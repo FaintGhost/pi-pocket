@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Avatar } from "./avatar.js";
 import { chatUnread, TypingLine } from "./chat.js";
 import {
+    clearPendingCommand,
     loadTemplates,
     parseCommand,
     parseTemplate,
@@ -348,8 +349,8 @@ function WatchBar() {
 }
 
 export function Composer() {
-    const { view, conversationId } = store.state;
-    const historyScope = { person: store.state.me?.id, conversation: conversationId };
+    const { view, conversationId, me, users, server } = store.state;
+    const historyScope = { person: me?.id, conversation: conversationId };
     const [text, setText] = useState(() => drafts.get(conversationId));
     const [files, setFiles] = useState([]);
     const [steer, setSteer] = useState(true);
@@ -402,6 +403,7 @@ export function Composer() {
     const list = useRef(null);
     // One per `!` command: sending it again after a lost reply runs it once.
     const requestId = useRef(uid());
+    const runningCommand = useRef(false);
     const busy = view.live.busy;
     const agent = view.agent;
 
@@ -490,20 +492,32 @@ export function Composer() {
         }
 
         if (value.startsWith("/")) {
-            loadTemplates();
+            void loadTemplates().catch(() => {});
         }
 
         // A command is not a message to Pi: no "typing to Pi" for it.
         typing(value.trim() === "" || value.startsWith("/") ? null : "pi");
     };
 
+    const blocked = collab() && view.turns?.on && view.turns.driver !== me?.id;
+    const globalCommand = (command) =>
+        me?.role === "owner" && command?.extension === true && command.scope === "global";
+    const full = expandPastes(text, pastes);
+    const parsed = parseCommand(full);
+    const globalOnly =
+        blocked &&
+        me?.role === "owner" &&
+        ((server?.extensionCommands ?? []).some((command) => command.scope === "global") ||
+            globalCommand(parsed?.command));
     // Ctrl+R: what was sent before that has the words in the box.
     const recalled = searching ? searchHistory(text, historyScope) : [];
     const chosenRecall = recalled[Math.min(pick, recalled.length - 1)];
-    const suggestions = hideCommands || searching ? [] : suggestCommands(text);
+    const suggestions =
+        hideCommands || searching
+            ? []
+            : suggestCommands(text).filter((command) => !blocked || globalCommand(command));
     const chosen = suggestions[Math.min(pick, suggestions.length - 1)];
-    const parsed = parseCommand(text);
-    const template = parsed ? null : parseTemplate(text);
+    const template = parsed ? null : parseTemplate(full);
     // `!command` runs in the session's folder and Pi sees it; `!!command`, only the people here.
     const shell = text.startsWith("!")
         ? { context: !text.startsWith("!!"), command: text.replace(/^!!?/, "").trim() }
@@ -550,6 +564,13 @@ export function Composer() {
 
     /** Run a slash command. The text goes away once it worked; attached files stay for the next message. */
     const runCommand = async ({ command, arg }) => {
+        if (runningCommand.current || (blocked && !globalCommand(command))) {
+            return;
+        }
+
+        runningCommand.current = true;
+        const draft = drafts.get(conversationId);
+
         setSending(true);
         const ok = await attempt(async () => {
             await command.run(arg);
@@ -557,9 +578,10 @@ export function Composer() {
             return true;
         });
 
+        runningCommand.current = false;
         setSending(false);
 
-        if (ok) {
+        if (ok && drafts.get(conversationId) === draft) {
             update("");
         }
     };
@@ -589,10 +611,18 @@ export function Composer() {
 
     /** A tapped suggestion: commands that take text, and prompt templates, fill the box; the others run at once. */
     const choose = (command) => {
+        if (blocked && !globalCommand(command)) {
+            return;
+        }
+
         if (command.args || command.template) {
             update(`/${command.name} `);
             focusEnd();
-        } else {
+        } else if (!runningCommand.current) {
+            if (command.extension) {
+                update(`/${command.name}`);
+            }
+
             runCommand({ command, arg: "" });
         }
     };
@@ -611,6 +641,7 @@ export function Composer() {
     const canSend =
         !sending &&
         !uploading &&
+        (!blocked || globalCommand(parsed?.command)) &&
         (text.trim() !== "" || files.some((file) => file.state === "done"));
 
     /** What went out stays for ↑; its pastes are done with. */
@@ -655,20 +686,19 @@ export function Composer() {
     };
 
     const send = async () => {
-        if (!canSend) {
+        if (!canSend || runningCommand.current) {
             return;
         }
 
         // What shows is what goes: words still coming would land in the emptied box.
         dictation.stop(true);
-        const full = expandPastes(text, pastes);
 
         if (parsed) {
             if (full.length <= REMEMBER_CHARS) {
                 remember(full, historyScope);
             }
 
-            return runCommand(parseCommand(full) ?? parsed);
+            return runCommand(parsed);
         }
 
         if (shell) {
@@ -902,6 +932,10 @@ export function Composer() {
     };
 
     const addFiles = (list) => {
+        if (blocked) {
+            return;
+        }
+
         for (const file of list) {
             const key = uid();
             const preview = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
@@ -964,15 +998,16 @@ export function Composer() {
         );
     };
 
-    const placeholder = dictation.listening
-        ? "Listening…"
-        : busy
-          ? steer
-              ? "Steer the current run…"
-              : "Queue a message for after this run…"
-          : "Ask Pi anything…";
+    const placeholder = globalOnly
+        ? "Run a global command…"
+        : dictation.listening
+          ? "Listening…"
+          : busy
+            ? steer
+                ? "Steer the current run…"
+                : "Queue a message for after this run…"
+            : "Ask Pi anything…";
     const inbox = view.inbox ?? [];
-    const { me, users } = store.state;
     const queuedBy = (item) =>
         item.by === undefined
             ? ""
@@ -1009,8 +1044,6 @@ export function Composer() {
         </footer>`;
     }
 
-    const turns = view.turns;
-    const blocked = collab() && turns?.on && turns.driver !== me?.id;
     const level =
         agent?.thinkingLevel && agent.thinkingLevel !== "off" && agent.reasoning
             ? agent.thinkingLevel
@@ -1067,7 +1100,7 @@ export function Composer() {
         </div>
         <${ParentSessionButton} />
         ${
-            blocked
+            blocked && !globalOnly
                 ? html`${
                       busy &&
                       html`<div class="composer-row stop-only">
@@ -1284,6 +1317,11 @@ export function Composer() {
                         placeholder=${placeholder}
                         onInput=${(event) => {
                             setBrowsing(null);
+
+                            if (event.currentTarget.value === "") {
+                                void attempt(() => clearPendingCommand(conversationId));
+                            }
+
                             update(event.currentTarget.value, event.currentTarget.selectionStart);
                         }}
                         onKeyDown=${onKey}
@@ -1299,6 +1337,7 @@ export function Composer() {
                             class="icon-button attach-button"
                             aria-label="Attach files"
                             title="Attach files"
+                            disabled=${blocked}
                             onClick=${() => picker.current?.click()}
                         >
                             <${Icon} name="clip" size=${17} />
@@ -1308,6 +1347,7 @@ export function Composer() {
                             type="file"
                             multiple
                             hidden
+                            disabled=${blocked}
                             onChange=${(event) => {
                                 addFiles([...event.currentTarget.files]);
                                 event.currentTarget.value = "";
@@ -1317,6 +1357,7 @@ export function Composer() {
                             class=${`model-chip ${agent?.available === false ? "warn" : ""}`}
                             aria-label=${`Model: ${modelLabel(agent)}${level ? `, thinking ${level}` : ""}`}
                             title=${`Model and thinking: ${modelLabel(agent)}${level ? `, ${level}` : ""}`}
+                            disabled=${blocked}
                             onClick=${() => openSheet({ type: "model" })}
                         >
                             <${Icon} name="sparkle" size=${12} class="model-spark" />
@@ -1330,6 +1371,7 @@ export function Composer() {
                             html`<button
                                 class=${`plan-chip ${view.plan?.on ? "on" : ""}`}
                                 aria-pressed=${view.plan?.on === true}
+                                disabled=${blocked}
                                 title="Plan mode: Pi reads and proposes, and changes nothing until you approve"
                                 onMouseDown=${(event) => event.preventDefault()}
                                 onClick=${() => attempt(() => actions.setPlan(!view.plan?.on))}
@@ -1340,6 +1382,7 @@ export function Composer() {
                         <span class="grow"></span>
                         ${
                             busy &&
+                            !blocked &&
                             html`<div
                                 class="mode-switch"
                                 role="radiogroup"
@@ -1375,7 +1418,7 @@ export function Composer() {
                                 )}
                             </div>`
                         }
-                        <${MicButton} dictation=${dictation} class="composer-mic" />
+                        ${!blocked && html`<${MicButton} dictation=${dictation} class="composer-mic" />`}
                         <button
                             class=${`send-button ${canSend ? "ready" : ""}`}
                             aria-label="Send"

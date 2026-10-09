@@ -65,6 +65,7 @@ import {
     TurnsDoc,
 } from "./docs.ts";
 import { describe, HttpError } from "./errors.ts";
+import { ExtensionCommands } from "./extension-commands.ts";
 import { ExtensionWebs, mayUse } from "./extension-web.ts";
 import { defang, quoted } from "./fence.ts";
 import { FolderFavorites } from "./folder-favorites.ts";
@@ -253,9 +254,10 @@ export class PocketApp {
     models!: ModelRuntime;
     settings!: SettingsManager;
     /** What extension modules get (`PocketHost`): kept for tests that stand in for an older server's. */
-    host!: PocketHost;
+    host!: Omit<PocketHost, "commands">;
     loader!: ExtensionLoader;
     readonly commands = new Commands(this);
+    readonly extensionCommands = new ExtensionCommands(this);
     readonly collab = new Collab(this);
     readonly alerts = new Alerts(this);
     readonly providers = new Providers(this);
@@ -461,10 +463,15 @@ export class PocketApp {
         registry.install(
             defineExtension({
                 name: "pocket-core",
-                tasks: [ResendTask, this.shell.task, this.commands.followTask],
+                tasks: [
+                    ResendTask,
+                    this.shell.task,
+                    this.commands.followTask,
+                    this.extensionCommands.task,
+                ],
             }),
         );
-        const host: PocketHost = {
+        const host: Omit<PocketHost, "commands"> = {
             guard: this.guard,
             approvals: this.approvals,
             agentDir: getAgentDir(),
@@ -513,7 +520,11 @@ export class PocketApp {
             { builtIn: join(APP_ROOT, "src", "server", "extensions"), dropIn },
             (file) => this.config.extensionChoice(file),
             // What a module's load says can name the server's folders, or quote a provider: the owner's to read.
-            { webs: this.webs, notify: (level, message) => this.ownerNotice(level, message) },
+            {
+                webs: this.webs,
+                notify: (level, message) => this.ownerNotice(level, message),
+                commandsChanged: () => this.#refreshClients(),
+            },
         );
         // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one.
         await this.gallery.recover().catch((error: unknown) => {
@@ -1662,6 +1673,13 @@ export class PocketApp {
                 extensions: this.loader.extensionNames(),
                 // The browser modules this person's tabs load (`extension-ui.js`).
                 ui: this.webs.clients(user),
+                extensionCommands: this.loader
+                    .commands()
+                    .filter(
+                        (command) =>
+                            user.role === "owner" ||
+                            (user.role === "guest" && command.scope === "conversation"),
+                    ),
                 // Tells the web app this server has people chat and typing indicators.
                 chat: true,
                 // Manual refresh reloads shared model configuration and catalogs; only the owner may start it.

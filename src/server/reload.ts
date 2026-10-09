@@ -9,6 +9,7 @@
  * it installed; a tool call already running still finishes. What a module adds to the app (routes, a browser module)
  * is kept by `ExtensionWebs` and goes in and out with its extensions.
  */
+import { randomUUID } from "node:crypto";
 import {
     existsSync,
     type FSWatcher,
@@ -26,7 +27,13 @@ import { pathToFileURL } from "node:url";
 import type { Extension, Registry } from "@earendil-works/pi-durable";
 import { describe } from "./errors.ts";
 import { ExtensionWebs, POCKET_API } from "./extension-web.ts";
-import type { ExtensionModule, PocketHost, WebAccess } from "./host.ts";
+import type {
+    CommandInfo,
+    ExtensionCommand,
+    ExtensionModule,
+    PocketHost,
+    WebAccess,
+} from "./host.ts";
 
 /**
  * How long a module may take to load (its import, and an async default export) before its load fails. At the server's
@@ -110,6 +117,41 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "session_watch_pr",
 ]);
 
+/** Composer commands a module may not replace, whether currently available or not. */
+export const BUILT_IN_COMMANDS: ReadonlySet<string> = new Set([
+    "compact",
+    "reset",
+    "instructions",
+    "model",
+    "thinking",
+    "new",
+    "name",
+    "cwd",
+    "plan",
+    "schedule",
+    "remember",
+    "until",
+    "watch",
+    "stop",
+    "copy",
+    "find",
+    "session",
+    "export",
+    "resume",
+    "chat",
+    "browser",
+    "files",
+    "changes",
+    "branch",
+    "pip",
+    "peek",
+    "artifacts",
+    "login",
+    "settings",
+    "trust",
+    "theme",
+]);
+
 /** Pi Pocket's own modules, or the owner's from the drop-in folder. */
 export type ModuleSource = "built-in" | "drop-in";
 
@@ -145,6 +187,8 @@ export interface ExtensionInfo {
 }
 
 type Module = { file: string; directory: string; source: ModuleSource };
+
+export type RegisteredCommand = CommandInfo & Pick<ExtensionCommand, "handler">;
 
 /** Extension modules in a folder: `.ts` files, except tests and files starting with `_`. A missing folder has none. */
 function moduleFiles(directory: string): string[] {
@@ -188,13 +232,16 @@ export function prepareDropInFolder(directory: string, appModules: string): void
 
 export class ExtensionLoader {
     readonly #registry: Registry;
-    readonly #host: PocketHost;
+    readonly #host: Omit<PocketHost, "commands">;
     readonly #builtIn: string;
     readonly #dropIn: string | undefined;
     readonly #choice: (file: string) => boolean | undefined;
     readonly #webs: ExtensionWebs;
     /** Extension names each file installed, to uninstall the ones a new version no longer provides. */
     readonly #installed = new Map<string, Extension[]>();
+    /** The commands each file's installed version registered. */
+    readonly #commands = new Map<string, RegisteredCommand[]>();
+    readonly #commandsChanged: () => Promise<void>;
     readonly #errors = new Map<string, string>();
     readonly #timers = new Map<string, NodeJS.Timeout>();
     /** Drop-ins already reported for having a built-in module's name, so each is reported once. */
@@ -221,12 +268,14 @@ export class ExtensionLoader {
      */
     constructor(
         registry: Registry,
-        host: PocketHost,
+        host: Omit<PocketHost, "commands">,
         folders: { builtIn: string; dropIn?: string },
         choice: (file: string) => boolean | undefined = () => undefined,
         options: {
             webs?: ExtensionWebs;
             notify?: (level: "info" | "warning" | "error", message: string) => void;
+            /** The modules' commands changed: tabs must hear the new list. */
+            commandsChanged?: () => Promise<void>;
             /** How long a load may take; tests make it short. */
             loadLimitMs?: number;
         } = {},
@@ -239,6 +288,7 @@ export class ExtensionLoader {
         this.#webs = options.webs ?? new ExtensionWebs();
         this.#notify = options.notify ?? ((level, message) => host.notice(level, message));
         this.#loadLimitMs = options.loadLimitMs ?? LOAD_LIMIT_MS;
+        this.#commandsChanged = options.commandsChanged ?? (() => Promise.resolve());
     }
 
     /** Every module, built-in ones first in install order. A drop-in with a built-in's name is left out. */
@@ -380,6 +430,10 @@ export class ExtensionLoader {
         this.#webs.remove(file);
         this.#installed.delete(file);
         this.#errors.delete(file);
+
+        if (this.#commands.delete(file)) {
+            void this.#commandsChanged();
+        }
     }
 
     /**
@@ -451,6 +505,16 @@ export class ExtensionLoader {
         return [...this.#installed.values()].flat().map((extension) => extension.name);
     }
 
+    /** Commands offered by the modules that loaded, without their server-side handlers. */
+    commands(): CommandInfo[] {
+        return [...this.#commands.values()].flat().map(({ handler: _handler, ...info }) => info);
+    }
+
+    /** Resolve one exact registration, rather than running a different module after a stale browser choice. */
+    command(id: string): RegisteredCommand | undefined {
+        return [...this.#commands.values()].flat().find((command) => command.id === id);
+    }
+
     async #load(file: string, cacheBust: boolean, until?: number): Promise<Extension[]> {
         const module = this.#module(file);
 
@@ -516,13 +580,38 @@ export class ExtensionLoader {
         // and what it set up (its cleanups) goes. The new version starts before the old one's cleanups run.
         const { part, web } = this.#webs.stage(file, module.directory, titleOf(file));
         let committed = false;
+        const commands: RegisteredCommand[] = [];
+        let collecting = true;
 
         try {
-            const returned = loaded.default(this.#host, web) as unknown;
-            // An async default export: it may register until it settles.
-            const built = isThenable(returned)
-                ? await this.#within(Promise.resolve(returned), deadline, file)
-                : returned;
+            let returned: unknown;
+            let built: unknown;
+
+            try {
+                returned = loaded.default(
+                    {
+                        ...this.#host,
+                        commands: {
+                            register: (command) => {
+                                if (!collecting) {
+                                    throw new Error(
+                                        "Register commands while the module builds its extensions, not afterwards.",
+                                    );
+                                }
+
+                                commands.push(this.#checkCommand(file, command, commands));
+                            },
+                        },
+                    },
+                    web,
+                ) as unknown;
+                // An async default export: it may register until it settles.
+                built = isThenable(returned)
+                    ? await this.#within(Promise.resolve(returned), deadline, file)
+                    : returned;
+            } finally {
+                collecting = false;
+            }
 
             this.#stillLatest(file, generation);
 
@@ -534,7 +623,8 @@ export class ExtensionLoader {
             if (
                 (built === undefined || built === null) &&
                 part.empty &&
-                part.disposers.length === 0
+                part.disposers.length === 0 &&
+                commands.length === 0
             ) {
                 throw new Error(
                     "the module returned no extensions and added nothing to the app: return its extensions",
@@ -562,6 +652,15 @@ export class ExtensionLoader {
             this.#errors.delete(file);
             this.#webs.commit(part);
             committed = true;
+
+            const commandsChanged =
+                commands.length > 0 || (this.#commands.get(file)?.length ?? 0) > 0;
+
+            this.#commands.set(file, commands);
+
+            if (commandsChanged) {
+                await this.#commandsChanged();
+            }
 
             return extensions;
         } finally {
@@ -725,6 +824,63 @@ export class ExtensionLoader {
                 }
             }
         }
+    }
+
+    /** Check one command a module registers: its name must not take a built-in's or another module's. */
+    #checkCommand(
+        file: string,
+        command: ExtensionCommand,
+        registered: readonly RegisteredCommand[],
+    ): RegisteredCommand {
+        if (command === null || typeof command !== "object") {
+            throw new Error("A command must have a name, description, scope, and handler.");
+        }
+
+        const { name, description, scope, args, handler } = command;
+
+        if (typeof name !== "string" || !/^[a-z][a-z0-9_-]*$/.test(name)) {
+            throw new Error(
+                "A command name must start with a lowercase letter and use lowercase letters, digits, hyphens, or underscores.",
+            );
+        }
+
+        if (typeof description !== "string" || description.trim() === "") {
+            throw new Error(`The command ${name} needs a description.`);
+        }
+
+        if (scope !== "conversation" && scope !== "global") {
+            throw new Error(`The command ${name} needs conversation or global scope.`);
+        }
+
+        if (args !== undefined && typeof args !== "string") {
+            throw new Error(`The command ${name} args must be a text hint.`);
+        }
+
+        if (typeof handler !== "function") {
+            throw new Error(`The command ${name} needs a handler.`);
+        }
+
+        if (BUILT_IN_COMMANDS.has(name)) {
+            throw new Error(
+                `The command ${name} is a built-in command: give it a name of your own.`,
+            );
+        }
+
+        const other = this.commands().find((each) => each.file !== file && each.name === name);
+
+        if (other !== undefined || registered.some((each) => each.name === name)) {
+            throw new Error(`${other?.file ?? file} already has a command named ${name}.`);
+        }
+
+        return {
+            id: randomUUID(),
+            file,
+            name,
+            description,
+            scope,
+            handler,
+            ...(args === undefined ? {} : { args }),
+        };
     }
 
     /** Watch both folders and reload a module shortly after it changes. Keeps the old code when the new one fails. */
