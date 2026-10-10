@@ -1389,17 +1389,17 @@ function StatusLine() {
     if (window) {
         const used = stats.contextTokens ?? 0;
         const percent = Math.min(100, Math.round((used / window) * 100));
+        // Compacted since the last answer: what is left, estimated until the next answer measures it.
+        const about = stats.contextEstimated ? "~" : "";
+        const title = `${about}${formatTokens(used)} of ${formatTokens(window)} tokens in context`;
 
         parts.push(
-            html`<span
-                class="context"
-                title=${`${formatTokens(used)} of ${formatTokens(window)} tokens in context`}
-            >
+            html`<span class="context" title=${title}>
                 context
                 <span class="meter" aria-hidden="true">
                     <span style=${`width:${percent}%`}></span>
                 </span>
-                ${percent}%
+                ${about}${percent}%
             </span>`,
         );
     }

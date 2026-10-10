@@ -214,6 +214,33 @@ export class Pip {
         return undefined;
     }
 
+    /**
+     * PiP turned off: each one's run stops, and any compaction of its context, which would go on without PiP's own
+     * summary (`pip-compact.ts`) and read what came from outside as it is. Nothing new reaches it until it is back.
+     */
+    async stopAll(): Promise<void> {
+        const app = this.#app;
+
+        for (const user of app.config.users) {
+            const id = this.idOf(user.id);
+
+            if (id === undefined) {
+                continue;
+            }
+
+            try {
+                await (await app.conversation(id)).abort(context);
+
+                for (const compaction of (await app.harness.snapshot(LiveDoc, id, context))
+                    ?.compactions ?? []) {
+                    await app.harness.abortTask(compaction.taskId, context);
+                }
+            } catch (error) {
+                app.log(`PiP ${String(id)} was not stopped: ${describe(error)}`);
+            }
+        }
+    }
+
     /** The person whose PiP a conversation is; undefined for every other conversation. */
     ownerOf(conversationId: ConversationId): string | undefined {
         return this.#app.sessionMeta(conversationId)?.pip;

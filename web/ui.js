@@ -740,6 +740,8 @@ const ICONS = {
     monitor: "M3 4h18v12H3zM8 20h8M12 16v4",
     terminal: "M4 5h16v14H4zM8 10l2 2-2 2M12 14h4",
     fit: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
+    // Compact: two rules, and what is between them pressed toward the middle.
+    compact: "M4 3h16M4 21h16M12 6v5M9 8l3 3 3-3M12 18v-5M9 16l3-3 3 3",
 };
 
 /** An icon's SVG path, for marks drawn outside Preact (gestures.js). */

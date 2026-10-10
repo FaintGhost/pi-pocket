@@ -465,6 +465,13 @@ export class Commands {
 
         app.requireSee(user, id);
         await app.requireDriver(id, user);
+
+        // PiP turned off takes nothing, from its person either: it would run without its rules, and be compacted without
+        // its own summary (`pip-compact.ts`). What else goes to it (reports, schedules, watches) waits meanwhile.
+        if (app.pip.ownerOf(id) !== undefined && !app.pip.available(user)) {
+            throw new HttpError(409, "PiP is turned off in Extensions.");
+        }
+
         const conversation = await app.conversation(id);
         const typed = request.text.trim();
         // `/skill:name request` sends the skill with the request; `/name arguments`, Pi's prompt template of that name.
@@ -1582,12 +1589,21 @@ export class Commands {
 
         app.requireSee(user, id);
         await app.requireDriver(id, user);
+        // PiP's summaries are its own, written by its extension's hook with outside text left out: while PiP is off,
+        // there is no hook, and Pi Durable's summary would read what came from outside as it is.
+        const pip = app.pip.ownerOf(id) !== undefined;
+
+        if (pip && !app.pip.available(user)) {
+            throw new HttpError(409, "PiP is turned off in Extensions.");
+        }
+
         // Compacting asks the model for a summary, which costs like any other request.
         app.spend.check(user, id);
         const conversation = await app.conversation(id);
         const taskId = await conversation.compact(instructions, context);
+        const done = pip ? "PiP's context compacted." : "Compacted.";
 
-        app.notice("info", "Compacting…", id);
+        app.notice("info", pip ? "Compacting PiP's context…" : "Compacting…", id);
         await app.collab.activity(id, user, "started compacting the context", false);
         void app.harness.waitForTask(taskId, context).then(
             (receipt) => {
@@ -1595,18 +1611,26 @@ export class Commands {
 
                 if (outcome.status === "completed") {
                     const { entryId, submissionId } = outcome.result;
+                    // PiP's own summary could not be written: it declined, rather than let Pi Durable write one.
+                    const failed = pip ? app.pipCompaction.failure(Number(taskId)) : undefined;
 
-                    app.notice(
-                        "info",
-                        entryId === undefined && submissionId === undefined
-                            ? "Nothing to compact: the context fits in the recent window."
-                            : "Compacted.",
-                        id,
-                    );
+                    if (failed !== undefined) {
+                        app.notice("error", `PiP's context was not compacted: ${failed}`, id);
+                    } else {
+                        app.notice(
+                            "info",
+                            entryId === undefined && submissionId === undefined
+                                ? "Nothing to compact: the context fits in the recent window."
+                                : done,
+                            id,
+                        );
+                    }
                 } else if (outcome.status === "aborted") {
                     app.notice("info", "Compaction aborted.", id);
                 } else {
-                    app.notice("error", `Compaction ${outcome.status}`, id);
+                    const why = "error" in outcome ? outcome.error?.message : undefined;
+
+                    app.notice("error", `Compaction ${outcome.status}${why ? `: ${why}` : ""}`, id);
                 }
             },
             (error: unknown) => app.notice("error", describe(error), id),

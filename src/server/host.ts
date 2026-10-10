@@ -7,6 +7,7 @@ import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
 import type { Memory } from "./memory.ts";
 import type { Pip } from "./pip.ts";
+import type { PipCompaction } from "./pip-compact.ts";
 import type { Schedules } from "./schedules.ts";
 import type { RepoWatches } from "./repo-watches.ts";
 import type { Watches } from "./watches.ts";
@@ -162,6 +163,8 @@ export interface PocketHost {
         | "repoWatches"
         | "removeRepoWatch"
     >;
+    /** PiP's compactions: its extension's hook has PiP write its own summaries. */
+    readonly pipCompaction: Pick<PipCompaction, "summarize">;
     /** Sessions' watches of their pull requests: Pi's watch_pr tool starts and stops them. */
     readonly watches: Pick<Watches, "task" | "start" | "stop" | "get">;
     /** Repository watches: the triggers extension runs their task; PiP's repo_watch tool sets them up. */

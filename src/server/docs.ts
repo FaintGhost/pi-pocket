@@ -437,6 +437,19 @@ export const FollowsDoc = defineDoc<{
     initial: () => ({ items: {} }),
 });
 
+/**
+ * PiP's compactions whose summary PiP wrote itself (`pip-compact.ts`), by task id: their cost is in `pi.usage`, added
+ * once. The newest few are kept.
+ */
+export const PipCompactionDoc = defineDoc<{ counted: number[] }>({
+    kind: "pocket.pip-compaction",
+    version: 1,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({ counted: [] }),
+});
+
 /** Whether a PR watch still looks (`watching`), or why it stopped. */
 export type WatchStatus = "watching" | "merged" | "closed" | "gave-up" | "failed" | "expired";
 

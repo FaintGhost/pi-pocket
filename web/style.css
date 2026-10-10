@@ -5378,6 +5378,21 @@ textarea.notes {
     margin-top: 0.4rem;
 }
 
+.setting select {
+    width: auto;
+    flex: none;
+    min-height: 40px;
+}
+
+/* A choice under its words when the two do not fit side by side, as on a phone. */
+.setting.wrap {
+    flex-wrap: wrap;
+}
+
+.setting.wrap > .grow {
+    flex: 1 1 14rem;
+}
+
 /* A scheduled message in its sheet: what Pi gets, when, and who set it. */
 .schedule {
     display: flex;
@@ -10167,6 +10182,31 @@ textarea.notes {
     color: var(--muted);
     font-size: 0.78rem;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* How full PiP's context is, as a session's status line shows it. */
+.pip-context {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-right: 0.2rem;
+    font: 0.72rem var(--mono);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pip-context .meter {
+    display: inline-flex;
+    width: 28px;
+    height: 4px;
+    background: var(--line);
+}
+
+.pip-context .meter > span {
+    background: var(--accent);
 }
 
 .pip-mark {

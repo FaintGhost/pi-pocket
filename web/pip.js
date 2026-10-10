@@ -7,7 +7,7 @@ import { useBack } from "./back.js";
 import { useDragToClose } from "./gestures.js";
 import { api, attempt, isRow, navigate, notify, store, uid } from "./store.js";
 import { itemsOf, says, summarize } from "./turns.js";
-import { html, Icon, Markdown, readable, Spinner, usePresence } from "./ui.js";
+import { formatTokens, html, Icon, Markdown, readable, Spinner, usePresence } from "./ui.js";
 import { MicButton, useDictation } from "./voice.js";
 
 const OPEN_KEY = "pocket.pip";
@@ -218,6 +218,45 @@ async function send(id, text, busy) {
     );
 
     return sent !== undefined;
+}
+
+/**
+ * Compact PiP's context: older messages become a summary PiP writes without what came from outside (`pip-compact.ts`).
+ * `focus`, the person's words, is what the summary should keep in mind. A notice says when it is done.
+ */
+function compactPip(id, focus) {
+    return attempt(() => api(`c/${id}/compact`, focus ? { instructions: focus } : {}));
+}
+
+/** `/compact`, or `/compact what to keep in mind`, typed in PiP's box. */
+const COMPACT = /^\/compact(?:\s+([\s\S]*))?$/;
+
+/** How full PiP's context is, as the status line shows a session's; its title says when PiP compacts itself. */
+function PipContext({ stats, window }) {
+    if (!window || stats?.contextTokens === undefined) {
+        return null;
+    }
+
+    const used = stats.contextTokens;
+    const percent = Math.min(100, Math.round((used / window) * 100));
+    const at = store.state.server?.pipCompactAt;
+    const about = stats.contextEstimated ? "~" : "";
+    const tokens = `${about}${formatTokens(used)} of ${formatTokens(window)} tokens in PiP's context.`;
+    const when =
+        at > 0
+            ? `PiP compacts itself above ${formatTokens(at)} once idle.`
+            : "Compact it when it grows.";
+    const title = `${tokens} ${when}`;
+
+    return html`<span
+        class="pip-context"
+        role="img"
+        aria-label=${`Context ${about}${percent}% full`}
+        title=${title}
+    >
+        <span class="meter"><span style=${`width:${percent}%`}></span></span>
+        ${about}${percent}%
+    </span>`;
 }
 
 function focusComposer() {
@@ -434,6 +473,17 @@ function Composer({ id, busy }) {
         dictation.stop(true);
         change("");
 
+        const compact = COMPACT.exec(message);
+
+        // A command for the panel, not words for PiP.
+        if (compact) {
+            if ((await compactPip(id, compact[1]?.trim())) === undefined) {
+                change(message);
+            }
+
+            return;
+        }
+
         // Not sent: the words come back to the box, rather than be lost.
         if (!(await send(id, message, busy))) {
             change(message);
@@ -499,6 +549,9 @@ function PipPanel({ leaving, scrim }) {
     const busy = live.busy === true;
     // Calls of PiP's held for approval: the panel cannot answer them, so it says so and leads to where they can be.
     const waiting = ready ? (view.approvals ?? []) : [];
+    const compacting = ready && (live.compactions ?? []).length > 0;
+    const status =
+        waiting.length > 0 ? "needs you" : compacting ? "compacting…" : busy ? "working…" : "";
     // Where the focus was before the panel: read as it first renders, before its box takes the focus.
     const [before] = useState(() => document.activeElement);
 
@@ -553,9 +606,20 @@ function PipPanel({ leaving, scrim }) {
                 <${Icon} name="pip" size=${18} />
             </span>
             <h2>PiP</h2>
-            <span class="pip-status" aria-live="polite">
-                ${waiting.length > 0 ? "needs you" : busy ? "working…" : ""}
-            </span>
+            <span class="pip-status" aria-live="polite">${status}</span>
+            ${
+                ready &&
+                html`<${PipContext} stats=${view.stats} window=${view.agent?.contextWindow} />`
+            }
+            <button
+                class="icon-button"
+                aria-label="Compact"
+                title="Compact: PiP keeps a summary of older messages, and reads less each time"
+                disabled=${!ready || busy || compacting || rows.length === 0}
+                onClick=${() => compactPip(id)}
+            >
+                <${Icon} name="compact" size=${18} />
+            </button>
             <button
                 class="icon-button"
                 aria-label="Start fresh"

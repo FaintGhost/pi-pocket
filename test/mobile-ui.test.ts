@@ -6,6 +6,7 @@ import {
     cleanUp,
     newSession,
     openApp,
+    owner,
     root,
     say,
     scriptedModel,
@@ -1503,6 +1504,132 @@ test(
             "a phone's sheet",
         );
         await noPip();
+    },
+);
+
+test(
+    "PiP's header fits Compact, Start fresh, and how full its context is at every size; Compact summarizes it",
+    real,
+    async () => {
+        const pip = await app.pip.ensure(owner(app));
+
+        await app.commands.configure(pip, owner(app), {
+            model: { provider: "faux", modelId: "faux-1" },
+            thinkingLevel: "off",
+        });
+        await say(app, pip, "hello pip");
+        await say(app, pip, "and again");
+
+        for (const viewport of [VIEWPORTS.desktop, VIEWPORTS.mobile, VIEWPORTS.tablet]) {
+            await fresh();
+            await page.setViewport(viewport);
+            await page.evaluate(`(await import("/pip.js")).openPip()`);
+            await until(
+                async () =>
+                    (await inPage<boolean>(
+                        `return JSON.stringify(document.querySelector(".pip-head .pip-context") !== null)`,
+                    )) === true,
+                "how full PiP's context is",
+                20_000,
+            );
+            // Past its opening animation, where it takes its whole size.
+            await new Promise((resolve) => setTimeout(resolve, 450));
+            const head = await inPage<{
+                fits: boolean;
+                buttons: { label: string; width: number; height: number; inside: boolean }[];
+                context: string;
+                meter: boolean;
+                overlaps: boolean;
+            }>(`
+                const head = document.querySelector(".pip-head");
+                const box = head.getBoundingClientRect();
+                const parts = [...head.querySelectorAll(".pip-context, .icon-button")].map((each) =>
+                    each.getBoundingClientRect(),
+                );
+
+                return JSON.stringify({
+                    fits: head.scrollWidth <= head.clientWidth,
+                    buttons: [...head.querySelectorAll(".icon-button")].map((button) => {
+                        const rect = button.getBoundingClientRect();
+
+                        return {
+                            label: button.getAttribute("aria-label"),
+                            width: rect.width,
+                            height: rect.height,
+                            inside: rect.left >= box.left && rect.right <= box.right,
+                        };
+                    }),
+                    context: head.querySelector(".pip-context").textContent.replace(/\\s+/g, ""),
+                    meter: head.querySelector(".pip-context .meter > span") !== null,
+                    overlaps: parts.some((one, index) =>
+                        parts.slice(index + 1).some((two) => one.right > two.left + 0.5 && two.right > one.left + 0.5),
+                    ),
+                });
+            `);
+            const size = `${viewport.width}x${viewport.height}`;
+
+            assert.equal(head.fits, true, `${size}: nothing runs past the header`);
+            assert.equal(head.overlaps, false, `${size}: nothing over anything else`);
+            assert.deepEqual(
+                head.buttons.map((button) => button.label),
+                ["Compact", "Start fresh", "Open as a conversation", "Close PiP"],
+            );
+
+            for (const button of head.buttons) {
+                assert.ok(
+                    button.width >= 40 && button.height >= 40 && button.inside,
+                    `${size}: ${button.label} is a whole 40px target (${JSON.stringify(button)})`,
+                );
+            }
+
+            assert.match(head.context, /^\d+%$/, `${size}: how full, as a share`);
+            assert.ok(head.meter);
+            await noPip();
+        }
+
+        // Compact, by hand: compaction keeps only the newest few messages as they are, so these two have one to summarize.
+        const settings = app.settings.getCompactionSettings;
+
+        app.settings.getCompactionSettings = () => ({
+            enabled: true,
+            reserveTokens: 16_384,
+            keepRecentTokens: 10,
+        });
+
+        try {
+            await fresh();
+            await page.setViewport(VIEWPORTS.desktop);
+            await page.evaluate(`(await import("/pip.js")).openPip()`);
+            await tap('.pip-head [aria-label="Compact"]:not([disabled])');
+            await until(
+                async () =>
+                    (await inPage<boolean>(`
+                        return JSON.stringify([...document.querySelectorAll(".pip-body .pip-event")].some(
+                            (event) => event.textContent.includes("Earlier messages summarized"),
+                        ));
+                    `)) === true,
+                "the summary, in the panel",
+            );
+            await until(
+                async () =>
+                    (await inPage<boolean>(`
+                        const { store } = await import("/store.js");
+
+                        return JSON.stringify(store.state.notices.some((notice) => notice.message === "PiP's context compacted."));
+                    `)) === true,
+                "the notice that it is done",
+            );
+            // Estimated now, until PiP's next answer measures it.
+            assert.match(
+                await inPage<string>(
+                    `return JSON.stringify(document.querySelector(".pip-head .pip-context").textContent.replace(/\\s+/g, ""))`,
+                ),
+                /^~\d+%$/,
+            );
+            await noPip();
+        } finally {
+            app.settings.getCompactionSettings = settings;
+        }
     },
 );
 

@@ -73,6 +73,7 @@ import { configureHttp } from "./net.ts";
 import { PiSessions } from "./pi-sessions.ts";
 import { Hooks } from "./hooks.ts";
 import { Pip, PIP_EXTENSION } from "./pip.ts";
+import { PIP_COMPACT_CHOICES, PipCompaction } from "./pip-compact.ts";
 import { RepoWatches } from "./repo-watches.ts";
 import { snippet } from "./projection.ts";
 import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./prompts.ts";
@@ -112,6 +113,8 @@ const GUARD_FILE = "guard.ts";
 /** The extension module with the browser tool. While it is off, the Browser panel is off too. */
 const BROWSER_FILE = "browser.ts";
 const BROWSER_EXTENSION = "pocket-browser";
+/** The extension module that is PiP. */
+const PIP_FILE = "pip.ts";
 
 /** The most peek tiles a tab gets live at once: the ones on its screen, which a tall screen fits a handful of. */
 export const MAX_PEEKS = 12;
@@ -243,6 +246,8 @@ export class PocketApp {
     readonly piSessions = new PiSessions(this);
     /** PiP, the owner's assistant: its conversation, what its tools do, and the follows that report to it. */
     readonly pip = new Pip(this);
+    /** PiP's context kept small: compacted sooner than a session's, with summaries of its own (`pip-compact.ts`). */
+    readonly pipCompaction = new PipCompaction(this);
     /** Sessions' watches of their pull requests (`watches.ts`). */
     readonly watches = new Watches(this);
     /** PiP's standing orders on GitHub repositories: what happens there goes to PiP or a session (`repo-watches.ts`). */
@@ -393,6 +398,7 @@ export class PocketApp {
             goals: this.goals,
             browsers: this.browsers,
             pip: this.pip,
+            pipCompaction: this.pipCompaction,
             watches: this.watches,
             repoWatches: this.repoWatches,
             memory: this.memory,
@@ -589,6 +595,7 @@ export class PocketApp {
 
                 if (!busy) {
                     this.spend.runEnded(id);
+                    this.pipCompaction.runEnded(id);
 
                     if (this.#sessions[String(id)] !== undefined) {
                         this.#endedAt.set(id, Date.now());
@@ -1464,6 +1471,8 @@ export class PocketApp {
                 defaultModel: this.config.defaultModel ?? null,
                 // This person may have a PiP, the assistant over every screen (`pip.ts`).
                 pip: this.pip.available(user),
+                // Tokens of context above which PiP compacts itself once idle; 0: only as sessions do.
+                pipCompactAt: this.pipCompaction.compactAt,
             },
         };
     }
@@ -2096,6 +2105,10 @@ export class PocketApp {
             await this.browsers.closeAll();
         }
 
+        if (file === PIP_FILE && !enabled) {
+            await this.pip.stopAll();
+        }
+
         this.notice(
             enabled ? "info" : "warning",
             `${user.name} turned ${module.title} ${enabled ? "on" : "off"}.`,
@@ -2144,6 +2157,27 @@ export class PocketApp {
                 ? `${user.name} made approvals need someone other than who asked.`
                 : `${user.name} let anyone who can steer allow risky calls.`,
         );
+    }
+
+    /** The owner chooses when PiP compacts itself: above so many tokens of context once idle, or (0) as sessions do. */
+    async setPipCompactAt(user: User, tokens: unknown): Promise<void> {
+        if (user.role !== "owner") {
+            throw new HttpError(403, "Only the owner can do that");
+        }
+
+        if (typeof tokens !== "number" || !PIP_COMPACT_CHOICES.includes(tokens)) {
+            throw new HttpError(
+                400,
+                `pipCompactAt must be one of ${PIP_COMPACT_CHOICES.join(", ")}`,
+            );
+        }
+
+        if (tokens === this.pipCompaction.compactAt) {
+            return;
+        }
+
+        this.config.pipCompactAt = tokens;
+        await this.#refreshClients();
     }
 
     /**
