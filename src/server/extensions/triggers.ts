@@ -1,7 +1,8 @@
 /**
  * Triggers start work from outside the app: a PR watch tells Pi when its pull request's checks fail, it has conflicts,
- * or reviewers comment, until it is merged; webhooks turn posts from other services into messages to a session or to
- * PiP. While this is off, watches wait and webhooks answer 503.
+ * or reviewers comment, until it is merged; repository watches tell PiP what happens on the owner's repositories;
+ * webhooks turn posts from other services into messages to a session or to PiP. While this is off, watches wait and
+ * webhooks answer 503.
  */
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
@@ -31,7 +32,7 @@ export default function createTriggers(host: PocketHost) {
         name: "watch_pr",
         description:
             `Watch this session's pull request on GitHub until it is merged or closed: when its checks fail (with their logs), it has conflicts, or reviewers comment, you get a message starting "[via ${WATCH_VIA}]". ` +
-            `Start it after you open a PR (gh pr create) when the person wants it seen through. At most ${MAX_SENT} messages. Actions: start (pr: number or URL; default the PR of the current branch), status, stop.`,
+            `Start it after you open a PR (gh pr create) when the person wants it seen through. At most ${MAX_SENT} messages. Actions: start (pr: its number in this folder's repository, or the address or owner/name#12 of one in another repository you can push to; default the PR of the current branch), status, stop.`,
         parameters: Type.Object({
             action: Type.Union([
                 Type.Literal("start"),
@@ -40,7 +41,8 @@ export default function createTriggers(host: PocketHost) {
             ]),
             pr: Type.Optional(
                 Type.String({
-                    description: "start: the PR's number or URL; default the current branch's",
+                    description:
+                        "start: the PR's number, address, or owner/name#12; default the current branch's",
                 }),
             ),
         }),
@@ -82,9 +84,12 @@ export default function createTriggers(host: PocketHost) {
         },
     });
 
+    // A server started before repository watches has none to run: they come with its restart.
+    const repoWatches = (host as Partial<PocketHost>).repoWatches;
+
     return defineExtension({
         name: TRIGGERS_EXTENSION,
-        tasks: [host.watches.task],
+        tasks: [host.watches.task, ...(repoWatches === undefined ? [] : [repoWatches.task])],
         tools: [watchPr],
     });
 }

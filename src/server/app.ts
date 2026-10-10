@@ -73,6 +73,7 @@ import { configureHttp } from "./net.ts";
 import { PiSessions } from "./pi-sessions.ts";
 import { Hooks } from "./hooks.ts";
 import { Pip, PIP_EXTENSION } from "./pip.ts";
+import { RepoWatches } from "./repo-watches.ts";
 import { snippet } from "./projection.ts";
 import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./prompts.ts";
 import { Providers } from "./providers.ts";
@@ -244,6 +245,8 @@ export class PocketApp {
     readonly pip = new Pip(this);
     /** Sessions' watches of their pull requests (`watches.ts`). */
     readonly watches = new Watches(this);
+    /** PiP's standing orders on GitHub repositories: what happens there goes to PiP or a session (`repo-watches.ts`). */
+    readonly repoWatches = new RepoWatches(this);
     /** Webhooks: addresses other services post to, each a message to a session or PiP (`hooks.ts`). */
     readonly hooks = new Hooks(this);
     /** Lessons Pi keeps across sessions, for a project or everywhere. */
@@ -391,6 +394,7 @@ export class PocketApp {
             browsers: this.browsers,
             pip: this.pip,
             watches: this.watches,
+            repoWatches: this.repoWatches,
             memory: this.memory,
         };
 

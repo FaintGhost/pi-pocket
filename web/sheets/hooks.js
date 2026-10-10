@@ -1,4 +1,5 @@
-// Webhooks: addresses other services post to, each turning every post into a message to Pi in a session, or to PiP.
+// Webhooks and watches: addresses other services post to, each turning every post into a message to Pi in a session or
+// to PiP; and the repository watches PiP set up, which need no address.
 import { useEffect, useState } from "preact/hooks";
 import { pipAvailable } from "../pip.js";
 import { api, attempt, closeSheet, navigate, notify, store } from "../store.js";
@@ -61,6 +62,39 @@ function HookRow({ hook, base, fresh, onRemove, onRotate }) {
                 </button>`
             }
             <button class="button small ghost" onClick=${onRotate}>New secret</button>
+            <button class="button small ghost" onClick=${onRemove}>Remove</button>
+        </div>
+    </div>`;
+}
+
+/** A repository watch PiP set up: the repository, what it looks for, where it sends, and removing it. */
+function WatchRow({ watch, onRemove }) {
+    const open = (event) => {
+        event.preventDefault();
+        closeSheet();
+        navigate(watch.target);
+    };
+
+    const narrowed = [
+        watch.label && `label ${watch.label}`,
+        watch.assigned && "assigned to you",
+        watch.anyone && "from anyone",
+        watch.events.includes("ci") && `CI on ${watch.branch}`,
+    ].filter(Boolean);
+
+    return html`<div class="hook">
+        <div class="hook-head">
+            <strong class="grow">${watch.repo}</strong>
+            <span class="muted small">
+                to ${watch.pip ? "PiP" : html`<a href=${`/s/${watch.target}`} onClick=${open}>${watch.targetTitle}</a>`}
+            </span>
+        </div>
+        <div class="muted small">${watch.events.join(", ")}${narrowed.length > 0 ? ` · ${narrowed.join(", ")}` : ""}</div>
+        ${watch.instructions && html`<div class="hook-text">${watch.instructions}</div>`}
+        <div class="hook-actions">
+            <span class="muted small grow">
+                ${watch.count === 0 ? "nothing sent yet" : `${watch.count} sent, last ${formatWhen(watch.lastNewsAt)}`}${watch.note ? ` · last look failed: ${watch.note}` : ""}
+            </span>
             <button class="button small ghost" onClick=${onRemove}>Remove</button>
         </div>
     </div>`;
@@ -131,7 +165,17 @@ export function HooksSheet() {
             await load();
         });
 
-    return html`<${Sheet} title="Webhooks" onClose=${closeSheet}>
+    const unwatch = (watch) =>
+        attempt(async () => {
+            if (!confirm(`Stop watching ${watch.repo}? Nothing more comes from it.`)) {
+                return;
+            }
+
+            await api(`repo-watches/${encodeURIComponent(watch.id)}/remove`, {});
+            await load();
+        });
+
+    return html`<${Sheet} title="Webhooks and watches" onClose=${closeSheet}>
         <p class="muted small">
             Other services (GitHub, a deploy, a monitor) post to a webhook's address, and each post becomes a message to Pi in a session, or to PiP: your instructions, then what came.
         </p>
@@ -195,6 +239,21 @@ export function HooksSheet() {
                 </button>`
         }
         ${list === null && html`<p class="muted">Loading…</p>`}
+        ${
+            list?.repoWatches?.length > 0 &&
+            html`<div class="group">
+                <div class="group-title">Repositories watched</div>
+                ${list.repoWatches.map(
+                    (watch) =>
+                        html`<${WatchRow}
+                            key=${watch.id}
+                            watch=${watch}
+                            onRemove=${() => unwatch(watch)}
+                        />`,
+                )}
+            </div>`
+        }
+        ${list && html`<div class="group-title">Webhooks</div>`}
         ${list?.hooks.length === 0 && html`<p class="muted">No webhooks yet.</p>`}
         ${list?.hooks.map(
             (hook) => html`<${HookRow}
@@ -209,6 +268,9 @@ export function HooksSheet() {
         ${
             list &&
             html`<p class="muted small">
+                Ask PiP to watch a repository, such as “watch acme/api: when CI fails on main, fix it”. It needs no address.
+            </p>
+            <p class="muted small">
                 ${list.base ? "" : `Services post to ${location.origin}, so they must be able to reach it: a tunnel's address works for GitHub. `}For GitHub: the repository's Settings → Webhooks → Add webhook; paste the address as the Payload URL and the secret as the Secret, choose application/json, and pick the events.
             </p>`
         }

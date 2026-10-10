@@ -448,6 +448,8 @@ export type PrWatch = {
     url: string;
     title: string;
     branch: string;
+    /** The PR is in another repository than the session's folder: Pi is told to work in a checkout of it. */
+    elsewhere?: boolean;
     /** Whose work it is: messages go to Pi for them, and their checks and spend limit apply. */
     by: string;
     /** Pi set it up, for `by`. */
@@ -516,6 +518,62 @@ export type Hook = {
 /** Every webhook, by id. */
 export const HooksDoc = defineDoc<{ items: Record<string, Hook> }>({
     kind: "pocket.hooks",
+    version: 1,
+    scope: "session",
+    initial: () => ({ items: {} }),
+});
+
+/** What a repository watch looks for (`repo-watches.ts`). */
+export type RepoEvent = "issues" | "pulls" | "ci" | "releases" | "mentions";
+
+/**
+ * A watch of a GitHub repository `gh`'s account can push to: what happens there (new issues and PRs, CI failing on a
+ * branch, releases, @pi mentions) goes, with its person's standing instructions, to PiP or a session.
+ */
+export type RepoWatch = {
+    /** Short and stable: what PiP and people use to remove it. */
+    id: string;
+    /** `owner/name`, or `host/owner/name` off github.com, as GitHub spells it. */
+    repo: string;
+    events: RepoEvent[];
+    /** What to do when something comes: the message's first part. */
+    instructions: string;
+    /** Issues and PRs with this label only. */
+    label?: string;
+    /** Issues and PRs assigned to `gh`'s account only. */
+    assigned?: boolean;
+    /** The branch whose failing CI counts; the repository's default branch. */
+    branch: string;
+    /** Issues and PRs from anyone, not only from people who can write to the repository (and bots' PRs). */
+    anyone?: boolean;
+    /** The conversation it messages: its person's PiP, or a session. */
+    target: number;
+    /** Whose work it is: messages go for them, with their checks and spend limit. */
+    by: string;
+    /** PiP set it up, for `by`. */
+    byPi: boolean;
+    createdAt: number;
+    /** What happened before this (ISO, as GitHub writes times) was there before the watch. */
+    since: string;
+    taskId: TaskId;
+    /** When it looks next. */
+    next: number;
+    /** What was told already, by kind and id (`i12`, `p7`, `r123`, `v9`, `c456`, `l789`). */
+    seen: string[];
+    /** Messages sent, and when the last one went. */
+    count: number;
+    lastNewsAt?: number;
+    /** When it last looked, and how many looks in a row failed, with why the last did. */
+    lastAt?: number;
+    errors: number;
+    note?: string;
+    /** The tool call that set it up, so a replayed call finds it. */
+    key?: string;
+};
+
+/** Every repository watch, by id. */
+export const RepoWatchesDoc = defineDoc<{ items: Record<string, RepoWatch> }>({
+    kind: "pocket.repo-watches",
     version: 1,
     scope: "session",
     initial: () => ({ items: {} }),

@@ -8,6 +8,7 @@ import type { LancetGuard } from "./lancet.ts";
 import type { Memory } from "./memory.ts";
 import type { Pip } from "./pip.ts";
 import type { Schedules } from "./schedules.ts";
+import type { RepoWatches } from "./repo-watches.ts";
 import type { Watches } from "./watches.ts";
 
 export interface ApprovalRequest {
@@ -154,9 +155,16 @@ export interface PocketHost {
         | "schedule"
         | "cancelSchedule"
         | "follow"
+        | "watchPr"
+        | "prWatch"
+        | "addRepoWatch"
+        | "repoWatches"
+        | "removeRepoWatch"
     >;
     /** Sessions' watches of their pull requests: Pi's watch_pr tool starts and stops them. */
     readonly watches: Pick<Watches, "task" | "start" | "stop" | "get">;
+    /** Repository watches: the triggers extension runs their task; PiP's repo_watch tool sets them up. */
+    readonly repoWatches: Pick<RepoWatches, "task">;
     /** Lessons Pi keeps across sessions (`memory.ts`): the memory tool saves them, and its section lists them. */
     readonly memory: Pick<Memory, "project" | "applying" | "inForce" | "add" | "change">;
 }

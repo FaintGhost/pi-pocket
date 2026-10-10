@@ -64,8 +64,10 @@ const SCHEDULED = "[scheduled] ";
 
 /** A message the app sent for a person, and what sent it: PiP, a PR watch, a webhook (`submit` in src/server/commands.ts). */
 const VIA = /^\[via ([^\]\n]{1,80})\] /;
-/** What came from outside in such a message, fenced as data for Pi: a check's log, a webhook's post. */
-const FENCED = /<(ci-log|webhook-payload)((?: [a-z]+="[^"\n]*")*)>\n([\s\S]*?)\n<\/\1>/g;
+/** What came from outside in such a message, fenced as data for Pi: a check's log, a webhook's post, GitHub's events. */
+const FENCED =
+    /<(ci-log|webhook-payload|github-event)((?: [a-z]+="[^"\n]*")*)>\n([\s\S]*?)\n<\/\1>/g;
+const FENCE_LABELS = { "webhook-payload": "What was posted", "github-event": "On GitHub" };
 
 /** A message from the app with what it fenced for Pi shown as blocks of its own, named after what each is. */
 function FencedText({ text }) {
@@ -75,7 +77,11 @@ function FencedText({ text }) {
     for (const match of text.matchAll(FENCED)) {
         const name = /"([^"]*)"/.exec(match[2])?.[1];
         const label =
-            match[1] === "ci-log" ? `Log of ${name ?? "a check"}` : (name ?? "What was posted");
+            match[1] === "ci-log"
+                ? `Log of ${name ?? "a check"}`
+                : match[1] === "github-event"
+                  ? `On GitHub${name ? `: ${name}` : ""}`
+                  : (name ?? FENCE_LABELS[match[1]]);
 
         parts.push(
             html`<${MentionedText} text=${text.slice(last, match.index).replace(/\n$/, "")} />`,

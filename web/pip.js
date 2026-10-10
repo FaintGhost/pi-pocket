@@ -18,26 +18,33 @@ const ROWS = 80;
 /** Below this width the panel is a sheet from the bottom edge; above it, a window in the corner. */
 const NARROW = matchMedia("(max-width: 699px)");
 const REPORT = "[report] ";
-/** A post to one of the person's webhooks, as PiP gets it (`hooks.ts`): which hook, then the instructions and what came. */
+/**
+ * What came from outside, as PiP gets it: a post to one of the person's webhooks (`hooks.ts`), or what happened on a
+ * repository they watch (`repo-watches.ts`). Which one, then the instructions and what came.
+ */
 const WEBHOOK = /^\[via webhook ([^\]\n]{1,80})\] /;
+const REPO_WATCH = /^\[via watch ([^\]\n]{1,120})\] /;
 
 /**
- * A webhook post for reading: the person's instructions, and what came as plain text (never Markdown: it is anyone's),
- * without the note to PiP about it.
+ * A webhook's post or a watch's news for reading: the person's instructions, and what came as plain text (never
+ * Markdown: it is anyone's), without the note to PiP about it.
  */
 function post(text) {
-    const body = text.replace(/\n?What came between <webhook-payload> tags[^\n]*$/, "");
-    const data = /<webhook-payload[^>]*>\n?([\s\S]*?)\n?<\/webhook-payload>/.exec(body);
+    const body = text.replace(
+        /\n?What came between <(?:webhook-payload|github-event)> tags[^\n]*$/,
+        "",
+    );
+    const data = /<(webhook-payload|github-event)[^>]*>\n?([\s\S]*?)\n?<\/\1>/.exec(body);
 
     return data
-        ? { text: body.slice(0, data.index).trim(), data: readable(data[1]) }
+        ? { text: body.slice(0, data.index).trim(), data: readable(data[2]) }
         : { text: body, data: null };
 }
 
 const SCHEDULED = "[scheduled] ";
 
 const INTRO =
-    "I keep an eye on your sessions: ask what’s going on, start new work, or have me check back later.";
+    "I keep an eye on your sessions and repositories: ask what’s going on, start new work, have me check back later, or watch a repository and act when something happens.";
 
 /** Things to ask PiP on its first open: sent at once, or (ending in "…") put in the box to finish. */
 const SUGGESTIONS = [
@@ -45,6 +52,7 @@ const SUGGESTIONS = [
     "What happened today?",
     "Start a session to …",
     "Every weekday at 9:00, tell me what changed overnight",
+    "When CI fails on main in …",
 ];
 
 /** The server lets this person have a PiP: the owner, while its extension is on. */
@@ -275,12 +283,14 @@ function Item({ item, last, busy }) {
             }
 
             const hook = WEBHOOK.exec(text);
+            const watched = hook ? null : REPO_WATCH.exec(text);
+            const outside = hook ?? watched;
 
-            if (hook) {
-                const posted = post(text.slice(hook[0].length));
+            if (outside) {
+                const posted = post(text.slice(outside[0].length));
 
                 return html`<${Report}
-                    label=${`Webhook: ${hook[1]}`}
+                    label=${`${watched ? "GitHub" : "Webhook"}: ${outside[1]}`}
                     text=${posted.text}
                     data=${posted.data}
                 />`;

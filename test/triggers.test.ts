@@ -91,6 +91,17 @@ async function fakeGh(args: string[]): Promise<string> {
         return "me\n";
     }
 
+    // Whether gh can push to a repository: acme's, yes; evil's, no.
+    const repo = /^repos\/([^/]+\/[^/?]+)$/.exec(args.at(-1) ?? "");
+
+    if (args[0] === "api" && repo !== null) {
+        return JSON.stringify({
+            full_name: repo[1],
+            default_branch: "main",
+            permissions: { push: repo[1]!.startsWith("acme/") },
+        });
+    }
+
     if (args[0] === "api") {
         return JSON.stringify(github.lines);
     }
@@ -106,14 +117,19 @@ async function fakeGh(args: string[]): Promise<string> {
         throw new Error('no pull requests found for branch "x"');
     }
 
-    // A number is that PR; a branch, or none, is the session's PR 7.
-    const number = asked !== undefined && /^\d+$/.test(asked) ? Number(asked) : 7;
+    // A number is that PR; an address, its PR; a branch, or none, is the session's PR 7.
+    const address = /^https:\/\/[^/]+\/([^/]+\/[^/]+)\/pull\/(\d+)$/.exec(asked ?? "");
+    const number = address
+        ? Number(address[2])
+        : asked !== undefined && /^\d+$/.test(asked)
+          ? Number(asked)
+          : 7;
     // PR 99 is on GitHub Enterprise.
     const host = number === 99 ? "ghe.acme.com" : "github.com";
 
     return JSON.stringify({
         number,
-        url: `https://${host}/acme/app/pull/${number}`,
+        url: `https://${host}/${address?.[1] ?? "acme/app"}/pull/${number}`,
         title: "Make it fast",
         state: asked === "6" ? "MERGED" : github.state,
         headRefName: "fast",
@@ -366,7 +382,7 @@ test("a watch says when the PR has conflicts, gives up past its messages, and st
     assert.match((await watchOf(id))?.note ?? "", /GitHub could not be asked: HTTP 502/);
 });
 
-test("what comes from outside cannot end its fence, and Pi watches only this repository's PRs", async () => {
+test("what comes from outside cannot end its fence, and Pi watches PRs only where it can push", async () => {
     // A check's name and log, from a fork's PR, try to end the log's fence early.
     github = freshGithub();
     github.checks = [
@@ -405,18 +421,18 @@ test("what comes from outside cannot end its fence, and Pi watches only this rep
     assert.equal((await messages(id)).at(-1)!.match(/<\s*\/\s*webhook-payload/gi)?.length, 1);
     await app.commands.removeHook(owner(app), hook.id);
 
-    // Pi names a PR by its number in this folder's repository, never by an address: one elsewhere would let its owner
-    // speak to Pi as a reviewer. A person may name any, but never as an option of gh's.
+    // Pi names a PR by its number in this folder's repository, or by its address only where gh can push: one in
+    // someone else's would let its owner speak to Pi as a reviewer. Nobody names one as an option of gh's.
     await assert.rejects(
         app.watches.start(id, owner(app).id, {
             pr: "https://github.com/evil/x/pull/1",
             byPi: true,
         }),
-        /give its number/,
+        /cannot push to evil\/x/,
     );
     await assert.rejects(
         app.watches.start(id, owner(app).id, { pr: "--web", byPi: true }),
-        /give its number/,
+        /Name the pull request/,
     );
     await assert.rejects(
         app.commands.watchPr(id, owner(app), "--web"),
@@ -427,6 +443,35 @@ test("what comes from outside cannot end its fence, and Pi watches only this rep
     const view = github.calls.find((call) => call[1] === "view")!;
 
     assert.deepEqual(view.slice(-2), ["--", "fast"], "the PR comes after --");
+    await app.commands.unwatchPr(id, owner(app));
+});
+
+test("Pi watches a PR in another repository it can push to, and is told to work in a checkout of it", async () => {
+    github = freshGithub();
+    github.checks = [
+        {
+            __typename: "CheckRun",
+            name: "test",
+            status: "COMPLETED",
+            conclusion: "FAILURE",
+            detailsUrl: "https://github.com/acme/api/actions/runs/1/job/8",
+        },
+    ];
+    github.logs["8"] = "boom";
+    const id = await newSession(app);
+
+    await say(app, id, "watch_pr start acme/api#31");
+    const watch = await watchOf(id);
+
+    assert.equal(watch?.repo, "acme/api");
+    assert.equal(watch?.number, 31);
+    assert.equal(watch?.elsewhere, true, "the session's folder is no checkout of it");
+    await until(async () => (await watchOf(id))?.sent === 1, "the failure to be told");
+    await until(async () => !app.isBusy(id), "Pi to answer");
+    assert.match(
+        (await messages(id)).at(-1)!,
+        /it is in acme\/api, which this session's folder is not a checkout of, so work in a checkout of it \(clone it with gh repo clone if there is none\)/,
+    );
     await app.commands.unwatchPr(id, owner(app));
 });
 

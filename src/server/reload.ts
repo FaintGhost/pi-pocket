@@ -88,6 +88,8 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "session_schedule",
     "approvals",
     "watch_pr",
+    "repo_watch",
+    "session_watch_pr",
 ]);
 
 /** Pi Pocket's own modules, or the owner's from the drop-in folder. */

@@ -256,6 +256,18 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, await app.commands.addHook(user, await readJson(request)));
         }
 
+        // A repository watch removed, by its person or the owner.
+        if (
+            first === "repo-watches" &&
+            second !== undefined &&
+            third === "remove" &&
+            method === "POST"
+        ) {
+            await app.repoWatches.remove(user, second);
+
+            return json(response, 200, { ok: true });
+        }
+
         // A new secret, for a hook whose address or secret got out.
         if (first === "hooks" && second !== undefined && third === "rotate" && method === "POST") {
             return json(response, 200, await app.hooks.rotate(user, second));

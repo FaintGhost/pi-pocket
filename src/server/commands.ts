@@ -1133,7 +1133,24 @@ export class Commands {
             };
         });
 
-        return { hooks, base: app.access?.url ?? null };
+        // Repository watches (`repo-watches.ts`), which PiP sets up: shown with the hooks, to see and remove.
+        const repoWatches = (await app.repoWatches.list(user)).map((watch) => {
+            const target = watch.target as unknown as ConversationId;
+            const meta = app.sessionMeta(target);
+
+            return {
+                ...watch,
+                targetTitle:
+                    meta?.pip !== undefined
+                        ? "PiP"
+                        : app.canSee(user, target)
+                          ? (meta?.title ?? "New session")
+                          : "a session you cannot open",
+                pip: meta?.pip !== undefined,
+            };
+        });
+
+        return { hooks, repoWatches, base: app.access?.url ?? null };
     }
 
     /** Make a webhook that messages a session (or PiP) for this person. */

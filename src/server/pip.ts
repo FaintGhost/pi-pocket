@@ -10,6 +10,8 @@
  * then sends PiP a report. Request ids keep a restart from sending a message or a report twice.
  */
 import { createHash } from "node:crypto";
+import { existsSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -29,9 +31,12 @@ import { FollowsDoc, SessionsDoc } from "./docs.ts";
 import { NOTE_ENTRY } from "./entry-format.ts";
 import { describe, HttpError } from "./errors.ts";
 import { defang } from "./fence.ts";
+import { git } from "./git.ts";
+import { originRepo, parseRepo, requirePush, sameRepo } from "./github.ts";
 import { resolveModel } from "./models.ts";
 import { homePath } from "./paths.ts";
 import { type ClientEntry, projectEntry, snippet } from "./projection.ts";
+import type { RepoWatchRequest, RepoWatchView } from "./repo-watches.ts";
 import { clientKey, requestFor } from "./requests.ts";
 import { describeMoment, describeRepeat } from "./when.ts";
 
@@ -65,6 +70,9 @@ const STARTS_PER_HOUR = 20;
  * a loop (follow, report, follow; or PiP and a session messaging each other) from spending without end.
  */
 const ACTIONS_PER_HOUR = 60;
+/** How long a clone may take, and how long a folder's repository is kept before git is asked again. */
+const CLONE_TIMEOUT_MS = 15 * 60_000;
+const ORIGIN_FOR_MS = 5 * 60_000;
 /** How long a follow that reported is remembered, so a replayed call that made it does not make another. */
 const FOLLOW_MEMORY_MS = 24 * 3_600_000;
 
@@ -162,6 +170,9 @@ export class Pip {
     readonly #creating = new Map<string, Promise<ConversationId>>();
     /** When each PiP started its recent sessions, and made its recent messages and follows: for the hourly limits. */
     readonly #recent = new Map<string, number[]>();
+    /** Clones under way, by repository, so two asks clone once; and folders' repositories, kept a few minutes. */
+    readonly #cloning = new Map<string, Promise<string>>();
+    readonly #origins = new Map<string, { repo: string | undefined; at: number }>();
     /** The durable task behind each follow; PiP's extension installs it. */
     readonly task: Task<FollowInput, FollowState, null, object>;
 
@@ -557,7 +568,13 @@ export class Pip {
      */
     async start(
         pipId: ConversationId,
-        request: { folder?: string; title?: string; worktree?: boolean; model?: string },
+        request: {
+            folder?: string;
+            repo?: string;
+            title?: string;
+            worktree?: boolean;
+            model?: string;
+        },
     ): Promise<ConversationId> {
         const app = this.#app;
         const user = this.#person(pipId);
@@ -565,9 +582,15 @@ export class Pip {
         const model =
             request.model === undefined ? undefined : resolveModel(app.models, request.model);
 
+        if (request.folder !== undefined && request.repo !== undefined) {
+            throw new Error("Give a folder or a repository, not both.");
+        }
+
         this.#count(user, "start", STARTS_PER_HOUR);
+        const folder =
+            request.repo === undefined ? request.folder : await this.checkout(pipId, request.repo);
         const { id } = await app.commands.createSession(user, {
-            ...(request.folder === undefined ? {} : { cwd: request.folder }),
+            ...(folder === undefined ? {} : { cwd: folder }),
             ...(request.title === undefined ? {} : { title: request.title }),
             worktree: request.worktree === true,
         });
@@ -594,6 +617,134 @@ export class Pip {
         const id = this.#session(pipId, user, sessionId);
 
         return { requestId: await this.#submit(id, user, message, key, steer) };
+    }
+
+    // ─── GitHub ─────────────────────────────────────────────────────────────
+
+    /**
+     * Where PiP's person works on a GitHub repository: the checkout a session of theirs works in (its `origin` is the
+     * repository), or else a clone, made now, in the data folder's `repos/`. Only a repository gh's account can push
+     * to: someone else's would bring its own instructions (its AGENTS.md) into a session that can run commands.
+     */
+    async checkout(pipId: ConversationId, repo: string): Promise<string> {
+        const app = this.#app;
+
+        this.#person(pipId);
+        const named = parseRepo(repo);
+
+        if (named === undefined) {
+            throw new Error(`${repo} is not a repository: say owner/name, or its address.`);
+        }
+
+        const info = await requirePush(app.watches.gh, named);
+        const clone = join(app.dataDir, "repos", ...info.repo.split("/"));
+        const folders = new Set<string>();
+
+        for (const meta of Object.values(app.sessionCatalogue())) {
+            if (meta.pip === undefined) {
+                folders.add(meta.worktree?.source ?? meta.cwd);
+            }
+        }
+
+        folders.add(app.defaultCwd);
+
+        for (const folder of [clone, ...[...folders].slice(0, 200)]) {
+            if (existsSync(folder) && sameRepo(await this.#origin(folder), info.repo)) {
+                return (
+                    await git(folder, ["rev-parse", "--show-toplevel"]).catch(() => folder)
+                ).trim();
+            }
+        }
+
+        let cloning = this.#cloning.get(info.repo);
+
+        if (cloning === undefined) {
+            mkdirSync(dirname(clone), { recursive: true });
+            cloning = app.watches
+                .gh(["repo", "clone", info.repo, clone], undefined, CLONE_TIMEOUT_MS)
+                .then(() => clone)
+                .finally(() => this.#cloning.delete(info.repo));
+            this.#cloning.set(info.repo, cloning);
+        }
+
+        try {
+            return await cloning;
+        } catch (error) {
+            throw new Error(`${info.repo} could not be cloned: ${describe(error)}`);
+        }
+    }
+
+    /** A folder's GitHub repository, kept a few minutes: PiP asks of many folders. */
+    async #origin(folder: string): Promise<string | undefined> {
+        const now = Date.now();
+        const known = this.#origins.get(folder);
+
+        if (known !== undefined && now - known.at < ORIGIN_FOR_MS) {
+            return known.repo;
+        }
+
+        const repo = await originRepo(folder);
+
+        this.#origins.set(folder, { repo, at: now });
+
+        return repo;
+    }
+
+    /** Watch a session's pull request for PiP's person: its branch's, or `pr` (a number, address, or owner/name#12). */
+    async watchPr(pipId: ConversationId, sessionId: number, pr: string | undefined, key: string) {
+        const user = this.#person(pipId);
+        const id = this.#session(pipId, user, sessionId);
+
+        this.#count(user, "act", ACTIONS_PER_HOUR);
+
+        return this.#app.watches.start(id, user.id, {
+            ...(pr === undefined || pr.trim() === "" ? {} : { pr }),
+            byPi: true,
+            key,
+        });
+    }
+
+    /** A session's PR watch, or stopping it. */
+    async prWatch(pipId: ConversationId, sessionId: number, stop: boolean) {
+        const user = this.#person(pipId);
+        const id = this.#session(pipId, user, sessionId);
+
+        return stop ? this.#app.watches.stop(id) : this.#app.watches.get(id);
+    }
+
+    /** Watch a repository for PiP's person: what happens there comes to PiP, or to session `to`. */
+    async addRepoWatch(
+        pipId: ConversationId,
+        request: Omit<RepoWatchRequest, "target" | "byPi" | "key"> & { to?: number },
+        key: string,
+    ): Promise<RepoWatchView> {
+        const user = this.#person(pipId);
+        const { to, ...rest } = request;
+        const target = to === undefined ? pipId : this.#session(pipId, user, to);
+
+        this.#count(user, "act", ACTIONS_PER_HOUR);
+
+        return this.#app.repoWatches.add(user, { ...rest, target, byPi: true, key });
+    }
+
+    /** PiP's person's repository watches, each with where it sends. */
+    async repoWatches(pipId: ConversationId): Promise<(RepoWatchView & { to: string })[]> {
+        const app = this.#app;
+        const user = this.#person(pipId);
+
+        return (await app.repoWatches.list(user))
+            .filter((watch) => watch.by === user.id)
+            .map((watch) => ({
+                ...watch,
+                to:
+                    watch.target === Number(pipId)
+                        ? "you"
+                        : `session ${watch.target} (${app.sessionMeta(watch.target as unknown as ConversationId)?.title ?? "untitled"})`,
+            }));
+    }
+
+    async removeRepoWatch(pipId: ConversationId, id: string): Promise<RepoWatchView> {
+        return this.#app.repoWatches.remove(this.#person(pipId), id);
     }
 
     /** Stop a session's run. */

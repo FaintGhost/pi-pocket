@@ -6,7 +6,7 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { type ConversationId, LiveDoc, type TaskGraphNode } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
-import { FollowsDoc, ScheduleDoc, SubagentsDoc } from "./docs.ts";
+import { FollowsDoc, RepoWatchesDoc, ScheduleDoc, SubagentsDoc, WatchDoc } from "./docs.ts";
 import { describeMoment } from "./when.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -112,6 +112,31 @@ async function describeTask(
                     follow === undefined
                         ? "following a session's run"
                         : `following “${app.sessionMeta(follow.session as unknown as ConversationId)?.title ?? "a session"}” until its run ends`,
+            };
+        }
+
+        case "pocket.pr-watch": {
+            const watch = (await app.harness.snapshot(WatchDoc, id, context))?.watch;
+
+            return {
+                label:
+                    watch === undefined
+                        ? "watching a pull request"
+                        : `watching PR #${watch.number} until it is merged`,
+            };
+        }
+
+        // PiP's (or a session's) standing order on a repository.
+        case "pocket.repo-watch": {
+            const watch = Object.values(
+                (await app.harness.snapshot(RepoWatchesDoc, context))?.items ?? {},
+            ).find((each) => each.taskId === node.id);
+
+            return {
+                label:
+                    watch === undefined
+                        ? "watching a repository"
+                        : `watching ${watch.repo} for ${watch.events.join(", ")}`,
             };
         }
 
