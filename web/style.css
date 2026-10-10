@@ -3475,17 +3475,28 @@ button.chip:hover {
 /* The buttons take the right side's place, widened so a long title ends before them (one or two 26px buttons). */
 @media (hover: hover) {
     .session-row:hover .session-act,
-    .session-row:focus-within .session-act {
+    .session-act:focus-visible {
         opacity: 1;
         transform: none;
     }
-    .session-row:not(.no-acts):hover .session-side,
-    .session-row:not(.no-acts):focus-within .session-side {
+    .session-row:not(.no-acts):hover .session-side {
         opacity: 0;
         min-width: 56px;
     }
-    .session-row.one-act:hover .session-side,
-    .session-row.one-act:focus-within .session-side {
+    .session-row.one-act:hover .session-side {
+        min-width: 26px;
+    }
+    /* Keyboard focus in the row shows them too, not the focus a click leaves on the open session's row. Kept apart
+       from the rules above: a browser without :has() drops only these. */
+    .session-row:has(:focus-visible) .session-act {
+        opacity: 1;
+        transform: none;
+    }
+    .session-row:not(.no-acts):has(:focus-visible) .session-side {
+        opacity: 0;
+        min-width: 56px;
+    }
+    .session-row.one-act:has(:focus-visible) .session-side {
         min-width: 26px;
     }
     /* While Ctrl/⌘ drags a selection, rows do not show their buttons. */

@@ -222,6 +222,11 @@ async function fresh(mobile = false): Promise<void> {
     );
     await selectTab("Recent");
     await page.hover({ x: 1, y: 1 });
+    assert.equal(
+        await inPage<boolean>(`return JSON.stringify(matchMedia("(hover: hover)").matches)`),
+        !mobile,
+        "a mouse on the desktop, touch on the phone",
+    );
 }
 
 before(async () => {
@@ -246,6 +251,11 @@ before(async () => {
         dataDir: mkdtempSync(join(root, "session-row-ui-")),
         load: async () => undefined,
         save: () => {},
+        // A mouse, whatever this machine has: headless Chromium without one says (hover: none), and rows show their
+        // buttons only where a pointer can hover. The phone size's touch emulation still makes it (hover: none).
+        args: [
+            "--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4",
+        ],
     });
     page = await browsers.open(1);
     await page.navigate(`${base}/login?token=${encodeURIComponent(app.config.ownerToken)}`);
@@ -298,6 +308,14 @@ test(
         await hidden(active);
     },
 );
+
+test("a click opens a session without leaving its row's actions shown", real, async () => {
+    await fresh();
+    await page.click({ selector: `${row(active)} > .session` });
+    await page.hover({ x: 1, y: 1 });
+    assert.ok(await focused(`${row(active)} > .session`), "the click left focus on the row");
+    await hidden(active);
+});
 
 test("an archived row reserves only one action's space on keyboard focus", real, async () => {
     await fresh();
