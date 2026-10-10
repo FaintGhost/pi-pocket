@@ -248,6 +248,57 @@ function GoalBar() {
     </div>`;
 }
 
+/** How a watch's last look found the PR's checks, and why a watch ended. */
+const WATCH_CHECKS = {
+    pending: "checks running",
+    passed: "checks pass",
+    failed: "checks failed",
+};
+
+function watchEnded(watch) {
+    switch (watch.status) {
+        case "merged":
+            return "was merged.";
+        case "closed":
+            return "was closed.";
+        case "gave-up":
+            return `had more to tell than ${watch.max} messages: watch stopped.`;
+        case "expired":
+            return "had nothing new for two weeks: watch stopped.";
+        default:
+            return `could not be watched: ${watch.note ?? "something went wrong"}.`;
+    }
+}
+
+/** A PR watch: which PR, its checks, what it sent Pi; stop it, or dismiss one that ended. */
+function WatchBar() {
+    const { watch } = store.state.view;
+
+    if (!watch) {
+        return null;
+    }
+
+    const pr = html`<a href=${watch.url} target="_blank" rel="noopener">PR #${watch.number}</a>`;
+    const checks = WATCH_CHECKS[watch.checks];
+    const text =
+        watch.status === "watching"
+            ? html`<strong>Watching</strong> ${pr}${checks ? ` · ${checks}` : ""}${watch.sent > 0 ? ` · ${watch.sent} of ${watch.max} sent` : ""}${watch.note ? " · last look failed" : ""}`
+            : html`${pr} ${watchEnded(watch)}`;
+
+    return html`<div
+        class=${`watch-bar ${watch.status}`}
+        title=${watch.note ? `${watch.title}\n${watch.note}` : watch.title}
+    >
+        <span class="grow">${text}</span>
+        ${
+            canSteer() &&
+            html`<button class="link small" onClick=${() => attempt(actions.unwatchPr)}>
+                ${watch.status === "watching" ? "Stop" : "Dismiss"}
+            </button>`
+        }
+    </div>`;
+}
+
 export function Composer() {
     const { view, conversationId } = store.state;
     const [text, setText] = useState(() => drafts.get(conversationId));
@@ -898,6 +949,7 @@ export function Composer() {
             ${collab() && html`<${DriverBar} />`}
             <${PlanBar} blocked=${blocked} />
             <${GoalBar} />
+            <${WatchBar} />
             <${SubagentsBar} />
             <${TrustBar} />
         </div>

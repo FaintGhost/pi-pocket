@@ -1,7 +1,7 @@
 // The menu: what can be done in this session and in the app.
 import { browserAvailable, displayUrl, setBrowserOpen } from "../browser.js";
 import { chatUnread } from "../chat.js";
-import { schedulesAvailable } from "../commands.js";
+import { schedulesAvailable, triggersOn, watchAvailable, watchPr } from "../commands.js";
 import { filesAvailable, setFilesOpen } from "../files-panel.js";
 import { peeksOn, togglePeeks } from "../peeks.js";
 import { openPip, pipAvailable, pipUnread } from "../pip.js";
@@ -245,6 +245,19 @@ export function MenuSheet() {
         ${conversation && steer && driving && item("New context", () => openSheet({ type: "reset" }), "Pi starts fresh; history stays")}
         ${schedulesAvailable() && item("Scheduled messages", () => openSheet({ type: "schedules" }), view.schedules.length === 0 ? "none" : `${view.schedules.length} coming`)}
         ${
+            watchAvailable() &&
+            steer &&
+            !view.watch &&
+            item(
+                "Watch pull request",
+                () => {
+                    closeSheet();
+                    attempt(() => watchPr());
+                },
+                "fix CI, answer reviews",
+            )
+        }
+        ${
             conversation &&
             item("Copy link", () =>
                 copyText(location.href).then(
@@ -298,6 +311,7 @@ export function MenuSheet() {
             ${collab() && item("Notifications", () => openSheet({ type: "notifications" }), "Pi finished, approvals, chat")}
             ${item("Running now", () => openSheet({ type: "running" }), "everything Pi is doing")}
             ${item("Spend", () => openSheet({ type: "spend" }), me?.role === "owner" ? "by person and session, limits" : "yours")}
+            ${triggersOn() && me?.role !== "viewer" && item("Webhooks", () => openSheet({ type: "hooks" }), "messages from other services")}
             ${item("Providers", () => openSheet({ type: "providers" }))}
             ${item("Extensions", () => openSheet({ type: "extensions" }), store.state.guard?.enabled ? "Lancet Guard on" : store.state.guard?.available ? "Lancet Guard off" : "")}
             ${

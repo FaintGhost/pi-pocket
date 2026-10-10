@@ -37,6 +37,7 @@ const ORDER = [
     "guard.ts",
     "codemode.ts",
     "pip.ts",
+    "triggers.ts",
 ];
 /** Modules the app cannot work without: always on. */
 const REQUIRED = new Set(["prompt.ts"]);
@@ -53,6 +54,7 @@ const TITLES: Record<string, string> = {
     "guard.ts": "Lancet Guard",
     "codemode.ts": "Codemode",
     "pip.ts": "PiP",
+    "triggers.ts": "Triggers",
 };
 
 /**
@@ -82,6 +84,7 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "session_archive",
     "session_schedule",
     "approvals",
+    "watch_pr",
 ]);
 
 /** Pi Pocket's own modules, or the owner's from the drop-in folder. */

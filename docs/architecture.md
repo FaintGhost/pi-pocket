@@ -24,7 +24,7 @@ Some state lives in this process alone, and a restart forgets it. For example:
 **Its parts:**
 
 - `commands`, `collab`, `alerts`, `providers`, `schedules`, `goals`, `shell`, `spend`
-- `workspace`, `transcripts`, `attribution`, `piSessions`, `pip`
+- `workspace`, `transcripts`, `attribution`, `piSessions`, `pip`, `watches`, `hooks`
 - `browsers`
 
 **What stays on `PocketApp`** (the parts call these rather than keeping copies):
@@ -43,6 +43,10 @@ Extensions never see `PocketApp`. They get `PocketHost` (`host.ts`), whose funct
 ## PiP's conversation
 
 PiP (`pip.ts`) is a conversation with a `pip` mark in its session entry, which `sessions()` leaves out of every list. The harness settings select every installed extension but PiP's (`pocket-pip`) by default; PiP's conversation stores its own selection (`PIP_EXTENSIONS`, without bash, write, or edit), which `ensure` sets again each time it opens, so PiP's tools reach no other conversation. Its tools act through `Commands` and `Schedules` as PiP's person, with that person's checks, so `canSee` keeps every PiP from everyone but its person: anyone who could write to it would act as them. Its messages to sessions are once per tool call (a request id hashed from the call's key), and each follow leaves a mark in its list (`FollowsDoc`) when it reports or is stopped, so a replayed call neither sends nor follows twice. A tab's PiP panel is a second client in PiP's room (`setPip`), whose `view` events reach the tab as `pipview`; `watching` counts it, so PiP's answers push nothing while it shows.
+
+## Work from outside the app
+
+A PR watch (`watches.ts`) is a `WatchDoc` in its session and a durable task there, which sleeps until its next look, looks with `gh` (`watches.gh`, which tests replace), and puts what to tell Pi in its checkpoint before sending it: the send's request id is the watch's task and count, so a restart sends it once. Comment ids told, and the commits whose failures and conflicts were told, stay in the watch. Webhooks (`hooks.ts`) are app-wide (`HooksDoc`); `/hook/…` is outside `/api` and its sign-in, and lets a post in only by its hook's secret. Both send through `Commands.submit` as their person, with a `via` that marks the message (`[via PR watch]`, `[via webhook NAME]`), so that person's checks and spend limit apply, and what came from outside is fenced.
 
 ## Startup
 

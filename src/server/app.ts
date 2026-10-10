@@ -69,6 +69,7 @@ import { takeLock } from "./lock.ts";
 import { isThinkingLevel, modelList, resolveModel, THINKING_LEVELS } from "./models.ts";
 import { configureHttp } from "./net.ts";
 import { PiSessions } from "./pi-sessions.ts";
+import { Hooks } from "./hooks.ts";
 import { Pip, PIP_EXTENSION } from "./pip.ts";
 import { snippet } from "./projection.ts";
 import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./prompts.ts";
@@ -90,6 +91,7 @@ import {
 } from "./skills.ts";
 import { Spend } from "./spend.ts";
 import { Transcripts } from "./transcripts.ts";
+import { Watches } from "./watches.ts";
 import { Workspace } from "./workspace.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -238,6 +240,10 @@ export class PocketApp {
     readonly piSessions = new PiSessions(this);
     /** PiP, the owner's assistant: its conversation, what its tools do, and the follows that report to it. */
     readonly pip = new Pip(this);
+    /** Sessions' watches of their pull requests (`watches.ts`). */
+    readonly watches = new Watches(this);
+    /** Webhooks: addresses other services post to, each a message to a session or PiP (`hooks.ts`). */
+    readonly hooks = new Hooks(this);
     /** Each conversation's browser page, which Pi and the people in the conversation share. */
     readonly browsers: Browsers;
     readonly #clients = new Set<Client>();
@@ -380,6 +386,7 @@ export class PocketApp {
             goals: this.goals,
             browsers: this.browsers,
             pip: this.pip,
+            watches: this.watches,
         };
 
         this.host = host;
@@ -1596,6 +1603,8 @@ export class PocketApp {
                 (meta === undefined ? `Conversation ${String(room.id)}` : "New session"),
             cwd: agent.cwd ?? meta?.cwd ?? this.defaultCwd,
             archived: meta?.archived === true,
+            // PiP's own conversation, opened as a page: some session things (a PR to watch) are not for it.
+            ...(meta?.pip === undefined ? {} : { pip: true }),
             ...(room.parent === undefined ? {} : { parent: room.parent }),
             ...(room.subagentName === undefined ? {} : { subagentName: room.subagentName }),
             // Each browser finds the source's title in its own session list, so only people who can open it get a link.

@@ -1074,6 +1074,99 @@ export class Commands {
         );
     }
 
+    /** Watch the session's pull request (its branch's, or `pr`): Pi hears of failed checks, conflicts, and reviews. */
+    async watchPr(id: ConversationId, user: User, pr: unknown): Promise<{ number: number }> {
+        const app = this.#app;
+
+        app.requireSee(user, id);
+        await app.requireDriver(id, user);
+        app.spend.check(user, id);
+        const asked = optionalText(pr, "pr");
+        const watch = await app.watches.start(
+            id,
+            user.id,
+            asked === undefined ? {} : { pr: asked },
+        );
+
+        await app.collab.activity(
+            id,
+            user,
+            `started watching PR #${watch.number} “${snippet(watch.title, 60)}”`,
+        );
+
+        return { number: watch.number };
+    }
+
+    /** Stop watching the session's pull request, or clear a watch that ended. */
+    async unwatchPr(id: ConversationId, user: User): Promise<void> {
+        const app = this.#app;
+
+        app.requireSee(user, id);
+        await app.requireDriver(id, user);
+        const watch = await app.watches.stop(id);
+
+        if (watch?.status === "watching") {
+            await app.collab.activity(id, user, `stopped watching PR #${watch.number}`);
+        }
+    }
+
+    /**
+     * The webhooks a person may manage, each with where it sends (a session's title, or PiP), and the address other
+     * services reach this server at, when it has a public one.
+     */
+    async hooks(user: User) {
+        const app = this.#app;
+        const hooks = (await app.hooks.list(user)).map((hook) => {
+            const target = hook.target as unknown as ConversationId;
+            const meta = app.sessionMeta(target);
+
+            return {
+                ...hook,
+                targetTitle: meta?.pip !== undefined ? "PiP" : (meta?.title ?? "New session"),
+                pip: meta?.pip !== undefined,
+            };
+        });
+
+        return { hooks, base: app.access?.url ?? null };
+    }
+
+    /** Make a webhook that messages a session (or PiP) for this person. */
+    async addHook(user: User, body: { target?: unknown; name?: unknown; instructions?: unknown }) {
+        const app = this.#app;
+        // "pip": this person's PiP, made now if they have none yet.
+        const target =
+            body.target === "pip" && app.pip.available(user)
+                ? Number(await app.pip.ensure(user))
+                : Number(body.target);
+
+        if (!Number.isSafeInteger(target) || target < 0) {
+            throw new HttpError(400, "Say which session the webhook messages.");
+        }
+
+        const id = target as unknown as ConversationId;
+        const hook = await app.hooks.add(user, id, body);
+
+        if (app.sessionMeta(id)?.pip === undefined) {
+            await app.collab.activity(id, user, `made the webhook “${snippet(hook.name, 60)}”`);
+        }
+
+        return hook;
+    }
+
+    async removeHook(user: User, hookId: string): Promise<void> {
+        const app = this.#app;
+        const hook = await app.hooks.remove(user, hookId);
+        const target = hook.target as unknown as ConversationId;
+
+        if (app.sessionMeta(target) !== undefined && app.sessionMeta(target)?.pip === undefined) {
+            await app.collab.activity(
+                target,
+                user,
+                `removed the webhook “${snippet(hook.name, 60)}”`,
+            );
+        }
+    }
+
     /** Pi keeps working until `command` passes, checked after each of its answers. */
     async setGoal(id: ConversationId, user: User, command: unknown): Promise<void> {
         const app = this.#app;

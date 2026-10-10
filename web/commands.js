@@ -20,6 +20,22 @@ export const schedulesAvailable = () =>
 const goalsAvailable = () =>
     isSession() && store.state.server?.extensions?.includes("pocket-goals") === true;
 
+/** Webhooks need the triggers extension; so does watching a PR, which is for sessions other than PiP. */
+export const triggersOn = () =>
+    store.state.server?.extensions?.includes("pocket-triggers") === true;
+export const watchAvailable = () =>
+    isSession() && !store.state.view.conversation?.pip && triggersOn();
+
+/** Watch this session's pull request (its branch's, or `pr`), and say what that means. */
+export async function watchPr(pr) {
+    const { number } = await actions.watchPr(pr);
+
+    notify(
+        "info",
+        `Watching PR #${number}: Pi hears when its checks fail, it has conflicts, or reviewers comment, until it is merged.`,
+    );
+}
+
 /** How long a list of prompt templates is used before it is fetched again: someone may be writing one. */
 const TEMPLATES_FOR_MS = 30_000;
 
@@ -295,6 +311,14 @@ const COMMANDS = [
             await actions.setGoal(arg);
             notify("info", `Pi keeps going until ${arg} passes, checked after each answer.`);
         },
+    },
+    {
+        name: "watch",
+        args: "[PR number or URL]",
+        description:
+            "Watch this session's pull request: Pi fixes failed checks and answers reviews until it is merged",
+        available: watchAvailable,
+        run: (arg) => watchPr(arg),
     },
     { name: "stop", description: "Stop the current run", run: () => actions.abort() },
     { name: "copy", description: "Copy Pi’s last reply", run: copyLast },

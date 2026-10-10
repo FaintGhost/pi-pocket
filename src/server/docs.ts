@@ -399,3 +399,82 @@ export const FollowsDoc = defineDoc<{
     fork: "initial",
     initial: () => ({ items: {} }),
 });
+
+/** Whether a PR watch still looks (`watching`), or why it stopped. */
+export type WatchStatus = "watching" | "merged" | "closed" | "gave-up" | "failed" | "expired";
+
+/** A session's watch of its pull request (`watches.ts`). */
+export type PrWatch = {
+    /** `owner/name`, or `host/owner/name` for GitHub Enterprise. */
+    repo: string;
+    number: number;
+    url: string;
+    title: string;
+    branch: string;
+    /** Whose work it is: messages go to Pi for them, and their checks and spend limit apply. */
+    by: string;
+    /** Pi set it up, for `by`. */
+    byPi?: boolean;
+    createdAt: number;
+    /** The durable task that looks. */
+    taskId: TaskId;
+    status: WatchStatus;
+    /** When it looks next. */
+    next: number;
+    /** Messages sent to Pi, and the most it sends. */
+    sent: number;
+    max: number;
+    /** Comments older than this were there before the watch: ISO time, as GitHub gives it. */
+    since: string;
+    /** Comments, reviews, and review comments told already, by id. */
+    seen: string[];
+    /** The commit whose failed checks Pi was told about, and the one whose conflicts. */
+    failedSha?: string;
+    conflictSha?: string;
+    /** What the last look found, for the bar: the checks of the PR's last commit. */
+    checks?: "pending" | "passed" | "failed" | "none";
+    lastAt?: number;
+    /** When it last found something to tell: two weeks with nothing and it stops. */
+    lastNewsAt: number;
+    /** Looks or sends in a row that failed, and why the last did: it stops after a while of them. */
+    errors: number;
+    note?: string;
+    /** The tool call that set it up, so a replayed call finds it. */
+    key?: string;
+};
+
+/** A session's PR watch. A fork starts without it: the PR is the session's. */
+export const WatchDoc = defineDoc<{ watch?: PrWatch }>({
+    kind: "pocket.pr-watch",
+    version: 1,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({}),
+});
+
+/** A webhook (`hooks.ts`): an address that turns each post to it into a message to a session's Pi, or to PiP. */
+export type Hook = {
+    /** In its address, with the secret. */
+    id: string;
+    secret: string;
+    name: string;
+    /** What Pi should do with each post: the message's first part. */
+    instructions: string;
+    /** The session (or PiP) it messages. */
+    target: number;
+    /** Who made it: posts go as their work, with their checks and spend limit. */
+    by: string;
+    createdAt: number;
+    /** Posts that became messages, and when the last did. */
+    count: number;
+    lastAt?: number;
+};
+
+/** Every webhook, by id. */
+export const HooksDoc = defineDoc<{ items: Record<string, Hook> }>({
+    kind: "pocket.hooks",
+    version: 1,
+    scope: "session",
+    initial: () => ({ items: {} }),
+});

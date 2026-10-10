@@ -1144,6 +1144,30 @@ kbd {
     text-wrap: pretty;
 }
 
+/* What a PR watch or a webhook fenced for Pi (a check's log, a post): a block of its own, scrolling past a few lines. */
+.fenced-data {
+    margin: 0.4rem 0;
+    border: 1px solid var(--line);
+    background: var(--bg);
+}
+
+.fenced-label {
+    padding: 0.2rem 0.5rem;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.75rem;
+}
+
+.fenced-data pre {
+    margin: 0;
+    padding: 0.4rem 0.5rem;
+    max-height: 14rem;
+    overflow: auto;
+    font-size: 0.78rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 .attachments,
 .files {
     display: flex;
@@ -2030,11 +2054,11 @@ pre.diff .del {
 }
 
 /* Little room for the conversation: each bar keeps one line, its words cut short, its buttons whole. */
-.dock[data-compact] > :is(.plan-bar, .goal-bar, .trust-bar) {
+.dock[data-compact] > :is(.plan-bar, .goal-bar, .watch-bar, .trust-bar) {
     flex-wrap: nowrap;
 }
 
-.dock[data-compact] > :is(.plan-bar, .goal-bar, .trust-bar) > .grow {
+.dock[data-compact] > :is(.plan-bar, .goal-bar, .watch-bar, .trust-bar) > .grow {
     flex: 1 1 0;
     min-width: 0;
     white-space: nowrap;
@@ -2042,7 +2066,7 @@ pre.diff .del {
     text-overflow: ellipsis;
 }
 
-.dock[data-compact] > :is(.plan-bar, .goal-bar, .trust-bar) > :not(.grow) {
+.dock[data-compact] > :is(.plan-bar, .goal-bar, .watch-bar, .trust-bar) > :not(.grow) {
     flex: none;
     white-space: nowrap;
 }
@@ -5122,11 +5146,13 @@ textarea.notes {
     line-height: 1.5;
 }
 
-/* Bars above the message box: who drives (take turns), plan mode, a goal, and project trust. The left edge says which:
-   the accent for plan mode and a goal, the warning color for a question (who drives, whether to trust). */
+/* Bars above the message box: who drives (take turns), plan mode, a goal, a PR watch, and project trust. The left edge
+   says which: the accent for plan mode, a goal, and a watch, the warning color for a question (who drives, whether to
+   trust) and for a watch that had to stop. */
 .driver-bar,
 .plan-bar,
 .goal-bar,
+.watch-bar,
 .trust-bar {
     display: flex;
     flex-wrap: wrap;
@@ -5141,8 +5167,13 @@ textarea.notes {
 }
 
 .plan-bar,
-.goal-bar {
+.goal-bar,
+.watch-bar:is(.watching, .merged, .closed) {
     border-left-color: var(--accent);
+}
+
+.watch-bar a {
+    color: inherit;
 }
 
 /* The trust question keeps its words a readable width: on a phone its answers go under them, together, to the right. */
@@ -10239,4 +10270,43 @@ textarea.notes {
     .pip-scrim.leaving {
         animation: fade-out var(--t-out) linear forwards;
     }
+}
+
+/* A webhook in its sheet: name and where it sends, what Pi is told, its address when just made, and how it was used. */
+.hook {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.6rem 0.7rem;
+    margin-top: 0.5rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+}
+
+.hook.fresh {
+    border-color: var(--accent);
+}
+
+.hook-head,
+.hook-actions {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.hook-actions {
+    align-items: center;
+}
+
+.hook-text {
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.hook-address {
+    overflow-wrap: anywhere;
+    user-select: all;
+    color: var(--accent);
 }

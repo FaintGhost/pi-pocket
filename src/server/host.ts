@@ -7,6 +7,7 @@ import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
 import type { Pip } from "./pip.ts";
 import type { Schedules } from "./schedules.ts";
+import type { Watches } from "./watches.ts";
 
 export interface ApprovalRequest {
     id: string;
@@ -153,6 +154,8 @@ export interface PocketHost {
         | "cancelSchedule"
         | "follow"
     >;
+    /** Sessions' watches of their pull requests: Pi's watch_pr tool starts and stops them. */
+    readonly watches: Pick<Watches, "task" | "start" | "stop" | "get">;
 }
 
 /** The shape of every module in `src/server/extensions/`: a default export building one or more extensions. */

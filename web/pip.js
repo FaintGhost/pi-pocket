@@ -7,7 +7,7 @@ import { useBack } from "./back.js";
 import { useDragToClose } from "./gestures.js";
 import { api, attempt, isRow, navigate, notify, store, uid } from "./store.js";
 import { itemsOf, says, summarize } from "./turns.js";
-import { html, Icon, Markdown, Spinner, usePresence } from "./ui.js";
+import { html, Icon, Markdown, readable, Spinner, usePresence } from "./ui.js";
 
 const OPEN_KEY = "pocket.pip";
 const SEEN_KEY = "pocket.pip.seen";
@@ -17,6 +17,17 @@ const ROWS = 80;
 /** Below this width the panel is a sheet from the bottom edge; above it, a window in the corner. */
 const NARROW = matchMedia("(max-width: 699px)");
 const REPORT = "[report] ";
+/** A post to one of the person's webhooks, as PiP gets it (`hooks.ts`): which hook, then the instructions and what came. */
+const WEBHOOK = /^\[via webhook ([^\]\n]{1,80})\] /;
+
+/** A webhook post for reading: what came as a code block, without the note to PiP about it. */
+const postText = (text) =>
+    text
+        .replace(/\n?What came between <webhook-payload> tags[^\n]*$/, "")
+        .replace(
+            /<webhook-payload[^>]*>\n?([\s\S]*?)\n?<\/webhook-payload>/,
+            (_, body) => `\n\`\`\`\n${readable(body)}\n\`\`\``,
+        );
 const SCHEDULED = "[scheduled] ";
 
 const INTRO =
@@ -225,8 +236,8 @@ function sessionOf(anchor) {
 
 // ─── The panel ──────────────────────────────────────────────────────────────
 
-/** A report from a session PiP follows, folded to its first lines until opened. */
-function Report({ text }) {
+/** A report from a session PiP follows, or a webhook's post: folded to its first lines until opened. */
+function Report({ text, label = "Report" }) {
     const [open, setOpen] = useState(false);
 
     return html`<div class=${`pip-report ${open ? "open" : ""}`}>
@@ -237,7 +248,7 @@ function Report({ text }) {
             onClick=${() => setOpen(!open)}
         >
             <${Icon} name="pulse" size=${13} />
-            <span>Report</span>
+            <span>${label}</span>
             <${Icon} name="down" size=${13} class="pip-report-fold" />
         </button>
         <${Markdown} text=${linkSessions(text)} class="pip-report-text" />
@@ -254,6 +265,15 @@ function Item({ item, last, busy }) {
 
             if (text.startsWith(REPORT)) {
                 return html`<${Report} text=${text.slice(REPORT.length)} />`;
+            }
+
+            const hook = WEBHOOK.exec(text);
+
+            if (hook) {
+                return html`<${Report}
+                    label=${`Webhook: ${hook[1]}`}
+                    text=${postText(text.slice(hook[0].length))}
+                />`;
             }
 
             if (text.startsWith(SCHEDULED)) {

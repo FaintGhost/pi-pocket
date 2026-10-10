@@ -15,6 +15,7 @@ import { ModelPicker } from "./sheets/model.js";
 import { InviteSheet, PeopleSheet } from "./sheets/people.js";
 import { AuthDialog, ProvidersSheet } from "./sheets/providers.js";
 import { RunningSheet } from "./sheets/running.js";
+import { HooksSheet } from "./sheets/hooks.js";
 import { SchedulesSheet } from "./sheets/schedules.js";
 import { ShortcutsSheet } from "./sheets/shortcuts.js";
 import { SpendSheet } from "./sheets/spend.js";
@@ -196,6 +197,9 @@ function sheetBody(sheet) {
             break;
         case "schedules":
             body = view.conversation ? html`<${SchedulesSheet} />` : null;
+            break;
+        case "hooks":
+            body = html`<${HooksSheet} />`;
             break;
         case "share":
             body = html`<${ShareSheet} share=${sheet.share} />`;

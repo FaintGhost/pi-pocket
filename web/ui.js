@@ -1081,3 +1081,12 @@ export function item(label, run, hint) {
         ${hint && html`<span class="muted small">${hint}</span>`}
     </button>`;
 }
+
+/** Posted JSON laid out for people (Pi gets it compact); anything else as it came. */
+export function readable(text) {
+    try {
+        return JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+        return text;
+    }
+}

@@ -247,6 +247,26 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, { pip: app.pip.state(user) });
         }
 
+        // Webhooks: the ones this person may manage, with the address to give other services; making and removing one.
+        if (first === "hooks" && second === undefined && method === "GET") {
+            return json(response, 200, await app.commands.hooks(user));
+        }
+
+        if (first === "hooks" && second === undefined && method === "POST") {
+            return json(response, 200, await app.commands.addHook(user, await readJson(request)));
+        }
+
+        if (
+            first === "hooks" &&
+            second !== undefined &&
+            parts[2] === "remove" &&
+            method === "POST"
+        ) {
+            await app.commands.removeHook(user, second);
+
+            return json(response, 200, { ok: true });
+        }
+
         // The subagents board opened or closed in a tab: while open, it gets every subagent (`subagents` events).
         if (first === "subagents" && method === "POST") {
             const body = await readJson<{ connection?: unknown; on?: unknown; seq?: unknown }>(

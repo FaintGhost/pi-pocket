@@ -184,6 +184,18 @@ export async function conversationRoutes(
         return json(response, 200, { ok: true });
     }
 
+    if (third === "watch" && method === "POST") {
+        const body = await readJson<{ pr?: unknown; stop?: unknown }>(request);
+
+        if (body.stop === true) {
+            await app.commands.unwatchPr(id, user);
+
+            return json(response, 200, { ok: true });
+        }
+
+        return json(response, 200, await app.commands.watchPr(id, user, body.pr));
+    }
+
     if (third === "goal" && method === "POST") {
         const body = await readJson<{ command?: unknown; clear?: unknown }>(request);
 

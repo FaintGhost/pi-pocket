@@ -46,6 +46,7 @@ const emptyView = () => ({
     plan: { on: false },
     schedules: [],
     goal: null,
+    watch: null,
     branch: null,
     subagentsHeld: null,
 });
@@ -382,6 +383,8 @@ function mergeView(current, data) {
         schedules: data.schedules ?? base.schedules,
         // No goal is null, which the server sends too: only a missing field keeps the last value.
         goal: data.goal === undefined ? base.goal : data.goal,
+        // The session's PR watch, or null: the same.
+        watch: data.watch === undefined ? base.watch : data.watch,
         // Why subagents' reports wait (a spend limit), or null when none do: the subagents bar says it.
         subagentsHeld: data.subagentsHeld === undefined ? base.subagentsHeld : data.subagentsHeld,
         // What the folder has checked out: `{ branch }` or `{ detached }`, and null outside a repository.
@@ -858,6 +861,9 @@ export const actions = {
     setGoal: (command) => api(`c/${current()}/goal`, { command }),
     removeWorktree: (force) => api(`c/${current()}/worktree`, { remove: true, force }),
     clearGoal: () => api(`c/${current()}/goal`, { clear: true }),
+    /** Watch the session's pull request: its branch's, or `pr` (a number or address). */
+    watchPr: (pr) => api(`c/${current()}/watch`, pr ? { pr } : {}),
+    unwatchPr: () => api(`c/${current()}/watch`, { stop: true }),
     approve: (id, allow) => api(`approvals/${encodeURIComponent(id)}`, { allow }),
     /** `worktree`: the session works in a git worktree of its own, made from the folder. */
     createSession: (cwd, { worktree = false } = {}) =>

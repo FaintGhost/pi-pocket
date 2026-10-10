@@ -48,6 +48,7 @@ import {
     Markdown,
     openFile,
     plainText,
+    readable,
     replyText,
     Spinner,
     Thumb,
@@ -59,6 +60,36 @@ const NEXT_REPORT = /\n\n(?=\[subagent \S+ (?:answered|failed))/;
 
 /** How a scheduled message starts (see src/server/schedules.ts). */
 const SCHEDULED = "[scheduled] ";
+
+/** A message the app sent for a person, and what sent it: PiP, a PR watch, a webhook (`submit` in src/server/commands.ts). */
+const VIA = /^\[via ([^\]\n]{1,80})\] /;
+/** What came from outside in such a message, fenced as data for Pi: a check's log, a webhook's post. */
+const FENCED = /<(ci-log|webhook-payload)((?: [a-z]+="[^"\n]*")*)>\n([\s\S]*?)\n<\/\1>/g;
+
+/** A message from the app with what it fenced for Pi shown as blocks of its own, named after what each is. */
+function FencedText({ text }) {
+    const parts = [];
+    let last = 0;
+
+    for (const match of text.matchAll(FENCED)) {
+        const name = /"([^"]*)"/.exec(match[2])?.[1];
+        const label =
+            match[1] === "ci-log" ? `Log of ${name ?? "a check"}` : (name ?? "What was posted");
+
+        parts.push(
+            html`<${MentionedText} text=${text.slice(last, match.index).replace(/\n$/, "")} />`,
+        );
+        parts.push(html`<div class="fenced-data">
+            <div class="fenced-label">${label}</div>
+            <pre>${readable(match[3])}</pre>
+        </div>`);
+        last = match.index + match[0].length;
+    }
+
+    parts.push(html`<${MentionedText} text=${text.slice(last).replace(/^\n\n?/, "")} />`);
+
+    return parts;
+}
 
 /** A goal's check that did not pass, as Pi is told about it (see src/server/extensions/goals.ts): what, then its output. */
 const GOAL_CHECK =
@@ -258,8 +289,10 @@ function UserEntry({ entry, view, users }) {
         (view.conversation?.kind === "subagent" ? "Main agent" : undefined);
     const [written, attachments] = entry.text.split(ATTACHMENTS_HEADING);
     // Set up earlier to go out now: by a person (who shows as its author) or by Pi.
-    const scheduled = written.startsWith(SCHEDULED);
-    const body = scheduled ? written.slice(SCHEDULED.length) : written;
+    const via = VIA.exec(written);
+    const sent = via ? written.slice(via[0].length) : written;
+    const scheduled = sent.startsWith(SCHEDULED);
+    const body = scheduled ? sent.slice(SCHEDULED.length) : sent;
     const files = attachments ? parseAttachments(attachments) : [];
     // `/skill:name request`: the skill by name, and the request.
     const skill = SKILL.exec(body);
@@ -283,7 +316,7 @@ function UserEntry({ entry, view, users }) {
         >
             <span class="prompt-mark" style=${`color:${mark}`} aria-hidden="true">›</span>
             ${
-                (name || entry.at || scheduled) &&
+                (name || entry.at || scheduled || via) &&
                 html`<span class="prompt-head">
                     ${
                         name &&
@@ -296,6 +329,7 @@ function UserEntry({ entry, view, users }) {
                     }
                     ${entry.at && html`<span>${clock(entry.at)}</span>`}
                     ${scheduled && html`<span>· scheduled</span>`}
+                    ${via && html`<span>· via ${via[1]}</span>`}
                 </span>`
             }
             <div class="prompt-body">
@@ -312,7 +346,11 @@ function UserEntry({ entry, view, users }) {
                 ${
                     (skill ? skill[3] : body) &&
                     html`<div class="user-text">
-                        <${MentionedText} text=${skill ? skill[3] : body} />
+                        ${
+                            via
+                                ? html`<${FencedText} text=${body} />`
+                                : html`<${MentionedText} text=${skill ? skill[3] : body} />`
+                        }
                     </div>`
                 }
                 ${
