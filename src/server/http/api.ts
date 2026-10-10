@@ -268,6 +268,25 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, { ok: true });
         }
 
+        // A repository watch let hear from anyone, or only from the repository's people: by its person or the owner,
+        // never by PiP.
+        if (
+            first === "repo-watches" &&
+            second !== undefined &&
+            third === "anyone" &&
+            method === "POST"
+        ) {
+            const body = await readJson<{ anyone?: unknown }>(request);
+
+            if (typeof body.anyone !== "boolean") {
+                throw new HttpError(400, "anyone must be true or false");
+            }
+
+            await app.repoWatches.setAnyone(user, second, body.anyone);
+
+            return json(response, 200, { ok: true });
+        }
+
         // A new secret, for a hook whose address or secret got out.
         if (first === "hooks" && second !== undefined && third === "rotate" && method === "POST") {
             return json(response, 200, await app.hooks.rotate(user, second));

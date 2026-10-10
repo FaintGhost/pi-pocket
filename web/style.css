@@ -10092,14 +10092,30 @@ textarea.notes {
 
 /*
  * PiP's window: in the corner, over the conversation and its panels and under sheets, the launcher, and notices. It
- * pops in at 87% from the corner it sits in. On phones it is a sheet from the bottom edge, over a light scrim.
+ * sits between a session's top bar and its message box (`--topbar-h`, `--composer-h`: app.js and composer.js publish
+ * them), so their buttons stay in reach. Only on a screen too short for its least height (180px) does it give way at
+ * the bottom, over the message box, never over the top bar. It pops in at 87% from the corner it sits in. On phones it is a sheet from
+ * the bottom edge, over a light scrim.
  */
 .pip-panel {
+    --pip-top: max(
+        calc(var(--gap-out) + env(safe-area-inset-top)),
+        calc(var(--topbar-h, 0px) + 6px)
+    );
+    --pip-bottom: max(
+        calc(var(--gap-out) + env(safe-area-inset-bottom)),
+        calc(var(--composer-h, 0px) + 6px)
+    );
+    --pip-height: clamp(
+        min(180px, calc(100dvh - var(--pip-top) - var(--gap-out))),
+        calc(100dvh - var(--pip-top) - var(--pip-bottom)),
+        640px
+    );
     position: fixed;
     right: calc(var(--gap-out) + env(safe-area-inset-right));
-    bottom: calc(var(--gap-out) + env(safe-area-inset-bottom));
+    bottom: min(var(--pip-bottom), calc(100dvh - var(--pip-top) - var(--pip-height)));
     width: min(420px, calc(100vw - 2 * var(--gap-out)));
-    height: min(640px, calc(100dvh - 2 * var(--gap-out) - env(safe-area-inset-top)));
+    height: var(--pip-height);
     z-index: 18;
     display: flex;
     flex-direction: column;
@@ -10221,7 +10237,7 @@ textarea.notes {
     align-items: center;
     gap: 0.35rem;
     width: 100%;
-    min-height: 32px;
+    min-height: 40px;
     color: var(--accent);
     font-size: 0.72rem;
 }
@@ -10295,7 +10311,7 @@ textarea.notes {
 }
 
 .pip-chip {
-    min-height: 36px;
+    min-height: 40px;
     padding: 0.35rem 0.65rem;
     border: 1px solid var(--line-strong);
     color: var(--body);
@@ -10310,6 +10326,21 @@ textarea.notes {
 
 .pip-loading {
     margin: auto;
+}
+
+/* A call of PiP's waits for approval, which the panel cannot give: a line that leads to where it can. */
+.pip-approval {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.5rem 0.35rem 0.85rem;
+    border-top: 1px solid var(--line);
+    color: var(--warn);
+    font-size: 0.82rem;
+}
+
+.pip-approval .button {
+    min-height: 40px;
 }
 
 .pip-composer {

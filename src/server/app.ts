@@ -744,11 +744,13 @@ export class PocketApp {
         this.#log(`[${level}] ${message}`);
 
         for (const client of this.#clients) {
-            // Server-wide notices can name other sessions' folders: people invited to one session do not get them.
+            // Server-wide notices can name other sessions' folders: people invited to one session do not get them. One
+            // about PiP reaches the tabs with its panel open too: the panel has no notices of its own.
             const reaches =
                 conversationId === undefined
                     ? client.user.sessions === undefined
-                    : client.conversationId === conversationId &&
+                    : (client.conversationId === conversationId ||
+                          client.pip?.conversationId === conversationId) &&
                       this.canSee(client.user, conversationId);
 
             if (reaches) {

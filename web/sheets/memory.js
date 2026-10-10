@@ -3,36 +3,43 @@ import { useEffect, useState } from "preact/hooks";
 import { api, attempt, closeSheet, navigate, notify, store } from "../store.js";
 import { html, Sheet, timeAgo } from "../ui.js";
 
-/** Memory needs its extension, and a conversation to say which project. */
-export const memoryAvailable = () =>
-    store.state.conversationId !== null &&
+/** Memory needs its extension, and a conversation to say which project: `id`, or the one open. */
+export const memoryAvailable = (id) =>
+    (id ?? store.state.conversationId) !== null &&
     store.state.server?.extensions?.includes("pocket-memory") === true;
 
 const path = (id, rest = "") => `c/${id}/memory${rest}`;
 
 /** The lessons last fetched, `{ id, data }`: the menu shows its hint from them at once while it asks again. */
 let last = null;
-/** The fetch under way, `{ key, promise }`: the sheet, the menu, and each memory call under way ask once together. */
-let asking = null;
+/**
+ * The fetch under way for each conversation, `{ rev, promise }`: the sheet, the menu, and each memory call ask once
+ * together, PiP's calls and the open session's too.
+ */
+const asking = new Map();
 
 function fetchLessons(id, rev) {
-    const key = `${id}:${rev}`;
+    let fetching = asking.get(id);
 
-    if (asking?.key !== key) {
-        asking = { key, promise: api(path(id)) };
+    if (fetching?.rev !== rev) {
+        fetching = { rev, promise: api(path(id)) };
+        asking.set(id, fetching);
     }
 
-    return asking.promise;
+    return fetching.promise;
 }
 
-/** The lessons that apply in this conversation, fetched when it shows and again whenever they change on the server. */
-export function useMemory() {
-    const id = store.state.conversationId;
+/**
+ * The lessons that apply in conversation `id` (the one open when absent), fetched when it shows and again whenever
+ * they change on the server.
+ */
+export function useMemory(conversationId) {
+    const id = conversationId ?? store.state.conversationId;
     // Followed here, not read from the render: a call's card in the conversation is not drawn again on every change.
     const [rev, setRev] = useState(store.state.memoryRev ?? 0);
 
     useEffect(() => store.subscribe((state) => setRev(state.memoryRev ?? 0)), []);
-    const on = memoryAvailable();
+    const on = memoryAvailable(id);
     const [data, setData] = useState(last?.id === id ? last.data : null);
 
     useEffect(() => {
@@ -97,6 +104,15 @@ export async function remember(text, scope = "project") {
     return lesson;
 }
 
+/** What the owner saw waiting, sent with Approve: the server approves only if it still waits. */
+function approval(lesson) {
+    if (lesson.pending) {
+        return { text: lesson.text };
+    }
+
+    return lesson.proposal?.forget ? { forget: true } : { text: lesson.proposal?.text };
+}
+
 /** Who saved a lesson, and where it came from, in a line. */
 function Source({ lesson }) {
     const { me } = store.state;
@@ -126,10 +142,15 @@ function Lesson({ lesson, data }) {
     const [forgetting, setForgetting] = useState(false);
     const act = (rest, body = {}, done = "") =>
         attempt(async () => {
-            await api(path(id, `/${encodeURIComponent(lesson.id)}${rest}`), body);
+            // Fetched again either way: after a refusal (it changed since), the sheet shows what waits now.
+            try {
+                await api(path(id, `/${encodeURIComponent(lesson.id)}${rest}`), body);
+            } finally {
+                refresh();
+            }
+
             setDraft(null);
             setForgetting(false);
-            refresh();
 
             if (done) {
                 notify("info", done);
@@ -185,7 +206,12 @@ function Lesson({ lesson, data }) {
                         approving &&
                         html`<button
                             class="button small primary"
-                            onClick=${() => act("/approve", {}, "Approved: Pi goes by it from its next message.")}
+                            onClick=${() =>
+                                act(
+                                    "/approve",
+                                    approval(lesson),
+                                    "Approved: Pi goes by it from its next message.",
+                                )}
                         >
                             Approve
                         </button>`
@@ -284,7 +310,7 @@ export function MemorySheet({ draft: initial = "" }) {
                     value=${text}
                     onInput=${(event) => setText(event.currentTarget.value)}
                     onKeyDown=${(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
+                        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
                             event.preventDefault();
                             add();
                         }
@@ -345,27 +371,36 @@ export function MemorySheet({ draft: initial = "" }) {
 }
 
 /**
- * Under Pi's memory call: what became of the lesson it saved, changed, or forgot. While it waits, the owner approves or
- * discards it right here, without opening the sheet.
+ * Under Pi's memory call: what became of the lesson it saved, changed, or forgot, in conversation `conversationId` (the
+ * one open when absent). While it waits, the owner reads it and approves or discards it right here, without opening
+ * the sheet.
  */
-export function LessonCall({ lessonId }) {
-    const data = useMemory();
-    const id = store.state.conversationId;
+export function LessonCall({ lessonId, conversationId }) {
+    const id = conversationId ?? store.state.conversationId;
+    const data = useMemory(id);
 
     if (!data) {
         return null;
     }
 
     const lesson = data.lessons.find((each) => each.id === lessonId);
-    const act = (rest, done) =>
+    // Fetched again either way: after a refusal (it changed since), the card shows what waits now.
+    const act = (rest, body, done) =>
         attempt(async () => {
-            await api(path(id, `/${encodeURIComponent(lessonId)}${rest}`), {});
-            refresh();
+            try {
+                await api(path(id, `/${encodeURIComponent(lessonId)}${rest}`), body);
+            } finally {
+                refresh();
+            }
+
             notify("info", done);
         });
 
+    // One waiting for the owner is hidden from others: say nothing rather than that it is gone.
     if (!lesson) {
-        return html`<div class="lesson-call muted small">No longer in memory.</div>`;
+        return data.owner
+            ? html`<div class="lesson-call muted small">No longer in memory.</div>`
+            : null;
     }
 
     if (!lesson.pending && !lesson.proposal) {
@@ -377,20 +412,29 @@ export function LessonCall({ lessonId }) {
         : lesson.proposal.forget
           ? "Forgetting this lesson"
           : "New text for this lesson";
+    const text = lesson.pending || lesson.proposal.forget ? lesson.text : lesson.proposal.text;
 
     return html`<div class="lesson-call waiting">
-        <span class="grow">${what} waits for ${data.owner ? "you" : "the owner"}.</span>
+        <div class="grow">
+            <div>${what} waits for ${data.owner ? "you" : "the owner"}:</div>
+            <div class="lesson-text">${text}</div>
+        </div>
         ${
             data.owner &&
             html`<button
                     class="button small primary"
-                    onClick=${() => act("/approve", "Approved: Pi goes by it from its next message.")}
+                    onClick=${() =>
+                        act(
+                            "/approve",
+                            approval(lesson),
+                            "Approved: Pi goes by it from its next message.",
+                        )}
                 >
                     Approve
                 </button>
                 <button
                     class="button small ghost"
-                    onClick=${() => act("/discard", "Discarded.")}
+                    onClick=${() => act("/discard", {}, "Discarded.")}
                 >
                     Discard
                 </button>`

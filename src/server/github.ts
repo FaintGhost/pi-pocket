@@ -72,16 +72,24 @@ export const apiArgs = (repo: string, ...rest: string[]): string[] => {
 
 /** The repository of a PR, from its address: `owner/name`, with the host when it is not github.com. */
 export function repoOfUrl(url: string): string {
-    const match = /^https?:\/\/([^/]+)\/([^/]+)\/([^/]+)\/pull\/\d+/.exec(url);
+    // The whole address, and nothing after its number: it is stored, and Pi reads it.
+    const match = /^https?:\/\/([^/\s]+)\/([^/\s]+)\/([^/\s]+)\/pull\/\d{1,9}$/.exec(url);
+    const repo = match === null ? undefined : joined(match[1], match[2]!, match[3]!);
 
-    if (match === null) {
-        throw new HttpError(400, `${url} is not a pull request's address.`);
+    if (repo === undefined) {
+        throw new HttpError(400, `${snippet(url, 200)} is not a pull request's address.`);
     }
 
-    return match[1] === "github.com"
-        ? `${match[2]}/${match[3]}`
-        : `${match[1]}/${match[2]}/${match[3]}`;
+    return repo;
 }
+
+/**
+ * What may name a branch, as people give it and as GitHub's answers must: what git allows (`release@2024`, `v1+hotfix`,
+ * `über`), but on one line, with no quote, never an option (`-`), and none of what git forbids: `..`, `@{`, `//`, a `/`
+ * or `.` at either end, `.lock` at the end, and `\ ~ ^ : ? * [`.
+ */
+export const BRANCH =
+    /^(?![-/.])(?!.*(?:\.\.|@\{|\/\/|\/\.))(?!.*(?:[/.]|\.lock)$)(?!@$)[^\s\p{Cc}\p{Cf}\\~^:?*["'`\u201c\u201d\u2018\u2019]{1,255}$/u;
 
 const SEGMENT = /^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,99}$/;
 const HOST = /^[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}(:\d+)?$/;
@@ -90,7 +98,12 @@ const HOST = /^[A-Za-z0-9][A-Za-z0-9.-]*\.[A-Za-z]{2,}(:\d+)?$/;
 function joined(host: string | undefined, owner: string, name: string): string | undefined {
     const bare = name.replace(/\.git$/, "");
 
-    if (!SEGMENT.test(owner) || !SEGMENT.test(bare)) {
+    // `.` and `..` would name a folder above the clone's (`repos/<owner>/<name>`), and GitHub has no such repository.
+    if (
+        !SEGMENT.test(owner) ||
+        !SEGMENT.test(bare) ||
+        [owner, bare].some((part) => part === "." || part === "..")
+    ) {
         return undefined;
     }
 
@@ -156,9 +169,50 @@ export type RepoInfo = {
     private: boolean;
 };
 
+/** Hosts `gh` is signed in to, by the `gh` that said so, and when it did: asked at most hourly. */
+const signedIn = new WeakMap<Gh, Map<string, number>>();
+const SIGNED_IN_MS = 3_600_000;
+
+/**
+ * A GitHub host other than github.com may be asked only when `gh` is signed in there: a host named in a page or a post
+ * could otherwise answer as GitHub ("you can push", "the owner commented"), and get any `GH_ENTERPRISE_TOKEN`. Asks
+ * `gh config get -h <host> user`, which reads gh's own hosts file and contacts nobody: a token in the environment does
+ * not count, and is sent nowhere. Throws a 403 that says how to sign in.
+ */
+export async function requireHost(gh: Gh, host: string | undefined): Promise<void> {
+    if (host === undefined || host.toLowerCase() === "github.com") {
+        return;
+    }
+
+    const key = host.toLowerCase();
+    const known = signedIn.get(gh) ?? new Map<string, number>();
+    const at = known.get(key);
+
+    if (at !== undefined && Date.now() - at < SIGNED_IN_MS) {
+        return;
+    }
+
+    const user = await gh(["config", "get", "-h", host, "user"]).then(
+        (out) => out.trim(),
+        () => "",
+    );
+
+    if (user === "") {
+        throw new HttpError(
+            403,
+            `This machine's gh is not signed in to ${host}: Pi and PiP reach only GitHub hosts it is signed in to (gh auth login --hostname ${host}).`,
+        );
+    }
+
+    known.set(key, Date.now());
+    signedIn.set(gh, known);
+}
+
 /** What GitHub says of a repository to `gh`'s account. Throws an HttpError a person can act on. */
 export async function repoInfo(gh: Gh, repo: string): Promise<RepoInfo> {
     const { host } = repoArgs(repo);
+
+    await requireHost(gh, host);
     let found: {
         full_name?: string;
         default_branch?: string;
@@ -180,10 +234,25 @@ export async function repoInfo(gh: Gh, repo: string): Promise<RepoInfo> {
     }
 
     const name = found.full_name ?? repoArgs(repo).path;
+    const named = host === undefined ? name : `${host}/${name}`;
+    const defaultBranch = found.default_branch ?? "main";
+
+    // The name ends up in paths (`repos/<owner>/<name>`) and in what Pi reads: only one that reads as a repository.
+    if (parseRepo(named) !== named) {
+        throw new HttpError(502, `GitHub named ${repo} oddly: ${snippet(name, 100)}.`);
+    }
+
+    // So does the default branch: only one a person could have given.
+    if (!BRANCH.test(defaultBranch)) {
+        throw new HttpError(
+            502,
+            `GitHub named ${repo}'s default branch oddly: ${snippet(defaultBranch, 100)}.`,
+        );
+    }
 
     return {
-        repo: host === undefined ? name : `${host}/${name}`,
-        defaultBranch: found.default_branch ?? "main",
+        repo: named,
+        defaultBranch,
         push: found.permissions?.push === true || found.permissions?.admin === true,
         private: found.private === true,
     };
@@ -220,14 +289,35 @@ export async function originRepo(folder: string): Promise<string | undefined> {
 export const sameRepo = (a: string | undefined, b: string | undefined): boolean =>
     a !== undefined && b !== undefined && a.toLowerCase() === b.toLowerCase();
 
-/** People whose words count on a repository: they can write to it. */
+/**
+ * Runs that are CI on a branch itself: pushed to it, scheduled, started by hand or through the API, or started by
+ * another workflow. A pull request's run (a fork's `main` too) or an issue's is someone else's: its title and its log
+ * are theirs. Repository watches and GitHub webhooks both go by it.
+ */
+export const BRANCH_EVENTS: ReadonlySet<string> = new Set([
+    "push",
+    "schedule",
+    "workflow_dispatch",
+    "repository_dispatch",
+    "workflow_run",
+]);
+
+/**
+ * People whose words count on a repository: its owner, its organization's members, and its collaborators, as GitHub
+ * labels them. A member need not have write access, but write access through a team shows only as MEMBER.
+ */
 export const TRUSTED_ASSOCIATIONS: ReadonlySet<string> = new Set([
     "OWNER",
     "MEMBER",
     "COLLABORATOR",
 ]);
-const FOR_PI = /(^|[^\w@])@pi\b/i;
+// @pi as a word of its own: not @pi-hole, @pi_bot, or @pipeline.
+const FOR_PI = /(^|[^\w@])@pi(?![\w-])/i;
 const QUOTED = /^\s*>.*$|```[\s\S]*?```|`[^`\n]*`/gm;
 
 /** Whether a comment asks for Pi: @pi in its own words, not in a quote or in code. */
 export const mentionsPi = (body: string): boolean => FOR_PI.test(body.replace(QUOTED, ""));
+
+/** A GitHub login as Pi reads it: only what a login may hold (a bot's ends `[bot]`). */
+export const login = (name: string | undefined): string =>
+    (name ?? "").replace(/[^\w.[\]-]/g, "").slice(0, 60) || "someone";

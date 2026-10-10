@@ -18,6 +18,7 @@ import { addActivity } from "./collab.ts";
 import type { User } from "./config.ts";
 import { ChatDoc, type Lesson, MemoryDoc } from "./docs.ts";
 import { HttpError } from "./errors.ts";
+import { INVISIBLE_CLASS } from "./fence.ts";
 import { git } from "./git.ts";
 import { snippet } from "./projection.ts";
 
@@ -71,7 +72,20 @@ export type MemoryView = {
 
 /** A plain copy of a lesson out of a commit's document. */
 const copy = (lesson: Lesson): Lesson => JSON.parse(JSON.stringify(lesson)) as Lesson;
-const flat = (text: string) => text.replace(/\s+/g, " ").trim();
+/**
+ * Characters nobody sees: controls, format characters (zero-width, bidi, tags), lone surrogates, private use,
+ * unassigned, the variation selectors, and the blank letters (Hangul fillers, the braille blank). The owner approves the
+ * text they see, so Pi must read no other.
+ */
+const INVISIBLE = new RegExp("[" + INVISIBLE_CLASS + "]", "gu");
+
+/** Text on one line with nothing hidden: whitespace first, so a newline becomes a space before controls go. */
+export const flat = (text: string) =>
+    text.replace(/\s+/g, " ").replace(INVISIBLE, "").replace(/ {2,}/g, " ").trim();
+/** A folder's name as Pi's prompt and the sheet show it. */
+// Cut by code points, so an emoji at the 80th is kept whole, not halved into a lone surrogate.
+const cut = (text: string) => Array.from(text).slice(0, 80).join("");
+const named = (name: string, key: string) => cut(flat(name)) || cut(flat(key));
 const ordered = (lessons: Lesson[]) =>
     lessons.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
 
@@ -86,7 +100,7 @@ async function projectOf(cwd: string): Promise<Project> {
         );
 
     if (common === "") {
-        return { key: folder, name: basename(folder) || folder };
+        return { key: folder, name: named(basename(folder), folder) };
     }
 
     const key = await realpath(resolve(folder, common)).catch(() => resolve(folder, common));
@@ -94,7 +108,7 @@ async function projectOf(cwd: string): Promise<Project> {
     const name =
         basename(key) === ".git" ? basename(dirname(key)) : basename(key).replace(/\.git$/, "");
 
-    return { key, name: name || key };
+    return { key, name: named(name, key) };
 }
 
 export class Memory {
@@ -197,7 +211,9 @@ export class Memory {
         project: Project | undefined,
         id: string,
     ): Lesson {
-        const lesson = doc.items[id.trim().replace(/^\[|\]$/g, "")];
+        const key = id.trim().replace(/^\[|\]$/g, "");
+        // Own keys only: `constructor` or `__proto__` is no lesson.
+        const lesson = Object.hasOwn(doc.items, key) ? doc.items[key] : undefined;
 
         if (
             lesson === undefined ||
@@ -327,6 +343,9 @@ export class Memory {
      * Change a lesson's text or forget it; approve or discard what waits. Only the owner, or whoever saved a lesson,
      * changes or forgets it; only the owner approves. A change from Pi or a guest to a lesson in force is a proposal:
      * the lesson stays as it is until the owner approves it. One that waits anyway changes as it is.
+     *
+     * An approval says what the owner saw (`expected`): what waits can change between their look and their tap, so
+     * approving holds only when it would make true what they saw.
      */
     async change(
         conversationId: ConversationId,
@@ -334,6 +353,7 @@ export class Memory {
         writer: Writer,
         id: string,
         change: { text: unknown } | "remove" | "approve" | "discard",
+        expected?: { text?: string; forget?: boolean },
     ): Promise<Lesson> {
         const app = this.#app;
         const text = typeof change === "object" ? this.#text(change.text) : undefined;
@@ -350,6 +370,28 @@ export class Memory {
             if (change === "approve") {
                 if (!owner) {
                     throw new HttpError(403, "Only the owner approves lessons.");
+                }
+
+                // What approving makes true; with nothing waiting, the text in force, so a second tap does nothing.
+                const waiting =
+                    lesson.pending !== true && lesson.proposal?.forget === true
+                        ? { forget: true }
+                        : {
+                              text:
+                                  lesson.pending !== true && lesson.proposal?.text !== undefined
+                                      ? lesson.proposal.text
+                                      : lesson.text,
+                          };
+
+                if (
+                    expected === undefined ||
+                    (expected.forget === true) !== (waiting.forget === true) ||
+                    (waiting.forget !== true && expected.text !== waiting.text)
+                ) {
+                    throw new HttpError(
+                        409,
+                        "This lesson changed since you looked: check it again.",
+                    );
                 }
 
                 if (lesson.pending === true) {
@@ -429,6 +471,23 @@ export class Memory {
             }
 
             if (inForce && held) {
+                // Back to the text in force: nothing to propose. The writer's own proposal goes (it changed its mind);
+                // someone else's stays for the owner.
+                if (text === lesson.text) {
+                    const proposal = lesson.proposal;
+
+                    if (
+                        proposal !== undefined &&
+                        proposal.by === (writer.userId ?? lesson.by) &&
+                        proposal.byPi === writer.byPi
+                    ) {
+                        delete lesson.proposal;
+                        await said(tx, `withdrew the proposal for the lesson ${quoted}`);
+                    }
+
+                    return copy(lesson);
+                }
+
                 if (lesson.proposal?.text !== text) {
                     lesson.proposal = {
                         text: text!,
@@ -556,19 +615,20 @@ export class Memory {
         });
     }
 
-    /** A person changes, forgets, or approves a lesson. */
+    /** A person changes, forgets, or approves a lesson; an approval says what they saw (see `change`). */
     async edit(
         id: ConversationId,
         user: User,
         lessonId: string,
         change: { text: unknown } | "remove" | "approve" | "discard",
+        expected?: { text?: string; forget?: boolean },
     ): Promise<Lesson> {
         const app = this.#app;
 
         app.requireSee(user, id);
         app.requireSteer(user);
 
-        return this.change(id, app.cwdOf(id), this.#person(user), lessonId, change);
+        return this.change(id, app.cwdOf(id), this.#person(user), lessonId, change, expected);
     }
 
     // ─── Tabs ──────────────────────────────────────────────────────────────

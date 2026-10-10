@@ -29,7 +29,16 @@ import { SubagentsBar } from "./subagents.js";
 import { TrustBar } from "./trust.js";
 import { prefs } from "./theme.js";
 import { MicButton, useDictation } from "./voice.js";
-import { formatBytes, formatTokens, html, Icon, Marked, modelLabel, Spinner } from "./ui.js";
+import {
+    formatBytes,
+    formatTokens,
+    html,
+    Icon,
+    Marked,
+    modelLabel,
+    Spinner,
+    useEdge,
+} from "./ui.js";
 
 const coarse = matchMedia("(pointer: coarse)").matches;
 /** The newest "Send to Pi" text already put into a message box (see `insertIntoComposer`). */
@@ -283,7 +292,7 @@ function WatchBar() {
     const checks = WATCH_CHECKS[watch.checks];
     const text =
         watch.status === "watching"
-            ? html`<strong>Watching</strong> ${pr}${checks ? ` · ${checks}` : ""}${watch.sent > 0 ? ` · ${watch.sent} of ${watch.max} sent` : ""}${watch.note ? " · last look failed" : ""}`
+            ? html`<strong>Watching</strong> ${pr}${checks ? ` · ${checks}` : ""}${watch.sent > 0 ? ` · ${watch.sent} of ${watch.max} sent` : ""}${watch.errors > 0 ? " · last look failed" : watch.note ? " · waiting" : ""}`
             : html`${pr} ${watchEnded(watch)}`;
 
     return html`<div
@@ -330,6 +339,8 @@ export function Composer() {
     });
     // What is above the message box, and how it shares the room with the conversation (`dock.js`).
     const dock = useRef(null);
+    // The whole of it, which says how far up it reaches: PiP's window on a wide screen stays above its Send and Stop.
+    const setFoot = useEdge("--composer-h", (rect) => innerHeight - rect.top);
     const picker = useRef(null);
     const list = useRef(null);
     // One per `!` command: sending it again after a lost reply runs it once.
@@ -907,7 +918,7 @@ export function Composer() {
     }, [writes]);
 
     if (collab() && !canSteer()) {
-        return html`<footer class="composer-wrap">
+        return html`<footer class="composer-wrap" ref=${setFoot}>
             <div class="dock" ref=${dock}>
                 <${TypingLine} where="pi" />
                 <${SubagentsBar} />
@@ -931,7 +942,7 @@ export function Composer() {
             ? agent.thinkingLevel
             : null;
 
-    return html`<footer class="composer-wrap">
+    return html`<footer class="composer-wrap" ref=${setFoot}>
         <div class="dock" ref=${dock}>
             <${TypingLine} where="pi" />
             ${

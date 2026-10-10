@@ -158,6 +158,8 @@ const DID = {
     approvals: { verb: "checked approvals" },
     memory: { verb: "saved", noun: "lesson" },
     watch_pr: { verb: "watched", noun: "pull request" },
+    session_watch_pr: { verb: "watched", noun: "pull request", by: "session" },
+    repo_watch: { verb: "set up", noun: "repository watch", by: "repo" },
 };
 
 /** Nouns said with "a" when there is one. */
@@ -171,6 +173,7 @@ const ONE = {
     call: "a call",
     lesson: "a lesson",
     "pull request": "a pull request",
+    "repository watch": "a repository watch",
 };
 
 /** Calls whose verb depends on what they were asked to do: listing or cancelling schedules, denying a call. */
@@ -195,10 +198,16 @@ function byAction(name, args) {
             : { verb: args.action === "update" ? "changed" : "forgot", noun: "lesson", by: "id" };
     }
 
-    if (name === "watch_pr" && args.action !== "start") {
+    if ((name === "watch_pr" || name === "session_watch_pr") && args.action !== "start") {
         return {
             verb: args.action === "stop" ? "stopped watching the PR" : "checked the PR watch",
         };
+    }
+
+    if (name === "repo_watch" && args.action !== "add") {
+        return args.action === "remove"
+            ? { verb: "removed", noun: "repository watch", by: "id" }
+            : { verb: "checked repository watches" };
     }
 
     return undefined;

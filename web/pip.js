@@ -22,8 +22,8 @@ const REPORT = "[report] ";
  * What came from outside, as PiP gets it: a post to one of the person's webhooks (`hooks.ts`), or what happened on a
  * repository they watch (`repo-watches.ts`). Which one, then the instructions and what came.
  */
-const WEBHOOK = /^\[via webhook ([^\]\n]{1,80})\] /;
-const REPO_WATCH = /^\[via watch ([^\]\n]{1,120})\] /;
+const WEBHOOK = /^\[via webhook ([^\]\n]{1,300})\] /;
+const REPO_WATCH = /^\[via watch ([^\]\n]{1,300})\] /;
 
 /**
  * A webhook's post or a watch's news for reading: the person's instructions, and what came as plain text (never
@@ -158,8 +158,8 @@ export function openPip(text) {
     }
 
     sessionStorage.setItem(OPEN_KEY, "1");
+    // The subscriber above tells the server, from inside this `set`: once, not twice.
     store.set({ pipOpen: true, launcher: false, drawer: false });
-    tellServer(true);
 }
 
 export function closePip() {
@@ -186,8 +186,15 @@ export async function askPip(text) {
     openPip();
     const pip = store.state.pip ?? (await opening);
 
-    if (pip) {
-        await send(pip.id, text, false);
+    if (!pip) {
+        notify("error", "PiP is not ready yet: your message waits in its box.");
+    }
+
+    // Not sent: the words wait in PiP's box rather than be lost (`send` said why), after what was there already.
+    if (!pip || !(await send(pip.id, text, false))) {
+        const draft = localStorage.getItem(DRAFT_KEY)?.trim();
+
+        openPip(draft ? `${draft}\n\n${text}` : text);
     }
 }
 
@@ -395,11 +402,13 @@ function Composer({ id, busy }) {
         }
     };
 
-    const dictation = useDictation(ref, change);
+    // PiP's box takes Alt+V while it shows, over the session's.
+    const dictation = useDictation(ref, change, { top: true });
 
     useLayoutEffect(fit, [text]);
-    // A phone's keyboard would cover the panel as it opens: there, the box waits for a tap.
-    useEffect(() => {
+    // A phone's keyboard would cover the panel as it opens: there, the box waits for a tap. Elsewhere it takes the focus
+    // as it mounts, in the same task as the key that opened it, so the next keys land here.
+    useLayoutEffect(() => {
         if (!NARROW.matches) {
             ref.current?.focus({ preventScroll: true });
         }
@@ -470,7 +479,7 @@ function Composer({ id, busy }) {
     </form>`;
 }
 
-function PipPanel({ leaving }) {
+function PipPanel({ leaving, scrim }) {
     const { pip, pipView: view, me } = store.state;
     const ref = useRef(null);
     const body = useRef(null);
@@ -488,18 +497,21 @@ function PipPanel({ leaving }) {
     const items = itemsOf(rows, blocks.length > 0 ? { kind: "assistant", blocks } : null);
     const speaking = blocks.some(says);
     const busy = live.busy === true;
+    // Calls of PiP's held for approval: the panel cannot answer them, so it says so and leads to where they can be.
+    const waiting = ready ? (view.approvals ?? []) : [];
+    // Where the focus was before the panel: read as it first renders, before its box takes the focus.
+    const [before] = useState(() => document.activeElement);
 
-    useDragToClose(ref, { dir: "down", onClose: closePip, enabled: NARROW.matches });
+    useDragToClose(ref, { dir: "down", onClose: closePip, enabled: NARROW.matches, scrim });
     // Focus goes back where it was when the panel closes.
-    useEffect(() => {
-        const before = document.activeElement;
-
-        return () => {
+    useEffect(
+        () => () => {
             if (before instanceof HTMLElement && before.isConnected) {
                 before.focus({ preventScroll: true });
             }
-        };
-    }, []);
+        },
+        [],
+    );
     // What shows now counts as seen.
     useEffect(markSeen, [pip?.endedAt]);
     // Stay at the newest words while they come, unless someone scrolled up to read.
@@ -541,7 +553,9 @@ function PipPanel({ leaving }) {
                 <${Icon} name="pip" size=${18} />
             </span>
             <h2>PiP</h2>
-            <span class="pip-status" aria-live="polite">${busy ? "working…" : ""}</span>
+            <span class="pip-status" aria-live="polite">
+                ${waiting.length > 0 ? "needs you" : busy ? "working…" : ""}
+            </span>
             <button
                 class="icon-button"
                 aria-label="Start fresh"
@@ -605,6 +619,23 @@ function PipPanel({ leaving }) {
                 </div>`
             }
         </div>
+        ${
+            waiting.length > 0 &&
+            html`<div class="pip-approval" role="status">
+                <${Icon} name="shield" size=${14} />
+                <span class="grow">PiP waits for your approval: ${waiting[0].tool}</span>
+                <button
+                    type="button"
+                    class="button small"
+                    onClick=${() => {
+                        closePip();
+                        navigate(id);
+                    }}
+                >
+                    Review
+                </button>
+            </div>`
+        }
         <${Composer} id=${id} busy=${busy} />
     </section>`;
 }
@@ -637,6 +668,8 @@ function PipBubble() {
 export function PipHost() {
     const open = store.state.pipOpen && pipAvailable();
     const [kept, leaving] = usePresence(open || null, 180);
+    // What a drag on the sheet dims as it goes: the scrim, not the app behind it.
+    const scrim = useRef(null);
 
     // Back closes it, as it closes a sheet.
     useBack(Boolean(open), closePip);
@@ -652,10 +685,11 @@ export function PipHost() {
     // On phones a scrim dims what is behind the sheet, and a tap on it closes it; wide screens have none.
     return html`<div
             class=${`pip-scrim ${leaving ? "leaving" : ""}`}
+            ref=${scrim}
             aria-hidden="true"
             onClick=${closePip}
         ></div>
-        <${PipPanel} leaving=${leaving} />`;
+        <${PipPanel} leaving=${leaving} scrim=${scrim} />`;
 }
 
 /** PiP in the rail: the way to it that is always there, marked while it works or has something new. */

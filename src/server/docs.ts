@@ -507,6 +507,11 @@ export type Hook = {
      * whoever sees the address (a repository's admins do) cannot post as the hook. Absent: the secret is in the address.
      */
     signed?: boolean;
+    /**
+     * For GitHub: posts about what people outside the repository wrote (not its owner, members, or collaborators) reach
+     * Pi too. Absent: they are dropped. Only a person sets it, in the hooks sheet.
+     */
+    anyone?: boolean;
     /** Who made it: posts go as their work, with their checks and spend limit. */
     by: string;
     createdAt: number;
@@ -544,7 +549,10 @@ export type RepoWatch = {
     assigned?: boolean;
     /** The branch whose failing CI counts; the repository's default branch. */
     branch: string;
-    /** Issues and PRs from anyone, not only from people who can write to the repository (and bots' PRs). */
+    /**
+     * Issues and PRs from anyone, not only from the repository's owner, members, and collaborators (and bots' PRs).
+     * Only a person turns it on, in the hooks sheet; PiP cannot.
+     */
     anyone?: boolean;
     /** The conversation it messages: its person's PiP, or a session. */
     target: number;

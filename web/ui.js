@@ -821,6 +821,74 @@ export function Boot({ caption = "starting", detail = "", inline = false }) {
     </div>`;
 }
 
+/** The element each edge was last published from (`useEdge`): one replacing another is not undone as the old goes. */
+const edges = new Map();
+
+/**
+ * A ref that keeps `name` (a CSS variable on the page's root) at where its element reaches, `measure(rect)` px, as it
+ * or the window resizes; unset while the element is hidden or gone. PiP's window keeps clear of the session's top bar
+ * and message box with them.
+ */
+export function useEdge(name, measure) {
+    const [ref] = useState(() => {
+        let stop = null;
+
+        const publish = (element) => {
+            const root = document.documentElement;
+
+            const update = () => {
+                // Another element took the name since (a frame queued before this one went): it says, not this one.
+                if (edges.get(name) !== element) {
+                    return;
+                }
+
+                const rect = element.getBoundingClientRect();
+
+                if (rect.height === 0) {
+                    root.style.removeProperty(name);
+                } else {
+                    root.style.setProperty(name, `${Math.max(0, Math.round(measure(rect)))}px`);
+                }
+            };
+
+            const observer = new ResizeObserver(update);
+            // A pane popping in (`popin` scales it) moves the element without resizing it: measured again as an
+            // animation around it ends.
+            let frame = 0;
+
+            const settled = () => {
+                cancelAnimationFrame(frame);
+                frame = requestAnimationFrame(update);
+            };
+
+            edges.set(name, element);
+            observer.observe(element);
+            addEventListener("resize", update);
+            document.addEventListener("animationend", settled);
+            update();
+
+            return () => {
+                observer.disconnect();
+                removeEventListener("resize", update);
+                document.removeEventListener("animationend", settled);
+                cancelAnimationFrame(frame);
+
+                if (edges.get(name) === element) {
+                    edges.delete(name);
+                    root.style.removeProperty(name);
+                }
+            };
+        };
+
+        return (element) => {
+            stop?.();
+            stop = element ? publish(element) : null;
+        };
+    });
+
+    return ref;
+}
+
 /**
  * Keep showing a value for `ms` after it goes away (null or undefined), so what it shows can animate out. Returns the
  * value to show and whether it is leaving.

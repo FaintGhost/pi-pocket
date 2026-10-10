@@ -519,6 +519,8 @@ export class Room {
                           sent: this.watch.sent,
                           max: this.watch.max,
                           note: this.watch.note ?? null,
+                          // A note with no failed looks says why it waits (someone else drives).
+                          errors: this.watch.errors,
                           by: this.watch.by,
                       },
         };

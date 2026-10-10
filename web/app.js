@@ -55,7 +55,7 @@ import {
 } from "./store.js";
 import { prefs, setPrefs, startTheme } from "./theme.js";
 import { Transcript } from "./transcript.js";
-import { APPLE, Boot, html, Icon, iconPath, shortPath, usePresence } from "./ui.js";
+import { APPLE, Boot, html, Icon, iconPath, shortPath, useEdge, usePresence } from "./ui.js";
 import { toggleDictation } from "./voice.js";
 
 /**
@@ -113,8 +113,10 @@ function Topbar() {
         (session) =>
             session.waiting && !session.archived && session.id !== store.state.conversationId,
     ).length;
+    // How far down it reaches: PiP's window on a wide screen stays below its buttons.
+    const edge = useEdge("--topbar-h", (rect) => rect.bottom);
 
-    return html`<header class="topbar">
+    return html`<header class="topbar" ref=${edge}>
         <button
             class="icon-button badge-host topbar-back"
             aria-label=${waiting > 0 ? `Back to sessions, ${waiting} waiting for you` : "Back to sessions"}
@@ -543,8 +545,8 @@ addEventListener("keydown", (event) => {
             return;
         }
 
-        // PiP, the assistant over every screen.
-        if (event.code === "KeyA" && pipAvailable()) {
+        // PiP, the assistant over every screen; not under a sheet, where it would open unseen.
+        if (event.code === "KeyA" && pipAvailable() && !store.state.sheet) {
             event.preventDefault();
             togglePip();
 

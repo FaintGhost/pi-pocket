@@ -352,7 +352,15 @@ export class Spend {
         const pip = app.pip.idOf(user.id);
 
         if (pip !== undefined) {
-            sessions.push({ id: Number(pip), title: "PiP", spent: byRoot.get(pip) ?? 0 });
+            // With its limit, like any session's: the owner sees it, and can clear it.
+            const budget = app.sessionMeta(pip)?.budget;
+
+            sessions.push({
+                id: Number(pip),
+                title: "PiP",
+                spent: byRoot.get(pip) ?? 0,
+                ...(budget === undefined ? {} : { budget }),
+            });
         }
 
         const people = app.config.users

@@ -22,12 +22,16 @@ const ERRORS = {
 
 /** The dictation that listens now: one at a time, in the whole app. */
 let current = null;
-/** The boxes that can dictate, newest last: the shortcut (Alt+V) dictates into the newest (PiP's, while open). */
+/**
+ * The boxes that can dictate, newest last. The shortcut (Alt+V) dictates into PiP's while it shows (its box is `top`),
+ * else into the newest in the page: one gone for now (view only, someone else's turn) is passed over.
+ */
 const boxes = [];
 
-/** Alt+V: start or stop dictation in the newest box; false when no box can. */
+/** Alt+V: start or stop dictation in PiP's box or the newest; false when no box can. */
 export function toggleDictation() {
-    const box = boxes.at(-1);
+    const shown = (each) => each.box.current?.isConnected === true;
+    const box = boxes.findLast((each) => each.top && shown(each)) ?? boxes.findLast(shown);
 
     if (!box || !voiceAvailable()) {
         return false;
@@ -36,6 +40,30 @@ export function toggleDictation() {
     box.toggle();
 
     return true;
+}
+
+/**
+ * How long the starts of `a` and `b` agree, and their ends, each on its own: an edit that repeats what is beside it
+ * ("H" typed before "Hello") fits both ways, and either way it is outside what agrees.
+ */
+function common(a, b) {
+    let head = 0;
+
+    while (head < a.length && head < b.length && a[head] === b[head]) {
+        head++;
+    }
+
+    let tail = 0;
+
+    while (
+        tail < a.length &&
+        tail < b.length &&
+        a[a.length - 1 - tail] === b[b.length - 1 - tail]
+    ) {
+        tail++;
+    }
+
+    return { head, tail };
 }
 
 /** Words heard, put between what the box has before and after them, with a space where words would touch. */
@@ -58,8 +86,9 @@ function join(before, words, after) {
  * Dictation into a textarea (`box`, a ref). `onText(value, caret)` hears each change, as typing does, so the box's own
  * draft saving keeps it. Words go in at the caret while the box has the focus, and after its text when it does not.
  * Returns whether it listens, and `toggle` and `stop` (`stop(true)` drops words not yet settled: for sending, leaving).
+ * `top` marks PiP's box, which takes Alt+V while it shows.
  */
-export function useDictation(box, onText) {
+export function useDictation(box, onText, { top = false } = {}) {
     const [listening, setListening] = useState(false);
     const hear = useRef(onText);
     const self = useRef(null);
@@ -68,6 +97,8 @@ export function useDictation(box, onText) {
 
     if (self.current === null) {
         self.current = {
+            box,
+            top,
             recognition: null,
             /** Stop listening: `drop` throws away what is not settled yet, and anything heard after. */
             stop(drop = false) {
@@ -109,50 +140,127 @@ export function useDictation(box, onText) {
                 recognition.interimResults = true;
                 this.recognition = recognition;
 
-                // What the box had around the words, the results already in it, and the box as dictation left it.
+                // What the box had around the words, the results already in it, and the box as dictation left it: its
+                // text and its selection. `pending` is the first result not settled yet, and `span` where its words are.
                 let base = null;
                 let from = 0;
                 let seen = 0;
-                let written = null;
+                let written = "";
+                let selection = [0, 0];
+                let pending = 0;
+                let span = [0, 0];
+                // The person moved on while words were still coming: those finish where they are, then words go where
+                // the person is.
+                let moving = false;
+
+                const focused = () => document.activeElement === element;
+                const selected = () => [element.selectionStart, element.selectionEnd];
 
                 const rebase = () => {
-                    const focused = document.activeElement === element;
-                    const at = focused ? element.selectionStart : element.value.length;
-                    const end = focused ? element.selectionEnd : at;
+                    const at = focused() ? element.selectionStart : element.value.length;
+                    const end = focused() ? element.selectionEnd : at;
 
                     base = { before: element.value.slice(0, at), after: element.value.slice(end) };
                     from = seen;
+                    moving = false;
                 };
 
                 rebase();
+                written = element.value;
+                selection = selected();
+
+                /**
+                 * Typed into, or the caret moved, since the words last went in. Outside the words still coming, those
+                 * finish where they are, around what the person did; on them, the person's edit wins, and what is heard
+                 * next goes where the caret is.
+                 */
+                const changed = () => {
+                    const value = element.value;
+                    const [s, e] = span;
+                    const { head, tail } = common(written, value);
+                    // Where the edit was in what dictation wrote: after the words coming (they are in the start that
+                    // agrees), or before them (in the end that agrees).
+                    const after = value === written || head >= e;
+                    const before = !after && written.length - tail <= s;
+
+                    if (pending >= seen || !(after || before)) {
+                        rebase();
+
+                        return;
+                    }
+
+                    const shift = before ? value.length - written.length : 0;
+
+                    base = { before: value.slice(0, s + shift), after: value.slice(e + shift) };
+                    from = pending;
+                    moving = true;
+                };
 
                 recognition.onresult = (event) => {
-                    // Typed into meanwhile: what shows stays, and words heard from here on go where the caret is.
-                    if (written !== null && element.value !== written) {
-                        rebase();
+                    const results = event.results;
+
+                    if (
+                        element.value !== written ||
+                        (focused() && selected().some((at, index) => at !== selection[index]))
+                    ) {
+                        changed();
                     }
 
-                    const words = [];
+                    // What is settled, then what may still change, from the first result not settled on.
+                    let first = from;
 
-                    for (let index = from; index < event.results.length; index++) {
-                        words.push(event.results[index][0].transcript.trim());
+                    while (first < results.length && results[first].isFinal) {
+                        first++;
                     }
 
-                    seen = event.results.length;
-                    const { value, at } = join(
-                        base.before,
-                        words.filter(Boolean).join(" "),
-                        base.after,
-                    );
+                    const said = (start, end) => {
+                        const words = [];
 
+                        for (let index = start; index < end; index++) {
+                            words.push(results[index][0].transcript.trim());
+                        }
+
+                        return words.filter(Boolean).join(" ");
+                    };
+
+                    const settled = said(from, first);
+                    const coming = said(first, results.length);
+                    const all = [settled, coming].filter(Boolean).join(" ");
+                    const { value, at } = join(base.before, all, base.after);
+                    // Where the words still coming start: after the settled ones and a space, or where all start.
+                    const start =
+                        settled === ""
+                            ? base.before.length + (all !== "" && /\S$/.test(base.before) ? 1 : 0)
+                            : join(base.before, settled, base.after).at + (coming === "" ? 0 : 1);
+                    // Where the text after the words ends up: the person's selection there moves with it.
+                    const was = element.value.length - base.after.length;
+                    const now = value.length - base.after.length;
+                    const person = selected();
+
+                    seen = results.length;
+                    pending = first;
+                    span = [start, at];
                     written = value;
                     element.value = value;
 
-                    if (document.activeElement === element) {
-                        element.setSelectionRange(at, at);
+                    if (focused()) {
+                        const place = (point) =>
+                            point >= was ? point + now - was : Math.min(point, now);
+
+                        if (moving) {
+                            element.setSelectionRange(place(person[0]), place(person[1]));
+                        } else {
+                            element.setSelectionRange(at, at);
+                        }
                     }
 
-                    hear.current(value, at);
+                    selection = selected();
+                    hear.current(value, moving ? selection[1] : at);
+
+                    // The words left behind are all settled: what comes next goes where the person is.
+                    if (moving && first === results.length) {
+                        rebase();
+                    }
                 };
 
                 recognition.onerror = (event) => {

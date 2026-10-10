@@ -86,6 +86,8 @@ const IMAGE_MIME: Record<string, string> = {
     ".webp": "image/webp",
 };
 const MAX_TITLE = 120;
+/** A title as stored: one line, so it cannot pass for more lines where it is quoted (PiP's lists, reports). */
+const oneLine = (title: string): string => title.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE);
 /** The extension that makes plan mode block changes; without it, plan mode would do nothing. */
 const PLAN_EXTENSION = "pocket-plan";
 /** What Pi is told when someone approves its plan. */
@@ -155,7 +157,8 @@ export class Commands {
             throw new HttpError(403, "You were invited to one session and cannot start new ones.");
         }
 
-        const title = optionalText(request.title, "title")?.trim().slice(0, MAX_TITLE) || undefined;
+        const given = optionalText(request.title, "title");
+        const title = (given === undefined ? undefined : oneLine(given)) || undefined;
         const folder = app.workspace.checkDirectory(
             optionalText(request.cwd, "cwd") ?? app.defaultCwd,
         );
@@ -423,7 +426,7 @@ export class Commands {
 
             // A rename moves the session up the list. Archiving does not: brought back, or undone, it returns to where it was.
             if (patch.title !== undefined) {
-                meta.title = patch.title.trim().slice(0, MAX_TITLE) || undefined;
+                meta.title = oneLine(patch.title) || undefined;
                 meta.updatedAt = Date.now();
             }
 
@@ -431,7 +434,7 @@ export class Commands {
                 meta.archived = patch.archived;
             }
         }, context);
-        const title = patch.title?.trim().slice(0, MAX_TITLE);
+        const title = patch.title === undefined ? undefined : oneLine(patch.title);
 
         if (title !== undefined && title !== "" && title !== before?.title) {
             await app.collab.activity(id, user, `renamed the session to “${title}”`);
@@ -1156,7 +1159,13 @@ export class Commands {
     /** Make a webhook that messages a session (or PiP) for this person. */
     async addHook(
         user: User,
-        body: { target?: unknown; name?: unknown; instructions?: unknown; signed?: unknown },
+        body: {
+            target?: unknown;
+            name?: unknown;
+            instructions?: unknown;
+            signed?: unknown;
+            anyone?: unknown;
+        },
     ) {
         const app = this.#app;
         // "pip": this person's PiP, made now if they have none yet.
@@ -1184,7 +1193,12 @@ export class Commands {
         const hook = await app.hooks.remove(user, hookId);
         const target = hook.target as unknown as ConversationId;
 
-        if (app.sessionMeta(target) !== undefined && app.sessionMeta(target)?.pip === undefined) {
+        // No line where the remover can no longer go.
+        if (
+            app.sessionMeta(target) !== undefined &&
+            app.sessionMeta(target)?.pip === undefined &&
+            app.canSee(user, target)
+        ) {
             await app.collab.activity(
                 target,
                 user,

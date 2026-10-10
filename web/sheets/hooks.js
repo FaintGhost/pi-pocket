@@ -1,6 +1,6 @@
 // Webhooks and watches: addresses other services post to, each turning every post into a message to Pi in a session or
 // to PiP; and the repository watches PiP set up, which need no address.
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { pipAvailable } from "../pip.js";
 import { api, attempt, closeSheet, navigate, notify, store } from "../store.js";
 import { copyText, formatWhen, html, Sheet } from "../ui.js";
@@ -45,7 +45,7 @@ function HookRow({ hook, base, fresh, onRemove, onRotate }) {
                 ${hook.signed && html`<div class="mono small hook-address">Secret: ${hook.secret}</div>`}`
         }
         <div class="hook-actions">
-            <span class="muted small grow">${hook.signed ? "GitHub, signed" : "secret in the address"} · ${used}</span>
+            <span class="muted small grow">${hook.signed ? "GitHub, signed" : "secret in the address"}${hook.anyone ? " · from anyone" : ""} · ${used}</span>
             <button
                 class="button small"
                 onClick=${() => copy(addressOf(base, hook), hook.signed ? "Address copied: GitHub's Payload URL." : "Address copied. Keep it secret: anyone with it can message Pi.")}
@@ -67,8 +67,11 @@ function HookRow({ hook, base, fresh, onRemove, onRotate }) {
     </div>`;
 }
 
-/** A repository watch PiP set up: the repository, what it looks for, where it sends, and removing it. */
-function WatchRow({ watch, onRemove }) {
+/**
+ * A repository watch PiP set up: the repository, what it looks for, where it sends; whether strangers' issues and PRs
+ * reach it (only a person turns that on, never PiP), and removing it.
+ */
+function WatchRow({ watch, onRemove, onAnyone }) {
     const open = (event) => {
         event.preventDefault();
         closeSheet();
@@ -78,7 +81,6 @@ function WatchRow({ watch, onRemove }) {
     const narrowed = [
         watch.label && `label ${watch.label}`,
         watch.assigned && "assigned to you",
-        watch.anyone && "from anyone",
         watch.events.includes("ci") && `CI on ${watch.branch}`,
     ].filter(Boolean);
 
@@ -93,10 +95,14 @@ function WatchRow({ watch, onRemove }) {
         ${watch.instructions && html`<div class="hook-text">${watch.instructions}</div>`}
         <div class="hook-actions">
             <span class="muted small grow">
-                ${watch.count === 0 ? "nothing sent yet" : `${watch.count} sent, last ${formatWhen(watch.lastNewsAt)}`}${watch.note ? ` · last look failed: ${watch.note}` : ""}
+                ${watch.count === 0 ? "nothing sent yet" : `${watch.count} sent, last ${formatWhen(watch.lastNewsAt)}`}${watch.note ? ` · ${watch.errors > 0 ? "last look failed" : "waiting"}: ${watch.note}` : ""}
             </span>
             <button class="button small ghost" onClick=${onRemove}>Remove</button>
         </div>
+        <label class="check">
+            <input type="checkbox" checked=${watch.anyone === true} onChange=${onAnyone} />
+            From anyone, not only the repository's people
+        </label>
     </div>`;
 }
 
@@ -110,6 +116,9 @@ export function HooksSheet() {
     const [instructions, setInstructions] = useState("");
     const [target, setTarget] = useState(here ? "here" : "pip");
     const [github, setGithub] = useState(true);
+    const [anyone, setAnyone] = useState(false);
+    const [making, setMaking] = useState(false);
+    const makingNow = useRef(false);
     const [fresh, setFresh] = useState(null);
     const steer = me?.role !== "viewer";
     const load = () => attempt(async () => setList(await api("hooks")));
@@ -119,20 +128,34 @@ export function HooksSheet() {
 
     useEffect(() => void load(), []);
 
-    const make = () =>
+    // One hook per tap: a second tap while the first is on its way would make another, with its own secret.
+    const make = () => {
+        if (makingNow.current) {
+            return;
+        }
+
+        makingNow.current = true;
+        setMaking(true);
         attempt(async () => {
             const hook = await api("hooks", {
                 target: target === "pip" ? "pip" : here.id,
                 name: name.trim(),
                 instructions: instructions.trim(),
                 signed: github,
+                anyone: github && anyone,
             });
 
             setName("");
             setInstructions("");
+            setAnyone(false);
             setFresh(hook.id);
             await load();
+        }).finally(() => {
+            makingNow.current = false;
+            setMaking(false);
         });
+    };
+
     const remove = (hook) =>
         attempt(async () => {
             if (
@@ -175,6 +198,23 @@ export function HooksSheet() {
             await load();
         });
 
+    const setWatchAnyone = (watch, event) => {
+        const on = event.currentTarget.checked;
+
+        attempt(async () => {
+            if (
+                on &&
+                !confirm(
+                    `Let anyone's issues and PRs on ${watch.repo} reach ${watch.pip ? "PiP" : "Pi"}? Strangers' words then come with your instructions.`,
+                )
+            ) {
+                return;
+            }
+
+            await api(`repo-watches/${encodeURIComponent(watch.id)}/anyone`, { anyone: on });
+        }).finally(load);
+    };
+
     return html`<${Sheet} title="Webhooks and watches" onClose=${closeSheet}>
         <p class="muted small">
             Other services (GitHub, a deploy, a monitor) post to a webhook's address, and each post becomes a message to Pi in a session, or to PiP: your instructions, then what came.
@@ -216,6 +256,20 @@ export function HooksSheet() {
                     </div>
                 </div>
                 ${
+                    github &&
+                    html`<label class="check">
+                        <input
+                            type="checkbox"
+                            checked=${anyone}
+                            onChange=${(event) => setAnyone(event.currentTarget.checked)}
+                        />
+                        From anyone: issues, PRs, and comments by people outside the repository too
+                    </label>
+                    <div class="muted small">
+                        ${anyone ? "Strangers' words reach Pi too, fenced as data." : "Off: posts about issues, PRs, and comments by people outside the repository are dropped (a 202 says so), and their words in other posts are left out."}
+                    </div>`
+                }
+                ${
                     targets.length > 1 &&
                     html`<div class="field">
                         <div class="label">Sends to</div>
@@ -234,7 +288,11 @@ export function HooksSheet() {
                         </div>
                     </div>`
                 }
-                <button class="button primary wide" disabled=${name.trim() === ""} onClick=${make}>
+                <button
+                    class="button primary wide"
+                    disabled=${name.trim() === "" || making}
+                    onClick=${make}
+                >
                     Make webhook
                 </button>`
         }
@@ -249,6 +307,7 @@ export function HooksSheet() {
                             key=${watch.id}
                             watch=${watch}
                             onRemove=${() => unwatch(watch)}
+                            onAnyone=${(event) => setWatchAnyone(watch, event)}
                         />`,
                 )}
             </div>`

@@ -63,7 +63,7 @@ const NEXT_REPORT = /\n\n(?=\[subagent \S+ (?:answered|failed))/;
 const SCHEDULED = "[scheduled] ";
 
 /** A message the app sent for a person, and what sent it: PiP, a PR watch, a webhook (`submit` in src/server/commands.ts). */
-const VIA = /^\[via ([^\]\n]{1,80})\] /;
+const VIA = /^\[via ([^\]\n]{1,300})\] /;
 /** What came from outside in such a message, fenced as data for Pi: a check's log, a webhook's post, GitHub's events. */
 const FENCED =
     /<(ci-log|webhook-payload|github-event)((?: [a-z]+="[^"\n]*")*)>\n([\s\S]*?)\n<\/\1>/g;
@@ -651,7 +651,17 @@ function ThoughtStep({ block, streaming }) {
 }
 
 /** One tool call on the timeline: what it did and how it went, and tapped, its input and output. */
-function ToolStep({ call, result, slot, approval, entryId, streaming, canRun, busy }) {
+function ToolStep({
+    call,
+    result,
+    slot,
+    approval,
+    entryId,
+    streaming,
+    canRun,
+    busy,
+    conversationId,
+}) {
     const [open, setOpen] = useState(false);
     const [full, setFull] = useState(null);
     const view = store.state.view;
@@ -851,7 +861,9 @@ function ToolStep({ call, result, slot, approval, entryId, streaming, canRun, bu
     // What a call made shows under its line, as on today's cards: what it returned as images, an artifact, the browser.
     // A lesson Pi saved, changed, or forgot: its state, and approving it where it happened.
     const lesson =
-        call.name === "memory" && typeof details?.lesson === "string" && memoryAvailable()
+        call.name === "memory" &&
+        typeof details?.lesson === "string" &&
+        memoryAvailable(conversationId)
             ? details.lesson
             : null;
     const extras = result?.images > 0 || artifact || watch || lesson;
@@ -894,7 +906,10 @@ function ToolStep({ call, result, slot, approval, entryId, streaming, canRun, bu
         ${
             extras &&
             html`<div class="step-extras">
-                ${lesson && html`<${LessonCall} lessonId=${lesson} />`}
+                ${
+                    lesson &&
+                    html`<${LessonCall} lessonId=${lesson} conversationId=${conversationId} />`
+                }
                 ${
                     result?.images > 0 &&
                     html`<${EntryImages}
@@ -1135,6 +1150,7 @@ function ActivityGroup({ item, live, newest, busy, results, slots, approvals, co
                             streaming=${entry === undefined}
                             canRun=${canRun}
                             busy=${busy}
+                            conversationId=${conversationId}
                         />
                     <//>`;
                 })}

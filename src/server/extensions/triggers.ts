@@ -7,13 +7,15 @@
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
 import type { PrWatch } from "../docs.ts";
+import { quoted } from "../fence.ts";
 import type { PocketHost } from "../host.ts";
 import { endedText, MAX_SENT, TRIGGERS_EXTENSION, WATCH_VIA } from "../watches.ts";
 
 const reply = (text: string) => ({ content: [{ type: "text" as const, text }] });
 
-function describeWatch(watch: PrWatch): string {
-    const head = `PR #${watch.number} “${watch.title}” (${watch.url})`;
+/** A watch in a line, as Pi reads it: a note with no failed look says why it waits. */
+export function describeWatch(watch: PrWatch): string {
+    const head = `PR #${watch.number} ${quoted(watch.title)} (${watch.url})`;
 
     if (watch.status !== "watching") {
         return `${head}: watched ${endedText(watch)}.`;
@@ -24,7 +26,9 @@ function describeWatch(watch: PrWatch): string {
             ? ""
             : `, checks ${watch.checks === "pending" ? "running" : watch.checks}`;
 
-    return `${head}: watching${checks}, ${watch.sent} of ${watch.max} messages sent${watch.note === undefined ? "" : `; last look: ${watch.note}`}.`;
+    const note = watch.note?.replace(/\.$/, "");
+
+    return `${head}: watching${checks}, ${watch.sent} of ${watch.max} messages sent${note === undefined ? "" : watch.errors > 0 ? `; last look failed: ${note}` : `; waiting: ${note}`}.`;
 }
 
 export default function createTriggers(host: PocketHost) {
@@ -79,7 +83,7 @@ export default function createTriggers(host: PocketHost) {
             );
 
             return reply(
-                `Watching PR #${watch.number} “${watch.title}”. Messages come when its checks fail, it has conflicts, or reviewers comment; it stops when the PR is merged or closed.`,
+                `Watching PR #${watch.number} ${quoted(watch.title)}. Messages come when its checks fail, it has conflicts, or reviewers comment; it stops when the PR is merged or closed.`,
             );
         },
     });

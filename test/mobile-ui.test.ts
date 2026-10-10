@@ -1263,3 +1263,258 @@ test(
         await reach({ sheet: null, layers: 0 }, "closed");
     },
 );
+
+/** PiP closed and forgotten in this tab, so the tests after start without it. */
+async function noPip(): Promise<void> {
+    await page.evaluate(`
+        (await import("/pip.js")).closePip();
+        sessionStorage.removeItem("pocket.pip");
+        localStorage.removeItem("pocket.pip.draft");
+    `);
+    await until(
+        async () =>
+            (await inPage<boolean>(
+                `return JSON.stringify(document.querySelector(".pip-panel") === null)`,
+            )) === true,
+        "PiP's panel, gone",
+    );
+}
+
+test(
+    "on a desktop, Alt+A opens PiP once, for the keys typed next, above the message box; Esc gives the focus back",
+    real,
+    async () => {
+        await fresh();
+        await page.setViewport(VIEWPORTS.desktop);
+        await tap(`.sidebar .session-row[data-id="${first}"] .session`);
+        await reach({ path: `/s/${first}` }, "the session");
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".composer textarea") !== null)`,
+                )) === true,
+            "the session's message box",
+        );
+        await page.evaluate(`
+            localStorage.removeItem("pocket.pip.draft");
+            window.pipOpens = 0;
+            const fetched = window.fetch;
+            window.fetch = (url, init) => {
+                if (String(url) === "/api/pip" && JSON.parse(init.body).on === true) {
+                    window.pipOpens++;
+                }
+
+                return fetched(url, init);
+            };
+            document.querySelector(".composer textarea").focus();
+        `);
+
+        // The words right after the shortcut, before anything had time to draw.
+        await page.input([
+            { type: "key", key: "a", modifiers: 1 },
+            { type: "text", text: "hi pip" },
+        ]);
+        const typed = () =>
+            inPage<{ pip: string | null; session: string | null; focused: string | null }>(`
+                return JSON.stringify({
+                    pip: document.querySelector(".pip-composer textarea")?.value ?? null,
+                    session: document.querySelector(".composer textarea")?.value ?? null,
+                    focused: document.activeElement?.closest(".pip-composer") ? "pip"
+                        : document.activeElement?.closest(".composer") ? "session" : null,
+                });
+            `);
+
+        assert.deepEqual(await typed(), { pip: "hi pip", session: "", focused: "pip" });
+        // Past its opening animation, where it takes its whole size.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        // What the top bar and the message box say of their edges is where they are, once the pane has popped in.
+        assert.deepEqual(
+            await inPage<number[]>(`
+                const style = document.documentElement.style;
+                const said = (name) => Math.round(parseFloat(style.getPropertyValue(name)));
+                const top = document.querySelector(".topbar").getBoundingClientRect().bottom;
+                const box = document.querySelector(".composer-wrap").getBoundingClientRect().top;
+
+                return JSON.stringify([
+                    said("--topbar-h") - Math.round(top),
+                    said("--composer-h") - Math.round(innerHeight - box),
+                ]);
+            `),
+            [0, 0],
+            "--topbar-h and --composer-h match the real edges",
+        );
+
+        // The session's Send is not under PiP's window (disabled while the box is empty, it lets taps through to its row).
+        const hit = await inPage<boolean>(`
+            const box = document.querySelector(".composer .send-button").getBoundingClientRect();
+            const at = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+
+            return JSON.stringify(at?.closest(".composer") !== null && at?.closest(".pip-panel") === null);
+        `);
+
+        assert.equal(hit, true, "the session's Send can be clicked while PiP is open");
+        // Nor are the top bar's buttons: the menu, Changes.
+        const covered = await inPage<string[]>(`
+            const buttons = [...document.querySelectorAll(".topbar button")];
+
+            return JSON.stringify(
+                buttons
+                    .filter((button) => {
+                        const box = button.getBoundingClientRect();
+                        const at = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+
+                        return box.width > 0 && at?.closest(".pip-panel") !== null;
+                    })
+                    .map((button) => button.getAttribute("aria-label") ?? button.className),
+            );
+        `);
+
+        assert.ok(
+            await inPage<boolean>(
+                `return JSON.stringify(document.querySelector('.topbar [aria-label="Menu"]') !== null && document.querySelector(".topbar .changes-button") !== null)`,
+            ),
+            "the top bar shows the menu and Changes",
+        );
+        assert.deepEqual(covered, [], "no top bar button is under PiP's window");
+        assert.equal(await inPage<number>(`return JSON.stringify(window.pipOpens)`), 1);
+
+        await page.press("Escape");
+        await until(
+            async () => (await typed()).focused === "session",
+            "the focus back in the session's box",
+        );
+        await noPip();
+    },
+);
+
+test(
+    "on a phone, PiP dragged down closes, and the app behind it is not left dimmed",
+    real,
+    async () => {
+        await fresh();
+        await tap(row(first));
+        await reach({ path: `/s/${first}` }, "the session");
+        await page.evaluate(`(await import("/pip.js")).openPip()`);
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".pip-panel:not(.leaving)") !== null)`,
+                )) === true,
+            "PiP's sheet",
+        );
+        // Past its opening animation.
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await page.evaluate(`
+        const head = document.querySelector(".pip-head");
+        const panel = document.querySelector(".pip-panel");
+        const from = head.getBoundingClientRect().top + 10;
+        const to = panel.offsetHeight * 0.6;
+        const touch = (y) => new Touch({ identifier: 1, target: head, clientX: 200, clientY: y });
+        const fire = (type, y) =>
+            head.dispatchEvent(
+                new TouchEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    touches: type === "touchend" ? [] : [touch(y)],
+                    changedTouches: [touch(y)],
+                }),
+            );
+
+        fire("touchstart", from);
+
+        for (let step = 1; step <= 10; step++) {
+            fire("touchmove", from + (to * step) / 10);
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        }
+
+        fire("touchend", from + to);
+    `);
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".pip-panel") === null)`,
+                )) === true,
+            "PiP closed by the drag",
+        );
+        assert.deepEqual(
+            await inPage<{ inline: string; shown: string }>(`
+            const layout = document.querySelector(".layout");
+
+            return JSON.stringify({ inline: layout.style.opacity, shown: getComputedStyle(layout).opacity });
+        `),
+            { inline: "", shown: "1" },
+        );
+        await noPip();
+    },
+);
+
+test(
+    "PiP's panel says when a call of PiP's waits for approval, and leads to it",
+    real,
+    async () => {
+        await fresh();
+        await page.setViewport(VIEWPORTS.desktop);
+        await page.evaluate(`(await import("/pip.js")).openPip()`);
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".pip-panel .pip-loading") === null)`,
+                )) === true,
+            "PiP, awake",
+            20_000,
+        );
+        // As the server sends it while the guard holds one of PiP's calls.
+        const pip = await inPage<number>(`
+        const { store } = await import("/store.js");
+
+        store.set((state) => ({
+            pipView: { ...state.pipView, approvals: [{ id: "a1", tool: "session_start", subject: "", reason: "" }] },
+        }));
+
+        return JSON.stringify(store.state.pip.id);
+    `);
+
+        await until(
+            async () =>
+                (
+                    await inPage<string | null>(
+                        `return JSON.stringify(document.querySelector(".pip-approval")?.textContent ?? null)`,
+                    )
+                )?.includes("waits for your approval: session_start") === true,
+            "the line about the approval",
+        );
+        assert.equal(
+            await inPage<string>(
+                `return JSON.stringify(document.querySelector(".pip-status").textContent.trim())`,
+            ),
+            "needs you",
+        );
+        await tap(".pip-approval .button");
+        await reach({ path: `/s/${pip}` }, "PiP's conversation, where the call can be allowed");
+        await noPip();
+    },
+);
+
+test(
+    "/pip with words that cannot be sent leaves them in PiP's box, after its draft",
+    real,
+    async () => {
+        await fresh();
+        await page.setViewport(VIEWPORTS.desktop);
+        await page.evaluate(`
+        localStorage.setItem("pocket.pip.draft", "a draft");
+        const fetched = window.fetch;
+        window.fetch = (url, init) =>
+            String(url).endsWith("/submit") ? Promise.reject(new TypeError("offline")) : fetched(url, init);
+        (await import("/pip.js")).askPip("hello pip");
+    `);
+        await until(
+            async () =>
+                (await inPage<string | null>(
+                    `return JSON.stringify(document.querySelector(".pip-composer textarea")?.value ?? null)`,
+                )) === "a draft\n\nhello pip",
+            "the words, back in PiP's box after the draft",
+        );
+        await noPip();
+    },
+);

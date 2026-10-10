@@ -1,13 +1,16 @@
 /**
  * Repository watches: PiP's standing orders on a GitHub repository `gh`'s account can push to. A durable task looks
  * at the repository every few minutes with `gh`, and what is new there (issues and pull requests opened, CI failing on
- * a branch, releases published, comments and issues that mention @pi) goes as one message to PiP, or to a session,
- * after its person's instructions ("when CI fails on main, start a session to fix it"). What came from GitHub is
- * fenced as data. Issues and PRs count only from people who can write to the repository (and bots' PRs), unless the
- * watch says anyone; mentions always only from them. Each thing is told once, at most `MAX_ITEMS` in a message and
- * `MAX_PER_HOUR` messages an hour; the rest come in the next. It needs no public address, unlike a webhook. A watch
- * lasts until it is removed; looks that fail are retried less and less often, and say why. The triggers extension
- * (`extensions/triggers.ts`) installs the task; PiP sets watches up with its repo_watch tool (`extensions/pip.ts`).
+ * a branch: runs pushed to it, scheduled, or started by hand or through the API, in the repository itself; releases
+ * published, comments and issues that mention @pi) goes as one message to PiP, or to a session, after its person's
+ * instructions ("when CI fails on main, start a session to fix it"). What came from GitHub is fenced as data. Issues
+ * and PRs count only from the repository's owner, its organization's members, and its collaborators (and bots' PRs),
+ * unless the watch says anyone, which only a person turns on; mentions always only from them. While triggers are off,
+ * watches wait; while PiP is off, those to PiP hold what they found. Each thing is told once, at most `MAX_ITEMS` in a
+ * message and `MAX_PER_HOUR` messages an hour; the rest come in the next. It needs no public address, unlike a
+ * webhook. A watch lasts until it is removed; looks that fail are retried less and less often, and say why. The
+ * triggers extension (`extensions/triggers.ts`) installs the task; PiP sets watches up with its repo_watch tool
+ * (`extensions/pip.ts`).
  */
 import { randomUUID } from "node:crypto";
 import type { Context } from "@earendil-works/chord";
@@ -22,14 +25,18 @@ import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
 import { type RepoEvent, type RepoWatch, RepoWatchesDoc } from "./docs.ts";
 import { describe, HttpError } from "./errors.ts";
-import { attribute, clip, defang } from "./fence.ts";
+import { attribute, clip, defang, quoted } from "./fence.ts";
 import {
     apiArgs,
+    BRANCH,
+    BRANCH_EVENTS,
     type Gh,
+    login as loginOf,
     mentionsPi,
     parseRepo,
     repoArgs,
     requirePush,
+    sameRepo,
     TRUSTED_ASSOCIATIONS,
 } from "./github.ts";
 import { snippet } from "./projection.ts";
@@ -55,13 +62,12 @@ const POLL_MS = 3 * 60_000;
 const SOON_MS = 30_000;
 const RETRY_MS = 5 * 60_000;
 const MAX_RETRY_MS = 30 * 60_000;
-/** Ids remembered as told: more than every list a look reads, together. */
-const SEEN = 500;
+/** Ids remembered as told, of each kind (`i`, `p`, `r`, `v`, `c`, `l`): more than any list a look reads has of it. */
+const SEEN_PER_KIND = 100;
 /** How much of each thing's text Pi gets (an issue's body, release notes, a comment). */
 const BODY_CHARS = 1500;
 /** Failed runs: what a run can end in that is worth fixing. */
 const FAILED = new Set(["failure", "timed_out", "startup_failure"]);
-const BRANCH = /^[\w.][\w./-]{0,199}$/;
 
 type GhUser = { login?: string; type?: string } | null | undefined;
 type GhIssue = {
@@ -89,6 +95,9 @@ type GhRun = {
     event?: string;
     updated_at?: string;
     run_number?: number;
+    /** The repository it ran in, and where the commit it ran on is: a fork's, for its PR's runs and the runs they chain to. */
+    repository?: { full_name?: string } | null;
+    head_repository?: { full_name?: string } | null;
 };
 type GhRelease = {
     id: number;
@@ -151,6 +160,23 @@ const time = (iso: string | null | undefined): number => (iso ? Date.parse(iso) 
 
 /** The issue or PR a comment is on, from its API address. */
 const numberOf = (url: string | undefined): string => /\/(\d+)$/.exec(url ?? "")?.[1] ?? "?";
+
+/** What was told, cut to the newest `SEEN_PER_KIND` of each kind: a busy kind never pushes out a quiet one's. */
+function keepSeen(seen: readonly string[]): string[] {
+    const counts = new Map<string, number>();
+    const kept: string[] = [];
+
+    for (const id of [...seen].reverse()) {
+        const count = counts.get(id[0] ?? "") ?? 0;
+
+        if (count < SEEN_PER_KIND) {
+            counts.set(id[0] ?? "", count + 1);
+            kept.push(id);
+        }
+    }
+
+    return kept.reverse();
+}
 
 export class RepoWatches {
     readonly #app: PocketApp;
@@ -303,7 +329,6 @@ export class RepoWatches {
         // Only where gh's account can push: someone else's repository could hand Pi work as if it were this person's.
         const info = await requirePush(this.#gh, named);
         const now = app.now();
-        const id = randomUUID().slice(0, 6);
 
         const watch = await app.harness.commit(async (tx) => {
             const doc = await tx.doc(RepoWatchesDoc);
@@ -325,6 +350,13 @@ export class RepoWatches {
                     `A person can have ${MAX_WATCHES} repository watches at most: remove one first.`,
                 );
             }
+
+            let id: string;
+
+            // Short, so a new one could be one there is already: that one would be lost.
+            do {
+                id = randomUUID().slice(0, 6);
+            } while (Object.hasOwn(doc.items, id));
 
             const taskId = await tx.createTask(
                 this.task,
@@ -377,6 +409,32 @@ export class RepoWatches {
         await this.#app.harness.commit(async (tx) => {
             delete (await tx.doc(RepoWatchesDoc)).items[watch.id];
         }, context);
+        this.#sent.delete(watch.id);
+
+        return this.view(watch);
+    }
+
+    /**
+     * Let a watch's issues and PRs come from anyone, or only from the repository's people again. Only a person may: its
+     * person, or the owner. Returns it.
+     */
+    async setAnyone(user: User, id: string, anyone: boolean): Promise<RepoWatchView> {
+        const watch = await this.#app.harness.commit(async (tx) => {
+            const doc = await tx.doc(RepoWatchesDoc);
+            const item = Object.values(doc.items).find((each) => each.id === id.trim());
+
+            if (item === undefined || (user.role !== "owner" && item.by !== user.id)) {
+                throw new HttpError(404, `There is no repository watch ${id}.`);
+            }
+
+            if (anyone) {
+                item.anyone = true;
+            } else {
+                delete item.anyone;
+            }
+
+            return JSON.parse(JSON.stringify(item)) as RepoWatch;
+        }, context);
 
         return this.view(watch);
     }
@@ -423,19 +481,41 @@ export class RepoWatches {
             }
         };
 
-        const trusted = (user: GhUser, association: string | undefined) =>
-            TRUSTED_ASSOCIATIONS.has(association ?? "") || user?.type === "Bot";
+        // The repository's people; and a bot (one the repository's admins installed) for a PR, never for an issue.
+        const trusted = (user: GhUser, association: string | undefined, pull: boolean) =>
+            TRUSTED_ASSOCIATIONS.has(association ?? "") || (pull && user?.type === "Bot");
         const login = watch.assigned === true ? await this.#login(watch.repo) : undefined;
         // Issues and PRs a watch's filters let through: its label, assigned to gh's account, from someone who counts.
-        const passes = (issue: GhIssue) =>
+        const passes = (issue: GhIssue, pull: boolean) =>
             (watch.label === undefined ||
                 labelsOf(issue).some(
                     (name) => name.toLowerCase() === watch.label!.toLowerCase(),
                 )) &&
             (login === undefined ||
                 (issue.assignees ?? []).some((user) => user?.login === login)) &&
-            (watch.anyone === true || trusted(issue.user, issue.author_association));
-        const who = (user: GhUser) => `@${user?.login ?? "someone"}`;
+            (watch.anyone === true || trusted(issue.user, issue.author_association, pull));
+        const who = (user: GhUser) => `@${loginOf(user?.login)}`;
+        const labels = (issue: GhIssue) =>
+            labelsOf(issue).length > 0
+                ? ` · labels: ${snippet(labelsOf(issue).join(", "), 200)}`
+                : "";
+
+        // Pulls first: a PR that also mentions @pi is told once, as a PR, with its branches.
+        if (wants.has("pulls")) {
+            const pulls = await this.#get<GhIssue[]>(
+                watch,
+                "pulls?state=open&sort=created&direction=desc&per_page=30",
+            );
+
+            for (const pull of pulls.filter((each) => passes(each, true))) {
+                add({
+                    id: `p${pull.number}`,
+                    at: time(pull.created_at),
+                    line: `New pull request #${pull.number} ${quoted(pull.title ?? "")} by ${who(pull.user)}${pull.draft === true ? " (draft)" : ""} · ${snippet(pull.head?.ref ?? "?", 200)} → ${snippet(pull.base?.ref ?? "?", 200)}${labels(pull)} · ${pull.html_url ?? ""}`,
+                    ...(pull.body ? { body: pull.body } : {}),
+                });
+            }
+        }
 
         if (wants.has("issues") || wants.has("mentions")) {
             const issues = await this.#get<GhIssue[]>(
@@ -449,35 +529,25 @@ export class RepoWatches {
                 const item = {
                     id: `${pull ? "p" : "i"}${issue.number}`,
                     at: time(issue.created_at),
-                    line: `New ${kind} #${issue.number} “${snippet(issue.title ?? "", 120)}” by ${who(issue.user)}${labelsOf(issue).length > 0 ? ` · labels: ${labelsOf(issue).join(", ")}` : ""} · ${issue.html_url ?? ""}`,
+                    line: `New ${kind} #${issue.number} ${quoted(issue.title ?? "")} by ${who(issue.user)}${labels(issue)} · ${issue.html_url ?? ""}`,
                     ...(issue.body ? { body: issue.body } : {}),
                 };
 
-                if (wants.has("issues") && !pull && passes(issue)) {
+                if (wants.has("issues") && !pull && passes(issue, false)) {
                     add(item);
                 } else if (
                     wants.has("mentions") &&
                     mentionsPi(issue.body ?? "") &&
                     TRUSTED_ASSOCIATIONS.has(issue.author_association ?? "")
                 ) {
-                    add({ ...item, line: `${item.line} (mentions @pi)` });
+                    const same = items.find((each) => each.id === item.id);
+
+                    if (same === undefined) {
+                        add({ ...item, line: `${item.line} (mentions @pi)` });
+                    } else {
+                        same.line = `${same.line} (mentions @pi)`;
+                    }
                 }
-            }
-        }
-
-        if (wants.has("pulls")) {
-            const pulls = await this.#get<GhIssue[]>(
-                watch,
-                "pulls?state=open&sort=created&direction=desc&per_page=30",
-            );
-
-            for (const pull of pulls.filter(passes)) {
-                add({
-                    id: `p${pull.number}`,
-                    at: time(pull.created_at),
-                    line: `New pull request #${pull.number} “${snippet(pull.title ?? "", 120)}” by ${who(pull.user)}${pull.draft === true ? " (draft)" : ""} · ${pull.head?.ref ?? "?"} → ${pull.base?.ref ?? "?"}${labelsOf(pull).length > 0 ? ` · labels: ${labelsOf(pull).join(", ")}` : ""} · ${pull.html_url ?? ""}`,
-                    ...(pull.body ? { body: pull.body } : {}),
-                });
             }
         }
 
@@ -488,11 +558,17 @@ export class RepoWatches {
             );
 
             for (const run of runs.workflow_runs ?? []) {
-                if (FAILED.has(run.conclusion ?? "")) {
+                // The branch's own runs only, in this repository: none without an event or a repository to tell.
+                if (
+                    FAILED.has(run.conclusion ?? "") &&
+                    BRANCH_EVENTS.has(run.event ?? "") &&
+                    // Both GitHub's names now: a repository renamed since the watch began still matches itself.
+                    sameRepo(run.head_repository?.full_name, run.repository?.full_name)
+                ) {
                     add({
                         id: `r${run.id}`,
                         at: time(run.updated_at),
-                        line: `CI ${run.conclusion === "failure" ? "failed" : (run.conclusion ?? "failed").replace("_", " ")} on ${watch.branch}: “${snippet(run.name ?? "workflow", 80)}”${run.display_title ? ` for “${snippet(run.display_title, 80)}”` : ""} at ${(run.head_sha ?? "").slice(0, 7)} (run ${run.id}; its log: gh run view ${run.id} --log-failed --repo ${watch.repo}) · ${run.html_url ?? ""}`,
+                        line: `CI ${run.conclusion === "failure" ? "failed" : (run.conclusion ?? "failed").replace("_", " ")} on ${watch.branch}: ${quoted(run.name ?? "workflow", 80)}${run.display_title ? ` for ${quoted(run.display_title, 80)}` : ""} at ${(run.head_sha ?? "").slice(0, 7)} (run ${run.id}; its log: gh run view ${run.id} --log-failed --repo ${watch.repo}) · ${run.html_url ?? ""}`,
                     });
                 }
             }
@@ -505,7 +581,7 @@ export class RepoWatches {
                 add({
                     id: `v${release.id}`,
                     at: time(release.published_at),
-                    line: `New ${release.prerelease === true ? "pre-release" : "release"} ${release.tag_name ?? ""}${release.name ? ` “${snippet(release.name, 80)}”` : ""} · ${release.html_url ?? ""}`,
+                    line: `New ${release.prerelease === true ? "pre-release" : "release"} ${snippet(release.tag_name ?? "", 100)}${release.name ? ` ${quoted(release.name, 80)}` : ""} · ${release.html_url ?? ""}`,
                     ...(release.body ? { body: release.body } : {}),
                 });
             }
@@ -530,7 +606,7 @@ export class RepoWatches {
                 ) {
                     const on =
                         comment.pull_request_url !== undefined
-                            ? `pull request #${numberOf(comment.pull_request_url)}${comment.path ? ` (${comment.path})` : ""}`
+                            ? `pull request #${numberOf(comment.pull_request_url)}${comment.path ? ` (${quoted(comment.path, 200)})` : ""}`
                             : `#${numberOf(comment.issue_url)}`;
 
                     add({
@@ -568,6 +644,11 @@ export class RepoWatches {
 
         if (watch === undefined) {
             return runtime.commit(() => finished, context);
+        }
+
+        // Triggers are off: the watch waits, and asks GitHub nothing.
+        if (!this.running) {
+            return this.#again(id, runtime, this.timing.poll, context);
         }
 
         let items: Item[];
@@ -648,6 +729,16 @@ export class RepoWatches {
         }, context);
 
         if (!sent) {
+            // Triggers went off since the look: what it found waits, untold, for the next.
+            if (!this.running) {
+                return this.#again(id, runtime, this.timing.poll, context);
+            }
+
+            // PiP is off: a run there would have none of PiP's rules. Held, waiting at the usual pace: nothing failed.
+            if (app.sessionMeta(target)?.pip !== undefined && !app.pip.available(person)) {
+                return this.#again(id, runtime, this.timing.poll, context, "PiP is turned off");
+            }
+
             try {
                 await app.commands.submit(
                     target,
@@ -676,7 +767,7 @@ export class RepoWatches {
             }
 
             item.count += 1;
-            item.seen = [...item.seen, ...state.seen].slice(-SEEN);
+            item.seen = keepSeen([...item.seen, ...state.seen]);
             item.lastNewsAt = app.now();
             item.errors = 0;
             delete item.note;
@@ -687,7 +778,13 @@ export class RepoWatches {
     }
 
     /** Look again in `after` ms: this look went well. */
-    #again(id: string, runtime: Runtime, after: number, context: Context): Promise<void> {
+    #again(
+        id: string,
+        runtime: Runtime,
+        after: number,
+        context: Context,
+        waiting?: string,
+    ): Promise<void> {
         const app = this.#app;
 
         return runtime.commit(async (tx) => {
@@ -699,8 +796,13 @@ export class RepoWatches {
 
             item.lastAt = app.now();
             item.errors = 0;
-            delete item.note;
             item.next = app.now() + after;
+
+            if (waiting === undefined) {
+                delete item.note;
+            } else {
+                item.note = waiting;
+            }
 
             return { status: "running", checkpoint: { phase: "wait" } };
         }, context);
@@ -725,16 +827,4 @@ export class RepoWatches {
             return { status: "running", checkpoint: { phase: "wait" } };
         }, context);
     }
-}
-
-/** A watch in a line, as PiP and people read it. */
-export function describeRepoWatch(watch: RepoWatchView, target: string): string {
-    const filters = [
-        watch.label === undefined ? undefined : `label ${watch.label}`,
-        watch.assigned === true ? "assigned to you" : undefined,
-        watch.anyone === true ? "from anyone" : undefined,
-        watch.events.includes("ci") ? `CI on ${watch.branch}` : undefined,
-    ].filter((part) => part !== undefined);
-
-    return `${watch.id}: ${watch.repo} · ${watch.events.join(", ")}${filters.length > 0 ? ` (${filters.join(", ")})` : ""} → ${target} · ${watch.count} message${watch.count === 1 ? "" : "s"} sent${watch.note === undefined ? "" : ` · last look failed: ${watch.note}`}${watch.instructions === "" ? "" : ` · “${snippet(watch.instructions, 120)}”`}`;
 }

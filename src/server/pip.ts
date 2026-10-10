@@ -9,9 +9,9 @@
  * A follow is a durable task in PiP's conversation: it waits for the message PiP sent (or for the session to go idle),
  * then sends PiP a report. Request ids keep a restart from sending a message or a report twice.
  */
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type { Context } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -30,7 +30,7 @@ import type { User } from "./config.ts";
 import { FollowsDoc, SessionsDoc } from "./docs.ts";
 import { NOTE_ENTRY } from "./entry-format.ts";
 import { describe, HttpError } from "./errors.ts";
-import { defang } from "./fence.ts";
+import { defang, quoted } from "./fence.ts";
 import { git } from "./git.ts";
 import { originRepo, parseRepo, requirePush, sameRepo } from "./github.ts";
 import { resolveModel } from "./models.ts";
@@ -75,6 +75,11 @@ const CLONE_TIMEOUT_MS = 15 * 60_000;
 const ORIGIN_FOR_MS = 5 * 60_000;
 /** How long a follow that reported is remembered, so a replayed call that made it does not make another. */
 const FOLLOW_MEMORY_MS = 24 * 3_600_000;
+/**
+ * How long after a follow reported its session's "Pi finished" stays muted: long enough for the push of the same run's
+ * end, which comes a few seconds later, and short enough not to mute the next run's.
+ */
+const REPORTED_JUST_NOW_MS = 60_000;
 
 /** How what a session said reaches PiP: fenced, so it reads as data, not as instructions. */
 export const SESSION_OPEN = "<session-output>";
@@ -344,6 +349,45 @@ export class Pip {
     }
 
     /**
+     * A schedule set up in `conversationId` under `key` by `make`, counted as one of PiP's actions when PiP sets it up:
+     * in its own conversation (its schedule tool), or for `user` in a session. A key already used finds its schedule
+     * without counting again; a schedule `make` refuses (a `when` it cannot read) gives its count back.
+     */
+    async countSchedule<T>(
+        conversationId: ConversationId,
+        key: string,
+        make: () => Promise<T>,
+        user?: User,
+    ): Promise<T> {
+        const app = this.#app;
+        const counted =
+            user ??
+            (this.ownerOf(conversationId) === undefined ? undefined : this.#person(conversationId));
+
+        if (
+            counted === undefined ||
+            (await app.schedules.list(conversationId)).some((item) => item.key === key)
+        ) {
+            return make();
+        }
+
+        return this.#counted(counted, make);
+    }
+
+    /** Do `make`, counted as one of PiP's actions; refused (nothing made), it gives its count back. */
+    async #counted<T>(user: User, make: () => Promise<T>): Promise<T> {
+        this.#count(user, "act", ACTIONS_PER_HOUR);
+
+        try {
+            return await make();
+        } catch (error) {
+            this.#recent.get(`${user.id}:act`)?.pop();
+
+            throw error;
+        }
+    }
+
+    /**
      * Send a message for PiP's person, once for a key however often the call runs: a message already sent under it is
      * found, not sent again (nor checked again: a limit reached since does not undo it).
      */
@@ -541,9 +585,8 @@ export class Pip {
             : app.isBusy(id)
               ? "working"
               : "idle";
-        const head = [
-            `#${String(sessionId)} “${meta.title ?? "New session"}” · ${state}${meta.archived === true ? " · archived" : ""}`,
-            `Folder: ${homePath(app.cwdOf(id))}${meta.worktree === undefined ? "" : ` (worktree, branch ${meta.worktree.branch})`}`,
+        // What waits there and what is scheduled were written by the session's Pi or people: inside the fence too.
+        const pending = [
             ...(waiting.length === 0 ? [] : ["Waiting for approval:", ...waiting]),
             ...(schedules.length === 0
                 ? []
@@ -555,8 +598,14 @@ export class Pip {
                           )
                           .join("; ")}`,
                   ]),
+        ];
+        const head = [
+            `#${String(sessionId)} ${quoted(meta.title ?? "New session")} · ${state}${meta.archived === true ? " · archived" : ""}`,
+            `Folder: ${snippet(homePath(app.cwdOf(id)), 300)}${meta.worktree === undefined ? "" : ` (worktree, branch ${snippet(meta.worktree.branch, 120)})`}`,
             "",
-            lines.length === 0 ? "(no messages yet)" : fenced(lines.join("\n")),
+            pending.length + lines.length === 0
+                ? "(no messages yet)"
+                : fenced([...pending, ...lines].join("\n")),
         ];
 
         return head.join("\n");
@@ -622,14 +671,15 @@ export class Pip {
     // ─── GitHub ─────────────────────────────────────────────────────────────
 
     /**
-     * Where PiP's person works on a GitHub repository: the checkout a session of theirs works in (its `origin` is the
-     * repository), or else a clone, made now, in the data folder's `repos/`. Only a repository gh's account can push
-     * to: someone else's would bring its own instructions (its AGENTS.md) into a session that can run commands.
+     * Where PiP's person works on a GitHub repository: the checkout a session they started works in (its `origin` is
+     * the repository), or else a clone, made now, in the data folder's `repos/`. Only their own sessions' folders: one
+     * a guest made could hold the guest's instructions (an AGENTS.md). Only a repository gh's account can push to:
+     * someone else's would bring its own instructions into a session that can run commands. A clone is made beside its
+     * place and moved there once complete, so a clone cut off midway is never taken for one.
      */
     async checkout(pipId: ConversationId, repo: string): Promise<string> {
         const app = this.#app;
-
-        this.#person(pipId);
+        const user = this.#person(pipId);
         const named = parseRepo(repo);
 
         if (named === undefined) {
@@ -637,11 +687,17 @@ export class Pip {
         }
 
         const info = await requirePush(app.watches.gh, named);
+
+        // What GitHub answered becomes a path: nothing in it may climb out of `repos/`.
+        if (parseRepo(info.repo) !== info.repo) {
+            throw new Error(`${info.repo} is not a repository name this server can clone.`);
+        }
+
         const clone = join(app.dataDir, "repos", ...info.repo.split("/"));
         const folders = new Set<string>();
 
         for (const meta of Object.values(app.sessionCatalogue())) {
-            if (meta.pip === undefined) {
+            if (meta.pip === undefined && meta.createdBy === user.id) {
                 folders.add(meta.worktree?.source ?? meta.cwd);
             }
         }
@@ -659,10 +715,32 @@ export class Pip {
         let cloning = this.#cloning.get(info.repo);
 
         if (cloning === undefined) {
+            // Not the repository's checkout, or the loop above had taken it: never clone into it.
+            if (existsSync(clone)) {
+                throw new Error(
+                    `${clone} is there but is not a checkout of ${info.repo}: move it away, then ask again.`,
+                );
+            }
+
             mkdirSync(dirname(clone), { recursive: true });
+            this.#clearParts(clone);
+            // `~` is in no GitHub repository's name: no clone of another repository is ever taken for a part.
+            const part = `${clone}~part-${randomUUID().slice(0, 8)}`;
+
             cloning = app.watches
-                .gh(["repo", "clone", info.repo, clone], undefined, CLONE_TIMEOUT_MS)
-                .then(() => clone)
+                .gh(["repo", "clone", info.repo, part], undefined, CLONE_TIMEOUT_MS)
+                .then(() => {
+                    renameSync(part, clone);
+                    this.#origins.delete(clone);
+
+                    return clone;
+                })
+                .catch((error: unknown) => {
+                    // A git still writing there after a timeout fails once the folder is gone: harmless.
+                    rmSync(part, { recursive: true, force: true });
+
+                    throw error;
+                })
                 .finally(() => this.#cloning.delete(info.repo));
             this.#cloning.set(info.repo, cloning);
         }
@@ -671,6 +749,28 @@ export class Pip {
             return await cloning;
         } catch (error) {
             throw new Error(`${info.repo} could not be cloned: ${describe(error)}`);
+        }
+    }
+
+    /**
+     * Remove what clones of this repository left behind when the server stopped midway: their `~part-*` folders, once
+     * older than a clone may take (a git cut off by a restart may still write to a newer one).
+     */
+    #clearParts(clone: string): void {
+        const folder = dirname(clone);
+        const prefix = `${basename(clone)}~part-`;
+        const before = Date.now() - CLONE_TIMEOUT_MS;
+
+        for (const name of readdirSync(folder)) {
+            const part = join(folder, name);
+
+            try {
+                if (name.startsWith(prefix) && statSync(part).mtimeMs < before) {
+                    rmSync(part, { recursive: true, force: true });
+                }
+            } catch (error) {
+                this.#app.log(`could not remove ${part}: ${describe(error)}`);
+            }
         }
     }
 
@@ -695,6 +795,7 @@ export class Pip {
         const user = this.#person(pipId);
         const id = this.#session(pipId, user, sessionId);
 
+        // Counted even when refused: it asked GitHub, which the hourly count also keeps in bounds.
         this.#count(user, "act", ACTIONS_PER_HOUR);
 
         return this.#app.watches.start(id, user.id, {
@@ -720,8 +821,17 @@ export class Pip {
     ): Promise<RepoWatchView> {
         const user = this.#person(pipId);
         const { to, ...rest } = request;
+
+        // Strangers' issues and pull requests are let in by a person, in the hooks sheet, never by PiP.
+        if (rest.anyone === true) {
+            throw new Error(
+                "Only your person can let a watch take issues and pull requests from anyone: ask them to turn it on in Menu → Webhooks and watches once the watch is made.",
+            );
+        }
+
         const target = to === undefined ? pipId : this.#session(pipId, user, to);
 
+        // Counted even when refused: it asked GitHub, which the hourly count also keeps in bounds.
         this.#count(user, "act", ACTIONS_PER_HOUR);
 
         return this.#app.repoWatches.add(user, { ...rest, target, byPi: true, key });
@@ -739,7 +849,7 @@ export class Pip {
                 to:
                     watch.target === Number(pipId)
                         ? "you"
-                        : `session ${watch.target} (${app.sessionMeta(watch.target as unknown as ConversationId)?.title ?? "untitled"})`,
+                        : `session ${watch.target} (${quoted(app.sessionMeta(watch.target as unknown as ConversationId)?.title ?? "untitled", 80)})`,
             }));
     }
 
@@ -780,11 +890,12 @@ export class Pip {
                 return {
                     id: request.id,
                     session: Number(root),
-                    title: app.sessionMeta(root)?.title ?? "New session",
+                    // Written by the session's Pi or people: quoted, as data.
+                    title: quoted(app.sessionMeta(root)?.title ?? "New session"),
                     subagent: root !== request.conversationId,
                     tool: request.tool,
-                    subject: snippet(request.subject, 300),
-                    reason: snippet(request.reason, 200),
+                    subject: quoted(request.subject, 300),
+                    reason: quoted(request.reason, 200),
                 };
             });
     }
@@ -816,12 +927,19 @@ export class Pip {
 
         await app.requireDriver(id, user);
 
-        return app.schedules.add(id, {
-            when,
-            text: `[via ${PIP_NAME}] ${message}`,
-            requestedBy: user.id,
+        // A schedule is work to come, counted like a message.
+        return this.countSchedule(
+            id,
             key,
-        });
+            () =>
+                app.schedules.add(id, {
+                    when,
+                    text: `[via ${PIP_NAME}] ${message}`,
+                    requestedBy: user.id,
+                    key,
+                }),
+            user,
+        );
     }
 
     async cancelSchedule(pipId: ConversationId, sessionId: number, scheduleId: string) {
@@ -915,24 +1033,53 @@ export class Pip {
     }
 
     /**
-     * Whether a session's person hears of its run's end from their PiP: a follow waits on it, or reported in the last
-     * minutes. Its own "Pi finished" would say the same twice.
+     * Whether a session's person hears of its run's end from their PiP: a live follow waits on it, or one reported just
+     * now. Its own "Pi finished" would say the same twice. Not while PiP is off or a spend limit holds it back: its
+     * report would then start no run, and push nothing.
      */
     async reportsOn(sessionId: ConversationId, userId: string): Promise<boolean> {
+        const app = this.#app;
+        const user = app.config.userById(userId);
         const pip = this.idOf(userId);
 
-        if (pip === undefined) {
+        if (
+            user === undefined ||
+            pip === undefined ||
+            !this.available(user) ||
+            app.spend.heldBack(pip, userId) !== undefined
+        ) {
             return false;
         }
 
-        const follows = (await this.#app.harness.snapshot(FollowsDoc, pip, context))?.items ?? {};
         const now = Date.now();
+        const follows = Object.values(
+            (await app.harness.snapshot(FollowsDoc, pip, context))?.items ?? {},
+        ).filter((follow) => follow.session === Number(sessionId));
 
-        return Object.values(follows).some(
-            (follow) =>
-                follow.session === Number(sessionId) &&
-                (follow.doneAt === undefined || now - follow.doneAt < 5 * 60_000),
-        );
+        if (
+            follows.some(
+                (follow) =>
+                    follow.doneAt !== undefined && now - follow.doneAt < REPORTED_JUST_NOW_MS,
+            )
+        ) {
+            return true;
+        }
+
+        const waiting = follows.filter((follow) => follow.doneAt === undefined);
+        let live = false;
+
+        if (waiting.length > 0) {
+            // Only a follow whose task still runs reports: one that faulted, or is gone, never will.
+            await app.harness.commit(async (tx) => {
+                for (const follow of waiting) {
+                    const status = (await tx.task(follow.taskId as never))?.state.status;
+
+                    live ||= status !== undefined && status !== "terminal";
+                }
+            }, context);
+        }
+
+        return live;
     }
 
     /** What PiP's person does through PiP, so activity lines and decisions say so. */
@@ -944,7 +1091,7 @@ export class Pip {
 
     /** A session's last words, for PiP: how its run ended, and Pi's last answer, fenced. */
     async #lastWords(id: ConversationId, title: string, state: string): Promise<string> {
-        const name = `“${title}” (/s/${String(id)})`;
+        const name = `${quoted(title, 80)} (/s/${String(id)})`;
         const page = await (await this.#app.conversation(id)).entries({}, 16, undefined, context);
         const last = page.items
             .map((entry) => projectEntry(entry))
@@ -984,7 +1131,7 @@ export class Pip {
                 throw error;
             }
 
-            text = `Could not follow “${input.title}” (/s/${String(input.sessionId)}): ${describe(error)}`;
+            text = `Could not follow ${quoted(input.title, 80)} (/s/${String(input.sessionId)}): ${snippet(describe(error), 300)}`;
         }
 
         await runtime.commit(
@@ -1000,7 +1147,7 @@ export class Pip {
     /** What came of the run PiP follows, once it ended. */
     async #outcome(input: FollowInput, runtime: FollowRuntime, context: Context): Promise<string> {
         const session = await runtime.conversation(input.sessionId, context);
-        const name = `“${input.title}” (/s/${String(input.sessionId)})`;
+        const name = `${quoted(input.title, 80)} (/s/${String(input.sessionId)})`;
 
         if (session === undefined) {
             return `${name} is gone.`;

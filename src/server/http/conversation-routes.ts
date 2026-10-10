@@ -220,6 +220,20 @@ export async function conversationRoutes(
                   ? { text: (await readJson<{ text?: unknown }>(request)).text }
                   : undefined;
 
+        // An approval says what the person saw: it holds only if that is still what waits.
+        if (change === "approve") {
+            const seen = await readJson<{ text?: unknown; forget?: unknown }>(request);
+
+            return json(
+                response,
+                200,
+                await app.memory.edit(id, user, fourth, change, {
+                    text: typeof seen.text === "string" ? seen.text : undefined,
+                    forget: seen.forget === true,
+                }),
+            );
+        }
+
         if (change !== undefined) {
             return json(response, 200, await app.memory.edit(id, user, fourth, change));
         }

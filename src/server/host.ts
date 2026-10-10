@@ -153,6 +153,7 @@ export interface PocketHost {
         | "deny"
         | "schedules"
         | "schedule"
+        | "countSchedule"
         | "cancelSchedule"
         | "follow"
         | "watchPr"
