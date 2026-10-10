@@ -8,6 +8,7 @@ import { useDragToClose } from "./gestures.js";
 import { api, attempt, isRow, navigate, notify, store, uid } from "./store.js";
 import { itemsOf, says, summarize } from "./turns.js";
 import { html, Icon, Markdown, readable, Spinner, usePresence } from "./ui.js";
+import { MicButton, useDictation } from "./voice.js";
 
 const OPEN_KEY = "pocket.pip";
 const SEEN_KEY = "pocket.pip.seen";
@@ -375,6 +376,8 @@ function Composer({ id, busy }) {
         }
     };
 
+    const dictation = useDictation(ref, change);
+
     useLayoutEffect(fit, [text]);
     // A phone's keyboard would cover the panel as it opens: there, the box waits for a tap.
     useEffect(() => {
@@ -399,6 +402,8 @@ function Composer({ id, busy }) {
             return;
         }
 
+        // What shows is what goes: words still coming would land in the emptied box.
+        dictation.stop(true);
         change("");
 
         // Not sent: the words come back to the box, rather than be lost.
@@ -412,7 +417,7 @@ function Composer({ id, busy }) {
             ref=${ref}
             rows="1"
             value=${text}
-            placeholder=${busy ? "Tell PiP more…" : "Ask PiP…"}
+            placeholder=${dictation.listening ? "Listening…" : busy ? "Tell PiP more…" : "Ask PiP…"}
             aria-label="Message to PiP"
             enterkeyhint="send"
             onInput=${(event) => change(event.currentTarget.value)}
@@ -422,6 +427,7 @@ function Composer({ id, busy }) {
                 }
             }}
         ></textarea>
+        <${MicButton} dictation=${dictation} class="pip-mic" size=${18} />
         ${
             busy && text.trim() === ""
                 ? html`<button
