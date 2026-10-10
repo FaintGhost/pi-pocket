@@ -289,7 +289,8 @@ function UserEntry({ entry, view, users }) {
         (view.conversation?.kind === "subagent" ? "Main agent" : undefined);
     const [written, attachments] = entry.text.split(ATTACHMENTS_HEADING);
     // Set up earlier to go out now: by a person (who shows as its author) or by Pi.
-    const via = VIA.exec(written);
+    // Only a message nobody typed: someone writing "[via …]" themselves gets no label.
+    const via = authorId === undefined ? VIA.exec(written) : null;
     const sent = via ? written.slice(via[0].length) : written;
     const scheduled = sent.startsWith(SCHEDULED);
     const body = scheduled ? sent.slice(SCHEDULED.length) : sent;

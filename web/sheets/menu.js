@@ -250,7 +250,7 @@ export function MenuSheet() {
         ${
             watchAvailable() &&
             steer &&
-            !view.watch &&
+            view.watch?.status !== "watching" &&
             item(
                 "Watch pull request",
                 () => {

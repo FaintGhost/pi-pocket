@@ -28,6 +28,7 @@ import type { User } from "./config.ts";
 import { FollowsDoc, SessionsDoc } from "./docs.ts";
 import { NOTE_ENTRY } from "./entry-format.ts";
 import { describe, HttpError } from "./errors.ts";
+import { defang } from "./fence.ts";
 import { resolveModel } from "./models.ts";
 import { homePath } from "./paths.ts";
 import { type ClientEntry, projectEntry, snippet } from "./projection.ts";
@@ -107,7 +108,7 @@ const finished = { status: "terminal", outcome: { status: "completed", result: n
 
 /** A session's words, fenced for PiP; a fence inside them cannot end the fence early. */
 export function fenced(text: string): string {
-    return `${SESSION_OPEN}\n${text.replaceAll(SESSION_CLOSE, "</session_output>")}\n${SESSION_CLOSE}`;
+    return `${SESSION_OPEN}\n${defang(text)}\n${SESSION_CLOSE}`;
 }
 
 /** A tool call's key made into a request id's: short and safe whatever the call ids look like. */

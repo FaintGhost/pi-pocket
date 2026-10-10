@@ -1122,7 +1122,13 @@ export class Commands {
 
             return {
                 ...hook,
-                targetTitle: meta?.pip !== undefined ? "PiP" : (meta?.title ?? "New session"),
+                // A session the person can no longer open keeps its title to itself.
+                targetTitle:
+                    meta?.pip !== undefined
+                        ? "PiP"
+                        : app.canSee(user, target)
+                          ? (meta?.title ?? "New session")
+                          : "a session you cannot open",
                 pip: meta?.pip !== undefined,
             };
         });

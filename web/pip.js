@@ -21,14 +21,19 @@ const REPORT = "[report] ";
 /** A post to one of the person's webhooks, as PiP gets it (`hooks.ts`): which hook, then the instructions and what came. */
 const WEBHOOK = /^\[via webhook ([^\]\n]{1,80})\] /;
 
-/** A webhook post for reading: what came as a code block, without the note to PiP about it. */
-const postText = (text) =>
-    text
-        .replace(/\n?What came between <webhook-payload> tags[^\n]*$/, "")
-        .replace(
-            /<webhook-payload[^>]*>\n?([\s\S]*?)\n?<\/webhook-payload>/,
-            (_, body) => `\n\`\`\`\n${readable(body)}\n\`\`\``,
-        );
+/**
+ * A webhook post for reading: the person's instructions, and what came as plain text (never Markdown: it is anyone's),
+ * without the note to PiP about it.
+ */
+function post(text) {
+    const body = text.replace(/\n?What came between <webhook-payload> tags[^\n]*$/, "");
+    const data = /<webhook-payload[^>]*>\n?([\s\S]*?)\n?<\/webhook-payload>/.exec(body);
+
+    return data
+        ? { text: body.slice(0, data.index).trim(), data: readable(data[1]) }
+        : { text: body, data: null };
+}
+
 const SCHEDULED = "[scheduled] ";
 
 const INTRO =
@@ -237,8 +242,8 @@ function sessionOf(anchor) {
 
 // ─── The panel ──────────────────────────────────────────────────────────────
 
-/** A report from a session PiP follows, or a webhook's post: folded to its first lines until opened. */
-function Report({ text, label = "Report" }) {
+/** A report from a session PiP follows, or a webhook's post (with what came as `data`): folded until opened. */
+function Report({ text, label = "Report", data = null }) {
     const [open, setOpen] = useState(false);
 
     return html`<div class=${`pip-report ${open ? "open" : ""}`}>
@@ -253,6 +258,7 @@ function Report({ text, label = "Report" }) {
             <${Icon} name="down" size=${13} class="pip-report-fold" />
         </button>
         <${Markdown} text=${linkSessions(text)} class="pip-report-text" />
+        ${data !== null && html`<pre class="pip-report-data">${data}</pre>`}
     </div>`;
 }
 
@@ -271,9 +277,12 @@ function Item({ item, last, busy }) {
             const hook = WEBHOOK.exec(text);
 
             if (hook) {
+                const posted = post(text.slice(hook[0].length));
+
                 return html`<${Report}
                     label=${`Webhook: ${hook[1]}`}
-                    text=${postText(text.slice(hook[0].length))}
+                    text=${posted.text}
+                    data=${posted.data}
                 />`;
             }
 

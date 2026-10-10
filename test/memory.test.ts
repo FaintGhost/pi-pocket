@@ -23,7 +23,7 @@ import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi
 import type { ConversationId } from "@earendil-works/pi-durable";
 import type { User } from "../src/server/config.ts";
 import { ChatDoc, MemoryDoc } from "../src/server/docs.ts";
-import { MAX_EVERYWHERE_LESSONS, MAX_PROJECT_LESSONS } from "../src/server/memory.ts";
+import { MAX_EVERYWHERE_LESSONS, MAX_PENDING, MAX_PROJECT_LESSONS } from "../src/server/memory.ts";
 
 const tool = (args: Parameters<typeof fauxToolCall>[1]) =>
     fauxAssistantMessage([fauxToolCall("memory", args)], { stopReason: "toolUse" });
@@ -50,6 +50,8 @@ const route: FauxResponseStep = (request) => {
             return tool({ action: "add", text: rest.join(" "), scope: "everywhere" });
         case "forget":
             return tool({ action: "remove", id: rest[0] ?? "" });
+        case "list":
+            return tool({ action: "list" });
 
         case "check": {
             const { messages, systemPrompt } = request as {
@@ -164,10 +166,14 @@ test("a lesson Pi saves reaches later sessions in the repository and its worktre
     assert.ok(!(await given(repo, "check-zebra")));
 });
 
-test("lessons for everywhere reach every folder, and PiP, which has no project", async () => {
+test("lessons for everywhere reach every folder, and PiP, which has no project; Pi's wait for the owner", async () => {
     const id = await newSession(app, elsewhere);
 
+    // Pi's lesson for everywhere would reach every session and PiP: it waits for the owner, even on their own words.
     await say(app, id, "remember-everywhere Answer in British-spelling-yak.");
+    assert.match(await answer(id), /waits for the owner's approval/);
+    assert.ok(!(await given(repo, "British-spelling-yak")));
+    await app.memory.edit(id, owner(app), (await lessons())[0]!.id, "approve");
     assert.ok(await given(repo, "British-spelling-yak"));
     assert.ok(await given(elsewhere, "British-spelling-yak"));
 
@@ -219,6 +225,7 @@ test("a guest's lesson waits for the owner, and is used once approved", async ()
 test("on a message nobody wrote (a webhook's post, PiP's errand), Pi's lessons wait for the owner, and it forgets none", async () => {
     await clear();
     const id = await newSession(app, repo);
+
     const sent = async (text: string) => {
         const { submissionId } = await app.commands.submit(
             id,
@@ -246,6 +253,70 @@ test("on a message nobody wrote (a webhook's post, PiP's errand), Pi's lessons w
     // Asked in the owner's own words, it does.
     await say(app, id, `forget ${kept!.id}`);
     assert.ok(!(await lessons()).some((lesson) => lesson.id === kept!.id));
+
+    // A message that is nobody's (a subagent's report) holds lessons back too, and what was last is known after a
+    // restart.
+    const conversation = await app.conversation(id);
+    const report = await conversation.submit(
+        {
+            type: "input",
+            content: "remember Reports-say-so.",
+            whenBusy: "followUp",
+            requestId: "subagent-reports:test-1",
+        },
+        context,
+    );
+
+    await report.wait(context);
+    assert.equal(
+        (await lessons()).find((lesson) => lesson.text === "Reports-say-so.")?.pending,
+        true,
+    );
+    assert.equal(app.attribution.personWrote(id), false);
+    await app.close();
+    app = await openApp(scriptedModel(route), join(root, "memory-data"));
+    assert.equal(app.attribution.personWrote(id), false, "after a restart");
+    await say(app, id, "hello");
+    await app.close();
+    app = await openApp(scriptedModel(route), join(root, "memory-data"));
+    assert.equal(app.attribution.personWrote(id), true, "the owner's own, after a restart");
+    await clear();
+});
+
+test("Pi's list shows what is in force, and what waits only for whom it works for", async () => {
+    await clear();
+    const id = await newSession(app, repo);
+    const guest = app.config.addUser("Quinn", "guest").user;
+
+    await app.memory.add(
+        id,
+        repo,
+        { userId: owner(app).id, byPi: false, name: "Owner" },
+        {
+            text: "In-force-lesson.",
+            scope: "project",
+        },
+    );
+    await app.memory.add(
+        id,
+        repo,
+        { userId: guest.id, byPi: false, name: "Quinn" },
+        {
+            text: "Unapproved-guest-words.",
+            scope: "project",
+        },
+    );
+    await say(app, id, "list");
+    const listed = await answer(id);
+
+    assert.match(listed, /In-force-lesson/);
+    assert.doesNotMatch(
+        listed,
+        /Unapproved-guest-words/,
+        "the owner's Pi reads no unapproved words",
+    );
+    await sayAs(guest, id, "list");
+    assert.match(await answer(id), /Unapproved-guest-words.*waiting for the owner's approval/);
     await clear();
 });
 
@@ -289,6 +360,23 @@ test("a project and everywhere keep so many lessons, and say to forget one first
 
     // Another project still has room.
     await app.memory.add(id, repo, writer, { text: "fits", scope: "project" });
+
+    // Lessons waiting for approval take no room from the owner's, and one person may have only so many.
+    const guest = app.config.addUser("Pat", "guest").user;
+    const asGuest = { userId: guest.id, byPi: false, name: "Pat" };
+
+    for (let index = 0; index < MAX_PENDING; index++) {
+        await app.memory.add(id, elsewhere, asGuest, { text: `g${index}`, scope: "project" });
+    }
+
+    await assert.rejects(
+        app.memory.add(id, elsewhere, asGuest, { text: "one more", scope: "project" }),
+        /wait for the owner's approval already/,
+    );
+    // Full, the owner's list takes no approval either: one has to go first.
+    const waiting = (await lessons()).find((lesson) => lesson.pending === true)!;
+
+    await assert.rejects(app.memory.edit(id, owner(app), waiting.id, "approve"), /are full/);
 
     await clear();
 });

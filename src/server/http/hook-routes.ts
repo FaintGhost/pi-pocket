@@ -21,6 +21,7 @@ export async function hookRoute(
         throw new HttpError(405, "Webhooks take POST.");
     }
 
+    await app.hooks.precheck(id, secret);
     const body = await readBody(request, MAX_POST);
     const answer = await app.hooks.deliver(id, {
         ...(secret === undefined ? {} : { secret }),

@@ -120,6 +120,7 @@ What the default export receives. Extensions reach the app only through it; it s
 | `approvals`, `guard`             | Calls waiting for a person to allow them; Lancet Guard                                             |
 | `schedules`, `goals`, `browsers` | Scheduled messages, Done when, and the built-in browser, as their extensions use them              |
 | `memory`                         | Lessons Pi keeps across sessions: their projects, the ones in force, saving and changing them      |
+| `watches`                        | Sessions' PR watches: starting, stopping, and reading one, and the task that looks                 |
 
 Modules reload into the running server, but the server's own part (the host among it) changes only with a restart. A module that uses a member new to the host must work without it until then: check that it is there (`typeof host.heldBack === "function"`) and do as before when it is not. A module that called a missing member would fail at its first use, in every session.
 

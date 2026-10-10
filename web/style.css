@@ -10220,6 +10220,23 @@ textarea.notes {
     font-size: 0.85rem;
 }
 
+/* What a webhook posted: as it came, shown once the card is open. */
+.pip-report-data {
+    margin: 0.4rem 0 0;
+    padding: 0.4rem 0.5rem;
+    max-height: 16rem;
+    overflow: auto;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    font-size: 0.75rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.pip-report:not(.open) .pip-report-data {
+    display: none;
+}
+
 .pip-report:not(.open) .pip-report-text {
     display: -webkit-box;
     -webkit-line-clamp: 3;

@@ -27,9 +27,11 @@ const context: Context = BACKGROUND_CONTEXT;
 export const MEMORY_EXTENSION = "pocket-memory";
 /** How long a lesson may be. */
 export const MAX_LESSON = 300;
-/** Lessons a project keeps, and lessons for everywhere, pending ones included. */
+/** Lessons a project keeps, and lessons for everywhere, approved ones: pending ones do not take their room. */
 export const MAX_PROJECT_LESSONS = 40;
 export const MAX_EVERYWHERE_LESSONS = 30;
+/** Lessons waiting for approval that one person (or Pi for them) may have, so nobody fills the owner's list. */
+export const MAX_PENDING = 10;
 /** How long a folder's project is kept before git is asked again (a folder can become a repository). */
 const PROJECT_FOR_MS = 60_000;
 
@@ -115,7 +117,7 @@ export class Memory {
 
         const folder = cwd ?? app.cwdOf(conversationId);
 
-        const now = Date.now();
+        const now = this.#app.now();
         let cached = this.#projects.get(folder);
 
         if (cached === undefined || now - cached.at > PROJECT_FOR_MS) {
@@ -157,13 +159,14 @@ export class Memory {
     }
 
     /**
-     * Whether a write waits for the owner: one for anyone else, and Pi's on a message nobody wrote themselves (a
-     * webhook's post, a PR watch's comments, PiP's errand), whose words may not be its person's.
+     * Whether a write waits for the owner: one for anyone else; Pi's on a message nobody wrote themselves (a webhook's
+     * post, a PR watch's comments, PiP's errand, a subagent's report), whose words may not be its person's; and every
+     * lesson Pi saves for everywhere, which would reach every session and PiP.
      */
-    #held(conversationId: ConversationId, writer: Writer): boolean {
+    #held(conversationId: ConversationId, writer: Writer, everywhere: boolean): boolean {
         return (
             !this.#isOwner(writer.userId) ||
-            (writer.byPi && !this.#app.attribution.personWrote(conversationId))
+            (writer.byPi && (everywhere || !this.#app.attribution.personWrote(conversationId)))
         );
     }
 
@@ -236,7 +239,7 @@ export class Memory {
         const root = app.rootOf(conversationId);
         const meta = app.sessionMeta(root);
         const by = writer.userId ?? meta?.createdBy ?? "";
-        const pending = this.#held(conversationId, writer);
+        const pending = this.#held(conversationId, writer, project === undefined);
 
         return app.harness.commit(async (tx) => {
             const doc = await tx.doc(MemoryDoc);
@@ -252,7 +255,22 @@ export class Memory {
 
             const max = project === undefined ? MAX_EVERYWHERE_LESSONS : MAX_PROJECT_LESSONS;
 
-            if (items.filter((item) => item.project === project?.key).length >= max) {
+            if (
+                pending &&
+                items.filter((item) => item.pending === true && item.by === by).length >=
+                    MAX_PENDING
+            ) {
+                throw new HttpError(
+                    409,
+                    `${String(MAX_PENDING)} lessons wait for the owner's approval already: wait for them first.`,
+                );
+            }
+
+            if (
+                !pending &&
+                items.filter((item) => item.project === project?.key && item.pending !== true)
+                    .length >= max
+            ) {
                 throw new HttpError(
                     409,
                     `${project === undefined ? "Lessons for everywhere" : `${project.name}'s lessons`} are full (${String(max)}): forget one first, or fold two into one.`,
@@ -276,7 +294,7 @@ export class Memory {
                     : { from: { conversationId: Number(root), title: meta.title ?? "Untitled" } }),
                 by,
                 byPi: writer.byPi,
-                createdAt: Date.now(),
+                createdAt: this.#app.now(),
                 ...(pending ? { pending: true } : {}),
                 ...(request.key === undefined ? {} : { key: request.key }),
             };
@@ -318,6 +336,19 @@ export class Memory {
                 }
 
                 if (lesson.pending === true) {
+                    const max =
+                        lesson.project === undefined ? MAX_EVERYWHERE_LESSONS : MAX_PROJECT_LESSONS;
+                    const kept = Object.values(doc.items).filter(
+                        (item) => item.project === lesson.project && item.pending !== true,
+                    ).length;
+
+                    if (kept >= max) {
+                        throw new HttpError(
+                            409,
+                            `${lesson.project === undefined ? "Lessons for everywhere" : `${lesson.projectName ?? "This project"}'s lessons`} are full (${String(max)}): forget one first.`,
+                        );
+                    }
+
                     delete lesson.pending;
                     await this.#activity(
                         tx,
@@ -362,9 +393,9 @@ export class Memory {
             }
 
             lesson.text = text!;
-            lesson.updatedAt = Date.now();
+            lesson.updatedAt = this.#app.now();
 
-            if (this.#held(conversationId, writer)) {
+            if (this.#held(conversationId, writer, lesson.project === undefined)) {
                 lesson.pending = true;
             } else {
                 delete lesson.pending;

@@ -51,10 +51,11 @@ export class Attribution {
      */
     readonly #lastAuthorEntry = new Map<ConversationId, number>();
     /**
-     * Whether that person wrote the newest message themselves, rather than having it sent for them (by PiP, a PR watch,
-     * a webhook, a schedule Pi set up): what came from elsewhere may carry words that are not theirs.
+     * Whether a person wrote the newest message themselves, rather than having it sent for them (by PiP, a PR watch, a
+     * webhook, a schedule Pi set up) or it being nobody's (a subagent's report): what came from elsewhere may carry
+     * words that are not theirs. With the entry it is about, so an older message settling later does not change it.
      */
-    readonly #lastWrote = new Map<ConversationId, boolean>();
+    readonly #lastWrote = new Map<ConversationId, { entry: number; wrote: boolean }>();
     /** Who sent each submission, for queued messages. Filled from commits, or looked up once when missing. */
     readonly #submitters = new Map<number, string>();
     /** The submissions whose sender was looked up already, found or not. */
@@ -78,7 +79,8 @@ export class Attribution {
             ...authorsDoc?.requesters,
             ...authorsDoc?.entries,
         };
-        const missing = await this.#unrecordedAuthors(storage, id, known);
+        const newestInput = { entry: -1, wrote: false };
+        const missing = await this.#unrecordedAuthors(storage, id, known, newestInput);
 
         for (const { entry, userId } of missing) {
             known[String(entry)] = userId;
@@ -92,11 +94,10 @@ export class Attribution {
         if (newest !== undefined) {
             this.#lastAuthor.set(id, newest[1]);
             this.#lastAuthorEntry.set(id, Number(newest[0]));
-            this.#lastWrote.set(
-                id,
-                authorsDoc?.entries?.[newest[0]] !== undefined ||
-                    missing.some((each) => String(each.entry) === newest[0] && each.wrote),
-            );
+        }
+
+        if (newestInput.entry >= 0) {
+            this.#lastWrote.set(id, newestInput);
         }
 
         // Their authors are known: a message settling after the restart is not noted again.
@@ -153,6 +154,7 @@ export class Attribution {
         storage: Storage,
         id: ConversationId,
         known: Readonly<Record<string, string>>,
+        newestInput: { entry: number; wrote: boolean },
     ): Promise<{ entry: EntryId; userId: string; wrote: boolean }[]> {
         const missing: { entry: EntryId; userId: string; wrote: boolean }[] = [];
         let cursor: Cursor | undefined;
@@ -169,6 +171,15 @@ export class Attribution {
                 // Writes too: a `!` command Pi sees, or a note, is its person's (`shell.ts`, `Commands.note`).
                 const entry = record.entry;
                 const person = requestPerson(record.requestId);
+
+                if (
+                    record.type === "input" &&
+                    entry !== undefined &&
+                    Number(entry) > newestInput.entry
+                ) {
+                    newestInput.entry = Number(entry);
+                    newestInput.wrote = person?.wrote === true;
+                }
 
                 if (
                     entry !== undefined &&
@@ -191,6 +202,17 @@ export class Attribution {
 
         if (person?.wrote === true) {
             this.#submitters.set(record.id as unknown as number, person.userId);
+        }
+
+        if (record.type === "input" && record.entry !== undefined) {
+            const entry = Number(record.entry);
+
+            if (entry >= (this.#lastWrote.get(record.conversationId)?.entry ?? -1)) {
+                this.#lastWrote.set(record.conversationId, {
+                    entry,
+                    wrote: person?.wrote === true,
+                });
+            }
         }
 
         // A message's submission changes as it is placed and answered; its author is noted once, when it enters.
@@ -218,7 +240,6 @@ export class Attribution {
                 if (entry >= (this.#lastAuthorEntry.get(conversationId) ?? -1)) {
                     this.#lastAuthorEntry.set(conversationId, entry);
                     this.#lastAuthor.set(conversationId, requester);
-                    this.#lastWrote.set(conversationId, person?.wrote === true);
                 }
 
                 this.#noteAuthor(conversationId, record.entry, requester, person?.wrote === true);
@@ -271,6 +292,6 @@ export class Attribution {
      * the newest message was sent for them by something else, whose words it may carry, or when nobody is known.
      */
     personWrote(id: ConversationId): boolean {
-        return this.#lastWrote.get(this.#app.rootOf(id)) === true;
+        return this.#lastWrote.get(this.#app.rootOf(id))?.wrote === true;
     }
 }
