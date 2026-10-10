@@ -19,14 +19,23 @@ let last = null;
 const asking = new Map();
 
 function fetchLessons(id, rev) {
-    let fetching = asking.get(id);
+    const fetching = asking.get(id);
 
-    if (fetching?.rev !== rev) {
-        fetching = { rev, promise: api(path(id)) };
-        asking.set(id, fetching);
+    if (fetching?.rev === rev) {
+        return fetching.promise;
     }
 
-    return fetching.promise;
+    const asked = { rev, promise: api(path(id)) };
+
+    asking.set(id, asked);
+    // A fetch that failed is not kept: the next one asks again.
+    asked.promise.catch(() => {
+        if (asking.get(id) === asked) {
+            asking.delete(id);
+        }
+    });
+
+    return asked.promise;
 }
 
 /**
@@ -41,9 +50,12 @@ export function useMemory(conversationId) {
     useEffect(() => store.subscribe((state) => setRev(state.memoryRev ?? 0)), []);
     const on = memoryAvailable(id);
     const [data, setData] = useState(last?.id === id ? last.data : null);
+    // Asked again a few times when a fetch fails (a dropped connection, a restart), rather than loading for ever.
+    const [retry, setRetry] = useState(0);
 
     useEffect(() => {
         let live = true;
+        let timer;
 
         if (!on) {
             return undefined;
@@ -57,13 +69,18 @@ export function useMemory(conversationId) {
                     setData(fetched);
                 }
             },
-            () => {},
+            () => {
+                if (live && retry < 3) {
+                    timer = setTimeout(() => setRetry(retry + 1), 2000 * (retry + 1));
+                }
+            },
         );
 
         return () => {
             live = false;
+            clearTimeout(timer);
         };
-    }, [id, rev, on]);
+    }, [id, rev, on, retry]);
 
     return last?.id === id ? (data ?? last.data) : data;
 }
@@ -132,8 +149,13 @@ function Source({ lesson }) {
             html` · <a href=${`/s/${lesson.from.id}`} onClick=${open}>${lesson.from.title}</a>`
         }
         <span> · ${timeAgo(lesson.updatedAt ?? lesson.createdAt)}</span>
+        ${(lesson.pending || lesson.proposal) && html`<span> · for ${reach(lesson)}</span>`}
     </div>`;
 }
+
+/** Where a lesson applies, said where it waits: everywhere's reach every session and PiP. */
+const reach = (lesson) =>
+    lesson.scope === "everywhere" ? "everywhere: every session, and PiP" : "this project";
 
 /** One lesson: its text, where it came from, and what this person may do with it. */
 function Lesson({ lesson, data }) {
@@ -416,7 +438,7 @@ export function LessonCall({ lessonId, conversationId }) {
 
     return html`<div class="lesson-call waiting">
         <div class="grow">
-            <div>${what} waits for ${data.owner ? "you" : "the owner"}:</div>
+            <div>${what}, for ${reach(lesson)}, waits for ${data.owner ? "you" : "the owner"}:</div>
             <div class="lesson-text">${text}</div>
         </div>
         ${

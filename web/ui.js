@@ -827,7 +827,7 @@ const edges = new Map();
 /**
  * A ref that keeps `name` (a CSS variable on the page's root) at where its element reaches, `measure(rect)` px, as it
  * or the window resizes; unset while the element is hidden or gone. PiP's window keeps clear of the session's top bar
- * and message box with them.
+ * with it (`--topbar-h`).
  */
 export function useEdge(name, measure) {
     const [ref] = useState(() => {

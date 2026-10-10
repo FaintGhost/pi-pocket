@@ -10363,6 +10363,13 @@ textarea.notes {
     line-height: 1.45;
 }
 
+/* iOS zooms into a text field smaller than 16px as it takes focus: PiP's box keeps the app's touch size. */
+@media (pointer: coarse) {
+    .pip-composer textarea {
+        font-size: 16px;
+    }
+}
+
 .pip-send:not(:disabled) {
     color: var(--accent);
 }

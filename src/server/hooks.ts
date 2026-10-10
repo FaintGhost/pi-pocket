@@ -204,6 +204,15 @@ export function screen(payload: unknown, event = ""): unknown {
         return undefined;
     }
 
+    // A commit's status on no branch of this repository is a fork's (its message is theirs); a security advisory
+    // someone reported is a stranger's words.
+    if (
+        (event === "status" && !(Array.isArray(payload.branches) && payload.branches.length > 0)) ||
+        (event === "repository_advisory" && payload.action === "reported")
+    ) {
+        return undefined;
+    }
+
     const issue = payload.issue;
     const pull =
         isObject(payload.pull_request) ||

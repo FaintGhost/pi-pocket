@@ -867,6 +867,31 @@ test("PiP's own schedules wait while PiP is off, and go out once it is back", as
     assert.equal(await woken(), 2, "sent once, and answered");
 });
 
+test("a follow's report waits while PiP is off, and comes once it is back", async () => {
+    const id = await pip();
+    const me = owner(app);
+    const session = await newSession(app);
+    const reports = async () =>
+        (await said(id)).filter(
+            (line) => line.startsWith("> [report]") && line.includes(`/s/${String(session)})`),
+        ).length;
+
+    app.pip.holdMs = 100;
+    await say(app, id, `send ${String(session)} a sleepy job`);
+    await until(() => app.isBusy(session), "the session at work");
+    await app.setExtensionEnabled(me, "pip.ts", false);
+    await until(() => !app.isBusy(session), "the session's run over", 10_000);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    assert.equal(await reports(), 0, "no report, and no run without PiP's rules, while PiP is off");
+    assert.ok(!app.isBusy(id));
+
+    await app.setExtensionEnabled(me, "pip.ts", true);
+    await until(async () => (await reports()) > 0, "the report once PiP is back", 10_000);
+    await until(() => !app.isBusy(id), "PiP at rest");
+    assert.equal(await reports(), 1, "one report");
+    app.pip.holdMs = 60_000;
+});
+
 // Last: it restarts the app, for a fresh hour, and uses that hour's actions up.
 test("schedules count against PiP's hourly actions, its own too, once each; refused schedules do not", async () => {
     await app.close();

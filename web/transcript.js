@@ -420,7 +420,6 @@ function Collapsible({ text, limit = 600 }) {
 /** The mark a call's line starts with; the rest take theirs from `describeCall`. */
 const GLYPHS = { read: "→", edit: "✎", write: "+", bash: "$", grep: "⌕", find: "⌕", subagent: "⑂" };
 
-/** A call's line: its label (the tool, or a subagent's name) and what it acts on. */
 /** What Pi did with its memory tool, as a step's label. */
 const MEMORY_WORDS = {
     add: "saved a lesson",
@@ -429,6 +428,7 @@ const MEMORY_WORDS = {
     list: "read its lessons",
 };
 
+/** A call's line: its label (the tool, or a subagent's name) and what it acts on. */
 function stepWords(call) {
     const args = call.args ?? {};
 

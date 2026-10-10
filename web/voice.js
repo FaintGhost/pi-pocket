@@ -8,7 +8,9 @@ import { html, Icon } from "./ui.js";
 /** The browser's recognizer, looked up when used (so a page can stand one in), or undefined where there is none. */
 const Recognizer = () => globalThis.SpeechRecognition ?? globalThis.webkitSpeechRecognition;
 
-export const voiceAvailable = () => typeof Recognizer() === "function";
+/** Whether the mic can work here: a recognizer, and a page browsers give the microphone to (https, or this machine). */
+export const voiceAvailable = () =>
+    globalThis.isSecureContext !== false && typeof Recognizer() === "function";
 
 /** What each of the recognizer's errors means for the person; those not here are named as they are. */
 const ERRORS = {

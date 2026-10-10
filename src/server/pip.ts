@@ -30,7 +30,7 @@ import type { User } from "./config.ts";
 import { FollowsDoc, SessionsDoc } from "./docs.ts";
 import { NOTE_ENTRY } from "./entry-format.ts";
 import { describe, HttpError } from "./errors.ts";
-import { defang, quoted } from "./fence.ts";
+import { clip, defang, quoted } from "./fence.ts";
 import { git } from "./git.ts";
 import { originRepo, parseRepo, requirePush, sameRepo } from "./github.ts";
 import { resolveModel } from "./models.ts";
@@ -136,13 +136,6 @@ function textOf(message: AssistantMessage | undefined): string {
         .trim();
 }
 
-/** Text cut to `max` characters, keeping its lines. */
-function clip(text: string, max: number): string {
-    const trimmed = text.trim();
-
-    return trimmed.length > max ? `${trimmed.slice(0, max - 1)}…` : trimmed;
-}
-
 /** A tool call in a few words: its name and its first short argument. */
 function callLine(name: string, args: Record<string, unknown>): string {
     const first = Object.values(args).find(
@@ -180,6 +173,8 @@ export class Pip {
     readonly #origins = new Map<string, { repo: string | undefined; at: number }>();
     /** The durable task behind each follow; PiP's extension installs it. */
     readonly task: Task<FollowInput, FollowState, null, object>;
+    /** How long a report waits before it looks again whether PiP is back on (tests shorten it). */
+    holdMs = 60_000;
 
     constructor(app: PocketApp) {
         this.#app = app;
@@ -341,7 +336,7 @@ export class Pip {
             throw new Error(
                 kind === "start"
                     ? `You started ${String(max)} sessions in the last hour; wait, or ask the person to start more themselves.`
-                    : `You made ${String(max)} messages, follows, and schedules in the last hour; wait before making more.`,
+                    : `You made ${String(max)} messages, follows, schedules, and watches in the last hour; wait before making more.`,
             );
         }
 
@@ -1254,6 +1249,19 @@ export class Pip {
         context: Context,
     ): Promise<void> {
         const pipId = runtime.conversationId;
+
+        // PiP turned off keeps its follows: a report waits until it is on again, as its schedules, watches, and hooks
+        // do, so no run starts in its conversation without its rules and tools.
+        for (;;) {
+            const person = this.#app.config.userById(input.userId);
+
+            if (person === undefined || this.available(person)) {
+                break;
+            }
+
+            await runtime.sleep(runtime.now() + this.holdMs, context);
+        }
+
         const pip = await this.#app.harness.conversation(pipId, context);
         const requestId = requestFor(input.userId, `pip-report-${String(runtime.taskId)}`);
 
