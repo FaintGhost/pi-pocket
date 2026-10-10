@@ -28,7 +28,12 @@ export function describeWatch(watch: PrWatch): string {
 
     const note = watch.note?.replace(/\.$/, "");
 
-    return `${head}: watching${checks}, ${watch.sent} of ${watch.max} messages sent${note === undefined ? "" : watch.errors > 0 ? `; last look failed: ${note}` : `; waiting: ${note}`}.`;
+    const unchecked =
+        watch.unchecked === true
+            ? `; only the repository owner's comments count: gh's account cannot push to ${watch.repo}, so GitHub does not tell it who else can write there`
+            : "";
+
+    return `${head}: watching${checks}, ${watch.sent} of ${watch.max} messages sent${unchecked}${note === undefined ? "" : watch.errors > 0 ? `; last look failed: ${note}` : `; waiting: ${note}`}.`;
 }
 
 export default function createTriggers(host: PocketHost) {

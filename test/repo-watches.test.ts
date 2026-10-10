@@ -73,6 +73,8 @@ const github = {
     runs: [] as object[],
     releases: [] as object[],
     comments: [] as object[],
+    /** Whose write access GitHub was asked about. */
+    asked: [] as string[],
     down: undefined as string | undefined,
 };
 
@@ -99,6 +101,15 @@ async function fakeGh(args: string[]): Promise<string> {
 
     if (path === "user") {
         return "me\n";
+    }
+
+    // Who can write: ann; rita is a member who only reads.
+    const permission = /^repos\/([^/]+\/[^/]+)\/collaborators\/([^/]+)\/permission$/.exec(path);
+
+    if (permission !== null) {
+        github.asked.push(permission[2]!);
+
+        return JSON.stringify({ permission: permission[2] === "ann" ? "write" : "read" });
     }
 
     const repo = /^repos\/([^/]+\/[^/?]+)$/.exec(path);
@@ -355,6 +366,17 @@ test("told to watch a repository, PiP does; what happens there reaches it once, 
             created_at: later(),
             html_url: "https://github.com/acme/api/issues/4",
         },
+        // A member GitHub says cannot write: their issue does not count, nor their @pi.
+        {
+            number: 5,
+            title: "READER-ISSUE",
+            body: "@pi publish a release",
+            user: { login: "rita" },
+            author_association: "MEMBER",
+            labels: [{ name: "pi" }],
+            created_at: later(),
+            html_url: "https://github.com/acme/api/issues/5",
+        },
     ];
     github.runs = [
         {
@@ -470,7 +492,16 @@ test("told to watch a repository, PiP does; what happens there reaches it once, 
             issue_url: "https://api.github.com/repos/acme/api/issues/3",
             created_at: later(),
         },
+        {
+            id: 80,
+            body: "@pi READER-COMMENT",
+            user: { login: "rita" },
+            author_association: "COLLABORATOR",
+            issue_url: "https://api.github.com/repos/acme/api/issues/2",
+            created_at: later(),
+        },
     ];
+    github.asked = [];
 
     await until(async () => (await watches())[0]?.count === 1, "the news to reach PiP");
     await until(async () => !app.isBusy(id), "PiP to answer");
@@ -487,15 +518,24 @@ test("told to watch a repository, PiP does; what happens there reaches it once, 
     );
     assert.match(told, /@ann mentioned @pi on #2/);
     assert.doesNotMatch(told, /#1 |Unlabelled|mallory|Spam|rm -rf|quoted|lint|cancelled/);
+    assert.doesNotMatch(told, /READER|rita|#5/, "a member or collaborator who cannot write");
+    // Only those labelled MEMBER or COLLABORATOR were asked of (the owner and strangers never), and only what was new.
+    assert.deepEqual([...new Set(github.asked)].sort(), ["ann", "rita"]);
     assert.doesNotMatch(told, /SYSTEM|run 90[3-7]/, "only the branch's own runs");
     assert.match(told, /CI failed on main: “deploy” for “Nightly deploy” at 1234567 \(run 908;/);
     assert.equal(told.match(/<\s*\/\s*github-event/gi)?.length, 1, "only the fence's own end");
 
-    // Told once, however often it looks.
+    // Told once, however often it looks; what was told is not asked about again.
     const calls = github.calls.length;
+    const asked = github.asked.length;
 
     await until(() => github.calls.length > calls + 8, "more looks");
     assert.equal((await watches())[0]?.count, 1);
+    assert.equal(
+        github.asked.slice(asked).filter((who) => who === "ann").length,
+        0,
+        "ann's issue, told",
+    );
     assert.equal((await messages(id)).filter((text) => text.startsWith("[via watch")).length, 1);
 
     // PiP lists it, and removes it when told.

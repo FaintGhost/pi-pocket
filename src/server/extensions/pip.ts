@@ -483,7 +483,7 @@ export default function createPip(host: PocketHost) {
             anyone: Type.Optional(
                 Type.Boolean({
                     description:
-                        "Not yours to set: by default issues and pull requests come only from the repository's owner, organization members, and collaborators, as GitHub labels them. Only your person can let in anyone's, in Menu → Webhooks and watches; when they ask for it, make the watch without this and tell them so.",
+                        "Not yours to set: by default issues and pull requests come only from the repository's owner, and organization members and collaborators who can write to it. Only your person can let in anyone's, in Menu → Webhooks and watches; when they ask for it, make the watch without this and tell them so.",
                 }),
             ),
             to: Type.Optional(

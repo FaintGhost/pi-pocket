@@ -522,6 +522,8 @@ export class Room {
                           // A note with no failed looks says why it waits (someone else drives).
                           errors: this.watch.errors,
                           by: this.watch.by,
+                          // Only the owner's comments count: gh cannot push to the repository.
+                          ...(this.watch.unchecked === true ? { unchecked: true } : {}),
                       },
         };
 

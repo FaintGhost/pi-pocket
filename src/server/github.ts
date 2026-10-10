@@ -303,14 +303,87 @@ export const BRANCH_EVENTS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * People whose words count on a repository: its owner, its organization's members, and its collaborators, as GitHub
- * labels them. A member need not have write access, but write access through a team shows only as MEMBER.
+ * GitHub's labels for people who may be able to write to a repository: its organization's members and its
+ * collaborators. Neither label says they can (a member may only read, a collaborator only triage): `canWrite` asks.
+ * Write access through a team shows only as MEMBER.
  */
-export const TRUSTED_ASSOCIATIONS: ReadonlySet<string> = new Set([
-    "OWNER",
-    "MEMBER",
-    "COLLABORATOR",
-]);
+export const MAY_WRITE: ReadonlySet<string> = new Set(["MEMBER", "COLLABORATOR"]);
+
+/** A login GitHub could have given: no `/`, `.`, or `?` to steer the address it goes in. Bots' (`…[bot]`) are not. */
+const LOGIN = /^[A-Za-z0-9][\w-]{0,38}$/;
+/** What GitHub said of who can write where, by the `gh` that asked: an answer for ten minutes, "could not tell" for one. */
+const writing = new WeakMap<Gh, Map<string, { write: boolean | undefined; at: number }>>();
+const WRITE_MS = 10 * 60_000;
+const UNTOLD_MS = 60_000;
+const MAX_WRITING = 2_000;
+
+/**
+ * Whether `login` can write to `repo` (push to it: write, maintain, or admin, through a team or the organization
+ * too), as GitHub tells `gh`'s account. Undefined when it cannot be told: GitHub tells only accounts that can push
+ * there themselves, and only on a host gh is signed in to. False for anything that is not a login.
+ */
+export async function canWrite(gh: Gh, repo: string, login: string): Promise<boolean | undefined> {
+    if (!LOGIN.test(login)) {
+        return false;
+    }
+
+    const known = writing.get(gh) ?? new Map<string, { write: boolean | undefined; at: number }>();
+    const key = `${repo.toLowerCase()} ${login.toLowerCase()}`;
+    const had = known.get(key);
+    const now = Date.now();
+
+    writing.set(gh, known);
+
+    if (had !== undefined && now - had.at < (had.write === undefined ? UNTOLD_MS : WRITE_MS)) {
+        return had.write;
+    }
+
+    let write: boolean | undefined;
+
+    try {
+        await requireHost(gh, repoArgs(repo).host);
+        const found = JSON.parse(
+            await gh(
+                apiArgs(repo, `repos/${repoArgs(repo).path}/collaborators/${login}/permission`),
+            ),
+        ) as { permission?: unknown; user?: { permissions?: { push?: unknown } } | null };
+
+        write =
+            found.permission === "admin" ||
+            found.permission === "write" ||
+            found.user?.permissions?.push === true;
+    } catch {
+        write = undefined;
+    }
+
+    // Newest last, so the oldest goes first when there are too many.
+    known.delete(key);
+    known.set(key, { write, at: now });
+
+    if (known.size > MAX_WRITING) {
+        known.delete(known.keys().next().value!);
+    }
+
+    return write;
+}
+
+/**
+ * Whether someone's words count on a repository: its owner's (a person's own repository), or a member's or a
+ * collaborator's whom GitHub says can write to it. Nobody else's, and nobody's that cannot be checked.
+ */
+export async function fromWriter(
+    gh: Gh,
+    repo: string,
+    association: string | undefined,
+    login: string | undefined,
+): Promise<boolean> {
+    if (association === "OWNER") {
+        return true;
+    }
+
+    return MAY_WRITE.has(association ?? "") && (await canWrite(gh, repo, login ?? "")) === true;
+}
+
 // @pi as a word of its own: not @pi-hole, @pi_bot, or @pipeline.
 const FOR_PI = /(^|[^\w@])@pi(?![\w-])/i;
 const QUOTED = /^\s*>.*$|```[\s\S]*?```|`[^`\n]*`/gm;

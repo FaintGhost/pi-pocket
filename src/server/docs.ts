@@ -450,6 +450,11 @@ export type PrWatch = {
     branch: string;
     /** The PR is in another repository than the session's folder: Pi is told to work in a checkout of it. */
     elsewhere?: boolean;
+    /**
+     * `gh`'s account could not push to the PR's repository when the watch began, so GitHub does not tell it who can
+     * write there: members' and collaborators' remarks do not count, only the owner's (and bots' reviews).
+     */
+    unchecked?: boolean;
     /** Whose work it is: messages go to Pi for them, and their checks and spend limit apply. */
     by: string;
     /** Pi set it up, for `by`. */
@@ -508,8 +513,8 @@ export type Hook = {
      */
     signed?: boolean;
     /**
-     * For GitHub: posts about what people outside the repository wrote (not its owner, members, or collaborators) reach
-     * Pi too. Absent: they are dropped. Only a person sets it, in the hooks sheet.
+     * For GitHub: posts about what people outside the repository wrote (not its owner, nor members or collaborators who
+     * can write to it) reach Pi too. Absent: they are dropped. Only a person sets it, in the hooks sheet.
      */
     anyone?: boolean;
     /** Who made it: posts go as their work, with their checks and spend limit. */
@@ -550,7 +555,8 @@ export type RepoWatch = {
     /** The branch whose failing CI counts; the repository's default branch. */
     branch: string;
     /**
-     * Issues and PRs from anyone, not only from the repository's owner, members, and collaborators (and bots' PRs).
+     * Issues and PRs from anyone, not only from the repository's owner, and members and collaborators who can write to
+     * it (and bots' PRs).
      * Only a person turns it on, in the hooks sheet; PiP cannot.
      */
     anyone?: boolean;

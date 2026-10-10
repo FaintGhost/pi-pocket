@@ -5,7 +5,8 @@
  * with the hook's secret (`X-Hub-Signature-256`), which is not in its address. Any other hook has the secret in its
  * address. A post goes to Pi once even when sent again (by GitHub's delivery id, or an `Idempotency-Key`); anything
  * else gets a 404, as if there were no such hook. GitHub's posts about what someone outside the repository wrote (an
- * issue, a comment, a PR) are dropped, unless the hook's person made it for anyone. The address works only where the
+ * issue, a comment, a PR) are dropped, unless the hook's person made it for anyone: its people are its owner, and the
+ * members and collaborators GitHub tells `gh` can write to it. The address works only where the
  * service can reach this server: through a tunnel or a public address. Hooks run while the triggers extension is on.
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
@@ -16,7 +17,7 @@ import type { User } from "./config.ts";
 import { type Hook, HooksDoc } from "./docs.ts";
 import { HttpError } from "./errors.ts";
 import { attribute, clip, defang } from "./fence.ts";
-import { BRANCH_EVENTS, TRUSTED_ASSOCIATIONS } from "./github.ts";
+import { BRANCH_EVENTS, canWrite, MAY_WRITE, parseRepo } from "./github.ts";
 import { clientKey, requestFor } from "./requests.ts";
 import { TRIGGERS_EXTENSION } from "./watches.ts";
 
@@ -153,6 +154,9 @@ export function payloadText(content: { raw: string; json?: unknown }): string {
 /** What a GitHub payload is about, in order: the first of these that says who wrote it is who acted. */
 const AUTHORED = ["comment", "review", "issue", "pull_request", "discussion"];
 
+/** The members and collaborators a post's write access is asked of, at most: anyone past them counts as outside. */
+const MAX_ASKED = 8;
+
 /** What Pi gets instead of the words of someone outside the repository, in a post that goes. */
 export const LEFT_OUT = "(left out: written by someone outside the repository)";
 
@@ -163,13 +167,83 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
     value !== null && typeof value === "object" && !Array.isArray(value);
 
 /**
- * A GitHub payload screened for words from outside the repository, whose people are its owner, members, and
- * collaborators, as GitHub labels them. Undefined: the post is dropped, because who acted (the first of `AUTHORED` that
- * names its author) is from outside, or it is about a run or check that may be someone else's (see `BRANCH_EVENTS`). Otherwise
- * the payload, with the body of everything else outsiders wrote (the issue under a member's comment, a thread's
- * comments) left out and its title kept. Bots count on a PR and what is said on it (reviews, comments), never on an issue.
+ * What to ask GitHub before a payload is screened: its repository as `gh` names it (with its host off github.com;
+ * undefined when it names none it can tell), and the logins (lowercase) of the members and collaborators it names, who
+ * acted first, at most `MAX_ASKED`.
  */
-export function screen(payload: unknown, event = ""): unknown {
+export function writersToAsk(payload: unknown): { repo?: string; logins: string[] } {
+    const logins = new Set<string>();
+
+    // As deep as `screen` looks.
+    const walk = (value: unknown, depth: number): void => {
+        if (depth > 12 || logins.size >= MAX_ASKED) {
+            return;
+        }
+
+        if (Array.isArray(value)) {
+            value.forEach((item) => walk(item, depth + 1));
+
+            return;
+        }
+
+        if (!isObject(value)) {
+            return;
+        }
+
+        if (
+            typeof value.author_association === "string" &&
+            MAY_WRITE.has(value.author_association) &&
+            isObject(value.user) &&
+            typeof value.user.login === "string"
+        ) {
+            logins.add(value.user.login.toLowerCase());
+        }
+
+        Object.values(value).forEach((item) => walk(item, depth + 1));
+    };
+
+    if (!isObject(payload)) {
+        return { logins: [] };
+    }
+
+    AUTHORED.forEach((key) => walk(payload[key], 1));
+    walk(payload, 0);
+    const repository = payload.repository;
+    let host: string | undefined;
+
+    if (
+        isObject(repository) &&
+        typeof repository.html_url === "string" &&
+        typeof repository.full_name === "string"
+    ) {
+        try {
+            host = new URL(repository.html_url).host;
+        } catch {
+            host = undefined;
+        }
+    }
+
+    const repo =
+        host === undefined || !isObject(repository)
+            ? undefined
+            : parseRepo(`${host}/${String(repository.full_name)}`);
+
+    return { ...(repo === undefined ? {} : { repo }), logins: [...logins] };
+}
+
+/**
+ * A GitHub payload screened for words from outside the repository, whose people are its owner, and the members and
+ * collaborators in `writers` (lowercase logins GitHub says can write to it; see `writersToAsk`). Undefined: the post is
+ * dropped, because who acted (the first of `AUTHORED` that names its author) is from outside, or it is about a run or
+ * check that may be someone else's (see `BRANCH_EVENTS`). Otherwise the payload, with the body of everything else
+ * outsiders wrote (the issue under a member's comment, a thread's comments) left out and its title kept. Bots count on
+ * a PR and what is said on it (reviews, comments), never on an issue.
+ */
+export function screen(
+    payload: unknown,
+    event = "",
+    writers: ReadonlySet<string> = new Set(),
+): unknown {
     if (!isObject(payload)) {
         return payload;
     }
@@ -218,9 +292,17 @@ export function screen(payload: unknown, event = ""): unknown {
         isObject(payload.pull_request) ||
         isObject(payload.review) ||
         (isObject(issue) && issue.pull_request !== undefined && issue.pull_request !== null);
+    // A label is not enough: a member may only read, a collaborator only triage.
+    const writes = (item: Record<string, unknown>) =>
+        item.author_association === "OWNER" ||
+        (typeof item.author_association === "string" &&
+            MAY_WRITE.has(item.author_association) &&
+            isObject(item.user) &&
+            typeof item.user.login === "string" &&
+            writers.has(item.user.login.toLowerCase()));
     const outside = (item: Record<string, unknown>) =>
         typeof item.author_association === "string" &&
-        !TRUSTED_ASSOCIATIONS.has(item.author_association) &&
+        !writes(item) &&
         !(pull && isObject(item.user) && item.user.type === "Bot");
     const acting = AUTHORED.map((key) => payload[key]).find(
         (item) => isObject(item) && typeof item.author_association === "string",
@@ -439,6 +521,35 @@ export class Hooks {
     }
 
     /**
+     * Which members and collaborators a GitHub post names can write to its repository, as GitHub tells `gh`; `untold`
+     * when it could not say of one (gh is not signed in to the host, or cannot push there itself): they count as outside.
+     */
+    async #writers(payload: unknown): Promise<{ writers: Set<string>; untold: boolean }> {
+        const { repo, logins } = writersToAsk(payload);
+        const writers = new Set<string>();
+        let untold = false;
+
+        for (const login of logins) {
+            const write =
+                repo === undefined ? undefined : await canWrite(this.#app.watches.gh, repo, login);
+
+            if (write === true) {
+                writers.add(login);
+            } else if (write === undefined) {
+                untold = true;
+            }
+        }
+
+        if (untold) {
+            this.#app.log(
+                `webhook: who can write to ${repo ?? "a post's repository"} could not be checked: gh must be signed in to its host and able to push there`,
+            );
+        }
+
+        return { writers, untold };
+    }
+
+    /**
      * A post to hook `id`: let in, it becomes a message to the hook's target for its person. Returns the status and
      * what to answer; throws an HttpError for a post that cannot go.
      */
@@ -487,10 +598,16 @@ export class Hooks {
         // What a stranger wrote in an issue, a comment, or a fork's PR is not for Pi, unless the hook's person said
         // anyone: a post they started is dropped, and their words in any other post are left out.
         if (event !== undefined && hook.anyone !== true && content.json !== undefined) {
-            const json = screen(content.json, event);
+            const { writers, untold } = await this.#writers(content.json);
+            const json = screen(content.json, event, writers);
 
             if (json === undefined) {
-                return { status: 202, message: "Not delivered: from outside the repository." };
+                return {
+                    status: 202,
+                    message: untold
+                        ? "Not delivered: from outside the repository, or from someone whose access could not be checked."
+                        : "Not delivered: from outside the repository.",
+                };
             }
 
             content.json = json;

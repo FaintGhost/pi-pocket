@@ -1,8 +1,9 @@
 /**
  * Watching a pull request: while a session's PR is open, a durable task looks at it on GitHub every few minutes, with
  * the `gh` command signed in on this machine, and tells Pi in the session what needs doing: checks that failed, with
- * the end of their logs; conflicts with the base branch; new comments and reviews from the repository's owner, its
- * organization's members, and its collaborators (and review bots). Comments from whoever `gh` is signed in as count only
+ * the end of their logs; conflicts with the base branch; new comments and reviews from the repository's owner, and from
+ * its organization's members and its collaborators whom GitHub says can write to it (and review bots). GitHub tells
+ * that only to an account that can push there: elsewhere, only the owner's count. Comments from whoever `gh` is signed in as count only
  * when they mention @pi: Pi posts as them, and must not answer itself. Each look that finds something sends one message,
  * as the work of the person who set the watch up, never while Pi is busy there or someone else drives, and at most
  * `MAX_SENT` in all; while triggers are off it waits. The watch ends when the PR is merged
@@ -23,6 +24,7 @@ import { ChatDoc, type PrWatch, TurnsDoc, type WatchStatus, WatchDoc } from "./d
 import { describe, HttpError } from "./errors.ts";
 import { attribute, clip, defang, quoted } from "./fence.ts";
 import {
+    fromWriter,
     type Gh,
     login as loginOf,
     mentionsPi,
@@ -34,8 +36,8 @@ import {
     requireHost,
     requirePush,
     runGh,
+    repoInfo,
     sameRepo,
-    TRUSTED_ASSOCIATIONS,
 } from "./github.ts";
 
 export { type Gh, runGh } from "./github.ts";
@@ -175,23 +177,25 @@ function checkOf(item: GhRollup): Check {
 }
 
 /**
- * Whether a remark may reach Pi: from someone who can write to the repository, or a bot's review; from `gh`'s own
- * account only when it mentions @pi.
+ * Whether a remark may reach Pi: from the repository's owner or someone GitHub says can write to it, or a bot's review;
+ * from `gh`'s own account only when it mentions @pi.
  */
-function counts(
+async function counts(
+    gh: Gh,
+    repo: string,
     author: GhAuthor | undefined,
     association: string | undefined,
     body: string,
     mine: boolean,
     review: boolean,
-): boolean {
+): Promise<boolean> {
     if (mine) {
         return mentionsPi(body);
     }
 
     const bot = author?.is_bot === true || (author?.login ?? "").endsWith("[bot]");
 
-    return TRUSTED_ASSOCIATIONS.has(association ?? "") || (bot && review);
+    return (bot && review) || (await fromWriter(gh, repo, association, author?.login));
 }
 
 /** A log as Pi reads it best: no colours, timestamps, or `gh`'s job and step columns. */
@@ -448,6 +452,12 @@ export class Watches {
         const origin = await originRepo(app.cwdOf(asking));
         // A PR of another repository than the folder's: Pi has to work in a checkout of it to push a fix.
         const elsewhere = !sameRepo(origin, repo) && !sameRepo(origin, head);
+        // GitHub tells who can write to a repository only to an account that can push to it: elsewhere (a fork's PR
+        // to someone else's repository), its members' and collaborators' remarks cannot count, and the watch says so.
+        const unchecked = await repoInfo(this.gh, repo).then(
+            (info) => !info.push,
+            () => false,
+        );
         const number = found.number;
         const now = app.now();
 
@@ -485,6 +495,7 @@ export class Watches {
                 title: snippet(found.title ?? `PR #${number}`, 200),
                 branch: found.headRefName ?? "",
                 ...(elsewhere ? { elsewhere: true } : {}),
+                ...(unchecked ? { unchecked: true } : {}),
                 by: person.id,
                 ...(request.byPi === true ? { byPi: true } : {}),
                 createdAt: now,
@@ -587,7 +598,15 @@ export class Watches {
                 fresh(comment.createdAt) &&
                 comment.isMinimized !== true &&
                 body !== "" &&
-                counts(comment.author, comment.authorAssociation, body, mine, false)
+                (await counts(
+                    this.gh,
+                    watch.repo,
+                    comment.author,
+                    comment.authorAssociation,
+                    body,
+                    mine,
+                    false,
+                ))
             ) {
                 remarks.push({
                     id: `c${comment.id}`,
@@ -608,7 +627,15 @@ export class Watches {
             if (
                 fresh(at) &&
                 (changes || (review.state === "COMMENTED" && body !== "")) &&
-                counts(review.author, review.authorAssociation, body, mine, true)
+                (await counts(
+                    this.gh,
+                    watch.repo,
+                    review.author,
+                    review.authorAssociation,
+                    body,
+                    mine,
+                    true,
+                ))
             ) {
                 remarks.push({
                     id: `r${review.id}`,
@@ -639,7 +666,15 @@ export class Watches {
             if (
                 fresh(comment.created_at) &&
                 body !== "" &&
-                counts(author, comment.author_association, body, author.login === login, true)
+                (await counts(
+                    this.gh,
+                    watch.repo,
+                    author,
+                    comment.author_association,
+                    body,
+                    author.login === login,
+                    true,
+                ))
             ) {
                 const line = comment.line ?? comment.original_line;
 

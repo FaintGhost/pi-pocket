@@ -266,7 +266,7 @@ export function HooksSheet() {
                         From anyone: issues, PRs, and comments by people outside the repository too
                     </label>
                     <div class="muted small">
-                        ${anyone ? "Strangers' words reach Pi too, fenced as data." : "Off: posts about issues, PRs, and comments by people outside the repository are dropped (a 202 says so), and their words in other posts are left out."}
+                        ${anyone ? "Strangers' words reach Pi too, fenced as data." : "Off: posts about issues, PRs, and comments by people who cannot write to the repository are dropped (a 202 says so), and their words in other posts are left out. GitHub is asked who can write: gh must be able to push there."}
                     </div>`
                 }
                 ${

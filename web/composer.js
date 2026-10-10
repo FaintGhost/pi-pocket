@@ -283,12 +283,19 @@ function WatchBar() {
     const checks = WATCH_CHECKS[watch.checks];
     const text =
         watch.status === "watching"
-            ? html`<strong>Watching</strong> ${pr}${checks ? ` · ${checks}` : ""}${watch.sent > 0 ? ` · ${watch.sent} of ${watch.max} sent` : ""}${watch.errors > 0 ? " · last look failed" : watch.note ? " · waiting" : ""}`
+            ? html`<strong>Watching</strong> ${pr}${checks ? ` · ${checks}` : ""}${watch.sent > 0 ? ` · ${watch.sent} of ${watch.max} sent` : ""}${watch.unchecked ? " · owner's comments only" : ""}${watch.errors > 0 ? " · last look failed" : watch.note ? " · waiting" : ""}`
             : html`${pr} ${watchEnded(watch)}`;
 
     return html`<div
         class=${`watch-bar ${watch.status}`}
-        title=${watch.note ? `${watch.title}\n${watch.note}` : watch.title}
+        title=${[
+            watch.title,
+            watch.unchecked &&
+                "Only the repository owner's comments count: gh cannot push there, so GitHub does not say who else can write.",
+            watch.note,
+        ]
+            .filter(Boolean)
+            .join("\n")}
     >
         <span class="grow">${text}</span>
         ${

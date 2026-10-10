@@ -4,8 +4,9 @@
  * a branch: runs pushed to it, scheduled, or started by hand or through the API, in the repository itself; releases
  * published, comments and issues that mention @pi) goes as one message to PiP, or to a session, after its person's
  * instructions ("when CI fails on main, start a session to fix it"). What came from GitHub is fenced as data. Issues
- * and PRs count only from the repository's owner, its organization's members, and its collaborators (and bots' PRs),
- * unless the watch says anyone, which only a person turns on; mentions always only from them. While triggers are off,
+ * and PRs count only from the repository's owner, and its organization's members and collaborators whom GitHub says
+ * can write to it (and bots' PRs), unless the watch says anyone, which only a person turns on; mentions always only
+ * from them. While triggers are off,
  * watches wait; while PiP is off, those to PiP hold what they found. Each thing is told once, at most `MAX_ITEMS` in a
  * message and `MAX_PER_HOUR` messages an hour; the rest come in the next. It needs no public address, unlike a
  * webhook. A watch lasts until it is removed; looks that fail are retried less and less often, and say why. The
@@ -28,6 +29,7 @@ import { describe, HttpError } from "./errors.ts";
 import { attribute, clip, defang, quoted } from "./fence.ts";
 import {
     apiArgs,
+    fromWriter,
     BRANCH,
     BRANCH_EVENTS,
     type Gh,
@@ -37,7 +39,6 @@ import {
     repoArgs,
     requirePush,
     sameRepo,
-    TRUSTED_ASSOCIATIONS,
 } from "./github.ts";
 import { snippet } from "./projection.ts";
 import { clientKey, requestFor } from "./requests.ts";
@@ -481,19 +482,24 @@ export class RepoWatches {
             }
         };
 
-        // The repository's people; and a bot (one the repository's admins installed) for a PR, never for an issue.
-        const trusted = (user: GhUser, association: string | undefined, pull: boolean) =>
-            TRUSTED_ASSOCIATIONS.has(association ?? "") || (pull && user?.type === "Bot");
+        // Not told yet, and since the watch began: only these are worth asking GitHub who wrote them.
+        const fresh = (id: string, at: string | undefined) => !told.has(id) && time(at) >= since;
+        // The repository's owner, or someone GitHub says can write to it (asked only of what is new).
+        const writer = (user: GhUser, association: string | undefined) =>
+            fromWriter(this.#gh, watch.repo, association, user?.login);
         const login = watch.assigned === true ? await this.#login(watch.repo) : undefined;
-        // Issues and PRs a watch's filters let through: its label, assigned to gh's account, from someone who counts.
-        const passes = (issue: GhIssue, pull: boolean) =>
+        // Issues and PRs a watch's filters let through: its label, assigned to gh's account, from someone who counts:
+        // the repository's people, and a bot (one its admins installed) for a PR, never for an issue.
+        const passes = async (issue: GhIssue, pull: boolean) =>
             (watch.label === undefined ||
                 labelsOf(issue).some(
                     (name) => name.toLowerCase() === watch.label!.toLowerCase(),
                 )) &&
             (login === undefined ||
                 (issue.assignees ?? []).some((user) => user?.login === login)) &&
-            (watch.anyone === true || trusted(issue.user, issue.author_association, pull));
+            (watch.anyone === true ||
+                (pull && issue.user?.type === "Bot") ||
+                (await writer(issue.user, issue.author_association)));
         const who = (user: GhUser) => `@${loginOf(user?.login)}`;
         const labels = (issue: GhIssue) =>
             labelsOf(issue).length > 0
@@ -507,7 +513,11 @@ export class RepoWatches {
                 "pulls?state=open&sort=created&direction=desc&per_page=30",
             );
 
-            for (const pull of pulls.filter((each) => passes(each, true))) {
+            for (const pull of pulls) {
+                if (!fresh(`p${pull.number}`, pull.created_at) || !(await passes(pull, true))) {
+                    continue;
+                }
+
                 add({
                     id: `p${pull.number}`,
                     at: time(pull.created_at),
@@ -533,12 +543,16 @@ export class RepoWatches {
                     ...(issue.body ? { body: issue.body } : {}),
                 };
 
-                if (wants.has("issues") && !pull && passes(issue, false)) {
+                if (!fresh(item.id, issue.created_at)) {
+                    continue;
+                }
+
+                if (wants.has("issues") && !pull && (await passes(issue, false))) {
                     add(item);
                 } else if (
                     wants.has("mentions") &&
                     mentionsPi(issue.body ?? "") &&
-                    TRUSTED_ASSOCIATIONS.has(issue.author_association ?? "")
+                    (await writer(issue.user, issue.author_association))
                 ) {
                     const same = items.find((each) => each.id === item.id);
 
@@ -599,10 +613,12 @@ export class RepoWatches {
 
             for (const comment of [...comments, ...lines]) {
                 const body = comment.body ?? "";
+                const id = `${comment.pull_request_url !== undefined ? "l" : "c"}${comment.id}`;
 
                 if (
+                    fresh(id, comment.created_at) &&
                     mentionsPi(body) &&
-                    TRUSTED_ASSOCIATIONS.has(comment.author_association ?? "")
+                    (await writer(comment.user, comment.author_association))
                 ) {
                     const on =
                         comment.pull_request_url !== undefined
@@ -610,7 +626,7 @@ export class RepoWatches {
                             : `#${numberOf(comment.issue_url)}`;
 
                     add({
-                        id: `${comment.pull_request_url !== undefined ? "l" : "c"}${comment.id}`,
+                        id,
                         at: time(comment.created_at),
                         line: `${who(comment.user)} mentioned @pi on ${on} · ${comment.html_url ?? ""}`,
                         body,
