@@ -9908,3 +9908,335 @@ textarea.notes {
     flex: none;
     width: 96px;
 }
+
+/* ─── PiP ──────────────────────────────────────────────────── */
+
+/*
+ * PiP's window: in the corner, over the conversation and its panels and under sheets, the launcher, and notices. It
+ * pops in at 87% from the corner it sits in. On phones it is a sheet from the bottom edge, over a light scrim.
+ */
+.pip-panel {
+    position: fixed;
+    right: calc(var(--gap-out) + env(safe-area-inset-right));
+    bottom: calc(var(--gap-out) + env(safe-area-inset-bottom));
+    width: min(420px, calc(100vw - 2 * var(--gap-out)));
+    height: min(640px, calc(100dvh - 2 * var(--gap-out) - env(safe-area-inset-top)));
+    z-index: 18;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border: var(--border) solid transparent;
+    border-image: var(--active) 1;
+    transform-origin: bottom right;
+    animation: popin 0.32s var(--ease-out);
+}
+
+.pip-panel.leaving {
+    animation: popout var(--t-out) linear forwards;
+}
+
+.pip-head {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.45rem 0.3rem 0.4rem 0.8rem;
+    position: relative;
+    border-bottom: 1px solid var(--line);
+}
+
+.pip-head .grip {
+    display: none;
+}
+
+.pip-head h2 {
+    margin: 0 0 0 0.2rem;
+    font-size: 0.95rem;
+    color: var(--text);
+}
+
+.pip-status {
+    flex: 1;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.pip-mark {
+    display: inline-grid;
+    color: var(--accent);
+}
+
+.pip-mark.working .icon,
+.pip-bubble.busy .icon,
+.rail-pip.lit .icon {
+    animation: pulse 1.6s ease-in-out infinite;
+}
+
+.pip-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.8rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.pip-you {
+    align-self: flex-end;
+    max-width: 88%;
+    padding: 0.4rem 0.7rem;
+    background: var(--card-2);
+    border-right: 2px solid var(--accent);
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    animation: rise-in var(--t-fade) var(--ease-out);
+}
+
+.pip-reply {
+    color: var(--body);
+    overflow-wrap: anywhere;
+}
+
+.pip-reply .md > :first-child {
+    margin-top: 0;
+}
+
+.pip-reply .md > :last-child {
+    margin-bottom: 0;
+}
+
+.pip-steps,
+.pip-event {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: var(--muted);
+    font-size: 0.78rem;
+}
+
+.pip-tick {
+    width: 1ch;
+    color: var(--faint);
+    text-align: center;
+}
+
+.pip-error {
+    color: var(--err);
+    font-size: 0.85rem;
+}
+
+/* A report from a session PiP follows: three lines until opened. */
+.pip-report {
+    padding: 0.2rem 0.65rem 0.45rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    color: var(--body);
+}
+
+.pip-report-head {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: 100%;
+    min-height: 32px;
+    color: var(--accent);
+    font-size: 0.72rem;
+}
+
+.pip-report-head span {
+    flex: 1;
+    text-align: left;
+}
+
+.pip-report-fold {
+    color: var(--muted);
+    transition: transform var(--t-hover) var(--ease-out);
+}
+
+.pip-report.open .pip-report-fold {
+    transform: rotate(180deg);
+}
+
+.pip-report-text {
+    font-size: 0.85rem;
+}
+
+.pip-report:not(.open) .pip-report-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.pip-welcome {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.pip-hello {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--text);
+}
+
+.pip-intro {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+}
+
+.pip-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+}
+
+.pip-chip {
+    min-height: 36px;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid var(--line-strong);
+    color: var(--body);
+    font-size: 0.84rem;
+    text-align: left;
+}
+
+.pip-chip:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.pip-loading {
+    margin: auto;
+}
+
+.pip-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.25rem;
+    padding: 0.4rem 0.4rem 0.45rem 0.85rem;
+    border-top: 1px solid var(--line);
+}
+
+.pip-composer textarea {
+    flex: 1;
+    min-width: 0;
+    max-height: 160px;
+    padding: 0.55rem 0;
+    resize: none;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    line-height: 1.45;
+}
+
+.pip-send:not(:disabled) {
+    color: var(--accent);
+}
+
+.pip-scrim {
+    display: none;
+}
+
+/* The mark in the corner, while PiP works or has something new: above the message box, out of its way. */
+.pip-bubble {
+    position: fixed;
+    right: calc(var(--gap-out) + 6px + env(safe-area-inset-right));
+    bottom: calc(104px + env(safe-area-inset-bottom));
+    z-index: 16;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    background: var(--panel);
+    color: var(--accent);
+    border: var(--border) solid transparent;
+    border-image: var(--active) 1;
+    animation: popin 0.32s var(--ease-out);
+}
+
+.pip-bubble.leaving {
+    animation: popout var(--t-out) linear forwards;
+}
+
+.pip-dot,
+.rail-news {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    background: var(--accent);
+}
+
+.pip-dot {
+    top: 5px;
+    right: 5px;
+}
+
+.rail-news {
+    right: 8px;
+    bottom: 8px;
+    width: 6px;
+    height: 6px;
+}
+
+.rail-pip.lit {
+    color: var(--accent);
+}
+
+.rail-pip.open {
+    color: var(--text);
+    background: var(--hover);
+}
+
+@media (max-width: 699px) {
+    .pip-panel {
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 86dvh;
+        border: 0;
+        border-top: 2px solid transparent;
+        border-image: var(--active) 1;
+        padding-bottom: env(safe-area-inset-bottom);
+        animation: sheet-up var(--t-in) var(--ease-out);
+    }
+
+    .pip-panel.leaving {
+        animation: sheet-down 0.2s var(--ease-in-out) forwards;
+    }
+
+    .pip-head {
+        padding-top: 0.75rem;
+    }
+
+    .pip-head .grip {
+        display: block;
+    }
+
+    /* Above the message box and the jump to the newest message, both at the bottom right. */
+    .pip-bubble {
+        bottom: calc(176px + env(safe-area-inset-bottom));
+    }
+
+    .pip-scrim {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 17;
+        background: var(--scrim);
+        animation: fade var(--t-fade) var(--ease-almost);
+    }
+
+    .pip-scrim.leaving {
+        animation: fade-out var(--t-out) linear forwards;
+    }
+}

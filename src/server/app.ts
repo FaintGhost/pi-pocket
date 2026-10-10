@@ -31,6 +31,7 @@ import {
     type HarnessSettings,
     LiveDoc,
     type LiveState,
+    type Registry,
     type Storage,
     UsageDoc,
     type UsageState,
@@ -68,6 +69,7 @@ import { takeLock } from "./lock.ts";
 import { isThinkingLevel, modelList, resolveModel, THINKING_LEVELS } from "./models.ts";
 import { configureHttp } from "./net.ts";
 import { PiSessions } from "./pi-sessions.ts";
+import { Pip, PIP_EXTENSION } from "./pip.ts";
 import { snippet } from "./projection.ts";
 import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./prompts.ts";
 import { Providers } from "./providers.ts";
@@ -234,6 +236,8 @@ export class PocketApp {
     readonly transcripts = new Transcripts(this);
     /** Pi's sessions from the terminal, which the owner can continue here. */
     readonly piSessions = new PiSessions(this);
+    /** PiP, the owner's assistant: its conversation, what its tools do, and the follows that report to it. */
+    readonly pip = new Pip(this);
     /** Each conversation's browser page, which Pi and the people in the conversation share. */
     readonly browsers: Browsers;
     readonly #clients = new Set<Client>();
@@ -252,6 +256,8 @@ export class PocketApp {
     readonly #subagents = new Map<ConversationId, SubagentsOf>();
     #sessions: Record<string, SessionMeta> = {};
     #sessionsTimer: NodeJS.Timeout | undefined;
+    /** The extensions installed now: every conversation runs with them, except PiP's own, which PiP alone selects. */
+    #registry: Registry | undefined;
     #unsubscribeCommits: (() => void) | undefined;
     #unsubscribeApprovals: (() => void) | undefined;
     #unsubscribeBrowsers: (() => void) | undefined;
@@ -373,9 +379,11 @@ export class PocketApp {
             schedules: this.schedules,
             goals: this.goals,
             browsers: this.browsers,
+            pip: this.pip,
         };
 
         this.host = host;
+        this.#registry = registry;
         const dropIn = join(this.dataDir, "extensions");
 
         try {
@@ -652,7 +660,17 @@ export class PocketApp {
             }
         };
 
+        const registry = () => this.#registry;
+
         return {
+            // Every installed extension, in install order, but PiP's: its tools and prompt are for its conversation only,
+            // which selects it by name (`pip.ts`).
+            get extensions() {
+                return registry()
+                    ?.snapshot()
+                    .installed()
+                    .filter((extension) => extension.name !== PIP_EXTENSION);
+            },
             get stream() {
                 const provider = safe(() => settings.getProviderRetrySettings());
                 const idle = safe(() => settings.getHttpIdleTimeoutMs()) ?? 300_000;
@@ -749,6 +767,7 @@ export class PocketApp {
 
         client.send("hello", this.#helloFor(client, hello));
         client.send("sessions", this.sessions(client.user));
+        this.#sendPip(client);
 
         if (arriving) {
             this.#peopleChanged(client.user.id);
@@ -816,6 +835,7 @@ export class PocketApp {
         }
 
         client.peeks = undefined;
+        this.#closePip(client);
 
         if (!this.#online(client.user.id)) {
             this.#peopleChanged(client.user.id);
@@ -936,6 +956,107 @@ export class PocketApp {
         );
     }
 
+    /**
+     * A tab opened or closed its PiP panel. While it is open, the tab gets PiP's conversation as `pipview` events, from a
+     * view of its own beside the one the tab shows, and counts as looking at PiP, so its answers push nothing. Opening
+     * makes this person's PiP the first time. A request numbered `seq` below one already taken arrived late, and is
+     * dropped.
+     */
+    async setPip(user: User, connection: string, on: boolean, seq?: number): Promise<void> {
+        const id = on ? await this.pip.ensure(user) : undefined;
+
+        for (const client of this.#clients) {
+            if (client.user.id !== user.id || client.connection !== connection) {
+                continue;
+            }
+
+            if (seq !== undefined) {
+                if (seq <= (client.pipSeq ?? -Infinity)) {
+                    continue;
+                }
+
+                client.pipSeq = seq;
+            }
+
+            if (client.pip !== undefined && client.pip.conversationId !== id) {
+                this.#closePip(client);
+            }
+
+            if (id !== undefined && client.pip === undefined) {
+                void this.#openPip(client, id);
+            }
+        }
+
+        // Made just now: the tab learns its id from the PiP state.
+        this.#scheduleSessions();
+    }
+
+    async #openPip(tab: Client, id: ConversationId): Promise<void> {
+        const panel: Client = {
+            id: tab.id,
+            user: tab.user,
+            connection: tab.connection,
+            conversationId: id,
+            get visible() {
+                return tab.visible;
+            },
+            sentEntries: new Set<number>(),
+            orderKey: "",
+            // Only the view: the panel has no chat, notes, or browser of its own.
+            send: (event, data) => {
+                if (event === "view") {
+                    tab.send("pipview", data);
+                }
+            },
+        };
+
+        tab.pip = panel;
+        let room: Room;
+
+        try {
+            room = await this.room(id);
+        } catch (error) {
+            if (tab.pip === panel) {
+                tab.pip = undefined;
+            }
+
+            this.#log(`PiP's view did not open: ${describe(error)}`);
+
+            return;
+        }
+
+        // The tab left, or closed the panel, while the view opened.
+        if (!this.#clients.has(tab) || tab.pip !== panel) {
+            this.releaseRoom(room);
+
+            return;
+        }
+
+        room.keepOpen();
+        room.clients.add(panel);
+        room.push(panel, true);
+    }
+
+    #closePip(tab: Client): void {
+        const panel = tab.pip;
+
+        tab.pip = undefined;
+
+        if (panel?.conversationId !== undefined) {
+            this.#leaveRoom(panel, panel.conversationId);
+        }
+    }
+
+    /** Send a tab its person's PiP state, unless it is what the tab last got. */
+    #sendPip(client: Client): void {
+        const json = JSON.stringify(this.pip.state(client.user));
+
+        if (json !== client.pipSent) {
+            client.pipSent = json;
+            client.send("pip", JSON.parse(json) as unknown);
+        }
+    }
+
     /** A tab was hidden or shown: hidden tabs show their person as away, and let push notifications through. */
     setVisible(user: User, tab: string, visible: boolean): void {
         for (const client of this.#clients) {
@@ -970,7 +1091,7 @@ export class PocketApp {
         for (const client of this.#clients) {
             if (
                 client.user.id === userId &&
-                client.conversationId === id &&
+                (client.conversationId === id || client.pip?.conversationId === id) &&
                 client.visible !== false
             ) {
                 return true;
@@ -1064,9 +1185,19 @@ export class PocketApp {
         return current;
     }
 
-    /** People invited to one session see only that session and its subagents. */
+    /**
+     * People invited to one session see only that session and its subagents. A PiP is its own person's alone: its tools
+     * act as them, so anyone else who could write to it would act as them too.
+     */
     canSee(user: User, id: ConversationId): boolean {
-        return user.sessions === undefined || user.sessions.includes(String(this.rootOf(id)));
+        const root = this.rootOf(id);
+        const pip = this.#sessions[String(root)]?.pip;
+
+        if (pip !== undefined && pip !== user.id) {
+            return false;
+        }
+
+        return user.sessions === undefined || user.sessions.includes(String(root));
     }
 
     requireSee(user: User, id: ConversationId): void {
@@ -1311,6 +1442,8 @@ export class PocketApp {
                 approvalRule: this.config.approvalRule,
                 // The model and thinking level new sessions start with, or null for the last one picked.
                 defaultModel: this.config.defaultModel ?? null,
+                // This person may have a PiP, the assistant over every screen (`pip.ts`).
+                pip: this.pip.available(user),
             },
         };
     }
@@ -1339,6 +1472,7 @@ export class PocketApp {
                         ? all
                         : all.filter((session) => scope.includes(String(session.id))),
                 );
+                this.#sendPip(client);
 
                 if (client.board === true) {
                     board ??= this.subagents();
@@ -1374,7 +1508,12 @@ export class PocketApp {
         }
 
         return Object.entries(this.#sessions)
-            .filter(([id]) => user?.sessions === undefined || user.sessions.includes(id))
+            .filter(
+                ([id, meta]) =>
+                    // PiP is not a session people pick: it shows in its own panel (`pip.ts`).
+                    meta.pip === undefined &&
+                    (user?.sessions === undefined || user.sessions.includes(id)),
+            )
             .map(([id, meta]) => {
                 const model = this.#agents.get(Number(id) as unknown as ConversationId)?.model;
                 const busy = this.#busy.has(Number(id) as unknown as ConversationId);
@@ -1414,6 +1553,16 @@ export class PocketApp {
     /** The catalogue entry of a session; undefined for subagents and other conversations. */
     sessionMeta(id: ConversationId): SessionMeta | undefined {
         return this.#sessions[String(id)];
+    }
+
+    /** Every session's catalogue entry, PiP's included, by id. */
+    sessionCatalogue(): Readonly<Record<string, SessionMeta>> {
+        return this.#sessions;
+    }
+
+    /** When a session's last run ended, since this server started. */
+    endedAt(id: ConversationId): number | undefined {
+        return this.#endedAt.get(id);
     }
 
     async conversationTitle(id: ConversationId): Promise<string> {

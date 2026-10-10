@@ -43,7 +43,7 @@ import { isThinkingLevel, THINKING_LEVELS } from "./models.ts";
 import { writePiSession } from "./pi-sessions.ts";
 import { snippet } from "./projection.ts";
 import { expandPromptTemplate, expandSkillCommand } from "./prompts.ts";
-import { clientKey, ownRequest } from "./requests.ts";
+import { clientKey, ownRequest, requestFor } from "./requests.ts";
 import { type Resend, resendContent, resendRequest, ResendTask, userContent } from "./resend.ts";
 import { wantsTitle, writeTitle } from "./titles.ts";
 import { describeMoment, describeRepeat, knownZone } from "./when.ts";
@@ -345,6 +345,11 @@ export class Commands {
         );
     }
 
+    /** The model and thinking level a new session starts with now. */
+    defaultModel(): { model?: ModelRef; thinkingLevel?: ModelThinkingLevel } {
+        return this.#defaultModel();
+    }
+
     /**
      * The model a new session starts with: `prefer` (with its thinking level) when it is signed in here, or the owner's
      * default, or the one last picked, or Pi's default, or the first there is.
@@ -443,11 +448,16 @@ export class Commands {
         }
     }
 
+    /**
+     * Send a message to Pi as `user`. With `via`, an assistant (PiP) sends it for them: it is marked as sent through it,
+     * and is theirs to pay for and steer, but not their own words (`requestFor`). Only server code passes `via`.
+     */
     async submit(
         id: ConversationId,
         user: User,
         request: SubmitRequest,
-    ): Promise<{ submissionId: SubmissionId }> {
+        via?: string,
+    ): Promise<{ submissionId: SubmissionId; requestId: string }> {
         const app = this.#app;
 
         app.requireSee(user, id);
@@ -482,9 +492,11 @@ export class Commands {
             (file) =>
                 `- ${file.path} (${file.name}, ${file.mime || "unknown type"}, ${file.size} bytes)`,
         );
+        const written =
+            lines.length === 0 ? text : `${text}${ATTACHMENTS_HEADING}${lines.join("\n")}`.trim();
         const body = this.messageText(
             user,
-            lines.length === 0 ? text : `${text}${ATTACHMENTS_HEADING}${lines.join("\n")}`.trim(),
+            via === undefined ? written : `[via ${via}] ${written}`,
         );
         const mentioned =
             request.inlineFiles === true
@@ -509,7 +521,10 @@ export class Commands {
         }
 
         const content = parts.length === 1 ? body : parts;
-        const requestId = ownRequest(user.id, clientKey(request.requestId));
+        const requestId =
+            via === undefined
+                ? ownRequest(user.id, clientKey(request.requestId))
+                : requestFor(user.id, clientKey(request.requestId));
         const submission = await conversation.submit(
             {
                 type: "input",
@@ -524,7 +539,7 @@ export class Commands {
         await this.#touched(id, typed);
         this.#reportUnanswered(id, submission.wait(context));
 
-        return { submissionId: submission.id };
+        return { submissionId: submission.id, requestId };
     }
 
     /**
@@ -1267,6 +1282,11 @@ export class Commands {
 
         if (app.sessionMeta(id) === undefined) {
             throw new HttpError(400, "Only sessions can be forked");
+        }
+
+        // A fork would carry PiP's tools and none of PiP: they act as PiP's person, which a fork is not.
+        if (app.sessionMeta(id)?.pip !== undefined) {
+            throw new HttpError(400, "PiP's conversation cannot be forked. Start fresh instead.");
         }
     }
 

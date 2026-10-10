@@ -30,6 +30,11 @@ export type SessionMeta = {
     worktree?: Worktree;
     /** The session of Pi's in the terminal this one continues, and how many messages its file had then. */
     fromPi?: { session: string; count: number };
+    /**
+     * The id of the person whose PiP this is: their assistant, which looks after their other sessions (`pip.ts`). PiP is
+     * kept out of the session list; an older Pi Pocket, which does not know this field, lists it as a session.
+     */
+    pip?: string;
 };
 
 /** The catalogue of user-facing sessions: ownerless conversations created by the app. Subagents are not listed. */
@@ -373,6 +378,21 @@ export const BrowserDoc = defineDoc<{
  */
 export const ShellRequestsDoc = defineDoc<{ items: Record<string, number> }>({
     kind: "pocket.shell-requests",
+    version: 1,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({ items: {} }),
+});
+
+/**
+ * PiP's follows (`pip.ts`), by the key of the tool call that made each, so a call run again finds the follow it made.
+ * `doneAt` marks one that reported (or was stopped); it stays a day, then goes.
+ */
+export const FollowsDoc = defineDoc<{
+    items: Record<string, { taskId: number; session: number; at: number; doneAt?: number }>;
+}>({
+    kind: "pocket.pip-follows",
     version: 1,
     scope: "conversation",
     history: "latest",

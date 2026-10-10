@@ -3,6 +3,7 @@ import { browserAvailable, openInBrowser, toggleBrowser } from "./browser.js";
 import { filesAvailable, toggleFiles } from "./files-panel.js";
 import { branchAvailable } from "./sheets/branch.js";
 import { togglePeeks } from "./peeks.js";
+import { askPip, openPip, pipAvailable } from "./pip.js";
 import { actions, collab, navigate, notify, openSheet, scoped, store } from "./store.js";
 import { chooseTheme, THEMES } from "./theme.js";
 import { trustAvailable } from "./trust.js";
@@ -345,6 +346,13 @@ const COMMANDS = [
         description: "Switch the folder to another git branch, or make one",
         available: branchAvailable,
         run: (arg) => openSheet({ type: "branch", query: arg }),
+    },
+    {
+        name: "pip",
+        args: "[message]",
+        description: "Open PiP, your assistant over every session, or ask it something",
+        available: pipAvailable,
+        run: (arg) => (arg === "" ? openPip() : askPip(arg)),
     },
     {
         name: "peek",

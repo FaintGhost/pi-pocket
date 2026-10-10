@@ -348,6 +348,13 @@ export class Spend {
                 ...(budget === undefined ? {} : { budget }),
             };
         });
+        // PiP is out of the session list, not out of the spending: its person sees what it cost.
+        const pip = app.pip.idOf(user.id);
+
+        if (pip !== undefined) {
+            sessions.push({ id: Number(pip), title: "PiP", spent: byRoot.get(pip) ?? 0 });
+        }
+
         const people = app.config.users
             .filter((person) => owner || person.id === user.id)
             .map((person) => ({

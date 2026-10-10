@@ -694,6 +694,8 @@ export function shortPath(path, home) {
 
 const ICONS = {
     menu: "M3 6h18M3 12h18M3 18h18",
+    // PiP: a small orb with a glint.
+    pip: "M12 20a8 8 0 100-16 8 8 0 000 16zM8.5 11a3.5 3.5 0 013.5-3.5",
     more: "M5 12h.01M12 12h.01M19 12h.01",
     close: "M6 6l12 12M18 6L6 18",
     send: "M12 19V5M5 12l7-7 7 7",

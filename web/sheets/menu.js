@@ -4,6 +4,7 @@ import { chatUnread } from "../chat.js";
 import { schedulesAvailable } from "../commands.js";
 import { filesAvailable, setFilesOpen } from "../files-panel.js";
 import { peeksOn, togglePeeks } from "../peeks.js";
+import { openPip, pipAvailable, pipUnread } from "../pip.js";
 import { setArchived } from "../sessions.js";
 import {
     actions,
@@ -85,6 +86,17 @@ function Places() {
             label: "Branch",
             run: () => openSheet({ type: "branch" }),
         },
+        pipAvailable() && {
+            id: "pip",
+            icon: "pip",
+            label: "PiP",
+            dot: pipUnread(),
+            dotLabel: "something new",
+            run: () => {
+                openPip();
+                closeSheet();
+            },
+        },
         server?.peeks === true && {
             id: "peeks",
             icon: "tiles",
@@ -104,7 +116,7 @@ function Places() {
                 type="button"
                 class=${`place ${place.on ? "on" : ""}`}
                 data-place=${place.id}
-                aria-label=${place.count > 0 ? `${place.label}, ${place.count} ${place.counted ?? ""}`.trim() : place.dot ? `${place.label}, a page open` : place.label}
+                aria-label=${place.count > 0 ? `${place.label}, ${place.count} ${place.counted ?? ""}`.trim() : place.dot ? `${place.label}, ${place.dotLabel ?? "a page open"}` : place.label}
                 aria-pressed=${place.on === undefined ? undefined : place.on ? "true" : "false"}
                 onClick=${place.run}
             >

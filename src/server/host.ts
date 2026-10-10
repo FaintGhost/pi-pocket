@@ -5,6 +5,7 @@ import type { ConversationId, Extension, ModelRef, TaskId } from "@earendil-work
 import type { Browsers } from "./browser.ts";
 import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
+import type { Pip } from "./pip.ts";
 import type { Schedules } from "./schedules.ts";
 
 export interface ApprovalRequest {
@@ -133,6 +134,25 @@ export interface PocketHost {
     readonly goals: Pick<Goals, "get" | "run" | "record" | "mayContinue">;
     /** The built-in browser: a page per conversation, which the people in it watch and use too. */
     readonly browsers: Pick<Browsers, "open">;
+    /** PiP, the owner's assistant: what its tools do, each as PiP's person (`pip.ts`). */
+    readonly pip: Pick<
+        Pip,
+        | "ownerOf"
+        | "ownerName"
+        | "task"
+        | "sessions"
+        | "read"
+        | "start"
+        | "send"
+        | "stop"
+        | "archive"
+        | "approvals"
+        | "deny"
+        | "schedules"
+        | "schedule"
+        | "cancelSchedule"
+        | "follow"
+    >;
 }
 
 /** The shape of every module in `src/server/extensions/`: a default export building one or more extensions. */

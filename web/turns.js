@@ -145,10 +145,48 @@ const DID = {
     ls: { verb: "listed", noun: "folder", by: "path" },
     browser: { verb: "used the browser" },
     artifact: { verb: "published", noun: "artifact", by: "id" },
+    // PiP's.
+    sessions: { verb: "looked over sessions" },
+    session_read: { verb: "read", noun: "session", by: "session" },
+    session_start: { verb: "started", noun: "session" },
+    session_send: { verb: "messaged", noun: "session", by: "session" },
+    session_follow: { verb: "followed", noun: "session", by: "session" },
+    session_stop: { verb: "stopped", noun: "session", by: "session" },
+    session_archive: { verb: "archived", noun: "session", by: "session" },
+    session_schedule: { verb: "scheduled", noun: "message" },
+    schedule: { verb: "scheduled", noun: "reminder" },
+    approvals: { verb: "checked approvals" },
 };
 
 /** Nouns said with "a" when there is one. */
-const ONE = { subagent: "a subagent", script: "a script", artifact: "an artifact" };
+const ONE = {
+    subagent: "a subagent",
+    script: "a script",
+    artifact: "an artifact",
+    session: "a session",
+    message: "a message",
+    reminder: "a reminder",
+    call: "a call",
+};
+
+/** Calls whose verb depends on what they were asked to do: listing or cancelling schedules, denying a call. */
+function byAction(name, args) {
+    const scheduling = name === "schedule" || name === "session_schedule";
+
+    if (scheduling && args.action === "list") {
+        return { verb: "checked schedules" };
+    }
+
+    if (scheduling && args.action === "cancel") {
+        return { verb: "cancelled", noun: name === "schedule" ? "reminder" : "message", by: "id" };
+    }
+
+    if (name === "approvals" && args.action === "deny") {
+        return { verb: "denied", noun: "call", by: "id" };
+    }
+
+    return undefined;
+}
 
 /** Several things in a sentence: "a, b and c". */
 const sentence = (parts) =>
@@ -180,7 +218,7 @@ export function summarize(steps, thinking) {
             args.action !== "send";
         const kind = checking
             ? { verb: "checked on subagents" }
-            : (DID[call.name] ?? { verb: `used ${call.name}` });
+            : (byAction(call.name, args) ?? DID[call.name] ?? { verb: `used ${call.name}` });
         const nouns = did.get(kind.verb) ?? new Map();
 
         did.set(kind.verb, nouns);
@@ -188,7 +226,10 @@ export function summarize(steps, thinking) {
         if (kind.noun) {
             const things = nouns.get(kind.noun) ?? new Set();
 
-            things.add(kind.by && typeof args[kind.by] === "string" ? args[kind.by] : call.id);
+            const by = kind.by ? args[kind.by] : undefined;
+
+            // A path or a name, or a session's number.
+            things.add(typeof by === "string" || typeof by === "number" ? String(by) : call.id);
             nouns.set(kind.noun, things);
         }
     }

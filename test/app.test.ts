@@ -438,9 +438,11 @@ test("the owner turns extensions off and on, the guard follows its switch, and t
             "plan.ts",
             "guard.ts",
             "codemode.ts",
+            "pip.ts",
         ],
     );
     assert.equal(module("browser.ts").title, "Browser");
+    assert.equal(module("pip.ts").title, "PiP");
     assert.deepEqual(module("browser.ts").extensions[0]?.tools, ["browser"]);
     assert.equal(module("prompt.ts").required, true);
     assert.equal(module("codemode.ts").title, "Codemode");

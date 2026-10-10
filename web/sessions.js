@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Avatar, folderColor, initials } from "./avatar.js";
 import { useBack } from "./back.js";
 import { useDragToClose } from "./gestures.js";
+import { PipRailButton } from "./pip.js";
 import {
     actions,
     canSteer,
@@ -974,6 +975,7 @@ export function RailNav({ foldable = false, folded = false }) {
             </button>`
         }
         ${folded && html`<${RailTiles} />`}
+        <${PipRailButton} />
         <button
             class="rail-button rail-running"
             title="Running now"
