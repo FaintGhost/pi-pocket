@@ -28,6 +28,7 @@ import {
     type EntryRecord,
     type HookApi,
     LiveDoc,
+    ProviderDoc,
     UsageDoc,
 } from "@earendil-works/pi-durable";
 import { FollowsDoc, PipCompactionDoc } from "../src/server/docs.ts";
@@ -297,10 +298,19 @@ test("compacting by hand: PiP's summary is written without what came from outsid
 test("a summary written twice for one compaction, as after a restart, is asked for and counted once", async () => {
     const id = await pip();
     const memos = new Map<string, unknown>();
+    const sent: Record<string, unknown>[] = [];
     const api = {
         conversationId: id,
         taskId: 987_654,
-        models: app.models,
+        snapshot: app.harness.snapshot.bind(app.harness),
+        models: {
+            getModel: app.models.getModel.bind(app.models),
+            completeSimple: (...args: Parameters<typeof app.models.completeSimple>) => {
+                sent.push(args[2] as Record<string, unknown>);
+
+                return app.models.completeSimple(...args);
+            },
+        },
         memo: (name: string, ...rest: unknown[]) =>
             Promise.resolve(
                 rest.length === 1
@@ -320,6 +330,16 @@ test("a summary written twice for one compaction, as after a restart, is asked f
     assert.deepEqual(first, { summary: NOTES });
     assert.deepEqual(again, first);
     assert.equal(summaries.length, asked + 1, "asked for once");
+    // Sent as Pi Durable sends its summaries: with the conversation's provider identity (OpenCode Go refuses a request
+    // without one), Pi's timeout, and no cache.
+    assert.equal(sent.length, 1);
+    assert.equal(
+        sent[0]!.sessionId,
+        (await app.harness.snapshot(ProviderDoc, id, context))?.sessionId,
+    );
+    assert.equal(typeof sent[0]!.sessionId, "string");
+    assert.equal(sent[0]!.timeoutMs, app.streamSettings().timeoutMs);
+    assert.equal(sent[0]!.cacheRetention, "none");
     assert.ok(once > before);
     assert.equal(await tokensUsed(id), once, "counted once");
 

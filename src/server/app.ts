@@ -674,6 +674,28 @@ export class PocketApp {
         return sessionsChanged;
     }
 
+    /** How model requests stream here: Pi's timeout and retries. Pi Durable's requests and PiP's summaries use them. */
+    streamSettings(): { timeoutMs: number; maxRetryDelayMs?: number; maxRetries?: number } {
+        const read = <T>(get: () => T): T | undefined => {
+            try {
+                return get();
+            } catch {
+                return undefined;
+            }
+        };
+
+        const provider = read(() => this.settings.getProviderRetrySettings());
+        const idle = read(() => this.settings.getHttpIdleTimeoutMs()) ?? 300_000;
+
+        return {
+            timeoutMs: provider?.timeoutMs ?? (idle === 0 ? 2_147_483_647 : idle),
+            ...(provider?.maxRetryDelayMs === undefined
+                ? {}
+                : { maxRetryDelayMs: provider.maxRetryDelayMs }),
+            ...(provider?.maxRetries === undefined ? {} : { maxRetries: provider.maxRetries }),
+        };
+    }
+
     #harnessSettings(): HarnessSettings {
         const settings = this.settings;
 
@@ -686,6 +708,7 @@ export class PocketApp {
         };
 
         const registry = () => this.#registry;
+        const stream = () => this.streamSettings();
 
         return {
             // Every installed extension, in install order, but PiP's: its tools and prompt are for its conversation only,
@@ -697,18 +720,7 @@ export class PocketApp {
                     .filter((extension) => extension.name !== PIP_EXTENSION);
             },
             get stream() {
-                const provider = safe(() => settings.getProviderRetrySettings());
-                const idle = safe(() => settings.getHttpIdleTimeoutMs()) ?? 300_000;
-
-                return {
-                    timeoutMs: provider?.timeoutMs ?? (idle === 0 ? 2_147_483_647 : idle),
-                    ...(provider?.maxRetryDelayMs === undefined
-                        ? {}
-                        : { maxRetryDelayMs: provider.maxRetryDelayMs }),
-                    ...(provider?.maxRetries === undefined
-                        ? {}
-                        : { maxRetries: provider.maxRetries }),
-                };
+                return stream();
             },
             get compaction() {
                 return safe(() => settings.getCompactionSettings()) ?? {};

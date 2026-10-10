@@ -23,6 +23,7 @@ import {
     DEFAULT_COMPACTION_POLICY,
     type HookApi,
     LiveDoc,
+    ProviderDoc,
     UsageDoc,
 } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
@@ -387,6 +388,14 @@ export class PipCompaction {
             }
 
             const name = this.#app.pip.ownerName(id) ?? "its person";
+            // The conversation's own identity with the provider, as Pi Durable sends with its summaries: some providers
+            // (OpenCode Go) refuse a request without one.
+            const sessionId =
+                (await api.snapshot(ProviderDoc, id, hookContext))?.sessionId ??
+                (await this.#app.harness.commit(
+                    async (tx) => (await tx.doc(ProviderDoc, id)).sessionId,
+                    context,
+                ));
             const focus = compaction.instructions?.trim() || undefined;
             const now = this.#app.now();
             const message = await api.models.completeSimple(
@@ -411,7 +420,10 @@ export class PipCompaction {
                     ],
                 },
                 {
-                    // As Pi Durable's summaries: within what Pi's settings keep free for an answer.
+                    // As Pi Durable's summaries: Pi's timeout and retries, the conversation's provider identity, and
+                    // within what Pi's settings keep free for an answer.
+                    ...this.#app.streamSettings(),
+                    sessionId,
                     maxTokens: Math.min(
                         SUMMARY_TOKENS,
                         Math.floor(0.8 * this.#reserveTokens()),
