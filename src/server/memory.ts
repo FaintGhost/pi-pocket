@@ -31,7 +31,7 @@ export const MAX_LESSON = 300;
 export const MAX_PROJECT_LESSONS = 40;
 export const MAX_EVERYWHERE_LESSONS = 30;
 /** Lessons waiting for approval that one person (or Pi for them) may have, so nobody fills the owner's list. */
-export const MAX_PENDING = 10;
+export const MAX_PENDING = 20;
 /** How long a folder's project is kept before git is asked again (a folder can become a repository). */
 const PROJECT_FOR_MS = 60_000;
 
@@ -56,6 +56,8 @@ export type LessonView = {
     from?: { id: number; title: string };
     /** Whether this person may change or remove it. */
     mine: boolean;
+    /** A change that waits for the owner, for the owner and whoever proposed it to see. */
+    proposal?: { text?: string; forget?: boolean; byPi: boolean; byName: string; mine: boolean };
 };
 
 export type MemoryView = {
@@ -159,15 +161,30 @@ export class Memory {
     }
 
     /**
-     * Whether a write waits for the owner: one for anyone else; Pi's on a message nobody wrote themselves (a webhook's
-     * post, a PR watch's comments, PiP's errand, a subagent's report), whose words may not be its person's; and every
-     * lesson Pi saves for everywhere, which would reach every session and PiP.
+     * Whether a write waits for the owner: every one of Pi's, and every one of someone who is not the owner. What Pi
+     * read (a web page, a post, a comment, a file) can talk it into "a lesson", and a lesson reaches every later session:
+     * Pi proposes, the owner approves.
      */
-    #held(conversationId: ConversationId, writer: Writer, everywhere: boolean): boolean {
-        return (
-            !this.#isOwner(writer.userId) ||
-            (writer.byPi && (everywhere || !this.#app.attribution.personWrote(conversationId)))
-        );
+    #held(writer: Writer): boolean {
+        return writer.byPi || !this.#isOwner(writer.userId);
+    }
+
+    /** A 409 when a project's (or everywhere's) approved lessons are full. */
+    #roomFor(
+        doc: { items: Record<string, Lesson> },
+        lesson: Pick<Lesson, "project" | "projectName">,
+    ) {
+        const max = lesson.project === undefined ? MAX_EVERYWHERE_LESSONS : MAX_PROJECT_LESSONS;
+        const kept = Object.values(doc.items).filter(
+            (item) => item.project === lesson.project && item.pending !== true,
+        ).length;
+
+        if (kept >= max) {
+            throw new HttpError(
+                409,
+                `${lesson.project === undefined ? "Lessons for everywhere" : `${lesson.projectName ?? "This project"}'s lessons`} are full (${String(max)}): forget one first, or fold two into one.`,
+            );
+        }
     }
 
     #mayChange(lesson: Lesson, userId: string | undefined): boolean {
@@ -239,7 +256,7 @@ export class Memory {
         const root = app.rootOf(conversationId);
         const meta = app.sessionMeta(root);
         const by = writer.userId ?? meta?.createdBy ?? "";
-        const pending = this.#held(conversationId, writer, project === undefined);
+        const pending = this.#held(writer);
 
         return app.harness.commit(async (tx) => {
             const doc = await tx.doc(MemoryDoc);
@@ -253,8 +270,6 @@ export class Memory {
                 return copy(same);
             }
 
-            const max = project === undefined ? MAX_EVERYWHERE_LESSONS : MAX_PROJECT_LESSONS;
-
             if (
                 pending &&
                 items.filter((item) => item.pending === true && item.by === by).length >=
@@ -266,15 +281,12 @@ export class Memory {
                 );
             }
 
-            if (
-                !pending &&
-                items.filter((item) => item.project === project?.key && item.pending !== true)
-                    .length >= max
-            ) {
-                throw new HttpError(
-                    409,
-                    `${project === undefined ? "Lessons for everywhere" : `${project.name}'s lessons`} are full (${String(max)}): forget one first, or fold two into one.`,
-                );
+            if (!pending) {
+                this.#roomFor(doc, {
+                    ...(project === undefined
+                        ? {}
+                        : { project: project.key, projectName: project.name }),
+                });
             }
 
             let id = randomUUID().slice(0, 5);
@@ -312,53 +324,73 @@ export class Memory {
     }
 
     /**
-     * Change a lesson's text, remove it, or approve it. Only the owner, or whoever saved it, changes or removes one; only
-     * the owner approves. A change for anyone but the owner waits for approval again.
+     * Change a lesson's text or forget it; approve or discard what waits. Only the owner, or whoever saved a lesson,
+     * changes or forgets it; only the owner approves. A change from Pi or a guest to a lesson in force is a proposal:
+     * the lesson stays as it is until the owner approves it. One that waits anyway changes as it is.
      */
     async change(
         conversationId: ConversationId,
         cwd: string | undefined,
         writer: Writer,
         id: string,
-        change: { text: unknown } | "remove" | "approve",
+        change: { text: unknown } | "remove" | "approve" | "discard",
     ): Promise<Lesson> {
+        const app = this.#app;
         const text = typeof change === "object" ? this.#text(change.text) : undefined;
         const project = await this.project(conversationId, cwd);
+        const said = (tx: Tx, line: string) => this.#activity(tx, conversationId, writer, line);
 
-        return this.#app.harness.commit(async (tx) => {
+        return app.harness.commit(async (tx) => {
             const doc = await tx.doc(MemoryDoc);
             const lesson = this.#find(doc, project, id);
             const before = copy(lesson);
+            const quoted = `“${snippet(lesson.text, 80)}”`;
+            const owner = !writer.byPi && this.#isOwner(writer.userId);
 
             if (change === "approve") {
-                if (writer.byPi || !this.#isOwner(writer.userId)) {
+                if (!owner) {
                     throw new HttpError(403, "Only the owner approves lessons.");
                 }
 
                 if (lesson.pending === true) {
-                    const max =
-                        lesson.project === undefined ? MAX_EVERYWHERE_LESSONS : MAX_PROJECT_LESSONS;
-                    const kept = Object.values(doc.items).filter(
-                        (item) => item.project === lesson.project && item.pending !== true,
-                    ).length;
-
-                    if (kept >= max) {
-                        throw new HttpError(
-                            409,
-                            `${lesson.project === undefined ? "Lessons for everywhere" : `${lesson.projectName ?? "This project"}'s lessons`} are full (${String(max)}): forget one first.`,
-                        );
-                    }
-
+                    this.#roomFor(doc, lesson);
                     delete lesson.pending;
-                    await this.#activity(
-                        tx,
-                        conversationId,
-                        writer,
-                        `approved the lesson “${snippet(lesson.text, 80)}”`,
-                    );
+                    await said(tx, `approved the lesson ${quoted}`);
+                } else if (lesson.proposal?.forget === true) {
+                    delete doc.items[lesson.id];
+                    await said(tx, `approved forgetting the lesson ${quoted}`);
+
+                    return before;
+                } else if (lesson.proposal?.text !== undefined) {
+                    lesson.text = lesson.proposal.text;
+                    lesson.updatedAt = app.now();
+                    delete lesson.proposal;
+                    await said(tx, `approved a lesson's new text: “${snippet(lesson.text, 80)}”`);
                 }
 
                 return copy(lesson);
+            }
+
+            if (change === "discard") {
+                const proposer = lesson.proposal?.by;
+                const own = (by: string | undefined) =>
+                    !writer.byPi && by !== undefined && by === writer.userId;
+
+                if (lesson.pending === true && (owner || own(lesson.by))) {
+                    delete doc.items[lesson.id];
+                    await said(tx, `discarded the lesson ${quoted}`);
+
+                    return before;
+                }
+
+                if (lesson.proposal !== undefined && (owner || own(proposer))) {
+                    delete lesson.proposal;
+                    await said(tx, `kept the lesson ${quoted} as it was`);
+
+                    return copy(lesson);
+                }
+
+                throw new HttpError(403, "Only the owner, or whoever asked, can discard this.");
             }
 
             if (!this.#mayChange(lesson, writer.userId)) {
@@ -368,43 +400,66 @@ export class Memory {
                 );
             }
 
+            const held = this.#held(writer);
+            const inForce = lesson.pending !== true;
+
             if (change === "remove") {
-                // Forgetting cannot wait for approval, so it waits for a person's own words.
-                if (writer.byPi && !this.#app.attribution.personWrote(conversationId)) {
-                    throw new HttpError(
-                        403,
-                        "Pi forgets lessons only when a person asks it to in their own message: say which one and why.",
-                    );
+                // Forgetting one's own (or one nobody uses yet) goes at once; Pi's forgetting one in force is a proposal.
+                if (inForce && writer.byPi) {
+                    if (lesson.proposal?.forget !== true) {
+                        lesson.proposal = {
+                            forget: true,
+                            by: writer.userId ?? lesson.by,
+                            byPi: true,
+                            at: app.now(),
+                        };
+                        await said(
+                            tx,
+                            `proposed forgetting the lesson ${quoted}, for the owner to approve`,
+                        );
+                    }
+
+                    return copy(lesson);
                 }
 
                 delete doc.items[lesson.id];
-                await this.#activity(
-                    tx,
-                    conversationId,
-                    writer,
-                    `forgot the lesson “${snippet(lesson.text, 80)}”`,
-                );
+                await said(tx, `forgot the lesson ${quoted}`);
 
                 return before;
             }
 
-            if (text === lesson.text) {
+            if (inForce && held) {
+                if (lesson.proposal?.text !== text) {
+                    lesson.proposal = {
+                        text: text!,
+                        by: writer.userId ?? lesson.by,
+                        byPi: writer.byPi,
+                        at: app.now(),
+                    };
+                    await said(
+                        tx,
+                        `proposed new text for the lesson ${quoted}: “${snippet(text!, 80)}”, for the owner to approve`,
+                    );
+                }
+
+                return copy(lesson);
+            }
+
+            if (text === lesson.text && (held || inForce)) {
                 return before;
             }
 
-            lesson.text = text!;
-            lesson.updatedAt = this.#app.now();
-
-            if (this.#held(conversationId, writer, lesson.project === undefined)) {
-                lesson.pending = true;
-            } else {
+            // The owner's own edit is in force at once: of a lesson waiting, it approves it too.
+            if (!held && !inForce) {
+                this.#roomFor(doc, lesson);
                 delete lesson.pending;
             }
 
-            await this.#activity(
+            lesson.text = text!;
+            lesson.updatedAt = app.now();
+            delete lesson.proposal;
+            await said(
                 tx,
-                conversationId,
-                writer,
                 `changed a lesson to “${snippet(lesson.text, 80)}”${lesson.pending === true ? ", for the owner to approve" : ""}`,
             );
 
@@ -454,6 +509,20 @@ export class Memory {
                           }
                         : {}),
                     mine: user.role !== "viewer" && this.#mayChange(lesson, user.id),
+                    ...(lesson.proposal !== undefined && (owner || lesson.proposal.by === user.id)
+                        ? {
+                              proposal: {
+                                  ...(lesson.proposal.text === undefined
+                                      ? {}
+                                      : { text: lesson.proposal.text }),
+                                  ...(lesson.proposal.forget === true ? { forget: true } : {}),
+                                  byPi: lesson.proposal.byPi,
+                                  byName:
+                                      app.config.userById(lesson.proposal.by)?.name ?? "someone",
+                                  mine: lesson.proposal.by === user.id,
+                              },
+                          }
+                        : {}),
                 };
             });
 
@@ -492,7 +561,7 @@ export class Memory {
         id: ConversationId,
         user: User,
         lessonId: string,
-        change: { text: unknown } | "remove" | "approve",
+        change: { text: unknown } | "remove" | "approve" | "discard",
     ): Promise<Lesson> {
         const app = this.#app;
 

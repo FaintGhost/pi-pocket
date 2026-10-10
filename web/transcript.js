@@ -53,6 +53,7 @@ import {
     Spinner,
     Thumb,
 } from "./ui.js";
+import { LessonCall, memoryAvailable } from "./sheets/memory.js";
 
 const REPORT = /^\[subagent (\S+) (answered|failed)([^\]]*)\]\s?([\s\S]*)$/;
 /** Where the next report starts, in a message of several that arrived together (`extensions/subagents.ts`). */
@@ -414,6 +415,14 @@ function Collapsible({ text, limit = 600 }) {
 const GLYPHS = { read: "→", edit: "✎", write: "+", bash: "$", grep: "⌕", find: "⌕", subagent: "⑂" };
 
 /** A call's line: its label (the tool, or a subagent's name) and what it acts on. */
+/** What Pi did with its memory tool, as a step's label. */
+const MEMORY_WORDS = {
+    add: "saved a lesson",
+    update: "changed a lesson",
+    remove: "forgot a lesson",
+    list: "read its lessons",
+};
+
 function stepWords(call) {
     const args = call.args ?? {};
 
@@ -434,6 +443,13 @@ function stepWords(call) {
                 label: "browser",
                 subject: `${args.action ?? ""} ${describeCall(call).subject}`.trim(),
             };
+        case "memory":
+            return {
+                label: MEMORY_WORDS[args.action] ?? "memory",
+                subject: args.text ? short(args.text) : (args.id ?? ""),
+            };
+        case "watch_pr":
+            return { label: "watch PR", subject: [args.action, args.pr].filter(Boolean).join(" ") };
         default:
             return { label: call.name, subject: describeCall(call).subject };
     }
@@ -827,7 +843,12 @@ function ToolStep({ call, result, slot, approval, entryId, streaming, canRun, bu
     });
     const watch = call.name === "browser" && browserAvailable() && !store.state.browserOpen;
     // What a call made shows under its line, as on today's cards: what it returned as images, an artifact, the browser.
-    const extras = result?.images > 0 || artifact || watch;
+    // A lesson Pi saved, changed, or forgot: its state, and approving it where it happened.
+    const lesson =
+        call.name === "memory" && typeof details?.lesson === "string" && memoryAvailable()
+            ? details.lesson
+            : null;
+    const extras = result?.images > 0 || artifact || watch || lesson;
 
     return html`<div
         class=${`step ${open ? "open" : ""} ${settled ? "settled" : ""}`}
@@ -867,6 +888,7 @@ function ToolStep({ call, result, slot, approval, entryId, streaming, canRun, bu
         ${
             extras &&
             html`<div class="step-extras">
+                ${lesson && html`<${LessonCall} lessonId=${lesson} />`}
                 ${
                     result?.images > 0 &&
                     html`<${EntryImages}

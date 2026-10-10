@@ -584,6 +584,61 @@ test("a webhook's post becomes one message for its person: trimmed, fenced, and 
     assert.equal((await post(hook.path, "{}")).status, 404);
 });
 
+test("a GitHub hook is signed: its address alone lets nothing in, and a new secret shuts out the old", async () => {
+    const id = await newSession(app);
+    const hook = await app.commands.addHook(owner(app), {
+        target: Number(id),
+        name: "Signed",
+        signed: true,
+    });
+    const secret = hook.secret!;
+    const body = JSON.stringify({ action: "opened" });
+    const sign = (key: string) => `sha256=${createHmac("sha256", key).update(body).digest("hex")}`;
+    const post = (path: string, headers: Record<string, string> = {}) =>
+        fetch(`${base}${path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", ...headers },
+            body,
+        });
+
+    assert.equal(hook.path, `/hook/${hook.id}`, "no secret in the address");
+    assert.equal((await post(hook.path)).status, 404, "the address alone");
+    assert.equal((await post(`${hook.path}/${secret}`)).status, 404, "nor the secret in it");
+    assert.equal((await post(hook.path, { "x-hub-signature-256": sign(secret) })).status, 202);
+    await until(async () => !app.isBusy(id) && (await messages(id)).length === 1, "Pi to answer");
+
+    // Its address or secret got out: a new secret, and the old one lets nothing in.
+    const rotated = await app.hooks.rotate(owner(app), hook.id);
+
+    assert.notEqual(rotated.secret, secret);
+    assert.equal((await post(hook.path, { "x-hub-signature-256": sign(secret) })).status, 404);
+    assert.equal(
+        (
+            await post(hook.path, {
+                "x-hub-signature-256": sign(rotated.secret!),
+                "x-github-delivery": "d-9",
+            })
+        ).status,
+        202,
+    );
+
+    // A hook with its secret in the address gets a new address the same way.
+    const plain = await app.commands.addHook(owner(app), { target: Number(id), name: "Plain" });
+
+    assert.equal(plain.secret, undefined, "its secret is in its address");
+    const moved = await app.hooks.rotate(owner(app), plain.id);
+
+    assert.notEqual(moved.path, plain.path);
+    assert.equal((await post(plain.path)).status, 404);
+    await assert.rejects(
+        app.hooks.rotate(app.config.addUser("Rae", "guest").user, plain.id),
+        /No such webhook/,
+    );
+    await until(async () => !app.isBusy(id), "Pi to answer");
+    await app.commands.removeHook(owner(app), hook.id);
+    await app.commands.removeHook(owner(app), plain.id);
+});
+
 test("webhooks to PiP, and who may make, see, and remove them", async () => {
     const hook = await app.commands.addHook(owner(app), { target: "pip", name: "Alerts" });
     const pip = await app.pip.ensure(owner(app));

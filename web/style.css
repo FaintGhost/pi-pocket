@@ -5377,6 +5377,30 @@ textarea.notes {
     border-bottom: 0;
 }
 
+/* A change to a lesson that waits for the owner, under the lesson it would change. */
+.lesson-proposal {
+    margin-top: 0.35rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--accent);
+}
+
+/* Under Pi's memory call: the lesson's state, and Approve and Discard while it waits. */
+.lesson-call {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+    margin-top: 0.3rem;
+}
+
+.lesson-call.waiting {
+    padding: 0.35rem 0.5rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    font-size: 0.82rem;
+}
+
 /* Memory: a lesson Pi keeps, who saved it and where, and what can be done with it. */
 .lesson {
     display: flex;

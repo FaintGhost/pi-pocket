@@ -371,8 +371,13 @@ export type Lesson = {
     byPi: boolean;
     createdAt: number;
     updatedAt?: number;
-    /** Added or changed for someone who is not the owner: unused until the owner approves it. */
+    /** Saved by Pi, or by someone who is not the owner: unused until the owner approves it. */
     pending?: boolean;
+    /**
+     * A change to it in force that waits for the owner, as Pi or a guest proposed it: new text, or forgetting it. The
+     * lesson stays as it is until then.
+     */
+    proposal?: { text?: string; forget?: boolean; by: string; byPi: boolean; at: number };
     /** The tool call that made it, `taskId:callId`: the call run again finds it instead of saving another. */
     key?: string;
 };
@@ -495,6 +500,11 @@ export type Hook = {
     instructions: string;
     /** The session (or PiP) it messages. */
     target: number;
+    /**
+     * For GitHub: a post gets in only with GitHub's signature made with the secret, which is not in the address, so
+     * whoever sees the address (a repository's admins do) cannot post as the hook. Absent: the secret is in the address.
+     */
+    signed?: boolean;
     /** Who made it: posts go as their work, with their checks and spend limit. */
     by: string;
     createdAt: number;

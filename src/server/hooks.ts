@@ -1,10 +1,11 @@
 /**
- * Webhooks: secret addresses other services post to (GitHub, a deploy, a monitor), each of which turns every post into
- * a message to one session's Pi, or to PiP, as the work of the person who made it. The message is their instructions,
- * then what came, trimmed and fenced as data. A post is let in by the secret in its address, or by GitHub's signature
- * made with it (`X-Hub-Signature-256`), and goes to Pi once even when sent again (by GitHub's delivery id, or an
- * `Idempotency-Key`). Anything else gets a 404, as if there were no such hook. The address works only where the
- * service can reach this server: through a tunnel or a public address. Hooks run while the triggers extension is on.
+ * Webhooks: addresses other services post to (GitHub, a deploy, a monitor), each of which turns every post into a
+ * message to one session's Pi, or to PiP, as the work of the person who made it. The message is their instructions,
+ * then what came, trimmed and fenced as data. A GitHub hook is signed: a post gets in only with GitHub's signature made
+ * with the hook's secret (`X-Hub-Signature-256`), which is not in its address. Any other hook has the secret in its
+ * address. A post goes to Pi once even when sent again (by GitHub's delivery id, or an `Idempotency-Key`); anything
+ * else gets a 404, as if there were no such hook. The address works only where the service can reach this server:
+ * through a tunnel or a public address. Hooks run while the triggers extension is on.
  */
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -37,8 +38,8 @@ export const PAYLOAD_CLOSE = "</webhook-payload>";
 const DEFAULT_INSTRUCTIONS =
     "Something happened that you were set up to hear about. Say in a line what it is, and whether anything needs doing.";
 
-/** What a hook shows its people: everything but the secret, and its address. */
-export type HookView = Omit<Hook, "secret"> & { path: string };
+/** What a hook shows its people: its address, and a signed hook's secret, to give GitHub. */
+export type HookView = Omit<Hook, "secret"> & { path: string; secret?: string };
 
 /** A post as it came: what the server read of it. */
 export type Post = {
@@ -159,7 +160,9 @@ export class Hooks {
     view(hook: Hook): HookView {
         const { secret, ...rest } = hook;
 
-        return { ...rest, path: `/hook/${hook.id}/${secret}` };
+        return hook.signed === true
+            ? { ...rest, path: `/hook/${hook.id}`, secret }
+            : { ...rest, path: `/hook/${hook.id}/${secret}` };
     }
 
     /** The hooks a person may see and remove: their own; the owner's sees every one. Newest first. */
@@ -174,7 +177,7 @@ export class Hooks {
     async add(
         user: User,
         target: ConversationId,
-        request: { name?: unknown; instructions?: unknown },
+        request: { name?: unknown; instructions?: unknown; signed?: unknown },
     ): Promise<HookView> {
         const app = this.#app;
 
@@ -208,6 +211,7 @@ export class Hooks {
             instructions,
             target: Number(target),
             by: user.id,
+            ...(request.signed === true ? { signed: true } : {}),
             createdAt: app.now(),
             count: 0,
         };
@@ -222,6 +226,23 @@ export class Hooks {
             }
 
             doc.items[hook.id] = hook;
+        }, context);
+
+        return this.view(hook);
+    }
+
+    /** A new secret for a hook whose address or secret got out: the old one lets nothing in from now on. */
+    async rotate(user: User, id: string): Promise<HookView> {
+        const hook = await this.#app.harness.commit(async (tx) => {
+            const item = (await tx.doc(HooksDoc)).items[id];
+
+            if (item === undefined || (user.role !== "owner" && item.by !== user.id)) {
+                throw new HttpError(404, "No such webhook");
+            }
+
+            item.secret = randomBytes(24).toString("base64url");
+
+            return { ...item };
         }, context);
 
         return this.view(hook);
@@ -250,7 +271,11 @@ export class Hooks {
     async precheck(id: string, secret: string | undefined): Promise<void> {
         const hook = (await this.#all()).find((each) => each.id === id);
 
-        if (hook === undefined || (secret !== undefined && !same(secret, hook.secret))) {
+        // A signed hook's secret is never in an address: one that has it there got it from somewhere it should not.
+        if (
+            hook === undefined ||
+            (secret !== undefined && (hook.signed === true || !same(secret, hook.secret)))
+        ) {
             throw new HttpError(404, "Not found");
         }
     }
@@ -258,7 +283,7 @@ export class Hooks {
     /** Whether a post may use a hook: the secret in its address, or GitHub's signature of its body. */
     #lets(hook: Hook, post: Post): boolean {
         if (post.secret !== undefined) {
-            return same(post.secret, hook.secret);
+            return hook.signed !== true && same(post.secret, hook.secret);
         }
 
         const signature = header(post, "x-hub-signature-256");

@@ -214,7 +214,7 @@ export async function conversationRoutes(
     if (third === "memory" && fourth !== undefined && method === "POST") {
         const action = parts[4];
         const change =
-            action === "remove" || action === "approve"
+            action === "remove" || action === "approve" || action === "discard"
                 ? action
                 : action === undefined
                   ? { text: (await readJson<{ text?: unknown }>(request)).text }

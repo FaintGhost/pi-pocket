@@ -156,6 +156,8 @@ const DID = {
     session_schedule: { verb: "scheduled", noun: "message" },
     schedule: { verb: "scheduled", noun: "reminder" },
     approvals: { verb: "checked approvals" },
+    memory: { verb: "saved", noun: "lesson" },
+    watch_pr: { verb: "watched", noun: "pull request" },
 };
 
 /** Nouns said with "a" when there is one. */
@@ -167,6 +169,8 @@ const ONE = {
     message: "a message",
     reminder: "a reminder",
     call: "a call",
+    lesson: "a lesson",
+    "pull request": "a pull request",
 };
 
 /** Calls whose verb depends on what they were asked to do: listing or cancelling schedules, denying a call. */
@@ -183,6 +187,18 @@ function byAction(name, args) {
 
     if (name === "approvals" && args.action === "deny") {
         return { verb: "denied", noun: "call", by: "id" };
+    }
+
+    if (name === "memory" && args.action !== "add") {
+        return args.action === "list"
+            ? { verb: "read its lessons" }
+            : { verb: args.action === "update" ? "changed" : "forgot", noun: "lesson", by: "id" };
+    }
+
+    if (name === "watch_pr" && args.action !== "start") {
+        return {
+            verb: args.action === "stop" ? "stopped watching the PR" : "checked the PR watch",
+        };
     }
 
     return undefined;

@@ -12,11 +12,26 @@ const path = (id, rest = "") => `c/${id}/memory${rest}`;
 
 /** The lessons last fetched, `{ id, data }`: the menu shows its hint from them at once while it asks again. */
 let last = null;
+/** The fetch under way, `{ key, promise }`: the sheet, the menu, and each memory call under way ask once together. */
+let asking = null;
+
+function fetchLessons(id, rev) {
+    const key = `${id}:${rev}`;
+
+    if (asking?.key !== key) {
+        asking = { key, promise: api(path(id)) };
+    }
+
+    return asking.promise;
+}
 
 /** The lessons that apply in this conversation, fetched when it shows and again whenever they change on the server. */
 export function useMemory() {
     const id = store.state.conversationId;
-    const rev = store.state.memoryRev ?? 0;
+    // Followed here, not read from the render: a call's card in the conversation is not drawn again on every change.
+    const [rev, setRev] = useState(store.state.memoryRev ?? 0);
+
+    useEffect(() => store.subscribe((state) => setRev(state.memoryRev ?? 0)), []);
     const on = memoryAvailable();
     const [data, setData] = useState(last?.id === id ? last.data : null);
 
@@ -27,7 +42,7 @@ export function useMemory() {
             return undefined;
         }
 
-        api(path(id)).then(
+        fetchLessons(id, rev).then(
             (fetched) => {
                 last = { id, data: fetched };
 
@@ -60,7 +75,9 @@ export function memoryHint(data) {
     const live = data.lessons.filter((lesson) => !lesson.pending);
     const here = live.filter((lesson) => lesson.scope === "project").length;
     const everywhere = live.length - here;
-    const waiting = data.owner ? data.lessons.length - live.length : 0;
+    const waiting = data.owner
+        ? data.lessons.filter((lesson) => lesson.pending || lesson.proposal).length
+        : 0;
     const parts = [
         data.project ? `${here} here` : null,
         `${everywhere} everywhere`,
@@ -118,7 +135,8 @@ function Lesson({ lesson, data }) {
                 notify("info", done);
             }
         });
-    const approving = data.owner && lesson.pending;
+    const approving = data.owner && (lesson.pending || lesson.proposal);
+    const withdrawing = !data.owner && lesson.proposal?.mine;
 
     if (draft !== null) {
         return html`<div class="lesson">
@@ -145,22 +163,37 @@ function Lesson({ lesson, data }) {
     return html`<div class=${`lesson ${lesson.pending ? "pending" : ""}`}>
         <div class="lesson-text">${lesson.text}</div>
         ${
-            lesson.pending &&
+            lesson.proposal &&
+            html`<div class="lesson-proposal">
+                <span class="muted small">
+                    ${lesson.proposal.byPi ? "Pi" : lesson.proposal.mine ? "You" : lesson.proposal.byName} ${lesson.proposal.forget ? "proposes forgetting it." : "proposes:"}
+                </span>
+                ${lesson.proposal.text && html`<div class="lesson-text">${lesson.proposal.text}</div>`}
+            </div>`
+        }
+        ${
+            (lesson.pending || lesson.proposal) &&
             !data.owner &&
-            html`<div class="muted small">Waits for the owner's approval before Pi uses it.</div>`
+            html`<div class="muted small">Waits for the owner's approval; until then Pi goes on as before.</div>`
         }
         <div class="lesson-foot">
             <${Source} lesson=${lesson} />
             ${
-                (lesson.mine || approving) &&
+                (lesson.mine || approving || withdrawing) &&
                 html`<div class="row lesson-actions">
                     ${
                         approving &&
                         html`<button
                             class="button small primary"
-                            onClick=${() => act("/approve", {}, "Approved: Pi uses it from its next message.")}
+                            onClick=${() => act("/approve", {}, "Approved: Pi goes by it from its next message.")}
                         >
                             Approve
+                        </button>`
+                    }
+                    ${
+                        (approving || withdrawing) &&
+                        html`<button class="button small ghost" onClick=${() => act("/discard")}>
+                            ${approving ? "Discard" : "Withdraw"}
                         </button>`
                     }
                     ${
@@ -174,12 +207,13 @@ function Lesson({ lesson, data }) {
                     }
                     ${
                         lesson.mine &&
+                        !(approving && lesson.pending) &&
                         html`<button
                             class=${`button small ghost ${forgetting ? "danger" : ""}`}
                             onClick=${() => (forgetting ? act("/remove") : setForgetting(true))}
                             onBlur=${() => setForgetting(false)}
                         >
-                            ${approving ? (forgetting ? "Discard it" : "Discard") : forgetting ? "Forget it" : "Forget"}
+                            ${forgetting ? "Forget it" : "Forget"}
                         </button>`
                     }
                 </div>`
@@ -212,7 +246,9 @@ export function MemorySheet({ draft: initial = "" }) {
 
     const project = data.project;
     const chosen = project ? scope : "everywhere";
-    const waiting = data.owner ? data.lessons.filter((lesson) => lesson.pending) : [];
+    const waiting = data.owner
+        ? data.lessons.filter((lesson) => lesson.pending || lesson.proposal)
+        : [];
     const shown = data.lessons.filter((lesson) => !waiting.includes(lesson));
 
     const add = () => {
@@ -236,7 +272,7 @@ export function MemorySheet({ draft: initial = "" }) {
 
     return html`<${Sheet} title="Memory" onClose=${closeSheet}>
         <p class="muted small">
-            Short lessons Pi keeps across sessions: how to build and test, gotchas, conventions, preferences. ${project ? html`Those for <b>${project.name}</b> go to every session in it, worktrees too; the rest go everywhere.` : "PiP keeps lessons for everywhere."} Pi saves them as it learns; you can too.
+            Short lessons Pi keeps across sessions: how to build and test, gotchas, conventions, preferences. ${project ? html`Those for <b>${project.name}</b> go to every session in it, worktrees too; the rest go everywhere.` : "PiP keeps lessons for everywhere."} Pi proposes them as it learns, and the owner approves; yours count at once.
         </p>
         ${
             data.canWrite &&
@@ -306,4 +342,58 @@ export function MemorySheet({ draft: initial = "" }) {
             empty="Nothing yet."
         />
     <//>`;
+}
+
+/**
+ * Under Pi's memory call: what became of the lesson it saved, changed, or forgot. While it waits, the owner approves or
+ * discards it right here, without opening the sheet.
+ */
+export function LessonCall({ lessonId }) {
+    const data = useMemory();
+    const id = store.state.conversationId;
+
+    if (!data) {
+        return null;
+    }
+
+    const lesson = data.lessons.find((each) => each.id === lessonId);
+    const act = (rest, done) =>
+        attempt(async () => {
+            await api(path(id, `/${encodeURIComponent(lessonId)}${rest}`), {});
+            refresh();
+            notify("info", done);
+        });
+
+    if (!lesson) {
+        return html`<div class="lesson-call muted small">No longer in memory.</div>`;
+    }
+
+    if (!lesson.pending && !lesson.proposal) {
+        return html`<div class="lesson-call muted small">In memory: Pi goes by it.</div>`;
+    }
+
+    const what = lesson.pending
+        ? "A new lesson"
+        : lesson.proposal.forget
+          ? "Forgetting this lesson"
+          : "New text for this lesson";
+
+    return html`<div class="lesson-call waiting">
+        <span class="grow">${what} waits for ${data.owner ? "you" : "the owner"}.</span>
+        ${
+            data.owner &&
+            html`<button
+                    class="button small primary"
+                    onClick=${() => act("/approve", "Approved: Pi goes by it from its next message.")}
+                >
+                    Approve
+                </button>
+                <button
+                    class="button small ghost"
+                    onClick=${() => act("/discard", "Discarded.")}
+                >
+                    Discard
+                </button>`
+        }
+    </div>`;
 }

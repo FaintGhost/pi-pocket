@@ -7,15 +7,18 @@ import { copyText, formatWhen, html, Sheet } from "../ui.js";
 /** A hook's full address: the server's public one when it has one, else the one this browser uses. */
 const addressOf = (base, hook) => `${(base ?? location.origin).replace(/\/$/, "")}${hook.path}`;
 
-function copy(address) {
-    copyText(address).then(
-        () => notify("info", "Address copied. Keep it secret: anyone with it can message Pi."),
+function copy(text, what) {
+    copyText(text).then(
+        () => notify("info", what),
         () => notify("error", "Could not copy."),
     );
 }
 
-/** One hook: where it sends, what Pi is told to do, how it has been used; its address and removing it. */
-function HookRow({ hook, base, fresh, onRemove }) {
+/**
+ * One hook: where it sends, what Pi is told to do, how it has been used; its address (and a signed one's secret), a new
+ * secret, and removing it.
+ */
+function HookRow({ hook, base, fresh, onRemove, onRotate }) {
     const open = (event) => {
         event.preventDefault();
         closeSheet();
@@ -35,12 +38,29 @@ function HookRow({ hook, base, fresh, onRemove }) {
             </span>
         </div>
         ${hook.instructions && html`<div class="hook-text">${hook.instructions}</div>`}
-        ${fresh && html`<div class="mono small hook-address">${addressOf(base, hook)}</div>`}
+        ${
+            fresh &&
+            html`<div class="mono small hook-address">${addressOf(base, hook)}</div>
+                ${hook.signed && html`<div class="mono small hook-address">Secret: ${hook.secret}</div>`}`
+        }
         <div class="hook-actions">
-            <span class="muted small grow">${used}</span>
-            <button class="button small" onClick=${() => copy(addressOf(base, hook))}>
+            <span class="muted small grow">${hook.signed ? "GitHub, signed" : "secret in the address"} · ${used}</span>
+            <button
+                class="button small"
+                onClick=${() => copy(addressOf(base, hook), hook.signed ? "Address copied: GitHub's Payload URL." : "Address copied. Keep it secret: anyone with it can message Pi.")}
+            >
                 Copy address
             </button>
+            ${
+                hook.signed &&
+                html`<button
+                    class="button small"
+                    onClick=${() => copy(hook.secret, "Secret copied: GitHub's Secret.")}
+                >
+                    Copy secret
+                </button>`
+            }
+            <button class="button small ghost" onClick=${onRotate}>New secret</button>
             <button class="button small ghost" onClick=${onRemove}>Remove</button>
         </div>
     </div>`;
@@ -55,6 +75,7 @@ export function HooksSheet() {
     const [name, setName] = useState("");
     const [instructions, setInstructions] = useState("");
     const [target, setTarget] = useState(here ? "here" : "pip");
+    const [github, setGithub] = useState(true);
     const [fresh, setFresh] = useState(null);
     const steer = me?.role !== "viewer";
     const load = () => attempt(async () => setList(await api("hooks")));
@@ -70,6 +91,7 @@ export function HooksSheet() {
                 target: target === "pip" ? "pip" : here.id,
                 name: name.trim(),
                 instructions: instructions.trim(),
+                signed: github,
             });
 
             setName("");
@@ -88,6 +110,24 @@ export function HooksSheet() {
             }
 
             await api(`hooks/${encodeURIComponent(hook.id)}/remove`, {});
+            await load();
+        });
+    const rotate = (hook) =>
+        attempt(async () => {
+            const where = hook.signed
+                ? "Paste the new one into GitHub's Secret for it."
+                : "Give the new address to whatever posts to it.";
+
+            if (
+                !confirm(
+                    `A new secret for “${hook.name}”: posts with the old one stop getting in. ${where}`,
+                )
+            ) {
+                return;
+            }
+
+            await api(`hooks/${encodeURIComponent(hook.id)}/rotate`, {});
+            setFresh(hook.id);
             await load();
         });
 
@@ -116,6 +156,20 @@ export function HooksSheet() {
                         value=${instructions}
                         onInput=${(event) => setInstructions(event.currentTarget.value)}
                     ></textarea>
+                </div>
+                <div class="field">
+                    <div class="label">Posted by</div>
+                    <div class="segmented">
+                        <button class=${github ? "on" : ""} onClick=${() => setGithub(true)}>
+                            GitHub
+                        </button>
+                        <button class=${github ? "" : "on"} onClick=${() => setGithub(false)}>
+                            Another service
+                        </button>
+                    </div>
+                    <div class="muted small">
+                        ${github ? "Signed: GitHub gets the address and, separately, a secret; the address alone lets nothing in." : "The secret is in the address: anyone who has it can message Pi as you."}
+                    </div>
                 </div>
                 ${
                     targets.length > 1 &&
@@ -149,12 +203,13 @@ export function HooksSheet() {
                 base=${list.base}
                 fresh=${hook.id === fresh}
                 onRemove=${() => remove(hook)}
+                onRotate=${() => rotate(hook)}
             />`,
         )}
         ${
             list &&
             html`<p class="muted small">
-                ${list.base ? "" : `Services post to ${location.origin}, so they must be able to reach it: a tunnel's address works for GitHub. `}For GitHub: the repository's Settings → Webhooks → Add webhook, paste the address, choose application/json, and pick the events. GitHub's secret field may stay empty.
+                ${list.base ? "" : `Services post to ${location.origin}, so they must be able to reach it: a tunnel's address works for GitHub. `}For GitHub: the repository's Settings → Webhooks → Add webhook; paste the address as the Payload URL and the secret as the Secret, choose application/json, and pick the events.
             </p>`
         }
     <//>`;

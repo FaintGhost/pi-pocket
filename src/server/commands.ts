@@ -1137,7 +1137,10 @@ export class Commands {
     }
 
     /** Make a webhook that messages a session (or PiP) for this person. */
-    async addHook(user: User, body: { target?: unknown; name?: unknown; instructions?: unknown }) {
+    async addHook(
+        user: User,
+        body: { target?: unknown; name?: unknown; instructions?: unknown; signed?: unknown },
+    ) {
         const app = this.#app;
         // "pip": this person's PiP, made now if they have none yet.
         const target =
