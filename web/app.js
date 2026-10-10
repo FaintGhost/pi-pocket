@@ -113,7 +113,7 @@ function Topbar() {
         (session) =>
             session.waiting && !session.archived && session.id !== store.state.conversationId,
     ).length;
-    // How far down it reaches: PiP's window on a wide screen stays below its buttons.
+    // How far down it reaches: PiP's window on a short wide screen stops below its buttons.
     const edge = useEdge("--topbar-h", (rect) => rect.bottom);
 
     return html`<header class="topbar" ref=${edge}>

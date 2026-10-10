@@ -5401,6 +5401,11 @@ textarea.notes {
     font-size: 0.82rem;
 }
 
+/* The words that wait keep a readable width: where Approve and Discard would squeeze them, they go below. */
+.lesson-call.waiting > .grow {
+    flex: 1 1 16rem;
+}
+
 /* Memory: a lesson Pi keeps, who saved it and where, and what can be done with it. */
 .lesson {
     display: flex;
@@ -10091,31 +10096,24 @@ textarea.notes {
 /* ─── PiP ──────────────────────────────────────────────────── */
 
 /*
- * PiP's window: in the corner, over the conversation and its panels and under sheets, the launcher, and notices. It
- * sits between a session's top bar and its message box (`--topbar-h`, `--composer-h`: app.js and composer.js publish
- * them), so their buttons stay in reach. Only on a screen too short for its least height (180px) does it give way at
- * the bottom, over the message box, never over the top bar. It pops in at 87% from the corner it sits in. On phones it is a sheet from
- * the bottom edge, over a light scrim.
+ * PiP's window: anchored to the bottom right corner, wherever the app is and however tall the message box grows, over
+ * the conversation and its panels and under sheets, the launcher, and notices. It never reaches up over a session's top
+ * bar (`--topbar-h`, which app.js publishes): on a short screen it is shorter instead. It pops in at 87% from its
+ * corner. On phones it is a sheet from the bottom edge, over a light scrim.
  */
 .pip-panel {
     --pip-top: max(
         calc(var(--gap-out) + env(safe-area-inset-top)),
         calc(var(--topbar-h, 0px) + 6px)
     );
-    --pip-bottom: max(
-        calc(var(--gap-out) + env(safe-area-inset-bottom)),
-        calc(var(--composer-h, 0px) + 6px)
-    );
-    --pip-height: clamp(
-        min(180px, calc(100dvh - var(--pip-top) - var(--gap-out))),
-        calc(100dvh - var(--pip-top) - var(--pip-bottom)),
-        640px
-    );
     position: fixed;
     right: calc(var(--gap-out) + env(safe-area-inset-right));
-    bottom: min(var(--pip-bottom), calc(100dvh - var(--pip-top) - var(--pip-height)));
+    bottom: calc(var(--gap-out) + env(safe-area-inset-bottom));
     width: min(420px, calc(100vw - 2 * var(--gap-out)));
-    height: var(--pip-height);
+    height: min(
+        640px,
+        calc(100dvh - var(--pip-top) - var(--gap-out) - env(safe-area-inset-bottom))
+    );
     z-index: 18;
     display: flex;
     flex-direction: column;

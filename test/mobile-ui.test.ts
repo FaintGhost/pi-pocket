@@ -1281,7 +1281,7 @@ async function noPip(): Promise<void> {
 }
 
 test(
-    "on a desktop, Alt+A opens PiP once, for the keys typed next, above the message box; Esc gives the focus back",
+    "on a desktop, Alt+A opens PiP once, for the keys typed next, below the top bar; Esc gives the focus back",
     real,
     async () => {
         await fresh();
@@ -1327,33 +1327,19 @@ test(
         assert.deepEqual(await typed(), { pip: "hi pip", session: "", focused: "pip" });
         // Past its opening animation, where it takes its whole size.
         await new Promise((resolve) => setTimeout(resolve, 400));
-        // What the top bar and the message box say of their edges is where they are, once the pane has popped in.
-        assert.deepEqual(
-            await inPage<number[]>(`
-                const style = document.documentElement.style;
-                const said = (name) => Math.round(parseFloat(style.getPropertyValue(name)));
+        // What the top bar says of its edge is where it is, once the pane has popped in.
+        assert.equal(
+            await inPage<number>(`
+                const said = parseFloat(document.documentElement.style.getPropertyValue("--topbar-h"));
                 const top = document.querySelector(".topbar").getBoundingClientRect().bottom;
-                const box = document.querySelector(".composer-wrap").getBoundingClientRect().top;
 
-                return JSON.stringify([
-                    said("--topbar-h") - Math.round(top),
-                    said("--composer-h") - Math.round(innerHeight - box),
-                ]);
+                return JSON.stringify(Math.round(said) - Math.round(top));
             `),
-            [0, 0],
-            "--topbar-h and --composer-h match the real edges",
+            0,
+            "--topbar-h matches the top bar's real edge",
         );
 
-        // The session's Send is not under PiP's window (disabled while the box is empty, it lets taps through to its row).
-        const hit = await inPage<boolean>(`
-            const box = document.querySelector(".composer .send-button").getBoundingClientRect();
-            const at = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-
-            return JSON.stringify(at?.closest(".composer") !== null && at?.closest(".pip-panel") === null);
-        `);
-
-        assert.equal(hit, true, "the session's Send can be clicked while PiP is open");
-        // Nor are the top bar's buttons: the menu, Changes.
+        // The top bar's buttons are not under PiP's window: the menu, Changes.
         const covered = await inPage<string[]>(`
             const buttons = [...document.querySelectorAll(".topbar button")];
 
@@ -1382,6 +1368,139 @@ test(
         await until(
             async () => (await typed()).focused === "session",
             "the focus back in the session's box",
+        );
+        await noPip();
+    },
+);
+
+/** Where PiP's window is: its gaps to the screen's bottom and right edges, its top, and the top bar's bottom. */
+type Place = {
+    bottom: number;
+    right: number;
+    left: number;
+    top: number;
+    width: number;
+    screen: number;
+    topbar: number;
+};
+
+async function pipPlace(): Promise<Place> {
+    await until(
+        async () =>
+            (await inPage<boolean>(
+                `return JSON.stringify(document.querySelector(".pip-panel:not(.leaving)") !== null)`,
+            )) === true,
+        "PiP's window",
+    );
+    // Past its opening animation, where it takes its whole size.
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    return inPage<Place>(`
+        const box = document.querySelector(".pip-panel").getBoundingClientRect();
+
+        return JSON.stringify({
+            bottom: Math.round(innerHeight - box.bottom),
+            right: Math.round(innerWidth - box.right),
+            left: Math.round(box.left),
+            top: Math.round(box.top),
+            width: Math.round(box.width),
+            screen: innerWidth,
+            topbar: Math.round(document.querySelector(".topbar")?.getBoundingClientRect().bottom ?? 0),
+        });
+    `);
+}
+
+/** The session's message box holding `text`, as typing leaves it. */
+const typeInBox = (text: string) =>
+    page.evaluate(`
+        const box = document.querySelector(".composer textarea");
+
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value").set.call(box, ${JSON.stringify(text)});
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+        await new Promise((resolve) => setTimeout(resolve, 300));
+    `);
+
+test(
+    "PiP's window stays in the bottom right corner at every size, however tall the message box grows; on a phone it is a sheet on the bottom edge",
+    real,
+    async () => {
+        await fresh();
+        await tap(row(first));
+        await reach({ path: `/s/${first}` }, "the session");
+
+        for (const [width, height] of [
+            [1280, 800],
+            [1920, 1080],
+            [1024, 700],
+            [844, 390],
+        ] as const) {
+            const size = `${width}x${height}`;
+
+            await page.setViewport({ width, height, scale: 1, mobile: false });
+            await until(
+                async () =>
+                    (await inPage<boolean>(
+                        `return JSON.stringify(document.querySelector(".composer textarea") !== null)`,
+                    )) === true,
+                "the session's message box",
+            );
+            await page.evaluate(`(await import("/pip.js")).openPip()`);
+            const place = await pipPlace();
+
+            // Anchored: the same small gap to the bottom and the right edge, whatever the session shows.
+            assert.equal(
+                place.bottom,
+                place.right,
+                `${size}: as far from the bottom as from the right`,
+            );
+            assert.ok(
+                place.bottom >= 0 && place.bottom <= 24,
+                `${size}: on the bottom edge (${place.bottom}px up)`,
+            );
+            assert.ok(place.top >= place.topbar, `${size}: below the top bar`);
+            // A message box that grows does not move it.
+            await typeInBox("one\ntwo\nthree\nfour\nfive\nsix\nseven\neight");
+            assert.deepEqual(
+                await pipPlace(),
+                place,
+                `${size}: where it was with a tall message box`,
+            );
+            await typeInBox("");
+            await noPip();
+        }
+
+        // Over the session list too: the same corner.
+        await page.setViewport(VIEWPORTS.desktop);
+        await page.navigate(`${base}/`);
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(${JSON.stringify(row(first))}) !== null)`,
+                )) === true,
+            "the session list",
+        );
+        await page.evaluate(`(await import("/pip.js")).openPip()`);
+        const home = await pipPlace();
+
+        assert.equal(
+            home.bottom,
+            home.right,
+            "the session list: as far from the bottom as from the right",
+        );
+        assert.ok(home.bottom <= 24, "the session list: on the bottom edge");
+        await noPip();
+
+        // On a phone: a sheet across the whole width, on the bottom edge.
+        await fresh();
+        await tap(row(first));
+        await reach({ path: `/s/${first}` }, "the session");
+        await page.evaluate(`(await import("/pip.js")).openPip()`);
+        const phone = await pipPlace();
+
+        assert.deepEqual(
+            { bottom: phone.bottom, left: phone.left, width: phone.width },
+            { bottom: 0, left: 0, width: phone.screen },
+            "a phone's sheet",
         );
         await noPip();
     },
