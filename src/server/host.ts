@@ -5,6 +5,7 @@ import type { ConversationId, Extension, ModelRef, TaskId } from "@earendil-work
 import type { Browsers } from "./browser.ts";
 import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
+import type { Memory } from "./memory.ts";
 import type { Pip } from "./pip.ts";
 import type { Schedules } from "./schedules.ts";
 
@@ -153,6 +154,8 @@ export interface PocketHost {
         | "cancelSchedule"
         | "follow"
     >;
+    /** Lessons Pi keeps across sessions (`memory.ts`): the memory tool saves them, and its section lists them. */
+    readonly memory: Pick<Memory, "project" | "applying" | "inForce" | "add" | "change">;
 }
 
 /** The shape of every module in `src/server/extensions/`: a default export building one or more extensions. */

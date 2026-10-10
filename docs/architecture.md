@@ -24,7 +24,7 @@ Some state lives in this process alone, and a restart forgets it. For example:
 **Its parts:**
 
 - `commands`, `collab`, `alerts`, `providers`, `schedules`, `goals`, `shell`, `spend`
-- `workspace`, `transcripts`, `attribution`, `piSessions`, `pip`
+- `workspace`, `transcripts`, `attribution`, `piSessions`, `pip`, `memory`
 - `browsers`
 
 **What stays on `PocketApp`** (the parts call these rather than keeping copies):
@@ -43,6 +43,15 @@ Extensions never see `PocketApp`. They get `PocketHost` (`host.ts`), whose funct
 ## PiP's conversation
 
 PiP (`pip.ts`) is a conversation with a `pip` mark in its session entry, which `sessions()` leaves out of every list. The harness settings select every installed extension but PiP's (`pocket-pip`) by default; PiP's conversation stores its own selection (`PIP_EXTENSIONS`, without bash, write, or edit), which `ensure` sets again each time it opens, so PiP's tools reach no other conversation. Its tools act through `Commands` and `Schedules` as PiP's person, with that person's checks, so `canSee` keeps every PiP from everyone but its person: anyone who could write to it would act as them. Its messages to sessions are once per tool call (a request id hashed from the call's key), and each follow leaves a mark in its list (`FollowsDoc`) when it reports or is stopped, so a replayed call neither sends nor follows twice. A tab's PiP panel is a second client in PiP's room (`setPip`), whose `view` events reach the tab as `pipview`; `watching` counts it, so PiP's answers push nothing while it shows.
+
+## Memory
+
+Lessons Pi keeps across sessions are one document for the whole app, `MemoryDoc` (`pocket.memory`), by id. Each is for a project or for everywhere. A project is keyed by the real path of its git common folder (`git rev-parse --git-common-dir`), so a repository and all its worktrees share lessons; outside a repository, by the folder itself. `Memory` (`memory.ts`) works out a folder's project (kept a minute per folder) and keeps the rules:
+
+- The memory extension's section renders, before each request, the lessons in force for the conversation's folder: its project's and everywhere's, not pending, oldest first. It reads committed state only, so it renders the same text until a lesson changes. PiP has no project: it gets everywhere's.
+- A lesson saved or changed while Pi works for someone who is not the owner (`requesterOf`), or by such a person in the sheet, is pending, and no prompt has it until the owner approves it. Only the owner, or whoever saved a lesson, changes or removes it, Pi included (as the person it works for).
+- Pi's adds carry the tool call's key, so a replayed call finds its lesson. A subagent's lesson comes from its session (`rootOf`).
+- Every write adds an activity line to the session's chat in the same commit. `#committed` tells `Memory` when the document changed; it sends tabs a `memory` event, and the Memory sheet and menu fetch the lessons again (`GET /api/c/:id/memory`).
 
 ## Startup
 

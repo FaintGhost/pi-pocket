@@ -184,6 +184,35 @@ export async function conversationRoutes(
         return json(response, 200, { ok: true });
     }
 
+    // Memory: the lessons that apply here; one added by hand; one changed, forgotten, or approved.
+    if (third === "memory" && fourth === undefined) {
+        if (method === "GET") {
+            return json(response, 200, await app.memory.view(id, user));
+        }
+
+        if (method === "POST") {
+            return json(
+                response,
+                200,
+                await app.memory.remember(id, user, await readJson(request)),
+            );
+        }
+    }
+
+    if (third === "memory" && fourth !== undefined && method === "POST") {
+        const action = parts[4];
+        const change =
+            action === "remove" || action === "approve"
+                ? action
+                : action === undefined
+                  ? { text: (await readJson<{ text?: unknown }>(request)).text }
+                  : undefined;
+
+        if (change !== undefined) {
+            return json(response, 200, await app.memory.edit(id, user, fourth, change));
+        }
+    }
+
     if (third === "goal" && method === "POST") {
         const body = await readJson<{ command?: unknown; clear?: unknown }>(request);
 

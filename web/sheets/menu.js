@@ -22,6 +22,7 @@ import {
 import { isPinned, paletteOf, togglePin } from "../theme.js";
 import { currentTrust, trustAvailable } from "../trust.js";
 import { branchAvailable } from "./branch.js";
+import { memoryAvailable, memoryHint, useMemory } from "./memory.js";
 import { defaultLabel, defaultsKept } from "./model.js";
 import { copyText, html, Icon, item, Sheet, shortPath } from "../ui.js";
 
@@ -179,6 +180,7 @@ export function MenuSheet() {
         !turns.driver ||
         !store.state.presence.some((person) => person.id === turns.driver);
     const instructions = view.agent?.instructions;
+    const memory = useMemory();
 
     return html`<${Sheet} title=${conversation?.title ?? "Menu"} onClose=${closeSheet}>
         <${Places} />
@@ -243,6 +245,7 @@ export function MenuSheet() {
         ${session && steer && driving && item("Instructions for Pi", () => openSheet({ type: "instructions" }), instructions ? "on" : "none")}
         ${conversation && steer && driving && item("Compact context", () => openSheet({ type: "compact" }), "summarize older messages")}
         ${conversation && steer && driving && item("New context", () => openSheet({ type: "reset" }), "Pi starts fresh; history stays")}
+        ${conversation && memoryAvailable() && item("Memory", () => openSheet({ type: "memory" }), memoryHint(memory))}
         ${schedulesAvailable() && item("Scheduled messages", () => openSheet({ type: "schedules" }), view.schedules.length === 0 ? "none" : `${view.schedules.length} coming`)}
         ${
             conversation &&

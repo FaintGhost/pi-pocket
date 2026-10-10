@@ -5301,6 +5301,77 @@ textarea.notes {
     border-bottom: 0;
 }
 
+/* Memory: a lesson Pi keeps, who saved it and where, and what can be done with it. */
+.lesson {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.lesson:last-child {
+    border-bottom: 0;
+}
+
+.lesson.pending {
+    border-left: 2px solid var(--warn);
+    padding-left: 0.6rem;
+}
+
+.lesson-text {
+    overflow-wrap: anywhere;
+}
+
+.lesson-source a {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: var(--line-strong);
+    overflow-wrap: anywhere;
+}
+
+.lesson-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.3rem 0.6rem;
+}
+
+.lesson-source {
+    flex: 1 1 10rem;
+    min-width: 0;
+}
+
+.lesson-actions {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+.lesson-actions .button.danger {
+    border-color: var(--err);
+    color: var(--err);
+}
+
+.lesson-add {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.lesson-add .segmented {
+    flex-wrap: nowrap;
+    min-width: 0;
+}
+
+.lesson-add .segmented button {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Done when: a goal met, or one Pi gave up on. */
 .goal-bar.met {
     border-left-color: var(--ok);

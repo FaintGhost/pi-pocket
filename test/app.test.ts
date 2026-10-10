@@ -438,6 +438,7 @@ test("the owner turns extensions off and on, the guard follows its switch, and t
             "plan.ts",
             "guard.ts",
             "codemode.ts",
+            "memory.ts",
             "pip.ts",
         ],
     );
