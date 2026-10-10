@@ -9,6 +9,7 @@ import { ExtensionsSheet } from "./sheets/extensions.js";
 import { FileSheet } from "./sheets/file.js";
 import { FindSheet } from "./sheets/find.js";
 import { CwdSheet } from "./sheets/folder.js";
+import { MemorySheet } from "./sheets/memory.js";
 import { MenuSheet, PlacesSheet } from "./sheets/menu.js";
 import { MessageSheet } from "./sheets/message.js";
 import { ModelPicker } from "./sheets/model.js";
@@ -200,6 +201,9 @@ function sheetBody(sheet) {
             break;
         case "hooks":
             body = html`<${HooksSheet} />`;
+            break;
+        case "memory":
+            body = view.conversation ? html`<${MemorySheet} draft=${sheet.draft ?? ""} />` : null;
             break;
         case "share":
             body = html`<${ShareSheet} share=${sheet.share} />`;

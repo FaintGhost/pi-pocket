@@ -55,6 +55,7 @@ import {
     ChatDoc,
     type ChatMessage,
     DecisionsDoc,
+    MemoryDoc,
     type SessionMeta,
     SessionsDoc,
     type SubagentRecord,
@@ -66,6 +67,7 @@ import { Goals } from "./goals.ts";
 import { type ApprovalRequest, Approvals, type PocketHost } from "./host.ts";
 import { type GuardStatus, LancetGuard } from "./lancet.ts";
 import { takeLock } from "./lock.ts";
+import { Memory } from "./memory.ts";
 import { isThinkingLevel, modelList, resolveModel, THINKING_LEVELS } from "./models.ts";
 import { configureHttp } from "./net.ts";
 import { PiSessions } from "./pi-sessions.ts";
@@ -244,6 +246,8 @@ export class PocketApp {
     readonly watches = new Watches(this);
     /** Webhooks: addresses other services post to, each a message to a session or PiP (`hooks.ts`). */
     readonly hooks = new Hooks(this);
+    /** Lessons Pi keeps across sessions, for a project or everywhere. */
+    readonly memory = new Memory(this);
     /** Each conversation's browser page, which Pi and the people in the conversation share. */
     readonly browsers: Browsers;
     readonly #clients = new Set<Client>();
@@ -387,6 +391,7 @@ export class PocketApp {
             browsers: this.browsers,
             pip: this.pip,
             watches: this.watches,
+            memory: this.memory,
         };
 
         this.host = host;
@@ -618,6 +623,8 @@ export class PocketApp {
                     () => {},
                 );
             }
+        } else if (kind === MemoryDoc.definition.kind) {
+            this.memory.committed();
         } else if (ROOM_DOCS.has(kind) && id !== undefined) {
             if (kind === ChatDoc.definition.kind) {
                 if (

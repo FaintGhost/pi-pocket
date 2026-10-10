@@ -5,6 +5,7 @@ import type { ConversationId, Extension, ModelRef, TaskId } from "@earendil-work
 import type { Browsers } from "./browser.ts";
 import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
+import type { Memory } from "./memory.ts";
 import type { Pip } from "./pip.ts";
 import type { Schedules } from "./schedules.ts";
 import type { Watches } from "./watches.ts";
@@ -156,6 +157,8 @@ export interface PocketHost {
     >;
     /** Sessions' watches of their pull requests: Pi's watch_pr tool starts and stops them. */
     readonly watches: Pick<Watches, "task" | "start" | "stop" | "get">;
+    /** Lessons Pi keeps across sessions (`memory.ts`): the memory tool saves them, and its section lists them. */
+    readonly memory: Pick<Memory, "project" | "applying" | "inForce" | "add" | "change">;
 }
 
 /** The shape of every module in `src/server/extensions/`: a default export building one or more extensions. */

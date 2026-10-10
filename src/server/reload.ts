@@ -36,6 +36,7 @@ const ORDER = [
     "plan.ts",
     "guard.ts",
     "codemode.ts",
+    "memory.ts",
     "pip.ts",
     "triggers.ts",
 ];
@@ -53,6 +54,7 @@ const TITLES: Record<string, string> = {
     "plan.ts": "Plan mode",
     "guard.ts": "Lancet Guard",
     "codemode.ts": "Codemode",
+    "memory.ts": "Memory",
     "pip.ts": "PiP",
     "triggers.ts": "Triggers",
 };
@@ -75,6 +77,7 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "subagent",
     "schedule",
     "codemode",
+    "memory",
     "sessions",
     "session_read",
     "session_start",
