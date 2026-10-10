@@ -56,6 +56,7 @@ import {
 import { prefs, setPrefs, startTheme } from "./theme.js";
 import { Transcript } from "./transcript.js";
 import { APPLE, Boot, html, Icon, iconPath, shortPath, usePresence } from "./ui.js";
+import { toggleDictation } from "./voice.js";
 
 /**
  * Back to the session list, where it is not beside the conversation: back past the sessions opened from it, as a
@@ -546,6 +547,18 @@ addEventListener("keydown", (event) => {
         if (event.code === "KeyA" && pipAvailable()) {
             event.preventDefault();
             togglePip();
+
+            return;
+        }
+
+        // Dictation into the message box in view: PiP's while it is open, else the session's.
+        if (
+            event.code === "KeyV" &&
+            !store.state.sheet &&
+            !store.state.launcher &&
+            toggleDictation()
+        ) {
+            event.preventDefault();
 
             return;
         }

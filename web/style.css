@@ -2444,6 +2444,51 @@ button.chip:hover {
     transform: translateY(-2px);
 }
 
+/* Dictation (voice.js): a quiet mic beside Send; while it listens, the accent and a ring that breathes. */
+.composer-row .composer-mic {
+    width: 32px;
+    height: 32px;
+    color: var(--muted);
+}
+
+.mic-button.listening {
+    color: var(--accent);
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent-line);
+}
+
+.mic-button.listening::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius);
+    pointer-events: none;
+    animation: listening 1.6s var(--ease-out) infinite;
+}
+
+@keyframes listening {
+    from {
+        opacity: 0.9;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(1.35);
+    }
+}
+
+/* Still, the inset ring alone says it listens. */
+:root[data-motion="reduced"] .mic-button.listening::after {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root:not([data-motion="full"]) .mic-button.listening::after {
+        display: none;
+    }
+}
+
 /* Square buttons elsewhere: the chat's send. */
 .round {
     width: 36px;
@@ -8181,6 +8226,12 @@ textarea.notes {
     .composer.busy .plan-chip {
         display: none;
     }
+    /* While Pi works the row is full: the mic takes Send's place while there is nothing to send, and gives it back once
+       there is (staying while it listens, to stop it). */
+    .composer.busy:not(.filled):has(.composer-mic) .send-button,
+    .composer.busy.filled .composer-mic:not(.listening) {
+        display: none;
+    }
 }
 
 /* A swipe's mark: back, or the place a swipe on the conversation opens, following the finger in from its side. */
@@ -8463,16 +8514,18 @@ textarea.notes {
         min-height: 36px;
     }
     .composer-row .attach-button,
+    .composer-row .composer-mic,
     .composer-row .stop-button,
     .composer-row .send-button {
         width: 36px;
         height: 36px;
     }
     /* Kept small to fit one line on a phone; a layer past each takes a tap about 40px wide and tall. */
-    .composer-row :is(.places-button, .attach-button, .stop-button, .send-button) {
+    .composer-row :is(.places-button, .attach-button, .composer-mic, .stop-button, .send-button) {
         position: relative;
     }
-    .composer-row :is(.places-button, .attach-button, .stop-button, .send-button)::before {
+    .composer-row
+        :is(.places-button, .attach-button, .composer-mic, .stop-button, .send-button)::before {
         content: "";
         position: absolute;
         inset: -4px -2px;

@@ -10,6 +10,7 @@ const SHORTCUTS = [
     ["Alt B", "Open or close the browser"],
     ["Alt E", "Open or close the Files tile: the folder's files, and what changed"],
     ["Alt A", "Open or close PiP, your assistant"],
+    ["Alt V", "Dictate into the message box, or stop (where the browser can)"],
     ["j", "k: in Changes, the next or previous file"],
     ["n", "p: in Changes, the next or previous change"],
     ["v", "In Changes: mark the file viewed, or not"],
