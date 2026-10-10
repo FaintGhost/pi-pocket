@@ -805,7 +805,7 @@ export function SessionList({ compact = false }) {
                             </button>`
                             : null
                     }
-                    <div class="group-body">
+                    <div class="group-body" inert=${isClosed}>
                         <div>
                             ${group.rows.map(
                                 (session) =>

@@ -3155,6 +3155,10 @@ button.chip:hover {
     color: var(--muted);
 }
 
+.group-head:focus-visible {
+    color: var(--text);
+}
+
 .group-name {
     flex: 1;
     min-width: 0;
@@ -3244,6 +3248,12 @@ button.chip:hover {
 
 .session:hover {
     background: var(--hover);
+}
+
+/* Keep focus outlines inside list controls: scrolling and folding groups clip their edges. */
+.group-head:focus-visible,
+.session:focus-visible {
+    outline-offset: -1px;
 }
 
 /* The open session: the accent's soft fill and an accent title. */
@@ -3415,7 +3425,7 @@ button.chip:hover {
     display: none;
 }
 
-/* Archive and pin: on the row's right, shown on hover. */
+/* Archive and pin: on the row's right, shown on hover or while the row has focus. */
 .session-actions {
     position: absolute;
     top: 50%;
@@ -3465,25 +3475,18 @@ button.chip:hover {
 /* The buttons take the right side's place, widened so a long title ends before them (one or two 26px buttons). */
 @media (hover: hover) {
     .session-row:hover .session-act,
-    .session-act:focus-visible {
+    .session-row:focus-within .session-act {
         opacity: 1;
         transform: none;
     }
-    .session-row:not(.no-acts):hover .session-side {
+    .session-row:not(.no-acts):hover .session-side,
+    .session-row:not(.no-acts):focus-within .session-side {
         opacity: 0;
         min-width: 56px;
     }
-    .session-row.one-act:hover .session-side {
+    .session-row.one-act:hover .session-side,
+    .session-row.one-act:focus-within .session-side {
         min-width: 26px;
-    }
-    /* Kept apart from the rules above: a browser without :has() drops only these. */
-    .session-actions:has(:focus-visible) .session-act {
-        opacity: 1;
-        transform: none;
-    }
-    .session-row:has(.session-act:focus-visible) .session-side {
-        opacity: 0;
-        min-width: 56px;
     }
     /* While Ctrl/⌘ drags a selection, rows do not show their buttons. */
     :root.selecting .session-row .session-act {
