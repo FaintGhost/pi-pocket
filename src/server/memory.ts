@@ -156,6 +156,17 @@ export class Memory {
         return userId !== undefined && this.#app.config.userById(userId)?.role === "owner";
     }
 
+    /**
+     * Whether a write waits for the owner: one for anyone else, and Pi's on a message nobody wrote themselves (a
+     * webhook's post, a PR watch's comments, PiP's errand), whose words may not be its person's.
+     */
+    #held(conversationId: ConversationId, writer: Writer): boolean {
+        return (
+            !this.#isOwner(writer.userId) ||
+            (writer.byPi && !this.#app.attribution.personWrote(conversationId))
+        );
+    }
+
     #mayChange(lesson: Lesson, userId: string | undefined): boolean {
         return this.#isOwner(userId) || (userId !== undefined && lesson.by === userId);
     }
@@ -225,7 +236,7 @@ export class Memory {
         const root = app.rootOf(conversationId);
         const meta = app.sessionMeta(root);
         const by = writer.userId ?? meta?.createdBy ?? "";
-        const pending = !this.#isOwner(writer.userId);
+        const pending = this.#held(conversationId, writer);
 
         return app.harness.commit(async (tx) => {
             const doc = await tx.doc(MemoryDoc);
@@ -327,6 +338,14 @@ export class Memory {
             }
 
             if (change === "remove") {
+                // Forgetting cannot wait for approval, so it waits for a person's own words.
+                if (writer.byPi && !this.#app.attribution.personWrote(conversationId)) {
+                    throw new HttpError(
+                        403,
+                        "Pi forgets lessons only when a person asks it to in their own message: say which one and why.",
+                    );
+                }
+
                 delete doc.items[lesson.id];
                 await this.#activity(
                     tx,
@@ -345,10 +364,10 @@ export class Memory {
             lesson.text = text!;
             lesson.updatedAt = Date.now();
 
-            if (this.#isOwner(writer.userId)) {
-                delete lesson.pending;
-            } else {
+            if (this.#held(conversationId, writer)) {
                 lesson.pending = true;
+            } else {
+                delete lesson.pending;
             }
 
             await this.#activity(

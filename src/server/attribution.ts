@@ -50,6 +50,11 @@ export class Attribution {
      * later (after a restart, say) does not take that back.
      */
     readonly #lastAuthorEntry = new Map<ConversationId, number>();
+    /**
+     * Whether that person wrote the newest message themselves, rather than having it sent for them (by PiP, a PR watch,
+     * a webhook, a schedule Pi set up): what came from elsewhere may carry words that are not theirs.
+     */
+    readonly #lastWrote = new Map<ConversationId, boolean>();
     /** Who sent each submission, for queued messages. Filled from commits, or looked up once when missing. */
     readonly #submitters = new Map<number, string>();
     /** The submissions whose sender was looked up already, found or not. */
@@ -87,6 +92,11 @@ export class Attribution {
         if (newest !== undefined) {
             this.#lastAuthor.set(id, newest[1]);
             this.#lastAuthorEntry.set(id, Number(newest[0]));
+            this.#lastWrote.set(
+                id,
+                authorsDoc?.entries?.[newest[0]] !== undefined ||
+                    missing.some((each) => String(each.entry) === newest[0] && each.wrote),
+            );
         }
 
         // Their authors are known: a message settling after the restart is not noted again.
@@ -208,6 +218,7 @@ export class Attribution {
                 if (entry >= (this.#lastAuthorEntry.get(conversationId) ?? -1)) {
                     this.#lastAuthorEntry.set(conversationId, entry);
                     this.#lastAuthor.set(conversationId, requester);
+                    this.#lastWrote.set(conversationId, person?.wrote === true);
                 }
 
                 this.#noteAuthor(conversationId, record.entry, requester, person?.wrote === true);
@@ -253,5 +264,13 @@ export class Attribution {
      */
     requesterOf(id: ConversationId): string | undefined {
         return this.#lastAuthor.get(id) ?? this.#lastAuthor.get(this.#app.rootOf(id));
+    }
+
+    /**
+     * Whether Pi works in a session (a subagent: in its session) on a message its person wrote themselves. False when
+     * the newest message was sent for them by something else, whose words it may carry, or when nobody is known.
+     */
+    personWrote(id: ConversationId): boolean {
+        return this.#lastWrote.get(this.#app.rootOf(id)) === true;
     }
 }
