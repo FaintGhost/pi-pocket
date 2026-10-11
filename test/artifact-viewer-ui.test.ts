@@ -96,6 +96,29 @@ const frameSrc = () =>
 /** The query of a frame's address, by name. */
 const query = (src: string) => Object.fromEntries(new URL(src, base).searchParams);
 
+/**
+ * Wait until what moves as the page opens has stopped (not what loops for ever). Until then a click can miss: the
+ * timeline unrolls from the top, clipped below, so for its first moments the point a link is at is the group behind it.
+ */
+const still = () =>
+    page.evaluate(`
+        for (;;) {
+            const moving = document
+                .getAnimations()
+                .filter(
+                    (each) =>
+                        each.playState === "running" &&
+                        each.effect?.getComputedTiming().endTime !== Infinity,
+                );
+
+            if (moving.length === 0) {
+                return "true";
+            }
+
+            await Promise.all(moving.map((each) => each.finished.catch(() => {})));
+        }
+    `);
+
 const choose = (theme: string) =>
     page.evaluate(
         `(await import("/theme.js")).chooseTheme(${JSON.stringify(theme)}); return "true"`,
@@ -146,6 +169,7 @@ test(
             `return JSON.stringify(document.querySelector(".artifact-link") !== null)`,
             "the artifact in the conversation",
         );
+        await still();
         await page.click({ selector: ".artifact-link" });
         await until(async () => (await frameSrc()) !== null, "the viewer's frame");
         const dark = (await frameSrc())!;
