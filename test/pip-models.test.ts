@@ -197,6 +197,35 @@ test("a model's name that runs on into another's names only the longer one", () 
     assert.equal(personNamed("try z3-mini", z3, [z3]), true);
 });
 
+test("who pays is named after on, via, or the like, not by everyday words", () => {
+    const names: Record<string, string> = {
+        "acme-go": "Acme Go",
+        "kiwi-coding": "Kiwi Coding",
+        "zeta-gateway": "Zeta AI Gateway",
+    };
+    const at = Object.keys(names).map((provider) => model(provider, "kiwi-k3", "Kiwi K3"));
+    const pays = (text: string) =>
+        at
+            .filter((each) => personNamed(text, each, at, (provider) => names[provider]!))
+            .map((each) => each.provider);
+
+    // A provider's word as an everyday word picks none of them.
+    for (const text of [
+        "use Kiwi K3",
+        "use Kiwi K3, go ahead",
+        "use Kiwi K3 for the coding task",
+        "use Kiwi K3 via the AI gateway",
+    ]) {
+        assert.deepEqual(pays(text), [], text);
+    }
+
+    // Its words after on, via, through, and the like do, one of them not the others'.
+    assert.deepEqual(pays("use Kiwi K3 on Acme Go"), ["acme-go"]);
+    assert.deepEqual(pays("use Kiwi K3 on Kiwi Coding"), ["kiwi-coding"]);
+    assert.deepEqual(pays("use Kiwi K3 via Zeta AI Gateway"), ["zeta-gateway"]);
+    assert.deepEqual(pays("use Kiwi K3 through acme-go"), ["acme-go"]);
+});
+
 test("words that name a model not signed in name no shorter one that is", () => {
     const zeta = model("acme", "zeta-5", "Zeta 5");
     const nano = model("acme", "zeta-5-nano", "Zeta 5 Nano");

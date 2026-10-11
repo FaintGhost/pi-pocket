@@ -142,6 +142,9 @@ function phrases(model: Model<Api>, loosely: boolean): Phrase[] {
 
 const modelKey = (model: Model<Api>) => `${model.provider}/${model.id}`;
 
+/** The words a person names a provider after, as the one to pay: "on copilot", "via OpenRouter". */
+const VIA = new Set(["on", "via", "through", "with", "using", "from"]);
+
 /**
  * The models among `models` that `text` names, by the phrases above. Where a phrase of one model runs on into a longer
  * phrase of another, from the same word, the text names only the longer one: "gpt-5-nano" names gpt-5-nano, not gpt-5.
@@ -195,8 +198,8 @@ export function sharePhrase(text: string, a: Model<Api>, b: Model<Api>): boolean
  * Whether a person's `text` names `model`, as they would say it, among the `models` signed in: words that name a longer
  * one of them, or of `among` (every model Pi knows), do not name `model` ("gpt-5-nano" is not gpt-5). When the same
  * words name it at another provider too (Claude Opus 4.5 is at Anthropic and GitHub Copilot), the provider must be
- * named as well, by a word of its id or name that the others do not share ("copilot", "codex"): which one pays is
- * theirs to say.
+ * named as well, by a word of its id or name that the others do not share ("copilot", "codex"), right after one of
+ * `VIA` ("on copilot"): which one pays is theirs to say, and its word elsewhere ("go ahead") is ordinary text.
  */
 export function personNamed(
     text: string,
@@ -219,12 +222,26 @@ export function personNamed(
 
     const providerWords = (provider: string) =>
         new Set([...words(provider), ...words(providerName(provider))]);
+    const own = providerWords(model.provider);
     const shared = new Set([
         ...twins.flatMap((other) => [...providerWords(other.provider)]),
         ...words(model.id),
         ...words(model.name),
     ]);
-    const said = new Set(words(text));
+    const said = words(text);
 
-    return [...providerWords(model.provider)].some((word) => !shared.has(word) && said.has(word));
+    // Its words right after "on" (or "via"…), one of them not the others': "on Kiwi Coding" names Kiwi Coding.
+    return said.some((word, index) => {
+        if (!VIA.has(word)) {
+            return false;
+        }
+
+        for (let next = index + 1; own.has(said[next] ?? ""); next++) {
+            if (!shared.has(said[next]!)) {
+                return true;
+            }
+        }
+
+        return false;
+    });
 }
