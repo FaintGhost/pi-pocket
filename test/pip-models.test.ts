@@ -298,6 +298,36 @@ test("a two-character short name counts only with its family's word in the same 
     assert.equal(personNamed(indexed(["I like zeta", "use Z9"]), zeta, all), false);
 });
 
+test("a model's name, and who pays after on or via, stay in one message", () => {
+    const four = model("acme", "zeta-4o", "Zeta 4o");
+    const nano = model("acme", "zeta-5-nano", "Zeta 5 Nano");
+    const all = [four, nano];
+
+    // From the end of one message into the start of the next, they name nothing.
+    for (const messages of [
+        ["I like zeta", "4o apps"],
+        ["please use zeta", "5 nano is fine"],
+    ]) {
+        assert.deepEqual(modelsNamed(indexed(messages), all, true), [], messages.join(" | "));
+    }
+
+    // In one message, they do.
+    assert.deepEqual(modelsNamed(indexed(["hello", "I like zeta 4o"]), all, true), [four]);
+    assert.deepEqual(modelsNamed(indexed(["use zeta 5 nano", "thanks"]), all, true), [nano]);
+
+    const names: Record<string, string> = { "acme-go": "Acme Go", "kiwi-coding": "Kiwi Coding" };
+    const at = Object.keys(names).map((provider) => model(provider, "kiwi-k3", "Kiwi K3"));
+    const pays = (messages: string[]) =>
+        at
+            .filter((each) =>
+                personNamed(indexed(messages), each, at, (provider) => names[provider]!),
+            )
+            .map((each) => each.provider);
+
+    assert.deepEqual(pays(["use kiwi k3 on", "go ahead"]), []);
+    assert.deepEqual(pays(["use kiwi k3 on acme go", "thanks"]), ["acme-go"]);
+});
+
 test("words that name a model not signed in name no shorter one that is", () => {
     const zeta = model("acme", "zeta-5", "Zeta 5");
     const nano = model("acme", "zeta-5-nano", "Zeta 5 Nano");

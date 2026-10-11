@@ -89,9 +89,9 @@ const read = (text: string | Indexed): Indexed => (typeof text === "string" ? in
 type Phrase = { words: readonly string[]; joins?: readonly string[]; family?: Phrase };
 
 /**
- * Where `phrase` is a run of `text`'s words, joined as it says when it says, and not cut off in the middle of a written
- * word or a version ("zeta-5" in "zeta-5o" or "zeta-5.2"), with its family word in the same message if it needs one:
- * the index of its first word, each time.
+ * Where `phrase` is a run of `text`'s words, in one message, joined as it says when it says, and not cut off in the
+ * middle of a written word or a version ("zeta-5" in "zeta-5o" or "zeta-5.2"), with its family word in the same message
+ * if it needs one: the index of its first word, each time.
  */
 function starts(text: Indexed, phrase: Phrase): number[] {
     const length = phrase.words.length;
@@ -106,6 +106,7 @@ function starts(text: Indexed, phrase: Phrase): number[] {
 
         return (
             start + length <= text.joins.length &&
+            text.messages[start + length - 1] === text.messages[start] &&
             (after === undefined || after === " ") &&
             phrase.words.every(
                 (word, offset) =>
@@ -289,10 +290,15 @@ export function personNamed(
         ...words(model.name),
     ]);
 
-    // Its words right after "on" (or "via"…), one of them not the others': "on Kiwi Coding" names Kiwi Coding.
+    // Its words right after "on" (or "via"…), in its message, one of them not the others': "on Kiwi Coding" names Kiwi
+    // Coding.
     return [...VIA].some((via) =>
         (said.at.get(via) ?? []).some((index) => {
-            for (let next = index + 1; own.has(said.words[next] ?? ""); next++) {
+            for (
+                let next = index + 1;
+                said.messages[next] === said.messages[index] && own.has(said.words[next] ?? "");
+                next++
+            ) {
                 if (!shared.has(said.words[next]!)) {
                     return true;
                 }
