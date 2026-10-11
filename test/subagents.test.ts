@@ -23,6 +23,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { type ConversationId, InboxDoc, type TaskId } from "@earendil-works/pi-durable";
+import { dealtWith } from "../src/server/commands.ts";
 import { ChatDoc, SubagentsDoc } from "../src/server/docs.ts";
 import { runningNow } from "../src/server/running.ts";
 
@@ -1164,6 +1165,28 @@ test("the activity line quotes a subagent's name, cut short: Pi chose it", async
             .map((each) => each.text),
         [`dealt with the failure of subagent “\u2068slow-${"x".repeat(54)}…\u2069”`],
     );
+});
+
+test("a subagent's name in the activity line keeps its letters in every script, and nothing that closes its quotes", () => {
+    const line = (shown: string) => `dealt with the failure of subagent “\u2068${shown}\u2069”`;
+
+    // Letters, marks, and digits, in every script, come through whole.
+    for (const name of [
+        "हिन्दी-समीक्षा",
+        "サーバー確認",
+        "nai\u0308ve-check",
+        "Ünïcødé_2.0",
+        "خادم-مراجعة",
+        "בדיקה 3",
+    ]) {
+        assert.equal(dealtWith(name), line(name), name);
+    }
+
+    // Quote marks, and what looks like one; controls; and a mark with nothing under it, to sit on a quote.
+    assert.equal(dealtWith(`a"b“c”d'e«f»g‹h›i＂j`), line("abcdefghij"));
+    assert.equal(dealtWith("a″bʺcʼdˮeʹfߴgꞌh´i`j"), line("abcdefghij"));
+    assert.equal(dealtWith("a\u202eb\u200bc\u2066d\u2069e\u0007f"), line("abcdef"));
+    assert.equal(dealtWith("\u030ba \u030bb"), line("a b"));
 });
 
 test("a subagent's name cannot close its quotes in the activity line", async () => {

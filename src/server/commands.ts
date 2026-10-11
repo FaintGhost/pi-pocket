@@ -98,18 +98,26 @@ const MAX_TITLE = 120;
 /** A title as stored: one line, so it cannot pass for more lines where it is quoted (PiP's lists, reports). */
 const oneLine = (title: string): string => title.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE);
 /**
- * What a subagent's name drops where it is quoted, to keep its letters, digits, spaces, and ". _ -" only: no mark of its
- * own then closes the quotes, whether a quote mark, one that looks like one ("″", "ʺ"), or a control that turns the
- * text around or hides.
+ * What a subagent's name drops where it is quoted, to keep its letters, marks, and digits, in every script ("हिन्दी",
+ * "サーバー"), its spaces, and ". _ -": no mark of its own then closes the quotes. Every quote mark goes, and every other
+ * sign or symbol ("″", "´"); every control, those that turn the text around, hide, or end its isolate too; and the
+ * modifier letters that are quote marks or apostrophes in form ("ʺ", "ʼ", "ˮ", the Greek "ʹ", NKo's "ߴ", the saltillo
+ * "ꞌ").
  */
-const UNQUOTED = /[^\p{L}\p{N}\s._-]|\p{Lm}/gu;
+const UNQUOTED = /[^\p{L}\p{M}\p{N}\s._-]|[\u02B0-\u02FF\u0374\u07F4\u07F5\uA78B\uA78C]/gu;
+/** A mark with no letter or digit under it (first, or after a space), which would sit on the quote beside it. */
+const UNBORNE = /(?<![\p{L}\p{M}\p{N}])\p{M}+/gu;
+
 /**
  * A person's activity line when they dealt with a subagent's failure, in its parent session: Pi named it, so quoted, and
  * isolated (U+2068 … U+2069), so a name that ends in right-to-left letters keeps the closing quote and what follows (the
  * line's clock) after it. It cannot end the isolate itself: such controls are among what it drops.
  */
-const dealtWith = (name: string): string =>
-    `dealt with the failure of subagent “\u2068${snippet(name.replace(UNQUOTED, ""), 60)}\u2069”`;
+export const dealtWith = (name: string): string => {
+    const shown = snippet(name.replace(UNQUOTED, "").replace(UNBORNE, ""), 60);
+
+    return `dealt with the failure of subagent “\u2068${shown}\u2069”`;
+};
 
 /** What dismissing a subagent's failure came to: `newer` when it failed again since the failure seen. */
 type Dismissal = { dismissed: boolean; newer?: true };
