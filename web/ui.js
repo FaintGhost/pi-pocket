@@ -248,6 +248,16 @@ function sanitize(html, fold) {
         }
     }
 
+    // Local Markdown links open the same viewer as inline code paths.
+    for (const link of fragment.querySelectorAll("a[href]")) {
+        const path = linkedPath(link.getAttribute("href") ?? "");
+
+        if (path !== null) {
+            link.dataset.path = path;
+            link.removeAttribute("target");
+        }
+    }
+
     for (const pre of fragment.querySelectorAll("pre")) {
         codeBlock(pre, fold);
     }
@@ -347,6 +357,11 @@ DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
     // Before the URL check, so file:// and plain paths become app URLs instead of being dropped.
     if (node.nodeName === "IMG" && data.attrName === "src") {
         data.attrValue = imageSource(data.attrValue, rendering);
+    } else if (node.nodeName === "A" && data.attrName === "href") {
+        // `app.ts:42` looks like a URL scheme to the sanitizer; `./app.ts:42` is the same local file.
+        if (/^[a-z][a-z0-9+.-]*:/i.test(data.attrValue) && linkedPath(data.attrValue) !== null) {
+            data.attrValue = `./${data.attrValue}`;
+        }
     }
 });
 
@@ -463,6 +478,28 @@ function looksLikePath(text) {
     return match !== null && (match[1] !== "" || FILE_TYPES.has(match[3].toLowerCase()));
 }
 
+/** A local file link, using the same path recognition as inline code. App routes and URL schemes stay links. */
+function linkedPath(href) {
+    let path;
+
+    try {
+        path = decodeURIComponent(href);
+    } catch {
+        return null;
+    }
+
+    const withoutLine = path.replace(/:\d+(?:-\d+)?$/, "");
+
+    if (
+        /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(withoutLine) ||
+        /^\/(?:api|a|s|login|join|share)(?:\/|[?#]|$)/.test(path)
+    ) {
+        return null;
+    }
+
+    return looksLikePath(path) ? path : null;
+}
+
 /**
  * Open a file (or folder) of the session in the viewer: in the Files tile while it is open, otherwise in a sheet.
  * `path:42` opens it at line 42.
@@ -487,14 +524,15 @@ export function openFile(path) {
 
 /** File paths in rendered markdown open in the viewer. */
 document.addEventListener("click", (event) => {
-    const code = event.target.closest?.(".md code[data-path]");
+    const target = event.target.closest?.(".md code[data-path], .md a[data-path]");
 
-    if (!code || getSelection()?.toString()) {
+    if (!target || getSelection()?.toString()) {
         return;
     }
 
+    event.preventDefault();
     event.stopPropagation();
-    openFile(code.dataset.path);
+    openFile(target.dataset.path);
 });
 
 /** Images in rendered markdown open full screen, unless they are links. */
