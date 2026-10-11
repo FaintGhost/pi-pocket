@@ -111,13 +111,16 @@ export type SubagentRecord = {
     /** What the parent asked it last, the start of it, and when. */
     asked?: string;
     askedAt?: number;
-    /** When it last answered, or failed to (`failed`), what the parent asked; and why it failed, or that it was stopped. */
+    /**
+     * When it last answered, or failed to (`failed`), what the parent asked, or, once it failed, a person's own message to
+     * it; and why it failed, or that it was stopped.
+     */
     answeredAt?: number;
     failed?: boolean;
     error?: string;
     /**
-     * The failure a person dealt with (seen, dismissed, or sent it a message), by its `answeredAt`: it needs nobody
-     * now. A later failure has a later time, so it needs them again.
+     * The failure a person dealt with (seen, or dismissed), by its `answeredAt`: it needs nobody now. A later failure has
+     * a later time, so it needs them again.
      */
     dealtAt?: number;
 };

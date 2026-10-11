@@ -930,12 +930,37 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         assert.equal(entry(app)?.dealt, undefined);
         assert.equal(told(), "1 failed");
 
-        // A person who sends it a message deals with it there.
-        await app.commands.submit(sub, owner(app), { text: "Look again.", requestId: `a-${id}` });
-        await until(
-            () => isDeepStrictEqual(counts(app), { failed: 1, dealt: 1 }),
-            "dealt with by the message",
-        );
+        // A person's message to it settles it by what it comes to. Failing again, it still needs someone: the failure
+        // is the new one, and a person who dismissed the one before does not hide it.
+        const settled = async (text: string, after: number) => {
+            await app.commands.submit(sub, owner(app), { text, requestId: `${text}-${id}` });
+            await until(
+                async () => ((await record(app))?.answeredAt ?? 0) > after && !app.isBusy(sub),
+                `what "${text}" came to`,
+                15_000,
+            );
+
+            return (await record(app))!;
+        };
+
+        let now = (await record(app))!;
+
+        now = await settled("Look again.", now.answeredAt!);
+        assert.equal(now.failed, true);
+        assert.match(String(now.error), /Bad request/);
+        await until(() => isDeepStrictEqual(counts(app), { failed: 1 }), "it still needs someone");
+        assert.equal(await app.commands.dismissSubagent(sub, owner(app), now.answeredAt!), true);
+        await until(() => isDeepStrictEqual(counts(app), { failed: 1, dealt: 1 }), "dismissed");
+        now = await settled("And again.", now.answeredAt!);
+        assert.equal(now.failed, true);
+        await until(() => isDeepStrictEqual(counts(app), { failed: 1 }), "it needs someone again");
+
+        // Answered, it is done.
+        failing = new Set();
+        now = await settled("Try once more.", now.answeredAt!);
+        assert.equal(now.failed, false);
+        assert.equal(now.error, undefined);
+        await until(() => isDeepStrictEqual(counts(app), { done: 1 }), "done");
     } finally {
         failing = new Set();
         await first?.close();
@@ -943,6 +968,40 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         await app.close().catch(() => {});
         app = await openApp(scriptedModel(route), join(root, "subagents-data"));
     }
+});
+
+test("a person's message to a failed subagent settles that failure, never a newer one nobody saw", async () => {
+    failing = new Set(["late"]);
+    const id = await orchestrate({ spawn: ["late"], rounds: 0, sleep: 0 });
+    const record = async () => (await app.harness.snapshot(SubagentsDoc, id, context))?.agents.late;
+
+    await until(
+        async () => (await delivered(id)).late === 1 && !app.isBusy(id),
+        "the failure reported to Pi",
+        15_000,
+    );
+    const sub = (await record())!.conversationId;
+
+    // Its run on the person's message takes a while, and answers; meanwhile a newer failure is recorded, as Pi's work
+    // there would.
+    failing = new Set();
+    slow = { late: 0.5 };
+    await app.commands.submit(sub, owner(app), { text: "Have another go.", requestId: `go-${id}` });
+    await until(() => app.isBusy(sub), "its run under way");
+    const newer = Date.now();
+
+    await app.harness.commit(async (tx) => {
+        const agent = (await tx.doc(SubagentsDoc, id)).agents.late!;
+
+        agent.answeredAt = newer;
+        agent.failed = true;
+        agent.error = "a newer failure";
+    }, context);
+    await until(() => !app.isBusy(sub), "its run done", 15_000);
+    // There is nothing to wait for: its answer must change nothing. Past the commit it would make.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal((await record())?.answeredAt, newer);
+    assert.equal((await record())?.error, "a newer failure");
 });
 
 /** The subagents document of `id`: why its reports wait, if they do, and what waits. */

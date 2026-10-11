@@ -33,11 +33,12 @@ import {
     type TaskRuntime,
     type Tx,
 } from "@earendil-works/pi-durable";
-import { type PendingReport, REPORT_PREFIX, STOPPED, SubagentsDoc } from "../docs.ts";
+import { type PendingReport, REPORT_PREFIX, SubagentsDoc } from "../docs.ts";
 import { describe } from "../errors.ts";
 import type { PocketHost } from "../host.ts";
 import { levelAtMost, sameModel, THINKING_LEVELS } from "../models.ts";
 import { requestFor } from "../requests.ts";
+import { whyUnanswered } from "../subagent-runs.ts";
 
 function textOf(message: AssistantMessage | undefined): string {
     return (message?.content ?? [])
@@ -267,22 +268,6 @@ function modelFailure(reason: string, detail: unknown): boolean {
 /** What a report of a subagent its model failed tells Pi, after why. */
 export const MODEL_FAILED =
     "Its model or provider failed. Do not start it again on another model, and do not work around it: stop, and tell the user what failed and why. Only the user chooses models, and signs in again.";
-
-/** Why a subagent did not answer, for its report and its row: what went wrong, in a line, or that it was stopped. */
-function whyUnanswered(reason: string, detail: unknown): string {
-    if (reason === "aborted") {
-        return STOPPED;
-    }
-
-    if (reason === "no_model") {
-        return "its model is not available here";
-    }
-
-    const text = typeof detail === "string" && detail.trim() !== "" ? detail : reason;
-
-    // One line, and no "]", which ends a report's head.
-    return text.replace(/\s+/g, " ").replace(/]/g, ")").trim().slice(0, 200);
-}
 
 /** The submission of the batch `request`, while it waits in `conversationId`'s queue; undefined once it has left. */
 async function queuedBatch(

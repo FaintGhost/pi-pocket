@@ -46,6 +46,7 @@ import { snippet } from "./projection.ts";
 import { expandPromptTemplate, expandSkillCommand, unwrapSkill } from "./prompts.ts";
 import { clientKey, ownRequest, requestFor } from "./requests.ts";
 import { type Resend, resendContent, resendRequest, ResendTask, userContent } from "./resend.ts";
+import { whyUnanswered } from "./subagent-runs.ts";
 import { wantsTitle, writeTitle } from "./titles.ts";
 import { describeMoment, describeRepeat, knownZone } from "./when.ts";
 import {
@@ -540,6 +541,8 @@ export class Commands {
             via === undefined
                 ? ownRequest(user.id, clientKey(request.requestId))
                 : requestFor(user.id, clientKey(request.requestId));
+        // A failed subagent's failure as the person writes to it: what their message comes to settles it.
+        const failure = await this.#failureOf(id);
         const submission = await conversation.submit(
             {
                 type: "input",
@@ -552,11 +555,78 @@ export class Commands {
 
         app.collab.setTyping(id, user, null);
         await this.#touched(id, typed, text === typed ? undefined : text);
-        this.#reportUnanswered(id, submission.wait(context));
-        // A person who sends a failed subagent a message deals with its failure there: a later run takes its place.
-        await this.#dismissFailure(id);
+        const settled = submission.wait(context);
+
+        this.#reportUnanswered(id, settled);
+
+        if (failure !== undefined) {
+            this.#settleFailure(id, failure, settled);
+        }
 
         return { submissionId: submission.id, requestId };
+    }
+
+    /** When a subagent (`id`, its conversation) failed, if it is failed now (not stopped); undefined otherwise. */
+    async #failureOf(id: ConversationId): Promise<number | undefined> {
+        const parent = this.#app.parentOf(id);
+
+        if (parent === undefined) {
+            return undefined;
+        }
+
+        const agents = (await this.#app.harness.snapshot(SubagentsDoc, parent, context))?.agents;
+        const record = Object.values(agents ?? {}).find((each) => each.conversationId === id);
+
+        return record?.failed === true && record.error !== STOPPED
+            ? (record.answeredAt ?? 0)
+            : undefined;
+    }
+
+    /**
+     * What a person's message to a failed subagent (`id`) came to, kept as its reports keep what Pi's work came to:
+     * answered, it is done and needs nobody; unanswered, it failed again (or was stopped), which is its failure now. Not
+     * while its record holds a failure newer than the one they wrote to (`failure`): nobody saw that one. Nothing here
+     * reaches the person, whose message went: a commit that fails is logged. Not kept over a restart: the failure then
+     * stays as it was.
+     */
+    #settleFailure(
+        id: ConversationId,
+        failure: number,
+        settled: Promise<{ status: string; reason?: string; detail?: unknown }>,
+    ): void {
+        const app = this.#app;
+
+        void settled
+            .then((result) =>
+                app.harness.commit(async (tx) => {
+                    const parent = app.parentOf(id);
+                    const agents =
+                        parent === undefined ? {} : (await tx.doc(SubagentsDoc, parent)).agents;
+                    const name = Object.keys(agents).find(
+                        (each) => agents[each]!.conversationId === id,
+                    );
+                    const record = name === undefined ? undefined : agents[name]!;
+
+                    if (
+                        record === undefined ||
+                        (record.failed === true && (record.answeredAt ?? 0) !== failure)
+                    ) {
+                        return;
+                    }
+
+                    record.answeredAt = Date.now();
+                    record.failed = result.status === "unanswered";
+
+                    if (result.status === "unanswered") {
+                        record.error = whyUnanswered(result.reason ?? "", result.detail);
+                    } else {
+                        delete record.error;
+                    }
+                }, context),
+            )
+            .catch((error: unknown) =>
+                app.log(`what a message to ${String(id)} came to: ${describe(error)}`),
+            );
     }
 
     /**
@@ -581,8 +651,8 @@ export class Commands {
         return this.#dismissFailure(id, at);
     }
 
-    /** Mark a subagent's failure (the one at `at`, or the one it has now) dealt with; false when there is none to. */
-    async #dismissFailure(id: ConversationId, at?: number): Promise<boolean> {
+    /** Mark a subagent's failure, the one at `at`, dealt with; false when it has no such failure, or it already was. */
+    async #dismissFailure(id: ConversationId, at: number): Promise<boolean> {
         const parent = this.#app.parentOf(id);
 
         if (parent === undefined) {
@@ -601,7 +671,7 @@ export class Commands {
                 record.failed !== true ||
                 record.error === STOPPED ||
                 record.dealtAt === failure ||
-                (at !== undefined && at !== failure)
+                at !== failure
             ) {
                 return false;
             }
