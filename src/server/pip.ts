@@ -528,12 +528,18 @@ export class Pip {
      * that they set up. Never the instructions of a watch PiP set up (its own words, checked against the models signed
      * in then), what was posted to a webhook, what GitHub said, a report, or anything else sent for them. Each message
      * apart: a short name's family word counts in its own message only. `messages`: their messages alone, with their
-     * entries, newest first.
+     * entries, newest first. `newest`: the newest entry of PiP's conversation; `since`: where its context starts, as far
+     * as this read (its new context's entry, the oldest its last compaction kept, or the oldest read).
      */
     async #personWords(
         pipId: ConversationId,
         user: User,
-    ): Promise<{ words: string[]; messages: { id: number; text: string }[] }> {
+    ): Promise<{
+        words: string[];
+        messages: { id: number; text: string }[];
+        newest: number | undefined;
+        since: number;
+    }> {
         const app = this.#app;
         const own = (await app.harness.snapshot(AuthorsDoc, pipId, context))?.entries ?? {};
         const conversation = await app.conversation(pipId);
@@ -542,17 +548,28 @@ export class Pip {
         let keptFrom: number | undefined;
         let cursor: Cursor | undefined;
         let read = 0;
+        let newest: number | undefined;
+        let since = 0;
 
         scan: do {
             const page = await conversation.entries({}, NAMED_IN_PAGE, cursor, context);
 
             for (const entry of page.items) {
-                if (
-                    entry.kind === ResetEntry.kind ||
-                    (keptFrom !== undefined && entry.id < keptFrom)
-                ) {
+                newest ??= Number(entry.id);
+
+                if (entry.kind === ResetEntry.kind) {
+                    since = Number(entry.id);
+
                     break scan;
                 }
+
+                if (keptFrom !== undefined && entry.id < keptFrom) {
+                    since = keptFrom;
+
+                    break scan;
+                }
+
+                since = Number(entry.id);
 
                 if (entry.kind === CompactionEntry.kind) {
                     keptFrom ??= entry.head ?? Number(entry.id);
@@ -587,29 +604,34 @@ export class Pip {
                 ...standing.map((each) => each.instructions ?? ""),
             ],
             messages,
+            newest,
+            since,
         };
     }
 
     /**
-     * Whether the person's newest message (`messages`, newest first) answers the question PiP was last told to ask, which
-     * provider pays (`PipAskedDoc`), with `model`'s: their first message since, it is just the whole name or id of the
-     * provider of one of the models asked about, `model` among them, and of no other provider asked about. Everyday words
-     * ("sure", "go") answer nothing, and nor does a question from before Start fresh.
+     * Whether the person's newest message (`person`'s) answers the question PiP was last told to ask, which provider pays
+     * (`PipAskedDoc`), with `model`'s: asked in PiP's context now, it is their first message since, and just the whole
+     * name or id of the provider of one of the models asked about, `model` among them, and of no other provider asked
+     * about. Everyday words ("sure", "go") answer nothing, and no question from before PiP's context began is answered:
+     * one from before Start fresh (whenever that came: sent while PiP works, it waits for its next pause), one from
+     * before what its last compaction kept, or one an earlier build kept (without `at`).
      */
     async #answered(
         pipId: ConversationId,
         model: { provider: string; id: string },
-        messages: readonly { id: number; text: string }[],
+        person: { messages: readonly { id: number; text: string }[]; since: number },
         providerName: (provider: string) => string,
     ): Promise<boolean> {
         const asked = (await this.#app.harness.snapshot(PipAskedDoc, pipId, context))?.asked;
-        const [newest, before] = messages;
+        const [newest, before] = person.messages;
 
         if (
-            asked === undefined ||
+            typeof asked?.at !== "number" ||
+            asked.at < person.since ||
             newest === undefined ||
-            newest.id <= asked.after ||
-            (before?.id ?? 0) !== asked.after ||
+            newest.id <= asked.at ||
+            (before !== undefined && before.id > asked.at) ||
             !asked.models.some((each) => each.provider === model.provider && each.id === model.id)
         ) {
             return false;
@@ -650,7 +672,7 @@ export class Pip {
         const theirs = modelsNamed(said, [model], true, [...available, ...known]).includes(model);
         const named =
             personNamed(said, model, available, providerName, known) ||
-            (theirs && (await this.#answered(pipId, model, person.messages, providerName)));
+            (theirs && (await this.#answered(pipId, model, person, providerName)));
 
         // Their words name it, but at more than one provider: which one pays is theirs to say. What PiP asks about is kept,
         // for their answer (`#answered`).
@@ -665,7 +687,7 @@ export class Pip {
             await app.harness.commit(async (tx) => {
                 (await tx.doc(PipAskedDoc, pipId)).asked = {
                     models: asked.map((each) => ({ provider: each.provider, id: each.id })),
-                    after: person.messages[0]?.id ?? 0,
+                    at: person.newest ?? 0,
                 };
             }, context);
 

@@ -35,6 +35,8 @@ import {
 
 /** PiP's last prompt, as its requests carry it. */
 let prompt = "";
+/** When set, PiP's next request that carries "hold on" waits for it: PiP stays at work until then. */
+let holding: Promise<void> | undefined;
 
 const route: FauxResponseStep = (request) => {
     const all = JSON.stringify((request as { messages: unknown[] }).messages);
@@ -46,6 +48,14 @@ const route: FauxResponseStep = (request) => {
     }
 
     prompt = all;
+
+    if (holding !== undefined && all.includes("hold on")) {
+        const held = holding;
+
+        holding = undefined;
+
+        return held.then(() => fauxAssistantMessage([fauxText("held")]));
+    }
 
     if (role === "toolResult") {
         return fauxAssistantMessage([fauxText(`done: ${text}`)]);
@@ -534,6 +544,58 @@ test("PiP takes its person's bare answer to which provider pays, right after it 
     await say(app, fresh, "start a session on faux z8 for the review");
     await say(app, fresh, "hub-copilot");
     await assert.rejects(app.pip.start(fresh, z8("hub-copilot")), twice);
+});
+
+test("PiP's question of which provider pays, from before Start fresh, is never answered after it", async () => {
+    const id = await pip();
+    const z8 = { model: "hub-copilot/faux-z8" };
+    const twice = /more than one signed-in provider has/;
+    // Faux Z8 is named only in a webhook's instructions they set up: nothing of theirs is in PiP's context.
+    const hook = await app.hooks.add(owner(app), id, {
+        name: "reviews",
+        instructions: "use faux z8 for every review",
+    });
+
+    let release = () => {};
+
+    holding = new Promise((resolve) => {
+        release = resolve;
+    });
+
+    try {
+        // A post to the webhook keeps PiP at work. Start fresh, meanwhile, waits for its next pause; before that, PiP
+        // is told to ask which provider pays.
+        await app.commands.submit(
+            id,
+            owner(app),
+            { text: "hold on", requestId: "held-1" },
+            "webhook reviews",
+        );
+        await until(() => app.isBusy(id), "PiP at work");
+        await app.commands.reset(id, owner(app), undefined);
+        await assert.rejects(app.pip.start(id, z8), twice);
+        const asked = (await app.transcripts.allEntries(id, true)).at(-1)!.id;
+
+        release();
+        await until(() => !app.isBusy(id), "PiP at rest");
+        const reset = (await app.transcripts.allEntries(id, true)).findLast(
+            (entry) => entry.kind === "reset",
+        );
+
+        assert.ok(reset !== undefined && reset.id > asked, "Start fresh came after the question");
+
+        // Their first words in the new context are not its answer: PiP asks again, and then they are.
+        await say(app, id, "Hub Copilot");
+        await assert.rejects(app.pip.start(id, z8), twice);
+        await say(app, id, "Hub Copilot");
+        const made = await app.pip.start(id, z8);
+
+        assert.equal((await app.agentState(made))?.model?.provider, "hub-copilot");
+    } finally {
+        release();
+        holding = undefined;
+        await app.hooks.remove(owner(app), hook.id);
+    }
 });
 
 test("PiP takes a longer model's name for that model only", async () => {

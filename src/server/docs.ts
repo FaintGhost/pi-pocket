@@ -447,11 +447,11 @@ export const FollowsDoc = defineDoc<{
 
 /**
  * Which provider pays, as PiP was last told to ask its person (`pip.ts`): the models their words named, at more than one
- * provider, and their newest message then (`after`, 0 for none). Their next message answers it when it is just one of
- * those providers' whole name or id.
+ * provider, and the newest entry of PiP's conversation then (`at`). Their next message answers it when it is just one of
+ * those providers' whole name or id, in the same context.
  */
 export const PipAskedDoc = defineDoc<{
-    asked?: { models: { provider: string; id: string }[]; after: number };
+    asked?: { models: { provider: string; id: string }[]; at: number };
 }>({
     kind: "pocket.pip-asked",
     version: 1,
