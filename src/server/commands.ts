@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { basename, extname, join } from "node:path";
+import type { Context } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
     clampThinkingLevel,
@@ -21,9 +22,12 @@ import {
     type ConversationId,
     defineTask,
     type EntryId,
+    LiveDoc,
     type ModelRef,
+    type SettledSubmissionRecord,
     type SubmissionId,
     type Task,
+    type TaskRuntime,
 } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
@@ -184,13 +188,91 @@ function settle(
     return cleared;
 }
 
+/**
+ * What a person's message (`requestId`) to subagent `id` came to; undefined when it is not there, or is left in the
+ * subagent's queue with no run to take it. Pi Durable leaves a failed run's queue alone, so a message sent while a run
+ * went on, which then failed, waits for the next one someone sends, if anyone does: its follow ends then, and the
+ * message stays where it is. Its known request id gives back the message sent, as it is now: nothing is sent again.
+ */
+async function followed(
+    runtime: TaskRuntime<Followed, { phase: "wait" }, null, object>,
+    id: ConversationId,
+    requestId: string,
+    context: Context,
+): Promise<SettledSubmissionRecord | undefined> {
+    // Where it is: gone, left (queued with no run), or sent. One commit reads both, and writes nothing.
+    const where = async () => {
+        let found = "gone" as "gone" | "left" | "sent";
+
+        await runtime.commit(async (tx) => {
+            const record = await tx.submissionByRequest(id, requestId);
+
+            if (record !== undefined) {
+                found =
+                    record.status === "queued" && (await tx.doc(LiveDoc, id)).run === undefined
+                        ? "left"
+                        : "sent";
+            }
+        }, context);
+
+        return found;
+    };
+
+    if ((await where()) !== "sent") {
+        return undefined;
+    }
+
+    const submission = await (
+        await runtime.conversation(id, context)
+    )?.submit({ type: "input", content: "", requestId }, context);
+    const watch = await runtime.watchDoc(LiveDoc, id, context);
+    let leave!: () => void;
+    const left = new Promise<undefined>((resolve) => {
+        leave = () => resolve(undefined);
+    });
+    // The look under way, if any: one the watch started may still be going when it stops.
+    let looking: Promise<void> = Promise.resolve();
+
+    // Each time the subagent has no run, a look at whether this message is left behind. A failed one is reported.
+    const look = (live: { run?: unknown } | null) => {
+        if (live !== null && live.run === undefined) {
+            looking = where().then(
+                (found) => (found === "left" ? leave() : undefined),
+                (error: unknown) => runtime.report(error),
+            );
+        }
+
+        return looking;
+    };
+
+    if (submission === undefined) {
+        await watch?.stop();
+
+        return undefined;
+    }
+
+    try {
+        if (watch !== undefined) {
+            // A listener is never called inline, so the value it started on is this one's to look at.
+            await look(watch.value);
+            watch.start(look);
+        }
+
+        return await Promise.race([submission.wait(context), left]);
+    } finally {
+        // On every way out, so no watch outlives the phase, nor a look its commit.
+        await watch?.stop();
+        await looking;
+    }
+}
+
 export class Commands {
     readonly #app: PocketApp;
     /**
      * Follows a person's message to a failed subagent to its end and settles the failure by it (`settle`): a task of the
      * parent's, beside its work, so a restart before the run ends still settles it, as the subagent's reports do Pi's
-     * work. It finds the message by its request id, and never sends one. Answered, the parent's activity says who dealt
-     * with the failure.
+     * work. It finds the message by its request id, and never sends one (`followed`). Answered, the parent's activity
+     * says who dealt with the failure. A message left in the queue by a run that failed ends it, settling nothing.
      */
     readonly followTask: Task<Followed, { phase: "wait" }, null, object>;
 
@@ -204,19 +286,7 @@ export class Commands {
                 wait: async (task, runtime, context) => {
                     const { subagent, requestId, failure, by } = task.input;
                     const id = subagent as unknown as ConversationId;
-                    let sent = false;
-
-                    await runtime.commit(async (tx) => {
-                        sent = (await tx.submissionByRequest(id, requestId)) !== undefined;
-                    }, context);
-                    // Its known request id gives back the message sent, as it is now: nothing is sent again.
-                    const conversation = sent ? await runtime.conversation(id, context) : undefined;
-                    const settled = await (
-                        await conversation?.submit(
-                            { type: "input", content: "", requestId },
-                            context,
-                        )
-                    )?.wait(context);
+                    const settled = await followed(runtime, id, requestId, context);
                     let cleared: string | undefined;
 
                     await runtime.commit(async (tx) => {

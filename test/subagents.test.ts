@@ -24,6 +24,7 @@ import type { FauxResponseStep } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { type ConversationId, InboxDoc, type TaskId } from "@earendil-works/pi-durable";
 import { ChatDoc, SubagentsDoc } from "../src/server/docs.ts";
+import { runningNow } from "../src/server/running.ts";
 
 /** What the parent does: the subagents it starts, then how many rounds of `sleep` it works through. */
 let plan = { spawn: [] as string[], rounds: 0, sleep: 0.2 };
@@ -1081,6 +1082,60 @@ test("what a person's message to a failed subagent comes to is kept over a resta
         await app.close().catch(() => {});
         app = await openApp(scriptedModel(route), join(root, "subagents-data"));
     }
+});
+
+test("a message left in a failed subagent's queue by a run that failed ends its follow, and stays there", async () => {
+    failing = new Set(["stuck"]);
+    const id = await orchestrate({ spawn: ["stuck"], rounds: 0, sleep: 0 });
+    const record = async () =>
+        (await app.harness.snapshot(SubagentsDoc, id, context))?.agents.stuck;
+    const tasks = async () =>
+        (await runningNow(app, owner(app))).find((each) => each.id === Number(id))?.tasks ?? [];
+
+    await until(
+        async () => (await record())?.failed === true && !app.isBusy(id),
+        "its failure",
+        15_000,
+    );
+    const failed = (await record())!;
+    const sub = failed.conversationId as ConversationId;
+
+    // The person's first message runs, and its run fails after a sleep; their second waits behind it.
+    failing = new Set();
+    slow = { stuck: 1 };
+    lateFail = new Set(["stuck"]);
+    await app.commands.submit(sub, owner(app), { text: "Try again.", requestId: "stuck-1" });
+    await until(() => app.isBusy(sub), "its run under way");
+    await app.commands.submit(sub, owner(app), { text: "And this.", requestId: "stuck-2" });
+    assert.equal(
+        (await tasks()).filter(
+            (each) => each.label === "waiting for a failed subagent to answer a message",
+        ).length,
+        2,
+        "each message followed, in words",
+    );
+
+    // The first one's run failed: that is its failure now. The second, left in the queue, ends its follow.
+    await until(
+        async () => (await record())!.answeredAt! > failed.answeredAt! && !app.isBusy(sub),
+        "what the first came to",
+        15_000,
+    );
+    await until(async () => (await tasks()).length === 0, "nothing running", 15_000);
+    assert.equal((await record())!.failed, true);
+    assert.equal((await app.harness.snapshot(InboxDoc, sub, context))?.items.length, 1);
+
+    // Never withdrawn: the next message runs it too.
+    slow = {};
+    lateFail = new Set();
+    await app.commands.submit(sub, owner(app), { text: "Last try.", requestId: "stuck-3" });
+    await until(async () => (await record())!.failed === false, "answered", 15_000);
+    assert.deepEqual(
+        (await app.transcripts.allEntries(sub, true)).flatMap((entry) =>
+            entry.kind === "user" ? [entry.text] : [],
+        ),
+        ["Check stuck, please.", "Try again.", "And this.", "Last try."],
+    );
 });
 
 test("the activity line quotes a subagent's name, cut short: Pi chose it", async () => {
