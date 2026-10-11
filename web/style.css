@@ -3243,10 +3243,12 @@ button.chip:hover {
     text-align: left;
     border: 1px solid transparent;
     user-select: none;
+    -webkit-touch-callout: none;
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.session:hover {
+.session:hover,
+.session-row.pressing .session {
     background: var(--hover);
 }
 
@@ -3465,7 +3467,7 @@ button.chip:hover {
     color: var(--brand);
 }
 
-/* Touch screens archive and pin from the session's menu instead: an unseen button would take taps meant for the row. */
+/* Touch screens archive and pin from a long press on the row instead: an unseen button would take taps meant for it. */
 @media (hover: none) {
     .session-actions {
         display: none;
@@ -3577,6 +3579,18 @@ button.chip:hover {
 .select-clear:hover {
     background: var(--hover);
     color: var(--text);
+}
+
+/* A thumb's size on a touch screen, where a long press starts a selection. */
+@media (pointer: coarse) {
+    .select-bar .button {
+        min-height: 36px;
+        padding-inline: 0.8rem;
+    }
+    .select-clear {
+        width: 36px;
+        height: 36px;
+    }
 }
 
 .sessions-empty {

@@ -215,12 +215,37 @@ function subagentsTip(counts) {
     return `${kinds.map((kind) => `${counts[kind]} ${kind}`).join(" · ")} subagent${total === 1 ? "" : "s"}`;
 }
 
+/** How long a finger rests on a row before its actions open, and how far it may stray meanwhile (more is a scroll). */
+const PRESS_MS = 450;
+const PRESS_SLOP = 10;
+
+/** The list whose row a finger last held: Select in that row's sheet selects there. */
+let pressedIn = null;
+
+/**
+ * Select a session in the list where its row was held, and let taps there select more (or let go), as Ctrl/⌘+click
+ * does with a mouse. From the sheet a long press opens.
+ */
+export function selectFromList(id) {
+    pressedIn?.current?.(id);
+}
+
 /**
  * One session on one line: its folder's color, its title, and on the right what goes on there (its working subagents,
  * who else is in it, Pi working, a call waiting for you), unread chat, and how long ago. Its folder and model are in
  * its tooltip.
  */
-function SessionRow({ session, index, number, needle, selected, folders, onPick, onSelect }) {
+function SessionRow({
+    session,
+    index,
+    number,
+    needle,
+    selected,
+    pressing,
+    folders,
+    onPick,
+    onSelect,
+}) {
     const { conversationId, server, me } = store.state;
     const pinned = isPinned(session.id);
     const open = session.id === conversationId && !session.archived;
@@ -244,7 +269,7 @@ function SessionRow({ session, index, number, needle, selected, folders, onPick,
     const acts = (canSteer() ? 1 : 0) + (session.archived ? 0 : 1);
 
     return html`<div
-        class=${`session-row ${open ? "active" : ""} ${selected ? "selected" : ""} ${moving ? "moving" : ""} ${["no-acts", "one-act", ""][acts]}`}
+        class=${`session-row ${open ? "active" : ""} ${selected ? "selected" : ""} ${pressing ? "pressing" : ""} ${moving ? "moving" : ""} ${["no-acts", "one-act", ""][acts]}`}
         data-id=${session.id}
         style=${`--i:${index}`}
     >
@@ -382,6 +407,10 @@ export function SessionList({ compact = false }) {
     const [tab, setTabState] = useState(() => (prefs().group === "folder" ? "folders" : "recent"));
     const [closed, setClosed] = useState(readClosed);
     const [selected, setSelectedState] = useState(() => new Set());
+    // Taps select rows instead of opening them: a selection started from a long press's sheet, on a touch screen.
+    const [tapSelects, setTapSelects] = useState(false);
+    // The row a finger holds down, before its actions open.
+    const [pressing, setPressing] = useState(null);
     // The selection as drags and clicks see it between renders; the row a Shift+click extends from; the row a Ctrl/⌘ press
     // already selected, whose click then does nothing; the rows in view, in order.
     const picked = useRef(selected);
@@ -411,7 +440,32 @@ export function SessionList({ compact = false }) {
     const setSelected = (next) => {
         picked.current = next;
         setSelectedState(next);
+
+        if (next.size === 0) {
+            setTapSelects(false);
+        }
     };
+
+    // What Select in a held row's sheet does here; and what lets go of a press under way.
+    const startSelect = useRef(null);
+    const unpress = useRef(null);
+
+    startSelect.current = (id) => {
+        anchor.current = id;
+        setSelected(new Set([...picked.current, id]));
+        setTapSelects(true);
+    };
+
+    useEffect(
+        () => () => {
+            unpress.current?.();
+
+            if (pressedIn === startSelect) {
+                pressedIn = null;
+            }
+        },
+        [],
+    );
 
     const clearSelection = () => {
         anchor.current = null;
@@ -479,7 +533,7 @@ export function SessionList({ compact = false }) {
             return;
         }
 
-        if (event.ctrlKey || event.metaKey) {
+        if (event.ctrlKey || event.metaKey || (tapSelects && picked.current.size > 0)) {
             const next = new Set(picked.current);
 
             if (next.has(id)) {
@@ -499,13 +553,111 @@ export function SessionList({ compact = false }) {
     };
 
     /**
+     * A finger (or a pen) held on a row opens its actions in a sheet, as hovering shows them to a mouse: touch screens
+     * have no hover. The row shows the press while it is held; moving (a scroll, a drag) lets it go. The click the lift
+     * may then make, on the row or on the scrim that rose under it, does nothing.
+     */
+    const press = (event, id) => {
+        const session = sessions.find((each) => each.id === id);
+
+        // Nothing to offer: an archived session, for someone who cannot bring it back.
+        if (!event.isPrimary || !session || (session.archived && !canSteer())) {
+            return;
+        }
+
+        const { pointerId, clientX: x, clientY: y } = event;
+        let fired = false;
+        let after = 0;
+
+        const open = setTimeout(() => {
+            // Gone meanwhile (someone deleted it): nothing to open.
+            if (!store.state.sessions.some((each) => each.id === id)) {
+                return stop();
+            }
+
+            fired = true;
+            setPressing(null);
+            pressedIn = startSelect;
+            // Over the drawer, which stays: Select goes on there.
+            store.set({ sheet: { type: "session", id } });
+        }, PRESS_MS);
+
+        const move = (each) => {
+            if (
+                each.pointerId === pointerId &&
+                !fired &&
+                Math.hypot(each.clientX - x, each.clientY - y) > PRESS_SLOP
+            ) {
+                stop();
+            }
+        };
+
+        const lift = (each) => {
+            if (each.pointerId !== pointerId) {
+                return;
+            }
+
+            if (!fired) {
+                return stop();
+            }
+
+            // The lift's click comes at once, if at all; the next press is someone else's tap.
+            removeEventListener("pointerup", lift, true);
+            removeEventListener("pointercancel", lift, true);
+            addEventListener("pointerdown", stop, true);
+            after = setTimeout(stop, 400);
+        };
+
+        // A finger's click only: Enter on the sheet's item is a click too.
+        const eat = (each) => {
+            if (fired && each.detail > 0) {
+                each.preventDefault();
+                each.stopPropagation();
+                stop();
+            }
+        };
+
+        // Android's own long press: no menu, no text selection.
+        const quiet = (each) => each.preventDefault();
+
+        const stop = () => {
+            unpress.current = null;
+            clearTimeout(open);
+            clearTimeout(after);
+            setPressing((now) => (now === id ? null : now));
+            removeEventListener("pointermove", move, true);
+            removeEventListener("pointerup", lift, true);
+            removeEventListener("pointercancel", lift, true);
+            removeEventListener("pointerdown", stop, true);
+            removeEventListener("click", eat, true);
+            removeEventListener("contextmenu", quiet, true);
+        };
+
+        unpress.current?.();
+        unpress.current = stop;
+        setPressing(id);
+        addEventListener("pointermove", move, true);
+        addEventListener("pointerup", lift, true);
+        addEventListener("pointercancel", lift, true);
+        addEventListener("click", eat, true);
+        addEventListener("contextmenu", quiet, true);
+    };
+
+    /**
      * Ctrl/⌘+press on a row selects it (or, if it was selected, unselects it); dragging on does the same to every row
-     * between it and the pointer. Once the pointer moves, the list scrolls along near its top or bottom edge.
+     * between it and the pointer. Once the pointer moves, the list scrolls along near its top or bottom edge. A finger
+     * held on a row opens its actions instead.
      */
     const select = (event, id) => {
         held.current = null;
 
-        if (event.button !== 0 || event.pointerType !== "mouse") {
+        if (event.button !== 0) {
+            return;
+        }
+
+        if (event.pointerType !== "mouse") {
+            press(event, id);
+
             return;
         }
 
@@ -646,6 +798,9 @@ export function SessionList({ compact = false }) {
 
     // Esc lets go of the selection, unless something else takes it: a sheet, the launcher, a text field, or a menu.
     const selecting = selected.size > 0;
+
+    // On a touch screen, so does back.
+    useBack(tapSelects && selecting, clearSelection);
 
     useEffect(() => {
         if (!selecting) {
@@ -816,6 +971,7 @@ export function SessionList({ compact = false }) {
                                         number=${numbers.get(session.id)}
                                         needle=${needle}
                                         selected=${selected.has(session.id)}
+                                        pressing=${pressing === session.id}
                                         folders=${tab === "folders" && needle === ""}
                                         onPick=${pick}
                                         onSelect=${select}
