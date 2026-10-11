@@ -117,11 +117,14 @@ export const store = {
         pipView: emptyView(),
     },
     listeners: new Set(),
+    /**
+     * Change the state: by a patch, or by what a function of the state returns. The function runs first, so a change
+     * it makes on the way (a notice, say) is kept, not overwritten by the state as it was before.
+     */
     set(patch) {
-        this.state = {
-            ...this.state,
-            ...(typeof patch === "function" ? patch(this.state) : patch),
-        };
+        const change = typeof patch === "function" ? patch(this.state) : patch;
+
+        this.state = { ...this.state, ...change };
 
         for (const listener of this.listeners) {
             listener(this.state);

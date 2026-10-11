@@ -1,6 +1,7 @@
 // Signing in to a provider in a real browser, where this machine has Chromium. The server's word about a sign-in (its
 // next question, its end) can reach the page before the reply to the answer that led to it: the dialog then shows that
-// question, closes on success, shows a failure's error, never throws, and once closed stays closed.
+// question, closes on success with a notice that says so, shows a failure's error, never throws, and once closed stays
+// closed.
 import { type App, cleanUp, home, root, scriptedModel, until, work } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
@@ -187,6 +188,10 @@ async function answer(provider: string, value: string): Promise<void> {
     await page.click({ label: "Continue" });
 }
 
+/** A script that says whether a notice on screen says `text`. */
+const noticeSays = (text: string) =>
+    `return JSON.stringify([...document.querySelectorAll(".notice")].some((notice) => notice.textContent.includes(${JSON.stringify(text)})))`;
+
 /** Wait until the page has had every event the server sent so far: a notice sent now comes after them. */
 async function caughtUp(): Promise<void> {
     const word = `caught up ${String(Date.now())}`;
@@ -250,6 +255,7 @@ test("a failed sign-in shows its error, and once closed stays closed", real, asy
     );
     await caughtUp();
     assert.deepEqual(await problems(), []);
+    assert.equal(await inPage<boolean>(noticeSays("Signed in")), false, "no word of success");
 
     await page.click({ selector: `${dialog("keyed")} button[aria-label="Close"]` });
     await caughtUp();
@@ -307,13 +313,14 @@ test(
             `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("stepped")}') === null)`,
             "the dialog closed",
         );
+        await see(noticeSays("Signed in to stepped."), "the notice that says so");
         await caughtUp();
         assert.deepEqual(await problems(), []);
     },
 );
 
 test(
-    "a sign-in that works closes its dialog without an error, though it ended before the answer's reply",
+    "a sign-in that works closes its dialog and says so, without an error, though it ended before the answer's reply",
     real,
     async () => {
         await providers("keyed");
@@ -327,6 +334,7 @@ test(
             `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("keyed")}') === null)`,
             "the dialog closed",
         );
+        await see(noticeSays("Signed in to keyed."), "the notice that says so");
         await caughtUp();
         assert.deepEqual(await problems(), []);
     },
