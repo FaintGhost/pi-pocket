@@ -846,12 +846,13 @@ kbd {
     text-overflow: ellipsis;
 }
 
-/* The folder's color and last part, then the branch. */
+/* The folder's color and last part, then the branch. Keep its row while loading so the title stays put. */
 .title-sub {
     display: flex;
     align-items: center;
     gap: 7px;
     min-width: 0;
+    min-height: 1lh;
     font-size: 0.72rem;
     color: var(--muted);
     white-space: nowrap;
@@ -1087,6 +1088,38 @@ kbd {
     display: inline-flex;
     gap: 0.25rem;
     align-items: center;
+}
+
+/* The explicit parent route stays beside the message box on every layout, even when the dock scrolls. */
+.parent-session {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--accent);
+    font-size: 0.8rem;
+    text-align: left;
+}
+
+.parent-session:hover {
+    background: var(--hover);
+}
+
+.parent-session > :not(.parent-session-title) {
+    flex-shrink: 0;
+}
+
+.parent-session-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
 }
 
 /* A person's message: a filled row with a prompt mark, who and when over what they wrote. Scoped to its row: the
