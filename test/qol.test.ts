@@ -25,7 +25,7 @@ import { ProviderDoc, UsageDoc } from "@earendil-works/pi-durable";
 import { ShellRequestsDoc } from "../src/server/docs.ts";
 import { mentionedPaths } from "../src/server/files.ts";
 import type { ClientEntry } from "../src/server/projection.ts";
-import { cleanTitle, TITLE_PROMPT, titleModel, wantsTitle } from "../src/server/titles.ts";
+import { cleanTitle, TITLE_PROMPT, wantsTitle } from "../src/server/titles.ts";
 
 /** What the title model was last asked. */
 let titleAsked = "";
@@ -524,13 +524,12 @@ test("a long first message gets a short written title; a short one is the title"
         cleanTitle("Tối ưu hóa hiệu suất truy vấn cơ sở dữ liệu cho ứng dụng"),
         "Tối ưu hóa hiệu suất truy vấn cơ sở dữ liệu cho ứng dụng",
     );
-    const model = (id: string) => ({ id, provider: "p", input: ["text"] }) as never;
-
-    // The session's own model writes its title: never a cheaper one of its provider that nobody chose.
-    assert.equal(titleModel(model("big")).id, "big");
-
     const id = await newSession(app, folder);
 
+    // The session's own model writes its title, not the first or default one: its usage is the title's too.
+    await app.commands.configure(id, owner(app), {
+        model: { provider: "faux", modelId: "faux-2" },
+    });
     await say(
         app,
         id,
@@ -541,6 +540,10 @@ test("a long first message gets a short written title; a short one is the title"
             app.sessions().find((each) => each.id === Number(id))?.title ===
             "Tidy The Release Script",
         "the written title",
+    );
+    assert.deepEqual(
+        Object.keys((await app.harness.snapshot(UsageDoc, id, context))?.models ?? {}),
+        ["faux/faux-2"],
     );
     const short = await newSession(app, folder);
 

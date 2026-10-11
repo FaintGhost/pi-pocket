@@ -1,11 +1,12 @@
 /**
  * Session titles. A session is named after its first message at once; when that message is long, or is a command (a
  * skill or prompt template), the session's own model writes a short title in its place, unless someone
- * renamed the session first. A reply that is no title (the model thinking aloud, or cut off) leaves the first one. What
- * it costs counts as the session's spend, like Pi's own requests.
+ * renamed the session first. Never another model picked on the side, such as a cheaper one of the same provider: nobody
+ * chose that one, and it may cost what nobody agreed to. A reply that is no title (the model thinking aloud, or cut off)
+ * leaves the first one. What it costs counts as the session's spend, like Pi's own requests.
  */
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import type { Api, Model, Usage } from "@earendil-works/pi-ai";
+import type { Usage } from "@earendil-works/pi-ai";
 import { type ConversationId, ProviderDoc, UsageDoc } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import { SessionsDoc } from "./docs.ts";
@@ -40,14 +41,6 @@ export function wantsTitle(text: string): boolean {
     const words = text.trim().split(/\s+/).length;
 
     return words >= LONG_WORDS || text.trim().includes("\n");
-}
-
-/**
- * The model a title is written with: the session's own, which a person chose. Never another one picked on the side,
- * such as a cheaper model of the same provider: nobody chose that one, and it may cost what nobody agreed to.
- */
-export function titleModel(current: Model<Api>): Model<Api> {
-    return current;
 }
 
 /**
@@ -102,16 +95,15 @@ export async function writeTitle(
         }
 
         const agent = await app.agentState(id);
-        const current =
+        const model =
             agent?.model === undefined
                 ? undefined
                 : app.models.getModel(agent.model.provider, agent.model.modelId);
 
-        if (current === undefined) {
+        if (model === undefined) {
             return;
         }
 
-        const model = titleModel(current);
         // The conversation's own identity with the provider, as Pi Durable sends with its summaries: some providers
         // (OpenCode Go) refuse a request without one.
         // A conversation older than that identity gets one, as Pi Durable gives it before its next request.
