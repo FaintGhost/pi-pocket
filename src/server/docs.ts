@@ -446,6 +446,22 @@ export const FollowsDoc = defineDoc<{
 });
 
 /**
+ * Which provider pays, as PiP was last told to ask its person (`pip.ts`): the models their words named, at more than one
+ * provider, and their newest message then (`after`, 0 for none). Their next message answers it when it is just one of
+ * those providers' whole name or id.
+ */
+export const PipAskedDoc = defineDoc<{
+    asked?: { models: { provider: string; id: string }[]; after: number };
+}>({
+    kind: "pocket.pip-asked",
+    version: 1,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({}),
+});
+
+/**
  * PiP's compactions whose summary PiP wrote itself (`pip-compact.ts`), by task id: their cost is in `pi.usage`, added
  * once. The newest few are kept.
  */

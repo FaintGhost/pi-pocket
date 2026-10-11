@@ -35,13 +35,13 @@ import {
 } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
-import { AuthorsDoc, FollowsDoc, SessionsDoc } from "./docs.ts";
+import { AuthorsDoc, FollowsDoc, PipAskedDoc, SessionsDoc } from "./docs.ts";
 import { NOTE_ENTRY } from "./entry-format.ts";
 import { describe, HttpError } from "./errors.ts";
 import { clip, defang, quoted } from "./fence.ts";
 import { git } from "./git.ts";
 import { originRepo, parseRepo, requirePush, sameRepo } from "./github.ts";
-import { indexed, modelsNamed, personNamed, sharePhrase } from "./model-names.ts";
+import { indexed, modelsNamed, personNamed, sharePhrase, words } from "./model-names.ts";
 import { findModel } from "./models.ts";
 import { homePath } from "./paths.ts";
 import { type ClientEntry, projectEntry, snippet } from "./projection.ts";
@@ -527,13 +527,17 @@ export class Pip {
      * new context, and those its last compaction kept), and the standing instructions of the watches and webhooks to it
      * that they set up. Never the instructions of a watch PiP set up (its own words, checked against the models signed
      * in then), what was posted to a webhook, what GitHub said, a report, or anything else sent for them. Each message
-     * apart: a short name's family word counts in its own message only.
+     * apart: a short name's family word counts in its own message only. `messages`: their messages alone, with their
+     * entries, newest first.
      */
-    async #personWords(pipId: ConversationId, user: User): Promise<string[]> {
+    async #personWords(
+        pipId: ConversationId,
+        user: User,
+    ): Promise<{ words: string[]; messages: { id: number; text: string }[] }> {
         const app = this.#app;
         const own = (await app.harness.snapshot(AuthorsDoc, pipId, context))?.entries ?? {};
         const conversation = await app.conversation(pipId);
-        const words: string[] = [];
+        const messages: { id: number; text: string }[] = [];
         // A compaction keeps the newest messages before it as they were: down to its head, they are still in context.
         let keptFrom: number | undefined;
         let cursor: Cursor | undefined;
@@ -559,7 +563,7 @@ export class Pip {
                 const shown = projectEntry(entry);
 
                 if (shown?.kind === "user" && own[String(shown.id)] === user.id) {
-                    words.push(shown.text);
+                    messages.push({ id: shown.id, text: shown.text });
                 }
             }
 
@@ -577,7 +581,48 @@ export class Pip {
             ),
         ];
 
-        return [...words, ...standing.map((each) => each.instructions ?? "")];
+        return {
+            words: [
+                ...messages.map((each) => each.text),
+                ...standing.map((each) => each.instructions ?? ""),
+            ],
+            messages,
+        };
+    }
+
+    /**
+     * Whether the person's newest message (`messages`, newest first) answers the question PiP was last told to ask, which
+     * provider pays (`PipAskedDoc`), with `model`'s: their first message since, it is just the whole name or id of the
+     * provider of one of the models asked about, `model` among them, and of no other provider asked about. Everyday words
+     * ("sure", "go") answer nothing, and nor does a question from before Start fresh.
+     */
+    async #answered(
+        pipId: ConversationId,
+        model: { provider: string; id: string },
+        messages: readonly { id: number; text: string }[],
+        providerName: (provider: string) => string,
+    ): Promise<boolean> {
+        const asked = (await this.#app.harness.snapshot(PipAskedDoc, pipId, context))?.asked;
+        const [newest, before] = messages;
+
+        if (
+            asked === undefined ||
+            newest === undefined ||
+            newest.id <= asked.after ||
+            (before?.id ?? 0) !== asked.after ||
+            !asked.models.some((each) => each.provider === model.provider && each.id === model.id)
+        ) {
+            return false;
+        }
+
+        const answer = words(newest.text).join(" ");
+        const answering = [...new Set(asked.models.map((each) => each.provider))].filter(
+            (provider) =>
+                answer !== "" &&
+                [provider, providerName(provider)].some((full) => words(full).join(" ") === answer),
+        );
+
+        return answering.length === 1 && answering[0] === model.provider;
     }
 
     /**
@@ -594,23 +639,38 @@ export class Pip {
             );
         }
 
-        // Read once for both checks below: it can be long.
-        const said = indexed(await this.#personWords(pipId, user));
+        // Read once for the checks below: it can be long.
+        const person = await this.#personWords(pipId, user);
+        const said = indexed(person.words);
         const available = app.models.getAvailableSnapshot();
         // Every model Pi knows: words that name one not signed in name no shorter one that is.
         const known = app.models.getModels();
-        const named = personNamed(
-            said,
-            model,
-            available,
-            (provider) => app.models.getProvider(provider)?.name ?? provider,
-            known,
-        );
+        const providerName = (provider: string) =>
+            app.models.getProvider(provider)?.name ?? provider;
+        const theirs = modelsNamed(said, [model], true, [...available, ...known]).includes(model);
+        const named =
+            personNamed(said, model, available, providerName, known) ||
+            (theirs && (await this.#answered(pipId, model, person.messages, providerName)));
 
-        // Their words name it, but at more than one provider: which one pays is theirs to say.
-        if (!named && modelsNamed(said, [model], true, [...available, ...known]).includes(model)) {
+        // Their words name it, but at more than one provider: which one pays is theirs to say. What PiP asks about is kept,
+        // for their answer (`#answered`).
+        if (!named && theirs) {
+            const asked = [
+                model,
+                ...available.filter(
+                    (other) => other.provider !== model.provider && sharePhrase(said, model, other),
+                ),
+            ];
+
+            await app.harness.commit(async (tx) => {
+                (await tx.doc(PipAskedDoc, pipId)).asked = {
+                    models: asked.map((each) => ({ provider: each.provider, id: each.id })),
+                    after: person.messages[0]?.id ?? 0,
+                };
+            }, context);
+
             throw new Error(
-                `Your person named ${model.name}, which more than one signed-in provider has. Ask them which provider to use; do not pick one.`,
+                `Your person named ${model.name}, which more than one signed-in provider has: ${[...new Set(asked.map((each) => providerName(each.provider)))].join(", ")}. Ask them which one to use (their answer may be just its name); do not pick one.`,
             );
         }
 
@@ -651,7 +711,7 @@ export class Pip {
         }
 
         const theirs = modelsNamed(
-            indexed(await this.#personWords(pipId, user)),
+            indexed((await this.#personWords(pipId, user)).words),
             available,
             true,
             known,

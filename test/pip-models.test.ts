@@ -69,6 +69,7 @@ const faux = fauxProvider({
         { id: "faux-2" },
         { id: "faux-2-mini" },
         { id: "faux-q7" },
+        { id: "faux-z8" },
         { id: "faux-vision", input: ["text", "image"] },
     ],
 });
@@ -90,6 +91,12 @@ const unsigned = {
     },
 };
 
+/** A second provider signed in, with faux-z8 too: which of the two pays is the person's to say. */
+const hub = {
+    ...fauxProvider({ provider: "hub-copilot", models: [{ id: "faux-z8" }] }).provider,
+    name: "Hub Copilot",
+};
+
 const { PocketApp } = await import("../src/server/app.ts");
 
 let app: App;
@@ -104,6 +111,7 @@ before(async () => {
         configureModels: (models) => {
             models.registerNativeProvider(faux.provider);
             models.registerNativeProvider(unsigned as never);
+            models.registerNativeProvider(hub as never);
         },
     });
 });
@@ -485,6 +493,47 @@ test("PiP starts a session on a model only when its person named it, in their ow
         app.pip.start(id, { model: "faux/nothing" }),
         /not a model signed in here/,
     );
+});
+
+test("PiP takes its person's bare answer to which provider pays, right after it asked, and nothing else", async () => {
+    const id = await pip();
+    const z8 = (provider: string) => ({ model: `${provider}/faux-z8` });
+    const twice = /more than one signed-in provider has/;
+
+    // Faux Z8 is at two providers: PiP is told to ask which one pays.
+    const ask = async (on = id) => {
+        await say(app, on, "start a session on faux z8 for the review");
+        await assert.rejects(app.pip.start(on, z8("hub-copilot")), twice);
+    };
+
+    // Everyday words, one word of the name, or a provider it did not ask about, answer nothing.
+    for (const reply of ["sure", "go", "Copilot", "Unsigned"]) {
+        await ask();
+        await say(app, id, reply);
+        await assert.rejects(app.pip.start(id, z8("hub-copilot")), twice, reply);
+    }
+
+    // The provider's whole name, as the person's next message, picks it, and only it.
+    await ask();
+    await say(app, id, "Hub Copilot");
+    const made = await app.pip.start(id, z8("hub-copilot"));
+
+    assert.equal((await app.agentState(made))?.model?.provider, "hub-copilot");
+    await assert.rejects(app.pip.start(id, z8("faux")), twice);
+
+    // Not right after the question: they said something else first.
+    await ask();
+    await say(app, id, "thanks");
+    await say(app, id, "Hub Copilot");
+    await assert.rejects(app.pip.start(id, z8("hub-copilot")), twice);
+
+    // A question from before Start fresh is not the one answered.
+    await ask();
+    const fresh = await pip();
+
+    await say(app, fresh, "start a session on faux z8 for the review");
+    await say(app, fresh, "hub-copilot");
+    await assert.rejects(app.pip.start(fresh, z8("hub-copilot")), twice);
 });
 
 test("PiP takes a longer model's name for that model only", async () => {
