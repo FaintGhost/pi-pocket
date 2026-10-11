@@ -246,6 +246,168 @@ test(
 );
 
 test(
+    "a child opened directly returns to its main session above the input on desktop and mobile",
+    real,
+    async () => {
+        const id = await newSession(app);
+        const title = ("Checkout investigation · " + "a long main-session title ".repeat(6))
+            .slice(0, 110)
+            .trim();
+
+        parentSleep = 0;
+        await app.commands.updateSession(id, owner(app), { title });
+        await app.commands.submit(id, owner(app), { text: "one more", requestId: `child-${id}` });
+        await until(async () => {
+            const doc = await app.harness.snapshot(SubagentsDoc, id, context);
+
+            return !!doc?.agents.extra && !app.isBusy(doc.agents.extra.conversationId);
+        }, "the child answered");
+
+        const child = (await app.harness.snapshot(SubagentsDoc, id, context))!.agents.extra!
+            .conversationId;
+        const other = await newSession(app);
+        const label = `Back to main session: ${title}`;
+        const long = Array.from({ length: 100 }, (_, index) => `Checkout detail ${index + 1}`).join(
+            "\n",
+        );
+
+        await app.commands.submit(child, owner(app), { text: long, requestId: `long-${child}` });
+        await until(async () => !app.isBusy(child), "the long message answered");
+
+        const measure = async () => {
+            await frames();
+
+            return inPage<{
+                top: number;
+                height: number;
+                visible: boolean;
+                inputVisible: boolean;
+                scrolls: boolean;
+                scrolled: number;
+            }>(
+                `const button = document.querySelector(".parent-session");
+                const scroller = document.querySelector(".scroller");
+                const box = button.getBoundingClientRect();
+                const input = document.querySelector(".composer textarea").getBoundingClientRect();
+
+                return JSON.stringify({
+                    top: box.top,
+                    height: box.height,
+                    visible: box.top >= scroller.getBoundingClientRect().bottom - 1 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth && document.documentElement.scrollWidth <= innerWidth,
+                    inputVisible: input.height > 0 && input.top >= box.bottom && input.bottom <= innerHeight,
+                    scrolls: scroller.scrollHeight > scroller.clientHeight,
+                    scrolled: scroller.scrollTop,
+                });`,
+            );
+        };
+
+        try {
+            for (const viewport of [
+                VIEWPORTS.mobile,
+                { width: 320, height: 400, scale: 1, mobile: true },
+                VIEWPORTS.desktop,
+            ]) {
+                await page.setViewport(viewport);
+                // Previous history points elsewhere: this action must follow the parent relationship.
+                await page.navigate(`${base}/s/${other}`);
+                await see(
+                    `return JSON.stringify(document.querySelector(".composer textarea") !== null)`,
+                    "the unrelated session",
+                );
+                assert.equal(
+                    await textOf(".parent-session"),
+                    null,
+                    "ordinary sessions have no return button",
+                );
+                await page.navigate(`${base}/s/${child}`);
+                await see(
+                    `return JSON.stringify(document.querySelector(".parent-session")?.getAttribute("aria-label") === ${JSON.stringify(label)})`,
+                    "the return button names the main session",
+                );
+                await says(".scroller", /Checkout detail 100/);
+                assert.equal(await textOf(".title-sub"), `subagent of ${title}`);
+                assert.equal(
+                    await inPage<number>(
+                        `return JSON.stringify(document.querySelectorAll('.topbar [aria-label^="Back to main session"], .transcript .breadcrumb').length)`,
+                    ),
+                    0,
+                    "no duplicate return controls above the conversation",
+                );
+                await settled();
+                await page.scroll(undefined, 100000);
+                await see(
+                    `return JSON.stringify(document.querySelector(".scroller").scrollTop > 0)`,
+                    "the long conversation scrolled",
+                );
+                const before = await measure();
+
+                assert.ok(before.height >= 44, "the button has a large click target");
+                assert.ok(
+                    before.visible && before.inputVisible && before.scrolls,
+                    "both navigation and input fit outside long content",
+                );
+                await page.scroll(undefined, -100000);
+                await see(
+                    `return JSON.stringify(document.querySelector(".scroller").scrollTop < ${before.scrolled})`,
+                    "the conversation scrolled back",
+                );
+                assert.equal(
+                    (await measure()).top,
+                    before.top,
+                    "scrolling does not move the return button",
+                );
+                await settled();
+                await page.click({ selector: ".parent-session" });
+                await see(
+                    `return JSON.stringify(location.pathname === "/s/${id}" && document.querySelector(".title-main")?.textContent === ${JSON.stringify(title)} && document.querySelector(".composer textarea") !== null)`,
+                    "the main session opened",
+                );
+                assert.equal(
+                    await textOf(".parent-session"),
+                    null,
+                    "the main session has no return button",
+                );
+            }
+
+            const { user, token } = app.config.addUser("Return-navigation viewer", "viewer");
+            const viewer = await browsers.open(3);
+
+            try {
+                await viewer.setViewport(VIEWPORTS.mobile);
+                await viewer.navigate(`${base}/login?token=${encodeURIComponent(token)}`);
+                await viewer.navigate(`${base}/s/${child}`);
+                await until(
+                    async () =>
+                        JSON.parse(
+                            await viewer.evaluate(
+                                `return JSON.stringify(document.querySelector(".view-only") !== null && document.querySelector(".parent-session")?.getAttribute("aria-label") === ${JSON.stringify(label)})`,
+                            ),
+                        ),
+                    "the viewer has the same return action",
+                );
+                await settled();
+                await viewer.click({ selector: ".parent-session" });
+                await until(
+                    async () =>
+                        JSON.parse(
+                            await viewer.evaluate(
+                                `return JSON.stringify(location.pathname === "/s/${id}" && document.querySelector(".title-main")?.textContent === ${JSON.stringify(title)} && document.querySelector(".view-only") !== null)`,
+                            ),
+                        ),
+                    "the viewer returned to the main session",
+                );
+            } finally {
+                await browsers.close(3);
+                app.config.removeUser(user.id);
+            }
+        } finally {
+            await app.commands.abort(id, owner(app));
+            await page.setViewport(VIEWPORTS.mobile);
+        }
+    },
+);
+
+test(
     "the queue stays a few rows tall however much waits, and reports wait in it as one row",
     real,
     async () => {

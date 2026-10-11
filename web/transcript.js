@@ -2125,12 +2125,6 @@ export function Transcript() {
     return html`<main class="scroller" ref=${scroller} onScroll=${onScroll}>
         <div class="transcript">
             ${
-                conversation.parent &&
-                html`<button class="breadcrumb" onClick=${() => navigate(conversation.parent.id)}>
-                    <${Icon} name="back" size=${14} /> ${conversation.parent.title}
-                </button>`
-            }
-            ${
                 conversation.forkedFrom &&
                 sessionsLoaded &&
                 (source
