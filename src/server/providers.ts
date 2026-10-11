@@ -267,10 +267,13 @@ export class Providers {
 
         this.#flows.set(flow.id, flow);
 
+        // Its name, as the Providers sheet shows it, for the dialog's title and the notice when it worked.
+        const providerName = app.models.getProvider(providerId)?.name ?? providerId;
+
         const send = (data: Record<string, unknown>) => {
             for (const client of app.clients) {
                 if (client.user.id === user.id) {
-                    client.send("auth", { flowId: flow.id, providerId, ...data });
+                    client.send("auth", { flowId: flow.id, providerId, providerName, ...data });
                 }
             }
         };

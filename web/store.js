@@ -702,6 +702,8 @@ function handleAuth(data) {
                 : {
                       flowId: data.flowId,
                       providerId: data.providerId,
+                      // Its id when the server sends no name (one not restarted since an update).
+                      providerName: data.providerName ?? data.providerId,
                       events: [],
                       prompt: null,
                       done: null,
@@ -721,7 +723,7 @@ function handleAuth(data) {
 
         if (data.step === "done") {
             if (data.ok) {
-                notify("info", `Signed in to ${data.providerId}.`);
+                notify("info", `Signed in to ${data.providerName ?? data.providerId}.`);
             }
 
             return { auth: data.ok ? null : { ...flow, prompt: null, done: data } };

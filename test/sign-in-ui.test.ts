@@ -108,8 +108,8 @@ const see = (script: string, what: string) =>
 /** Past a sheet's rise, as a person's next tap is (`back.js` lets go of a tap on what just slid in). */
 const settled = () => new Promise((resolve) => setTimeout(resolve, 450));
 
-/** The sign-in dialog of a provider. */
-const dialog = (provider: string) => `section[aria-label="Sign in: ${provider}"]`;
+/** The sign-in dialog of a provider, by its name (the Providers sheet's, not its id). */
+const dialog = (name: string) => `section[aria-label="Sign in: ${name}"]`;
 
 /** What went wrong in the page: errors thrown, and error notices. */
 const problems = () =>
@@ -179,12 +179,12 @@ async function providers(provider: string): Promise<void> {
 }
 
 /** Answer the dialog's question with `value`, by its field and Continue. */
-async function answer(provider: string, value: string): Promise<void> {
+async function answer(name: string, value: string): Promise<void> {
     await see(
-        `return JSON.stringify(document.querySelector('${dialog(provider)} .field input') !== null)`,
+        `return JSON.stringify(document.querySelector('${dialog(name)} .field input') !== null)`,
         "the question",
     );
-    await page.type({ selector: `${dialog(provider)} .field input` }, value);
+    await page.type({ selector: `${dialog(name)} .field input` }, value);
     await page.click({ label: "Continue" });
 }
 
@@ -248,20 +248,20 @@ after(async () => {
 test("a failed sign-in shows its error, and once closed stays closed", real, async () => {
     await providers("keyed");
     await page.click({ label: "API key" });
-    await answer("keyed", "wrong");
+    await answer("Keyed", "wrong");
     await see(
-        `return JSON.stringify(document.querySelector('${dialog("keyed")} .error-box')?.textContent.includes("Keyed turned that key down") === true)`,
+        `return JSON.stringify(document.querySelector('${dialog("Keyed")} .error-box')?.textContent.includes("Keyed turned that key down") === true)`,
         "the error",
     );
     await caughtUp();
     assert.deepEqual(await problems(), []);
     assert.equal(await inPage<boolean>(noticeSays("Signed in")), false, "no word of success");
 
-    await page.click({ selector: `${dialog("keyed")} button[aria-label="Close"]` });
+    await page.click({ selector: `${dialog("Keyed")} button[aria-label="Close"]` });
     await caughtUp();
     assert.equal(
         await inPage<boolean>(
-            `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("keyed")}') === null)`,
+            `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("Keyed")}') === null)`,
         ),
         true,
     );
@@ -276,15 +276,15 @@ test(
         await providers("keyed");
         await page.click({ label: "API key" });
         await see(
-            `return JSON.stringify(document.querySelector('${dialog("keyed")} .field input') !== null)`,
+            `return JSON.stringify(document.querySelector('${dialog("Keyed")} .field input') !== null)`,
             "the question",
         );
-        await page.click({ selector: `${dialog("keyed")} button[aria-label="Close"]` });
+        await page.click({ selector: `${dialog("Keyed")} button[aria-label="Close"]` });
         await until(() => keyedEnded > ended, "the server ended the sign-in");
         await caughtUp();
         assert.equal(
             await inPage<boolean>(
-                `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("keyed")}') === null)`,
+                `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("Keyed")}') === null)`,
             ),
             true,
             "the dialog stays closed",
@@ -300,20 +300,20 @@ test(
         await providers("stepped");
         await page.click({ label: "Sign in with Stepped" });
         await see(
-            `return JSON.stringify(document.querySelector('${dialog("stepped")}')?.textContent.includes("With a code") === true)`,
+            `return JSON.stringify(document.querySelector('${dialog("Stepped")}')?.textContent.includes("With a code") === true)`,
             "the first question",
         );
         await page.click({ label: "With a code" });
-        await answer("stepped", "the-code");
+        await answer("Stepped", "the-code");
         await see(
             `return JSON.stringify((await import("/store.js")).store.state.models.some((model) => model.provider === "stepped"))`,
             "signed in to Stepped",
         );
         await see(
-            `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("stepped")}') === null)`,
+            `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("Stepped")}') === null)`,
             "the dialog closed",
         );
-        await see(noticeSays("Signed in to stepped."), "the notice that says so");
+        await see(noticeSays("Signed in to Stepped."), "the notice that says so");
         await caughtUp();
         assert.deepEqual(await problems(), []);
     },
@@ -325,16 +325,16 @@ test(
     async () => {
         await providers("keyed");
         await page.click({ label: "API key" });
-        await answer("keyed", "a-good-key");
+        await answer("Keyed", "a-good-key");
         await see(
             `return JSON.stringify((await import("/store.js")).store.state.models.some((model) => model.provider === "keyed"))`,
             "signed in to Keyed",
         );
         await see(
-            `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("keyed")}') === null)`,
+            `return JSON.stringify((await import("/store.js")).store.state.auth === null && document.querySelector('${dialog("Keyed")}') === null)`,
             "the dialog closed",
         );
-        await see(noticeSays("Signed in to keyed."), "the notice that says so");
+        await see(noticeSays("Signed in to Keyed."), "the notice that says so");
         await caughtUp();
         assert.deepEqual(await problems(), []);
     },

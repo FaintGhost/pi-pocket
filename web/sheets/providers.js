@@ -278,7 +278,7 @@ export function AuthDialog() {
 
     const prompt = auth.prompt;
 
-    return html`<${Sheet} title=${`Sign in: ${auth.providerId}`} onClose=${close}>
+    return html`<${Sheet} title=${`Sign in: ${auth.providerName}`} onClose=${close}>
         ${auth.events.map((event) => {
             if (event.type === "auth_url") {
                 return html`<div class="auth-event">
