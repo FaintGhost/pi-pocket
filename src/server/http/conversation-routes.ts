@@ -127,6 +127,15 @@ export async function conversationRoutes(
         return json(response, 200, { ok: true });
     }
 
+    // A failed subagent dealt with: `at` says which failure the person saw.
+    if (third === "dismiss" && method === "POST") {
+        const body = await readJson<{ at?: unknown }>(request);
+
+        return json(response, 200, {
+            dismissed: await app.commands.dismissSubagent(id, user, body.at),
+        });
+    }
+
     if (third === "withdraw" && method === "POST") {
         const body = await readJson<{ submissionId?: number }>(request);
 

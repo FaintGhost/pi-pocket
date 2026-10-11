@@ -170,9 +170,20 @@ export function reportingOf(
     );
 }
 
+/** Whether a subagent failed (not stopped), and a person dealt with that failure: the one it has now. */
+function failureDismissed(record: SubagentRecord): boolean {
+    return (
+        record.failed === true &&
+        record.error !== STOPPED &&
+        record.dismissed !== undefined &&
+        record.dismissed === (record.answeredAt ?? 0)
+    );
+}
+
 /**
  * One subagent as the web app shows it, in its parent's subagents bar and on the subagents board: what it was asked and
- * when, whether it works, and how it ended (`stopped` is a `failed` that was stopped).
+ * when, whether it works, and how it ended (`stopped` is a `failed` that was stopped; `dismissed`, a failure a person
+ * dealt with, which needs nobody now).
  */
 export function subagentView(
     name: string,
@@ -192,6 +203,7 @@ export function subagentView(
         ...(record.failed === true && record.error !== undefined && record.error !== STOPPED
             ? { error: record.error }
             : {}),
+        ...(failureDismissed(record) ? { dismissed: true } : {}),
         ...(reporting ? { reporting: true } : {}),
     };
 }

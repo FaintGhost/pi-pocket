@@ -701,9 +701,18 @@ export class Pip {
                 ...(counts === undefined
                     ? {}
                     : {
+                          // "2 failed (1 dismissed)": failures a person dealt with need nobody now.
                           subagents: Object.entries(counts)
-                              .filter(([, count]) => typeof count === "number" && count > 0)
-                              .map(([kind, count]) => `${String(count)} ${kind}`)
+                              .filter(
+                                  ([kind, count]) =>
+                                      kind !== "dismissed" &&
+                                      typeof count === "number" &&
+                                      count > 0,
+                              )
+                              .map(
+                                  ([kind, count]) =>
+                                      `${String(count)} ${kind}${kind === "failed" && counts.dismissed !== undefined ? ` (${String(counts.dismissed)} dismissed)` : ""}`,
+                              )
                               .join(", "),
                       }),
             };

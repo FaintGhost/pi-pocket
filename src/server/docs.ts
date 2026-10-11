@@ -115,6 +115,11 @@ export type SubagentRecord = {
     answeredAt?: number;
     failed?: boolean;
     error?: string;
+    /**
+     * The failure a person dealt with (seen, dismissed, or sent it a message), by its `answeredAt`: it needs nobody
+     * now. A later failure has a later time, so it needs them again.
+     */
+    dismissed?: number;
 };
 
 /** A subagent's report waiting to go to its parent: all those waiting go together, as one message. */

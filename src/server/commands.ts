@@ -33,6 +33,7 @@ import {
     PlanDoc,
     type Schedule,
     SessionsDoc,
+    STOPPED,
     SubagentsDoc,
 } from "./docs.ts";
 import { ATTACHMENTS_HEADING, FILE_BLOCK, FROM_PREFIX, NOTE_ENTRY } from "./entry-format.ts";
@@ -552,8 +553,63 @@ export class Commands {
         app.collab.setTyping(id, user, null);
         await this.#touched(id, typed, text === typed ? undefined : text);
         this.#reportUnanswered(id, submission.wait(context));
+        // A person who sends a failed subagent a message deals with its failure there: a later run takes its place.
+        await this.#dismissFailure(id);
 
         return { submissionId: submission.id, requestId };
+    }
+
+    /**
+     * A person dealt with a failed subagent (`id`, its conversation): seen or dismissed, it needs nobody now, on the
+     * board, the rail, or the session list, until it fails again. `at` is the failure they saw (its `answeredAt`): a
+     * newer one still needs them. Whether it was dismissed now.
+     */
+    async dismissSubagent(id: ConversationId, user: User, at: unknown): Promise<boolean> {
+        const app = this.#app;
+
+        app.requireSee(user, id);
+        app.requireSteer(user);
+
+        if (typeof at !== "number" || !Number.isFinite(at)) {
+            throw new HttpError(400, "at must be the time of the failure seen");
+        }
+
+        if (app.parentOf(id) === undefined) {
+            throw new HttpError(404, "Not a subagent");
+        }
+
+        return this.#dismissFailure(id, at);
+    }
+
+    /** Mark a subagent's failure (the one at `at`, or the one it has now) dealt with; false when there is none to. */
+    async #dismissFailure(id: ConversationId, at?: number): Promise<boolean> {
+        const parent = this.#app.parentOf(id);
+
+        if (parent === undefined) {
+            return false;
+        }
+
+        return this.#app.harness.commit(async (tx) => {
+            const agents = (await tx.doc(SubagentsDoc, parent)).agents;
+            const name = Object.keys(agents).find((each) => agents[each]!.conversationId === id);
+            const record = name === undefined ? undefined : agents[name]!;
+            // Its failure is known by when it failed; a failure from before that was recorded has none.
+            const failure = record?.answeredAt ?? 0;
+
+            if (
+                record === undefined ||
+                record.failed !== true ||
+                record.error === STOPPED ||
+                record.dismissed === failure ||
+                (at !== undefined && at !== failure)
+            ) {
+                return false;
+            }
+
+            record.dismissed = failure;
+
+            return true;
+        }, context);
     }
 
     /**

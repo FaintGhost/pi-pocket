@@ -207,12 +207,16 @@ function Highlight({ text, needle }) {
     ${text.slice(at + needle.length)}`;
 }
 
+/** Failed subagents nobody has dealt with (seen or dismissed), of a session's counts or the rail's totals. */
+const failing = (counts) => (counts.failed ?? 0) - (counts.dismissed ?? 0);
+
 /** "2 working · 1 failed subagents": a session's subagents, for the ⑂ mark's tooltip. */
 function subagentsTip(counts) {
-    const kinds = ["working", "waiting", "failed"].filter((kind) => counts[kind] > 0);
-    const total = kinds.reduce((sum, kind) => sum + counts[kind], 0);
+    const shown = { ...counts, failed: failing(counts) };
+    const kinds = ["working", "waiting", "failed"].filter((kind) => shown[kind] > 0);
+    const total = kinds.reduce((sum, kind) => sum + shown[kind], 0);
 
-    return `${kinds.map((kind) => `${counts[kind]} ${kind}`).join(" · ")} subagent${total === 1 ? "" : "s"}`;
+    return `${kinds.map((kind) => `${shown[kind]} ${kind}`).join(" · ")} subagent${total === 1 ? "" : "s"}`;
 }
 
 /**
@@ -265,8 +269,8 @@ function SessionRow({
     const tip = [title, ...(folders ? where.reverse() : where)].join(" · ");
     const counts = session.subagents ?? {};
     const live = (counts.working ?? 0) + (counts.waiting ?? 0);
-    const failed = counts.failed ?? 0;
-    // Subagents at work, or failed ones, but not over a call waiting for you: that says more.
+    const failed = failing(counts);
+    // Subagents at work, or failed ones nobody dealt with, but not over a call waiting for you: that says more.
     const fork = !session.waiting && (live > 0 || failed > 0);
     const person = collab() ? (session.people ?? []).find((each) => each.id !== me?.id) : undefined;
     // Archive and pin show on hover; an archived session only comes back, and only for people who steer.
@@ -1026,7 +1030,7 @@ export function SessionList({ compact = false }) {
  * there, as the subagents board shows them.
  */
 export function subagentTotals(sessions = store.state.sessions) {
-    const totals = { working: 0, waiting: 0, failed: 0, stopped: 0, done: 0 };
+    const totals = { working: 0, waiting: 0, failed: 0, stopped: 0, done: 0, dismissed: 0 };
 
     for (const session of sessions) {
         const counts = session.subagents;
@@ -1089,6 +1093,7 @@ export function RailNav({ foldable = false, folded = false }) {
     const busy = sessions.filter((session) => session.busy).length;
     const agents = subagentTotals(sessions);
     const live = agents.working + agents.waiting;
+    const failed = failing(agents);
     const keys = `${APPLE ? "⌘" : "Ctrl"} B`;
     const fold = () => setPrefs({ sidebar: folded ? "open" : "rail" });
     const role = me?.role === "owner" ? "owner" : me?.role === "viewer" ? "view only" : "guest";
@@ -1155,7 +1160,7 @@ export function RailNav({ foldable = false, folded = false }) {
                 "Subagents",
                 live > 0 && `${live} at work`,
                 agents.waiting > 0 && `${agents.waiting} waiting for approval`,
-                agents.failed > 0 && `${agents.failed} failed`,
+                failed > 0 && `${failed} failed`,
             ]
                 .filter(Boolean)
                 .join(", ")}
@@ -1165,7 +1170,7 @@ export function RailNav({ foldable = false, folded = false }) {
             <${Icon} name="fork" size=${18} />
             ${live > 0 && html`<span class="rail-count">${live}</span>`}
             ${
-                (agents.failed > 0 || agents.waiting > 0) &&
+                (failed > 0 || agents.waiting > 0) &&
                 html`<span class="rail-trouble" aria-hidden="true"></span>`
             }
         </button>

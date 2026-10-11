@@ -42,6 +42,11 @@ const route: FauxResponseStep = (request) => {
     const { role, text } = lastText(request as never);
     const subagent = /You are the subagent \\"([^\\]+)\\"/.exec(all)?.[1];
 
+    // Their model fails: Pi hears they failed, and the board says they need you.
+    if (subagent?.startsWith("broken")) {
+        return fauxAssistantMessage([], { stopReason: "error", errorMessage: "Bad request" });
+    }
+
     if (subagent?.startsWith("slow") && role !== "toolResult") {
         return fauxAssistantMessage([fauxToolCall("bash", { command: "sleep 30" })], {
             stopReason: "toolUse",
@@ -61,6 +66,15 @@ const route: FauxResponseStep = (request) => {
                     message: `Check part ${index + 1} of the checkout branch and report what fails.`,
                 }),
             ),
+            { stopReason: "toolUse" },
+        );
+    }
+
+    const breaking = /^break (\S+)$/.exec(text);
+
+    if (breaking !== null) {
+        return fauxAssistantMessage(
+            [fauxToolCall("subagent", { action: "spawn", name: breaking[1]!, message: "Look." })],
             { stopReason: "toolUse" },
         );
     }
@@ -1143,5 +1157,173 @@ test(
             `return JSON.stringify(document.querySelector(".board") === null)`,
             "back from the board",
         );
+    },
+);
+
+/** A session at `size` whose subagent `name` fails, once Pi has heard so. */
+async function failed(
+    size: { width: number; height: number; scale: number; mobile: boolean },
+    name: string,
+): Promise<{ id: ConversationId; agent: ConversationId }> {
+    const id = await newSession(app);
+
+    await page.setViewport(size);
+    await page.navigate(`${base}/s/${id}`);
+    await see(
+        `return JSON.stringify(document.querySelector(".composer textarea") !== null)`,
+        "the session",
+    );
+    await app.commands.submit(id, owner(app), { text: `break ${name}`, requestId: `b-${name}` });
+    await until(
+        async () =>
+            (await app.harness.snapshot(SubagentsDoc, id, context))?.agents[name]?.failed ===
+                true && !app.isBusy(id),
+        `${name} failed, and Pi idle`,
+        15_000,
+    );
+
+    return {
+        id,
+        agent: (await app.harness.snapshot(SubagentsDoc, id, context))!.agents[name]!
+            .conversationId,
+    };
+}
+
+/**
+ * Whether the rail, the session's row, and the board's Needs you say a failure needs you, and how many failures of the
+ * session the session list says nobody has dealt with.
+ */
+const trouble = (id: ConversationId) =>
+    inPage<{ rail: boolean; row: boolean; needs: string[]; failing: number }>(`
+        const counts = (await import("/store.js")).store.state.sessions.find((each) => each.id === ${Number(id)})?.subagents ?? {};
+
+        return JSON.stringify({
+            rail: document.querySelector(".rail-agents .rail-trouble") !== null,
+            row: document.querySelector('.session-row[data-id="${id}"] .session-fork.failed') !== null,
+            needs: [...document.querySelectorAll(".board-need .board-need-main b")].map((each) => each.textContent),
+            failing: (counts.failed ?? 0) - (counts.dismissed ?? 0),
+        });
+    `);
+
+test(
+    "the board: a failed subagent needs you until it is dismissed, and stays dismissed after a reload",
+    real,
+    async () => {
+        // Fresh answers: those before have used up most of them.
+        model.setResponses(Array.from({ length: 200 }, () => route));
+        const { id } = await failed(VIEWPORTS.desktop, "broken-desk");
+
+        await see(
+            `return JSON.stringify(document.querySelector('.session-row[data-id="${id}"] .session-fork.failed') !== null && document.querySelector(".rail-agents .rail-trouble") !== null)`,
+            "the session's row and the rail say it failed",
+        );
+        await settled();
+        await page.click({ selector: ".rail-agents" });
+        await see(
+            `return JSON.stringify([...document.querySelectorAll(".board-need")].some((each) => each.textContent.includes("broken-desk")))`,
+            "Needs you lists it",
+        );
+        await page.evaluate(
+            `[...document.querySelectorAll(".board-need")].find((each) => each.textContent.includes("broken-desk")).click()`,
+        );
+        await says(".board-detail .board-detail-name", /^broken-desk$/);
+        await settled();
+        await page.click({ selector: ".board-detail .board-dismiss" });
+        await see(
+            `return JSON.stringify(document.querySelector(".board-detail-state")?.textContent.trim() === "Failed · dismissed" && document.querySelector(".board-dismiss") === null)`,
+            "dismissed, and still failed",
+        );
+        assert.deepEqual(
+            await trouble(id),
+            { rail: false, row: false, needs: [], failing: 0 },
+            "nothing says it needs you",
+        );
+
+        // After a reload, still: the session list and the board come from the server.
+        await page.reload();
+        await see(
+            `return JSON.stringify(document.querySelector('.session-row[data-id="${id}"]') !== null)`,
+            "the session list again",
+        );
+        await settled();
+        await page.click({ selector: ".rail-agents" });
+        await see(
+            `return JSON.stringify(document.querySelector(".board-cell.failed") !== null)`,
+            "its square on the board",
+        );
+        assert.deepEqual(await trouble(id), { rail: false, row: false, needs: [], failing: 0 });
+        assert.equal(
+            await inPage<string>(
+                `return JSON.stringify(document.querySelector(".board-cell.failed").textContent.trim())`,
+            ),
+            "",
+            "its square has no ! now",
+        );
+        await page.press("Escape");
+        await page.setViewport(VIEWPORTS.mobile);
+    },
+);
+
+test(
+    "the board on a phone: Dismiss in the bar at the bottom; a failure opened from the board is seen",
+    real,
+    async () => {
+        const first = await failed(VIEWPORTS.mobile, "broken-phone");
+        const second = await failed(VIEWPORTS.mobile, "broken-seen");
+
+        await page.evaluate(`(await import("/store.js")).store.set({ board: true })`);
+        await see(
+            `return JSON.stringify(document.querySelector(".board.phone") !== null && document.querySelectorAll(".board-need").length === 2)`,
+            "both in Needs you, at phone size",
+        );
+        await settled();
+        await page.evaluate(
+            `[...document.querySelectorAll(".board-need")].find((each) => each.textContent.includes("broken-phone")).click()`,
+        );
+        await says(".board-bar .board-detail-name", /^broken-phone$/);
+        const size = await inPage<{ w: number; h: number }>(
+            `const r = document.querySelector(".board-bar .board-dismiss").getBoundingClientRect(); return JSON.stringify({ w: r.width, h: r.height })`,
+        );
+
+        assert.ok(size.h >= 36, `Dismiss takes a thumb: ${JSON.stringify(size)}`);
+        await settled();
+        await page.click({ selector: ".board-bar .board-dismiss" });
+        await see(
+            `return JSON.stringify([...document.querySelectorAll(".board-need")].map((each) => each.querySelector("b").textContent).join() === "broken-seen")`,
+            "only the other one needs you",
+        );
+
+        // The other, opened from the board: seen there, it needs nobody either.
+        await page.evaluate(
+            `[...document.querySelectorAll(".board-need")].find((each) => each.textContent.includes("broken-seen")).click()`,
+        );
+        await settled();
+        await page.click({ selector: ".board-bar .button.primary" });
+        await see(
+            `return JSON.stringify(location.pathname === "/s/${Number(second.agent)}")`,
+            "the subagent open",
+        );
+        await until(
+            async () =>
+                (await app.harness.snapshot(SubagentsDoc, second.id, context))?.agents[
+                    "broken-seen"
+                ]?.dismissed !== undefined,
+            "its failure seen",
+        );
+        await page.reload();
+        await see(
+            `return JSON.stringify(document.querySelector(".composer textarea") !== null)`,
+            "the subagent again",
+        );
+        await page.evaluate(`(await import("/store.js")).store.set({ board: true })`);
+        await see(
+            `return JSON.stringify(document.querySelectorAll(".board-cell.failed").length >= 2)`,
+            "their squares",
+        );
+
+        // At phone size the board takes the session list's place: the list's counts say it.
+        for (const { id } of [first, second]) {
+            assert.deepEqual(await trouble(id), { rail: false, row: false, needs: [], failing: 0 });
+        }
     },
 );
