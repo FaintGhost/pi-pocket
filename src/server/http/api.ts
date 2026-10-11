@@ -550,6 +550,15 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, { ok: true });
         }
 
+        // One model allowed for subagents, or no longer: the rest stay as they are. The owner's (checked in `app.ts`).
+        if (first === "subagent-models" && second === undefined && method === "POST") {
+            const body = await readJson<{ model?: unknown; allowed?: unknown }>(request);
+
+            return json(response, 200, {
+                subagentModels: await app.allowSubagentModel(user, body.model, body.allowed),
+            });
+        }
+
         if (first === "extensions" && second === undefined && method === "GET") {
             return json(response, 200, await app.extensions(user));
         }

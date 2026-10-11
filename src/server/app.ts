@@ -2307,7 +2307,8 @@ export class PocketApp {
     /**
      * The owner picks the models Pi may start subagents on besides their session's own (`provider/modelId`, models Pi
      * knows). Empty, the default: none, and the subagent tool offers Pi no choice of model at all. The tool is rebuilt
-     * to match, so its description and parameters say what Pi may do.
+     * to match, so its description and parameters say what Pi may do. This replaces the whole list; the Providers sheet
+     * changes one model at a time (`allowSubagentModel`).
      */
     async setSubagentModels(user: User, models: unknown): Promise<void> {
         if (user.role !== "owner") {
@@ -2345,6 +2346,61 @@ export class PocketApp {
             }
         }
 
+        await this.#saveSubagentModels(chosen);
+    }
+
+    /**
+     * The owner allows one model for subagents, or stops allowing it, and keeps the rest as they are now: what the
+     * Providers sheet sends, so two quick taps, or two tabs, never undo each other. The list is read and written with no
+     * wait between, so changes that come together all count. A model stopped need not be one Pi still knows. Returns the
+     * list as it is then.
+     */
+    async allowSubagentModel(
+        user: User,
+        model: unknown,
+        allowed: unknown,
+    ): Promise<readonly string[]> {
+        if (user.role !== "owner") {
+            throw new HttpError(403, "Only the owner can do that");
+        }
+
+        if (typeof model !== "string" || typeof allowed !== "boolean") {
+            throw new HttpError(400, "Send model (provider/modelId) and allowed (true or false).");
+        }
+
+        const current = this.config.subagentModels;
+        let chosen = current.filter((each) => each !== model);
+
+        if (allowed) {
+            const slash = model.indexOf("/");
+            const found =
+                slash > 0
+                    ? this.models.getModel(model.slice(0, slash), model.slice(slash + 1))
+                    : undefined;
+
+            if (found === undefined) {
+                throw new HttpError(400, `${model} is not a model Pi knows (provider/modelId).`);
+            }
+
+            const key = `${found.provider}/${found.id}`;
+
+            chosen = current.includes(key) ? [...current] : [...current, key];
+
+            if (chosen.length > MAX_SUBAGENT_MODELS) {
+                throw new HttpError(
+                    400,
+                    `At most ${String(MAX_SUBAGENT_MODELS)} models can be allowed for subagents.`,
+                );
+            }
+        }
+
+        await this.#saveSubagentModels(chosen);
+
+        return this.config.subagentModels;
+    }
+
+    /** Keep the models for subagents, rebuild the subagent tool to match, and tell every tab. */
+    async #saveSubagentModels(chosen: readonly string[]): Promise<void> {
         const before = this.config.subagentModels;
 
         if (JSON.stringify(before) === JSON.stringify(chosen)) {

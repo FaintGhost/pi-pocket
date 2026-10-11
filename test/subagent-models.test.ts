@@ -315,3 +315,77 @@ test("the settings route changes the models for subagents, for the owner only, o
         server.close();
     }
 });
+
+test("the owner allows many models one at a time, and changes that come together, as from two tabs, all count", async () => {
+    const { createServer } = await import("node:http");
+    const { createHandler } = await import("../src/server/http.ts");
+    const server = createServer(
+        createHandler({ app, listen: { host: "127.0.0.1", port: 0 }, restart: () => {} }),
+    );
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    const toggle = (body: object, token = app.config.ownerToken) =>
+        fetch(`http://127.0.0.1:${port}/api/subagent-models`, {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${token}`,
+                "content-type": "application/json",
+                "x-pocket": "1",
+            },
+            body: JSON.stringify(body),
+        });
+    const kept = () => [...app.config.subagentModels].sort();
+
+    try {
+        await app.setSubagentModels(owner(app), []);
+
+        // Three at once: each is read and written with no wait between, so none undoes another.
+        const answers = await Promise.all(
+            ["faux/mine", "faux/pricey", "faux/other"].map((model) =>
+                toggle({ model, allowed: true }),
+            ),
+        );
+
+        assert.deepEqual(
+            answers.map((answer) => answer.status),
+            [200, 200, 200],
+        );
+        assert.deepEqual(kept(), ["faux/mine", "faux/other", "faux/pricey"]);
+        assert.deepEqual(
+            [...(await app.hello(owner(app))).server.subagentModels!].sort(),
+            ["faux/mine", "faux/other", "faux/pricey"],
+            "the owner's tabs are told",
+        );
+
+        // One taken off, and one allowed again at the same time: the rest stay.
+        await Promise.all([
+            toggle({ model: "faux/other", allowed: false }),
+            toggle({ model: "faux/pricey", allowed: true }),
+        ]);
+        assert.deepEqual(kept(), ["faux/mine", "faux/pricey"]);
+        assert.deepEqual(
+            await (await toggle({ model: "faux/mine", allowed: false })).json(),
+            { subagentModels: ["faux/pricey"] },
+            "the answer is the list as it is now",
+        );
+
+        // A model Pi no longer knows (a hand-edited config.json, a model gone) can still be taken off.
+        app.config.subagentModels = ["faux/pricey", "gone/old"];
+        assert.equal((await toggle({ model: "gone/old", allowed: false })).status, 200);
+        assert.deepEqual(kept(), ["faux/pricey"]);
+
+        // Only the owner, only models Pi knows, and only a model and true or false.
+        const guest = app.config.addUser("Cal", "guest").token;
+
+        assert.equal((await toggle({ model: "faux/other", allowed: true }, guest)).status, 403);
+        assert.equal((await toggle({ model: "faux/nothing", allowed: true })).status, 400);
+        assert.equal((await toggle({ model: "faux/other", allowed: "yes" })).status, 400);
+        assert.equal((await toggle({ allowed: true })).status, 400);
+        assert.deepEqual(kept(), ["faux/pricey"], "unchanged");
+    } finally {
+        server.closeAllConnections();
+        server.close();
+        await app.setSubagentModels(owner(app), []);
+    }
+});

@@ -4,82 +4,137 @@ import { useEffect, useState } from "preact/hooks";
 import { api, attempt, closeSheet, store } from "../store.js";
 import { html, Icon, Loader, Sheet } from "../ui.js";
 
+/** Models past this many get a box to find them by. */
+const MODEL_SEARCH_AT = 8;
+
+/** This tab's changes to the models for subagents, one after another: their answers come back in the order sent. */
+let saving = Promise.resolve();
+
 /**
- * The owner's choice of the models Pi may start subagents on besides their session's own. None, the default: subagents
- * always run on their session's model, and Pi is offered no model to pick.
+ * The owner's choice of the models Pi may start subagents on besides their session's own: every model, by provider,
+ * each checked or not on its own. None, the default: subagents always run on their session's model, and Pi is offered
+ * no model to pick. A tap sends that one model's change, not the whole list, so quick taps and other tabs keep theirs.
+ * `names`: providers' names by id, once the sheet has them.
  */
-function SubagentModels() {
+function SubagentModels({ names }) {
     const { models, server } = store.state;
     const allowed = server?.subagentModels;
+    // What this tab asked for and has no answer to yet, by model: shown at once.
+    const [asked, setAsked] = useState({});
+    const [query, setQuery] = useState("");
 
     // A server that does not keep the choice sends none.
     if (!Array.isArray(allowed)) {
         return null;
     }
 
-    const save = (next) => attempt(() => api("settings", { subagentModels: next }));
-    const find = (spec) => models.find((model) => `${model.provider}/${model.id}` === spec);
-    const addable = models.filter((model) => !allowed.includes(`${model.provider}/${model.id}`));
+    const specOf = (model) => `${model.provider}/${model.id}`;
+    // Allowed models that are not signed in now are listed too, so they can be seen and taken off.
+    const rows = [
+        ...models.map((model) => ({ spec: specOf(model), model })),
+        ...allowed
+            .filter((spec) => !models.some((model) => specOf(model) === spec))
+            .map((spec) => ({ spec, model: null })),
+    ];
+    const isOn = (spec) => asked[spec] ?? allowed.includes(spec);
+    const chosen = rows.filter((row) => isOn(row.spec)).map((row) => row.model?.name ?? row.spec);
+    const summary =
+        chosen.length === 0
+            ? "None allowed: Pi never picks a model."
+            : `${chosen.length} allowed: ${chosen.join(", ")}`;
+    const needle = query.trim().toLowerCase();
+    const groups = new Map();
+
+    for (const row of rows) {
+        const provider = row.spec.slice(0, row.spec.indexOf("/"));
+        const words = `${row.spec} ${row.model?.name ?? ""} ${names[provider] ?? ""}`;
+
+        if (needle === "" || words.toLowerCase().includes(needle)) {
+            groups.set(provider, [...(groups.get(provider) ?? []), row]);
+        }
+    }
+
+    const toggle = (spec, on) => {
+        setAsked((was) => ({ ...was, [spec]: on }));
+        saving = saving.then(async () => {
+            const answer = await attempt(() =>
+                api("subagent-models", { model: spec, allowed: on }),
+            );
+
+            if (Array.isArray(answer?.subagentModels)) {
+                store.set((state) => ({
+                    server: { ...state.server, subagentModels: answer.subagentModels },
+                }));
+            }
+
+            // Unless a later tap asked otherwise, what the server says shows now.
+            setAsked((was) => {
+                if (was[spec] !== on) {
+                    return was;
+                }
+
+                const rest = { ...was };
+
+                delete rest[spec];
+
+                return rest;
+            });
+        });
+    };
 
     return html`<div class="subagent-models">
         <div class="label">Models for subagents</div>
         <p class="muted small">
             Subagents always run on their session's model, the one people picked. Pi cannot choose another model unless you allow it here.
         </p>
+        <p class="small subagent-models-chosen" title=${summary}>${summary}</p>
         ${
-            allowed.length === 0
-                ? html`<p class="small">None allowed: Pi never picks a model.</p>`
-                : allowed.map((spec) => {
-                      const model = find(spec);
-
-                      return html`<div class="provider" key=${spec}>
-                          <div>
-                              <div>${model?.name ?? spec}</div>
-                              <div class="muted small">
-                                  ${spec}
-                                  ${
-                                      !model
-                                          ? html` · <span class="warn">not signed in</span>`
-                                          : model.signIn &&
-                                            html` · <span class="warn">needs sign-in</span>`
-                                  }
-                              </div>
-                          </div>
-                          <button
-                              class="button small ghost"
-                              aria-label=${`Stop allowing ${model?.name ?? spec}`}
-                              onClick=${() => save(allowed.filter((each) => each !== spec))}
-                          >
-                              Remove
-                          </button>
-                      </div>`;
-                  })
+            (rows.length > MODEL_SEARCH_AT || query !== "") &&
+            html`<label class="search">
+                <${Icon} name="search" size=${16} />
+                <input
+                    placeholder="Find a model"
+                    aria-label="Find a model for subagents"
+                    value=${query}
+                    onInput=${(event) => setQuery(event.currentTarget.value)}
+                />
+            </label>`
         }
-        ${
-            addable.length > 0 &&
-            html`<select
-                class="subagent-models-add"
-                aria-label="Allow a model for subagents"
-                value=""
-                onChange=${(event) => {
-                    const spec = event.currentTarget.value;
-
-                    event.currentTarget.value = "";
-
-                    if (spec) {
-                        save([...allowed, spec]);
-                    }
-                }}
-            >
-                <option value="">Allow a model for subagents…</option>
-                ${addable.map(
-                    (model) =>
-                        html`<option value=${`${model.provider}/${model.id}`}>
-                            ${model.name} (${model.provider})
-                        </option>`,
-                )}
-            </select>`
-        }
+        <div class="subagent-models-list" role="group" aria-label="Models for subagents">
+            ${
+                groups.size === 0 &&
+                html`<p class="muted small">
+                    ${rows.length === 0 ? "No models: sign in to a provider below." : "No model matches."}
+                </p>`
+            }
+            ${[...groups].map(
+                ([provider, list]) => html`<div key=${provider}>
+                    <div class="subagent-models-head">${names[provider] ?? provider}</div>
+                    ${list.map(
+                        ({ spec, model }) => html`<label class="subagent-model" key=${spec}>
+                            <input
+                                type="checkbox"
+                                value=${spec}
+                                checked=${isOn(spec)}
+                                onChange=${(event) => toggle(spec, event.currentTarget.checked)}
+                            />
+                            <span>
+                                ${model?.name ?? spec.slice(spec.indexOf("/") + 1)}
+                                <span class="muted small">
+                                    ${spec}
+                                    ${
+                                        !model
+                                            ? html` · <span class="warn">not signed in</span>`
+                                            : model.signIn &&
+                                              html` · <span class="warn">needs sign-in</span>`
+                                    }
+                                </span>
+                            </span>
+                        </label>`,
+                    )}
+                </div>`,
+            )}
+        </div>
     </div>`;
 }
 
@@ -120,7 +175,12 @@ export function ProvidersSheet() {
         <p class="muted small">
             Pi Pocket shares Pi's sign-ins (<span class="mono">~/.pi/agent/auth.json</span>). ${owner ? "" : "Only the owner can change them."}
         </p>
-        ${owner && html`<${SubagentModels} />`}
+        ${
+            owner &&
+            html`<${SubagentModels}
+                names=${Object.fromEntries((providers ?? []).map((each) => [each.id, each.name]))}
+            />`
+        }
         <label class="search">
             <${Icon} name="search" size=${16} />
             <input

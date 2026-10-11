@@ -4474,8 +4474,64 @@ button.chip:hover {
     margin: 0;
 }
 
-.subagent-models-add {
-    min-height: 40px;
+/* What is allowed, on one line: the list under it stays put while models are checked one after another. */
+.subagent-models-chosen {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.subagent-models .search {
+    margin-bottom: 0;
+}
+
+/* Every model, by provider. A long list scrolls in its own box, so the providers stay near. */
+.subagent-models-list {
+    max-height: min(22rem, 45dvh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+}
+
+.subagent-models-list > p {
+    padding: 0.6rem;
+}
+
+.subagent-models-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 0.35rem 0.6rem;
+    background: var(--card-2);
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+.subagent-model {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 44px;
+    padding: 0.35rem 0.6rem;
+    border-top: 1px solid var(--line);
+    cursor: pointer;
+}
+
+.subagent-model input {
+    width: auto;
+    flex: none;
+}
+
+.subagent-model > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.subagent-model .muted {
+    display: block;
 }
 
 .invite {
