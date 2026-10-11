@@ -2309,7 +2309,10 @@ export class PocketApp {
         await this.#refreshClients();
     }
 
-    /** Whether a provider's sign-in expired and needs a person to sign in again: its models are offered to no one. */
+    /**
+     * Whether a provider's sign-in expired and needs a person to sign in again: the model menu and a session's model chip
+     * mark its models, and subagents on another model are refused them (`resolveModel`). A session's own run still tries.
+     */
     readonly signInNeeded = (provider: string): boolean =>
         this.providers.needsSignIn(provider) !== undefined;
 
