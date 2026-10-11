@@ -1365,3 +1365,42 @@ test(
         await page.setViewport(VIEWPORTS.mobile);
     },
 );
+
+test(
+    "a failure opened from the session menu's Subagents list is seen, as from anywhere else",
+    real,
+    async () => {
+        const { id, agent } = await failed(VIEWPORTS.desktop, "broken-menu");
+
+        await see(
+            `return JSON.stringify(document.querySelector('.session-row[data-id="${id}"] .session-fork.failed') !== null)`,
+            "the session's row says it failed",
+        );
+        await page.evaluate(
+            `(await import("/store.js")).openSheet({ type: "menu" }); return "true"`,
+        );
+        await see(
+            `return JSON.stringify([...document.querySelectorAll(".sheet .list-item")].some((each) => each.textContent.includes("broken-menu")))`,
+            "the menu lists it",
+        );
+        await settled();
+        await page.evaluate(
+            `[...document.querySelectorAll(".sheet .list-item")].find((each) => each.textContent.includes("broken-menu")).click(); return "true"`,
+        );
+        await see(
+            `return JSON.stringify(location.pathname === "/s/${Number(agent)}")`,
+            "the subagent open",
+        );
+        await until(
+            async () =>
+                (await app.harness.snapshot(SubagentsDoc, id, context))?.agents["broken-menu"]
+                    ?.dealtAt !== undefined,
+            "its failure seen",
+        );
+        await see(
+            `return JSON.stringify(document.querySelector('.session-row[data-id="${id}"] .session-fork.failed') === null && document.querySelector(".rail-agents .rail-trouble") === null)`,
+            "the session's row and the rail clear",
+        );
+        await page.setViewport(VIEWPORTS.mobile);
+    },
+);
