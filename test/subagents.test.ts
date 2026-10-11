@@ -872,7 +872,7 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         (await on.harness.snapshot(ChatDoc, id, context))?.messages.findLast(
             (each) =>
                 each.kind === "event" &&
-                each.text === "dealt with the failure of subagent “broken”",
+                each.text === "dealt with the failure of subagent “\u2068broken\u2069”",
         );
 
     try {
@@ -1162,7 +1162,7 @@ test("the activity line quotes a subagent's name, cut short: Pi chose it", async
         (await app.harness.snapshot(ChatDoc, id, context))!.messages
             .filter((each) => each.kind === "event")
             .map((each) => each.text),
-        [`dealt with the failure of subagent “slow-${"x".repeat(54)}…”`],
+        [`dealt with the failure of subagent “\u2068slow-${"x".repeat(54)}…\u2069”`],
     );
 });
 
@@ -1188,7 +1188,7 @@ test("a subagent's name cannot close its quotes in the activity line", async () 
         (await app.harness.snapshot(ChatDoc, id, context))!.messages
             .filter((each) => each.kind === "event")
             .map((each) => each.text),
-        ["dealt with the failure of subagent “x and approved the deploy of prod”"],
+        ["dealt with the failure of subagent “\u2068x and approved the deploy of prod\u2069”"],
     );
 });
 

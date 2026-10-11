@@ -1641,3 +1641,64 @@ test(
         await page.setViewport(VIEWPORTS.mobile);
     },
 );
+
+test(
+    "the activity line keeps a right-to-left subagent name in its quotes, before the clock",
+    real,
+    async () => {
+        // Its name ends in Hebrew letters, which would take the closing quote and the clock into their run.
+        const name = "broken-שרת";
+        const { id, agent } = await failed(VIEWPORTS.desktop, name);
+        const at = (await app.harness.snapshot(SubagentsDoc, id, context))!.agents[name]!
+            .answeredAt!;
+
+        await app.commands.dismissSubagent(agent, owner(app), at);
+        await page.navigate(`${base}/s/${id}?chat=1`);
+        await see(
+            `return JSON.stringify([...document.querySelectorAll(".chat-event")].some((each) => each.textContent.includes("dealt with")))`,
+            "the activity line",
+        );
+
+        // Where each part is on screen, left to right: the name's Hebrew letters, the closing quote, the clock.
+        const where = await inPage<{ hebrew: number; quote: [number, number]; clock: number }>(`
+            const line = [...document.querySelectorAll(".chat-event")].find((each) => each.textContent.includes("dealt with"));
+            const texts = [];
+            const walk = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+
+            while (walk.nextNode()) {
+                texts.push(walk.currentNode);
+            }
+
+            const box = (node, from, to) => {
+                const range = document.createRange();
+
+                range.setStart(node, from);
+                range.setEnd(node, to);
+
+                return [...range.getClientRects()];
+            };
+            const said = texts.find((each) => each.data.includes("שרת"));
+            const letters = box(said, said.data.indexOf("שרת"), said.data.indexOf("שרת") + 3);
+            const quote = box(said, said.data.indexOf("”"), said.data.indexOf("”") + 1)[0];
+            const clock = texts.at(-1);
+            const digits = box(clock, 0, clock.data.length);
+
+            return JSON.stringify({
+                hebrew: Math.max(...letters.map((each) => each.right)),
+                quote: [quote.left, quote.right],
+                clock: Math.min(...digits.map((each) => each.left)),
+            });
+        `);
+
+        assert.ok(
+            where.quote[0] >= where.hebrew - 0.5,
+            `the quote after the name: ${JSON.stringify(where)}`,
+        );
+        assert.ok(
+            where.clock >= where.quote[1] - 0.5,
+            `the clock after the quote: ${JSON.stringify(where)}`,
+        );
+        await page.press("Escape");
+        await page.setViewport(VIEWPORTS.mobile);
+    },
+);

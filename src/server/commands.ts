@@ -103,9 +103,13 @@ const oneLine = (title: string): string => title.replace(/\s+/g, " ").trim().sli
  * text around or hides.
  */
 const UNQUOTED = /[^\p{L}\p{N}\s._-]|\p{Lm}/gu;
-/** A person's activity line when they dealt with a subagent's failure, in its parent session: Pi named it, so quoted. */
+/**
+ * A person's activity line when they dealt with a subagent's failure, in its parent session: Pi named it, so quoted, and
+ * isolated (U+2068 … U+2069), so a name that ends in right-to-left letters keeps the closing quote and what follows (the
+ * line's clock) after it. It cannot end the isolate itself: such controls are among what it drops.
+ */
 const dealtWith = (name: string): string =>
-    `dealt with the failure of subagent “${snippet(name.replace(UNQUOTED, ""), 60)}”`;
+    `dealt with the failure of subagent “\u2068${snippet(name.replace(UNQUOTED, ""), 60)}\u2069”`;
 
 /** What dismissing a subagent's failure came to: `newer` when it failed again since the failure seen. */
 type Dismissal = { dismissed: boolean; newer?: true };
