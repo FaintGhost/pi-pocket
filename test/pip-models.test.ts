@@ -61,13 +61,14 @@ const route: FauxResponseStep = (request) => {
           );
 };
 
-// The scripted models, and faux-2-mini, whose name runs on from faux-2's.
+// The scripted models, faux-2-mini, whose name runs on from faux-2's, and faux-q7, whose short name is two characters.
 const faux = fauxProvider({
     tokensPerSecond: 2000,
     models: [
         { id: "faux-1" },
         { id: "faux-2" },
         { id: "faux-2-mini" },
+        { id: "faux-q7" },
         { id: "faux-vision", input: ["text", "image"] },
     ],
 });
@@ -270,6 +271,33 @@ test("who pays is named after on, via, or the like, not by everyday words", () =
     assert.deepEqual(pays("use Kiwi K3 through acme-go"), ["acme-go"]);
 });
 
+test("a two-character short name counts only with its family's word in the same message", () => {
+    const zeta = model("acme", "zeta-z9", "Zeta Z9");
+    const v3 = model("acme", "acme-v3", "Acme V3");
+    const v4 = model("acme", "acme-v4", "Acme V4");
+    const m3 = model("acme", "acme-m3", "Acme-M3");
+    const all = [zeta, v3, v4, m3];
+
+    // Without it, they are ordinary codes, in a person's words or PiP's own: they name nothing.
+    for (const text of [
+        "generate ids with uuid v4",
+        "my M3 MacBook is slow",
+        "upgrade to Tailwind v3",
+        "use Z9",
+        "zeta's Z9s are here",
+    ]) {
+        assert.deepEqual(modelsNamed(text, all, true), [], text);
+    }
+
+    // With it, in the same message, they name it.
+    assert.deepEqual(modelsNamed("use Zeta's Z9", all, true), [zeta]);
+    assert.deepEqual(modelsNamed("zeta: use Z9 for it", all, true), [zeta]);
+    assert.equal(personNamed(indexed(["hello", "zeta: use Z9 for it"]), zeta, all), true);
+    // In another message, they do not.
+    assert.deepEqual(modelsNamed(indexed(["I like zeta", "use Z9"]), all, true), []);
+    assert.equal(personNamed(indexed(["I like zeta", "use Z9"]), zeta, all), false);
+});
+
 test("words that name a model not signed in name no shorter one that is", () => {
     const zeta = model("acme", "zeta-5", "Zeta 5");
     const nano = model("acme", "zeta-5-nano", "Zeta 5 Nano");
@@ -300,12 +328,12 @@ test("a model's usual short name names it, as it is written; ordinary words name
     const rho = model("acme", "rho-3-haiku", "Rho 3 Haiku");
     const all = [q4, kiwi, zeta, nova, lyra, gem, rho];
 
-    // Its name without its first word: a word that mixes letters and digits, a version and a word, or a word first.
-    assert.deepEqual(modelsNamed("use K3", all, true), [kiwi]);
-    assert.deepEqual(modelsNamed("try 4o", all, true), [nova]);
+    // Its name without its first word: a version and a word, or a word first, and two characters with its family's word.
+    assert.deepEqual(modelsNamed("use Kiwi's K3", all, true), [kiwi]);
+    assert.deepEqual(modelsNamed("nova: try 4o", all, true), [nova]);
     assert.deepEqual(modelsNamed("use 2.5 Flash", all, true), [gem]);
     assert.deepEqual(modelsNamed("use 2.5-flash", all, true), [gem]);
-    assert.equal(personNamed("use K3 for the review", kiwi, all), true);
+    assert.equal(personNamed("kiwi, use K3 for the review", kiwi, all), true);
     assert.equal(personNamed("use opus 4.5", lyra, all), true);
 
     // The same words written otherwise, or a bare number and a word, are ordinary text.
@@ -456,6 +484,21 @@ test("PiP takes the name of a model not signed in for no shorter one that is", a
         app.pip.send(id, session, "Spawn a reviewer subagent on faux-2.", false, "unsigned-1"),
         /names faux\/faux-2, which your person did not name/,
     );
+});
+
+test("PiP takes a two-character short name only with its family's word in the same message", async () => {
+    const id = await pip();
+
+    await say(app, id, "I run faux for everything");
+    await say(app, id, "start a session on Q7");
+    await assert.rejects(
+        app.pip.start(id, { model: "faux/faux-q7" }),
+        /did not name faux\/faux-q7/,
+    );
+    await say(app, id, "the faux one, Q7, please");
+    const made = await app.pip.start(id, { model: "faux/faux-q7" });
+
+    assert.equal((await app.agentState(made))?.model?.modelId, "faux-q7");
 });
 
 test("PiP's messages name no model its person did not name", async () => {

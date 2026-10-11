@@ -40,42 +40,58 @@ export function words(text: string): string[] {
 }
 
 /**
- * A text read for matching: its words and how they join (`split`), and where each word is. A phrase is looked up by its
- * first word there, not sought at every word, so reading a text costs its length once, and matching it costs the
- * phrases and the places they could start, however long the text is. PiP reads its person's words once per action.
+ * A text read for matching: its words and how they join (`split`), which message each is in, and where each word is. A
+ * phrase is looked up by its first word there, not sought at every word, so reading a text costs its length once, and
+ * matching it costs the phrases and the places they could start, however long the text is. PiP reads its person's
+ * words once per action.
  */
 export type Indexed = {
     words: readonly string[];
     joins: readonly string[];
+    messages: readonly number[];
     at: ReadonlyMap<string, readonly number[]>;
 };
 
-/** `text` read for matching. */
-export function indexed(text: string): Indexed {
-    const { words, joins } = split(text);
+/** `text` read for matching: one message, or several, each apart. */
+export function indexed(text: string | readonly string[]): Indexed {
+    const words: string[] = [];
+    const joins: string[] = [];
+    const messages: number[] = [];
     const at = new Map<string, number[]>();
 
-    words.forEach((word, index) => {
-        const places = at.get(word);
+    (typeof text === "string" ? [text] : text).forEach((message, number) => {
+        const part = split(message);
 
-        if (places === undefined) {
-            at.set(word, [index]);
-        } else {
-            places.push(index);
-        }
+        part.words.forEach((word, index) => {
+            const places = at.get(word);
+
+            if (places === undefined) {
+                at.set(word, [words.length]);
+            } else {
+                places.push(words.length);
+            }
+
+            words.push(word);
+            joins.push(part.joins[index]!);
+            messages.push(number);
+        });
     });
 
-    return { words, joins, at };
+    return { words, joins, messages, at };
 }
 
 const read = (text: string | Indexed): Indexed => (typeof text === "string" ? indexed(text) : text);
 
-/** Words that name a model; for a short name, also how they must be joined (`split`'s, the first one aside). */
-type Phrase = { words: readonly string[]; joins?: readonly string[] };
+/**
+ * Words that name a model; for a short name, also how they must be joined (`split`'s, the first one aside), and the
+ * `family` word it needs in the same message.
+ */
+type Phrase = { words: readonly string[]; joins?: readonly string[]; family?: Phrase };
 
 /**
  * Where `phrase` is a run of `text`'s words, joined as it says when it says, and not cut off in the middle of a written
- * word or a version ("zeta-5" in "zeta-5o" or "zeta-5.2"): the index of its first word, each time.
+ * word or a version ("zeta-5" in "zeta-5o" or "zeta-5.2"), with its family word in the same message if it needs one:
+ * the index of its first word, each time.
  */
 function starts(text: Indexed, phrase: Phrase): number[] {
     const length = phrase.words.length;
@@ -85,7 +101,7 @@ function starts(text: Indexed, phrase: Phrase): number[] {
     }
 
     // Where its first word is; the rest are compared there.
-    return (text.at.get(phrase.words[0]!) ?? []).filter((start) => {
+    const found = (text.at.get(phrase.words[0]!) ?? []).filter((start) => {
         const after = text.joins[start + length];
 
         return (
@@ -100,6 +116,14 @@ function starts(text: Indexed, phrase: Phrase): number[] {
             )
         );
     });
+
+    if (phrase.family === undefined || found.length === 0) {
+        return found;
+    }
+
+    const kin = new Set(starts(text, phrase.family).map((place) => text.messages[place]));
+
+    return found.filter((start) => kin.has(text.messages[start]));
 }
 
 /** Whether `phrase` is a run of `text`'s words. */
@@ -117,7 +141,8 @@ function distinct(phrase: Phrase): boolean {
  * left is still a name of its own: a word of three letters or more first ("opus 4.5"), however it is written; or a word
  * that mixes letters and digits ("K3", "4o"), or a version and a word after it ("2.5 Flash"), written as the model
  * writes them. A bare number and a word ("5 mini" of gpt-5-mini) is said in ordinary text, "build 5 mini apps", and so
- * are "K-3" and "4 o'clock".
+ * are "K-3" and "4 o'clock". So are two characters, a letter and a digit ("uuid v4", "my M3 laptop"): such a short name
+ * counts only with the word it was shortened from, its family, in the same message ("Kiwi's K3", "kiwi: use K3").
  */
 function shortened(full: string): Phrase | undefined {
     const { words, joins } = split(full);
@@ -127,6 +152,7 @@ function shortened(full: string): Phrase | undefined {
         return undefined;
     }
 
+    const family = { words: words.slice(0, from), joins: joins.slice(0, from) };
     const rest = { words: words.slice(from), joins: joins.slice(from) };
     const next = rest.joins.indexOf(" ", 1);
     const first = rest.words.slice(0, next === -1 ? undefined : next);
@@ -142,6 +168,10 @@ function shortened(full: string): Phrase | undefined {
         !first.some(letters) &&
         rest.joins.slice(1, first.length).includes(".") &&
         rest.words.slice(first.length).some(letters);
+
+    if (mixed && first.join("").length === 2) {
+        return { ...rest, family };
+    }
 
     return mixed || version ? rest : undefined;
 }

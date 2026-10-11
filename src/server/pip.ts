@@ -526,9 +526,10 @@ export class Pip {
      * What PiP's person said to it in their own words: their messages in its context now, newest first (since its last
      * new context, and those its last compaction kept), and the standing instructions of the watches and webhooks to it
      * that they set up. Never the instructions of a watch PiP set up (its own words, checked against the models signed
-     * in then), what was posted to a webhook, what GitHub said, a report, or anything else sent for them.
+     * in then), what was posted to a webhook, what GitHub said, a report, or anything else sent for them. Each message
+     * apart: a short name's family word counts in its own message only.
      */
-    async #personWords(pipId: ConversationId, user: User): Promise<string> {
+    async #personWords(pipId: ConversationId, user: User): Promise<string[]> {
         const app = this.#app;
         const own = (await app.harness.snapshot(AuthorsDoc, pipId, context))?.entries ?? {};
         const conversation = await app.conversation(pipId);
@@ -576,7 +577,7 @@ export class Pip {
             ),
         ];
 
-        return [...words, ...standing.map((each) => each.instructions ?? "")].join("\n");
+        return [...words, ...standing.map((each) => each.instructions ?? "")];
     }
 
     /**
@@ -649,7 +650,12 @@ export class Pip {
             return;
         }
 
-        const theirs = modelsNamed(await this.#personWords(pipId, user), available, true, known);
+        const theirs = modelsNamed(
+            indexed(await this.#personWords(pipId, user)),
+            available,
+            true,
+            known,
+        );
         const chosen = named.filter(
             (model) =>
                 !theirs.includes(model) &&
