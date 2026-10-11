@@ -4,9 +4,11 @@
  * sign-ins (`~/.pi/agent/auth.json`).
  *
  * A subscription's sign-in (OAuth) counts as signed in for as long as it is stored, even once it can no longer be
- * renewed. So each is asked afresh (the Providers sheet, a model Pi or PiP is about to use, a run that failed on it):
- * one its provider refuses to renew is marked as needing sign-in, its models are offered to no one, and the owner is
- * told, until someone signs in again.
+ * renewed. So each is asked afresh (the Providers sheet, a model PiP or a subagent on another model is about to use, a
+ * run that failed on it): one its provider refuses to renew is marked as needing sign-in, the model menu marks its
+ * models, PiP and subagents on other models refuse them, and the owner is told, until someone signs in again. A
+ * session's own run, a subagent on its model, and titles are not checked first: they try the model, and a run that
+ * fails on it marks it.
  */
 import { randomUUID } from "node:crypto";
 import type { AuthPrompt } from "@earendil-works/pi-ai";
@@ -200,7 +202,7 @@ export class Providers {
             // The owner's to fix: only they sign in.
             this.#app.ownerNotice(
                 "warning",
-                `The sign-in to ${name} expired and could not be renewed. Sign in again in Providers; until then its models are not used by Pi, subagents, or PiP.`,
+                `The sign-in to ${name} expired and could not be renewed. Sign in again in Providers; until then sessions on its models fail, and PiP and subagents on other models do not use them.`,
             );
             this.#changed();
         }

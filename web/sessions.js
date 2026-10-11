@@ -220,7 +220,7 @@ function subagentsTip(counts) {
 }
 
 /**
- * How long a finger rests on a row before its actions open; how far it may stray meanwhile (as far is a scroll, or the
+ * How long a finger rests on a row before its actions open; how far it may stray meanwhile (as far as a scroll, or the
  * drawer's drag); and how long before the row shows the press, so a scroll's start does not light it.
  */
 const PRESS_MS = 450;

@@ -90,7 +90,7 @@ export interface AccessChoice {
     prepare(mode: AccessMode): Promise<boolean | string>;
 }
 
-export type AccessResult = { mode: AccessMode; binary?: string } | "closed" | "unready";
+type AccessResult = { mode: AccessMode; binary?: string } | "closed" | "unready";
 
 /**
  * The mode to start in. One that is not ready (Tailscale not connected, no cloudflared) goes back to the menu when it
