@@ -789,3 +789,113 @@ test(
         await until(async () => !(await archivedNow()), "back from the archive");
     },
 );
+
+/** A finger dragged left from a row, as the drawer's drag-to-close hears it (touch events, which stay with the row). */
+const dragLeft = (id: ConversationId) =>
+    page.evaluate(`
+        const target = document.querySelector(${JSON.stringify(`${row(id)} > .session`)});
+        const box = target.getBoundingClientRect();
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        const touch = (at) => new Touch({ identifier: 3, target, clientX: at, clientY: y });
+        const fire = (type, at) =>
+            target.dispatchEvent(
+                new TouchEvent(type, {
+                    bubbles: true,
+                    cancelable: true,
+                    touches: type === "touchend" ? [] : [touch(at)],
+                    changedTouches: [touch(at)],
+                }),
+            );
+
+        fire("touchstart", x);
+
+        for (let step = 1; step <= 10; step++) {
+            fire("touchmove", x - step * 20);
+            await new Promise((resolve) => setTimeout(resolve, 30));
+        }
+
+        fire("touchend", x - 200);
+    `);
+
+const drawerOpen = () =>
+    inPage<boolean>(
+        `return JSON.stringify((await import("/store.js")).store.state.drawer === true && document.querySelector(".drawer") !== null)`,
+    );
+
+test(
+    "touch screens: in the drawer, a row's actions open over it, its drag waits, and Select selects there",
+    real,
+    async () => {
+        const [one, two] = folderSessions as [ConversationId, ConversationId];
+
+        await fresh(true);
+        await finger(active, { ms: 80 });
+        await settled({ path: `/s/${active}` }, "a session open");
+        await page.evaluate(`(await import("/store.js")).store.set({ drawer: true })`);
+        list = ".drawer";
+        await until(
+            async () =>
+                await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(${JSON.stringify(row(one))}) !== null)`,
+                ),
+            "the drawer's rows",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 450));
+
+        // The open session's row shows the press too, over its own fill.
+        const open = await finger(active, { ms: 600 });
+
+        assert.equal(open.pressed, true);
+        assert.notEqual(open.during, open.before, "the press shows on the open session's row");
+        await settled({ sheet: "session", layers: 2 }, "its actions, over the drawer");
+        await page.press("Escape");
+        await settled({ sheet: null, layers: 1 }, "closed, the drawer still open");
+
+        await finger(one, { ms: 600 });
+        await settled({ sheet: "session", layers: 2 }, "a row's actions, over the drawer");
+        // The finger that opened them slides left: the drawer under them stays.
+        await dragLeft(one);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        assert.equal(await drawerOpen(), true, "the drawer stays under the sheet");
+        await choose("Select");
+        await settled(
+            { sheet: null, selected: [Number(one)], layers: 2, path: `/s/${active}` },
+            "selected in the drawer",
+        );
+        assert.equal(await drawerOpen(), true, "the drawer stays for the selection");
+        await finger(two, { ms: 80 });
+        await settled({ selected: [two, one].map(Number), path: `/s/${active}` }, "a tap adds");
+
+        // Back lets go of the selection first, then the drawer drags closed again.
+        await page.evaluate(`history.back()`);
+        await settled({ selected: [], layers: 1 }, "back let go of the selection");
+        assert.equal(await drawerOpen(), true, "the drawer is still open");
+        await new Promise((resolve) => setTimeout(resolve, 450));
+        await dragLeft(one);
+        await until(async () => !(await drawerOpen()), "the drawer, dragged closed");
+    },
+);
+
+test(
+    "touch screens: a selected row that is archived leaves the selection, and taps open sessions again",
+    real,
+    async () => {
+        const [one, two] = folderSessions as [ConversationId, ConversationId];
+
+        await fresh(true);
+        await finger(one, { ms: 600 });
+        await settled({ sheet: "session" }, "the row's actions");
+        await choose("Select");
+        await settled({ sheet: null, selected: [Number(one)], layers: 1 }, "one selected");
+        await finger(one, { ms: 600 });
+        await settled({ sheet: "session" }, "its actions again");
+        await choose("Archive");
+        await settled({ sheet: null, selected: [], layers: 0 }, "archived, out of view");
+        await finger(two, { ms: 80 });
+        await settled({ path: `/s/${two}`, selected: [] }, "a tap opens a session");
+        await page.evaluate(
+            `await (await import("/store.js")).actions.updateSession(${Number(one)}, { archived: false })`,
+        );
+    },
+);

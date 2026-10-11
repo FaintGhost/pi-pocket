@@ -3242,13 +3242,13 @@ button.chip:hover {
     padding: 0 10px;
     text-align: left;
     border: 1px solid transparent;
+    -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.session:hover,
-.session-row.pressing .session {
+.session:hover {
     background: var(--hover);
 }
 
@@ -3271,6 +3271,11 @@ button.chip:hover {
 .session-row.selected .session {
     background: var(--accent-soft);
     border-color: var(--accent-line);
+}
+
+/* A finger held on a row, before its actions open: after the open and selected rows' fills, so it shows on them too. */
+.session-row.pressing .session {
+    background: var(--hover);
 }
 
 .session-mark {

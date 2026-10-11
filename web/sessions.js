@@ -215,9 +215,13 @@ function subagentsTip(counts) {
     return `${kinds.map((kind) => `${counts[kind]} ${kind}`).join(" · ")} subagent${total === 1 ? "" : "s"}`;
 }
 
-/** How long a finger rests on a row before its actions open, and how far it may stray meanwhile (more is a scroll). */
+/**
+ * How long a finger rests on a row before its actions open; how far it may stray meanwhile (as far is a scroll, or the
+ * drawer's drag); and how long before the row shows the press, so a scroll's start does not light it.
+ */
 const PRESS_MS = 450;
-const PRESS_SLOP = 10;
+const PRESS_SLOP = 8;
+const PRESS_SHOWS_MS = 100;
 
 /** The list whose row a finger last held: Select in that row's sheet selects there. */
 let pressedIn = null;
@@ -497,6 +501,8 @@ export function SessionList({ compact = false }) {
             : group.rows.map((session) => session.id),
     );
     const chosen = shown.filter((session) => selected.has(session.id)).map((session) => session.id);
+    // Taps select while the bar shows: not for rows selected and then hidden (archived, or searched away).
+    const tapping = tapSelects && chosen.length > 0;
     const numbers = new Map(workspaceOrder().map((session, index) => [session.id, index]));
 
     /** The rows from `from` to `to` as they show, or just `to` when either is out of view. */
@@ -533,7 +539,7 @@ export function SessionList({ compact = false }) {
             return;
         }
 
-        if (event.ctrlKey || event.metaKey || (tapSelects && picked.current.size > 0)) {
+        if (event.ctrlKey || event.metaKey || tapping) {
             const next = new Set(picked.current);
 
             if (next.has(id)) {
@@ -568,6 +574,7 @@ export function SessionList({ compact = false }) {
         const { pointerId, clientX: x, clientY: y } = event;
         let fired = false;
         let after = 0;
+        const shows = setTimeout(() => setPressing(id), PRESS_SHOWS_MS);
 
         const open = setTimeout(() => {
             // Gone meanwhile (someone deleted it): nothing to open.
@@ -586,7 +593,7 @@ export function SessionList({ compact = false }) {
             if (
                 each.pointerId === pointerId &&
                 !fired &&
-                Math.hypot(each.clientX - x, each.clientY - y) > PRESS_SLOP
+                Math.hypot(each.clientX - x, each.clientY - y) >= PRESS_SLOP
             ) {
                 stop();
             }
@@ -622,6 +629,7 @@ export function SessionList({ compact = false }) {
 
         const stop = () => {
             unpress.current = null;
+            clearTimeout(shows);
             clearTimeout(open);
             clearTimeout(after);
             setPressing((now) => (now === id ? null : now));
@@ -635,7 +643,6 @@ export function SessionList({ compact = false }) {
 
         unpress.current?.();
         unpress.current = stop;
-        setPressing(id);
         addEventListener("pointermove", move, true);
         addEventListener("pointerup", lift, true);
         addEventListener("pointercancel", lift, true);
@@ -800,7 +807,7 @@ export function SessionList({ compact = false }) {
     const selecting = selected.size > 0;
 
     // On a touch screen, so does back.
-    useBack(tapSelects && selecting, clearSelection);
+    useBack(tapping, clearSelection);
 
     useEffect(() => {
         if (!selecting) {
@@ -1269,7 +1276,12 @@ export function Drawer() {
     const close = () => store.set({ drawer: false });
 
     useBack(store.state.drawer === true, close);
-    useDragToClose(ref, { dir: "left", onClose: close, enabled: Boolean(open) && !leaving });
+    // Not under a row's actions, which a long press opens over it: the finger that opened them may still move.
+    useDragToClose(ref, {
+        dir: "left",
+        onClose: close,
+        enabled: Boolean(open) && !leaving && !store.state.sheet,
+    });
 
     if (!open) {
         return null;
