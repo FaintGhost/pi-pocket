@@ -169,34 +169,44 @@ test("a model's name that runs on into another's names only the longer one", () 
     assert.equal(personNamed("try z3-mini", z3, [z3]), true);
 });
 
-test("ordinary words name no model, and a short name that starts with a word still does", () => {
+test("a model's usual short name names it, as it is written; ordinary words name no model", () => {
     const q4 = model("acme", "q4-mini");
     const kiwi = model("acme", "kiwi-k3", "Kiwi K3");
     const zeta = model("acme", "zeta-5-mini", "Zeta 5 Mini");
     const nova = model("acme", "nova-4o", "Nova 4o");
     const lyra = model("acme", "lyra-opus-4-5", "Lyra Opus 4.5");
-    const all = [q4, kiwi, zeta, nova, lyra];
+    const gem = model("acme", "gem-2.5-flash", "Gem 2.5 Flash");
+    const rho = model("acme", "rho-3-haiku", "Rho 3 Haiku");
+    const all = [q4, kiwi, zeta, nova, lyra, gem, rho];
 
-    // Without its first word, a name that starts with a number or a lone letter is ordinary words.
+    // Its name without its first word: a word that mixes letters and digits, a version and a word, or a word first.
+    assert.deepEqual(modelsNamed("use K3", all, true), [kiwi]);
+    assert.deepEqual(modelsNamed("try 4o", all, true), [nova]);
+    assert.deepEqual(modelsNamed("use 2.5 Flash", all, true), [gem]);
+    assert.deepEqual(modelsNamed("use 2.5-flash", all, true), [gem]);
+    assert.equal(personNamed("use K3 for the review", kiwi, all), true);
+    assert.equal(personNamed("use opus 4.5", lyra, all), true);
+
+    // The same words written otherwise, or a bare number and a word, are ordinary text.
     for (const text of [
         "Build 4 mini apps",
         "Build 5 mini apps",
+        "write 3 haiku poems",
         "teach K-3 classes",
         "meet at 4 o'clock",
+        "pages 2-5 flash drives",
+        "use 2.5",
     ]) {
         assert.deepEqual(modelsNamed(text, all, true), [], text);
     }
 
     assert.equal(personNamed("Build 4 mini apps", q4, all), false);
     assert.equal(personNamed("teach K-3 classes", kiwi, all), false);
-    // Spelled out, each is named, and a short name that starts with a word of its own still is.
-    assert.deepEqual(modelsNamed("use q4-mini, Kiwi K3, zeta-5-mini, or nova-4o", all, true), [
-        q4,
-        kiwi,
-        zeta,
-        nova,
-    ]);
-    assert.equal(personNamed("use opus 4.5", lyra, all), true);
+    // Spelled out, each is named.
+    assert.deepEqual(
+        modelsNamed("use q4-mini, Kiwi K3, zeta-5-mini, nova-4o, or rho-3-haiku", all, true),
+        [q4, kiwi, zeta, nova, rho],
+    );
 });
 
 test("PiP's prompt puts checking before acting, and never picking a model", async () => {
