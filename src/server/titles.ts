@@ -6,7 +6,7 @@
  */
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Api, Model, Usage } from "@earendil-works/pi-ai";
-import { type ConversationId, UsageDoc } from "@earendil-works/pi-durable";
+import { type ConversationId, ProviderDoc, UsageDoc } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import { SessionsDoc } from "./docs.ts";
 import { describe } from "./errors.ts";
@@ -108,6 +108,9 @@ export async function writeTitle(
         }
 
         const model = titleModel(app.models.getAvailableSnapshot(), current);
+        // The conversation's own identity with the provider, as Pi Durable sends with its summaries: some providers
+        // (OpenCode Go) refuse a request without one.
+        const sessionId = (await app.harness.snapshot(ProviderDoc, id, context))?.sessionId;
         const reply = await app.models.completeSimple(
             model,
             {
@@ -124,7 +127,11 @@ export async function writeTitle(
                     },
                 ],
             },
-            { maxTokens: 1024 },
+            {
+                maxTokens: 1024,
+                cacheRetention: "none",
+                ...(sessionId === undefined ? {} : { sessionId }),
+            },
         );
         const title = cleanTitle(
             reply.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""),

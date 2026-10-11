@@ -21,7 +21,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai/providers/faux";
-import { UsageDoc } from "@earendil-works/pi-durable";
+import { ProviderDoc, UsageDoc } from "@earendil-works/pi-durable";
 import { ShellRequestsDoc } from "../src/server/docs.ts";
 import { mentionedPaths } from "../src/server/files.ts";
 import type { ClientEntry } from "../src/server/projection.ts";
@@ -551,10 +551,12 @@ test("a reply that is no title leaves the first message's; a command gets one wr
             ?.totalTokens ?? 0;
     const complete = app.models.completeSimple;
     let letGo: (() => void) | undefined;
+    let options: Parameters<typeof complete>[2];
 
     // Title requests wait to be let go: the session's own answer is counted first, and then the title's usage shows
     // when the commit that would rename the session is done.
     app.models.completeSimple = async function (...args) {
+        options = args[2];
         await new Promise<void>((resolve) => (letGo = resolve));
 
         return complete.apply(app.models, args);
@@ -575,6 +577,13 @@ test("a reply that is no title leaves the first message's; a command gets one wr
             letGo!();
             await until(async () => (await tokens(id)) > answered, "the title's usage");
             assert.equal(title(id), text);
+            // With the session's identity with the provider, which OpenCode Go requires, as Pi Durable's summaries.
+            assert.equal(
+                options?.sessionId,
+                (await app.harness.snapshot(ProviderDoc, id, context))?.sessionId,
+            );
+            assert.equal(typeof options?.sessionId, "string");
+            assert.equal(options?.cacheRetention, "none");
         }
 
         app.models.completeSimple = complete;
