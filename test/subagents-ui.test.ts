@@ -1327,3 +1327,41 @@ test(
         }
     },
 );
+
+test(
+    "a failure opened from its row in the subagents bar is seen: it needs nobody, on the server and in the app",
+    real,
+    async () => {
+        const { id, agent } = await failed(VIEWPORTS.desktop, "broken-row");
+        const row = `.agent-row.failed[data-peek="${Number(agent)}"] .agent-open`;
+
+        await see(
+            `return JSON.stringify(document.querySelector('.session-row[data-id="${id}"] .session-fork.failed') !== null && document.querySelector(".rail-agents .rail-trouble") !== null)`,
+            "the session's row and the rail say it failed",
+        );
+        await settled();
+        await page.click({ selector: ".agents-bar .agents-summary" });
+        await see(
+            `return JSON.stringify(document.querySelector(${JSON.stringify(row)}) !== null)`,
+            "its row in the bar",
+        );
+        await settled();
+        await page.click({ selector: row });
+        await see(
+            `return JSON.stringify(location.pathname === "/s/${Number(agent)}")`,
+            "the subagent open",
+        );
+        await until(
+            async () =>
+                (await app.harness.snapshot(SubagentsDoc, id, context))?.agents["broken-row"]
+                    ?.dealtAt !== undefined,
+            "its failure seen",
+        );
+        await see(
+            `return JSON.stringify(document.querySelector('.session-row[data-id="${id}"] .session-fork.failed') === null && document.querySelector(".rail-agents .rail-trouble") === null)`,
+            "the session's row and the rail clear",
+        );
+        assert.deepEqual(await trouble(id), { rail: false, row: false, needs: [], failing: 0 });
+        await page.setViewport(VIEWPORTS.mobile);
+    },
+);
