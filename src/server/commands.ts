@@ -562,7 +562,7 @@ export class Commands {
     /**
      * A person dealt with a failed subagent (`id`, its conversation): seen or dismissed, it needs nobody now, on the
      * board, the rail, or the session list, until it fails again. `at` is the failure they saw (its `answeredAt`): a
-     * newer one still needs them. Whether it was dismissed now.
+     * newer one still needs them. False when there was nothing to deal with: no such failure, or already dealt with.
      */
     async dismissSubagent(id: ConversationId, user: User, at: unknown): Promise<boolean> {
         const app = this.#app;
@@ -600,13 +600,13 @@ export class Commands {
                 record === undefined ||
                 record.failed !== true ||
                 record.error === STOPPED ||
-                record.dismissed === failure ||
+                record.dealtAt === failure ||
                 (at !== undefined && at !== failure)
             ) {
                 return false;
             }
 
-            record.dismissed = failure;
+            record.dealtAt = failure;
 
             return true;
         }, context);

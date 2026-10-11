@@ -40,7 +40,7 @@ const needsYou = (agent) => boardState(agent) === "waiting" || unresolved(agent)
 
 /** A subagent's state in words: "Failed · dismissed" for a failure someone dealt with. */
 const labelOf = (agent) =>
-    `${LABELS[boardState(agent)]}${boardState(agent) === "failed" && agent.dismissed ? " · dismissed" : ""}`;
+    `${LABELS[boardState(agent)]}${boardState(agent) === "failed" && agent.dealt ? " · dismissed" : ""}`;
 
 /** The board goes to one column below this width, as sheets come up from the bottom. */
 const PHONE = matchMedia("(max-width: 699px)");
@@ -611,7 +611,7 @@ export function SubagentsBoard() {
         // The most urgent state there, but for failures someone dealt with, which are quiet now.
         const top = STATES.find((state) =>
             list.some(
-                (agent) => boardState(agent) === state && !(state === "failed" && agent.dismissed),
+                (agent) => boardState(agent) === state && !(state === "failed" && agent.dealt),
             ),
         );
         const tone = top === undefined || top === "done" || top === "stopped" ? "quiet" : top;

@@ -1201,7 +1201,7 @@ const trouble = (id: ConversationId) =>
             rail: document.querySelector(".rail-agents .rail-trouble") !== null,
             row: document.querySelector('.session-row[data-id="${id}"] .session-fork.failed') !== null,
             needs: [...document.querySelectorAll(".board-need .board-need-main b")].map((each) => each.textContent),
-            failing: (counts.failed ?? 0) - (counts.dismissed ?? 0),
+            failing: (counts.failed ?? 0) - (counts.dealt ?? 0),
         });
     `);
 
@@ -1307,7 +1307,7 @@ test(
             async () =>
                 (await app.harness.snapshot(SubagentsDoc, second.id, context))?.agents[
                     "broken-seen"
-                ]?.dismissed !== undefined,
+                ]?.dealtAt !== undefined,
             "its failure seen",
         );
         await page.reload();

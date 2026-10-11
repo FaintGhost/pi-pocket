@@ -208,7 +208,7 @@ function Highlight({ text, needle }) {
 }
 
 /** Failed subagents nobody has dealt with (seen or dismissed), of a session's counts or the rail's totals. */
-const failing = (counts) => (counts.failed ?? 0) - (counts.dismissed ?? 0);
+const failing = (counts) => (counts.failed ?? 0) - (counts.dealt ?? 0);
 
 /** "2 working · 1 failed subagents": a session's subagents, for the ⑂ mark's tooltip. */
 function subagentsTip(counts) {
@@ -1030,7 +1030,7 @@ export function SessionList({ compact = false }) {
  * there, as the subagents board shows them.
  */
 export function subagentTotals(sessions = store.state.sessions) {
-    const totals = { working: 0, waiting: 0, failed: 0, stopped: 0, done: 0, dismissed: 0 };
+    const totals = { working: 0, waiting: 0, failed: 0, stopped: 0, done: 0, dealt: 0 };
 
     for (const session of sessions) {
         const counts = session.subagents;

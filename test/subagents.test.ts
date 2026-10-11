@@ -863,7 +863,7 @@ test("a failed subagent needs someone until a person deals with it, after a rest
     const tab = fakeTab(id, owner(first));
     // What the parent's subagents bar has of it.
     const bar = () =>
-        ((tab.field("subagents") ?? []) as { name: string; dismissed?: boolean }[]).find(
+        ((tab.field("subagents") ?? []) as { name: string; dealt?: boolean }[]).find(
             (each) => each.name === "broken",
         );
 
@@ -882,7 +882,7 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         // Failed, it needs someone: the session list counts it, and the board has it, as not dealt with.
         assert.deepEqual(counts(first), { failed: 1 });
         assert.equal(entry(first)?.failed, true);
-        assert.equal(entry(first)?.dismissed, undefined);
+        assert.equal(entry(first)?.dealt, undefined);
 
         // Someone who only watches cannot dismiss it; nor can anyone a failure other than the one it has now.
         await assert.rejects(first.commands.dismissSubagent(sub, viewer.user, at), /not steer/);
@@ -896,12 +896,12 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         // Dismissed, it is still a failure, and needs nobody: in the session list, on the board, and in the bar.
         assert.equal(await first.commands.dismissSubagent(sub, owner(first), at), true);
         await until(
-            () => isDeepStrictEqual(counts(first!), { failed: 1, dismissed: 1 }),
+            () => isDeepStrictEqual(counts(first!), { failed: 1, dealt: 1 }),
             "the session list says it was dealt with",
         );
         assert.equal(entry(first)?.failed, true);
-        assert.equal(entry(first)?.dismissed, true);
-        await until(() => bar()?.dismissed === true, "the parent's bar says so too");
+        assert.equal(entry(first)?.dealt, true);
+        await until(() => bar()?.dealt === true, "the parent's bar says so too");
         first.detach(tab.client);
 
         // As it was after a restart. The shared app steps aside meanwhile: one app per data folder in the process.
@@ -909,8 +909,8 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         first = undefined;
         await app.close();
         app = await openApp(scriptedModel(route), data);
-        assert.deepEqual(counts(app), { failed: 1, dismissed: 1 });
-        assert.equal(entry(app)?.dismissed, true);
+        assert.deepEqual(counts(app), { failed: 1, dealt: 1 });
+        assert.equal(entry(app)?.dealt, true);
         // PiP, looking at the sessions for its person, reads the same.
         const pip = await app.pip.ensure(owner(app));
         const told = () =>
@@ -927,13 +927,13 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         );
         assert.ok(((await record(app))?.answeredAt ?? 0) > at, "a later failure");
         assert.deepEqual(counts(app), { failed: 1 });
-        assert.equal(entry(app)?.dismissed, undefined);
+        assert.equal(entry(app)?.dealt, undefined);
         assert.equal(told(), "1 failed");
 
         // A person who sends it a message deals with it there.
         await app.commands.submit(sub, owner(app), { text: "Look again.", requestId: `a-${id}` });
         await until(
-            () => isDeepStrictEqual(counts(app), { failed: 1, dismissed: 1 }),
+            () => isDeepStrictEqual(counts(app), { failed: 1, dealt: 1 }),
             "dealt with by the message",
         );
     } finally {

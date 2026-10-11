@@ -169,7 +169,7 @@ function forBoard(entries: readonly SubagentEntry[]): SubagentEntry[] {
     const finished = (entry: SubagentEntry) =>
         entry.reporting !== true &&
         (["done", "stopped"].includes(subagentState(entry)) ||
-            (subagentState(entry) === "failed" && entry.dismissed === true));
+            (subagentState(entry) === "failed" && entry.dealt === true));
     const done = entries.filter(finished);
 
     if (done.length <= BOARD_FINISHED) {
@@ -184,24 +184,24 @@ function forBoard(entries: readonly SubagentEntry[]): SubagentEntry[] {
 
 /**
  * How many of a session's subagents are in each state, without the empty ones, and how many of those that failed a
- * person dealt with (`dismissed`): the rest need someone. Undefined for none at all.
+ * person dealt with (`dealt`): the rest need someone. Undefined for none at all.
  */
 function countSubagents(
     entries: readonly SubagentEntry[],
-): (Partial<Record<SubagentState, number>> & { dismissed?: number }) | undefined {
+): (Partial<Record<SubagentState, number>> & { dealt?: number }) | undefined {
     if (entries.length === 0) {
         return undefined;
     }
 
-    const counts: Partial<Record<SubagentState, number>> & { dismissed?: number } = {};
+    const counts: Partial<Record<SubagentState, number>> & { dealt?: number } = {};
 
     for (const entry of entries) {
         const state = subagentState(entry);
 
         counts[state] = (counts[state] ?? 0) + 1;
 
-        if (state === "failed" && entry.dismissed === true) {
-            counts.dismissed = (counts.dismissed ?? 0) + 1;
+        if (state === "failed" && entry.dealt === true) {
+            counts.dealt = (counts.dealt ?? 0) + 1;
         }
     }
 

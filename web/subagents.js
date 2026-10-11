@@ -43,7 +43,7 @@ export const stateOf = (agent) =>
     agent.busy ? "working" : agent.stopped ? "stopped" : agent.failed ? "failed" : "done";
 
 /** A failed subagent nobody has dealt with yet: it needs someone, on the board, the rail, and the session list. */
-export const unresolved = (agent) => stateOf(agent) === "failed" && agent.dismissed !== true;
+export const unresolved = (agent) => stateOf(agent) === "failed" && agent.dealt !== true;
 
 /** Say a subagent's failure was dealt with: the one this browser shows (by its time), so a newer one still shows. */
 export const dismiss = (agent) =>
@@ -135,7 +135,7 @@ function AgentRow({ agent }) {
     const stop = () => attempt(() => api(`c/${agent.conversationId}/abort`, {}));
     const status = stateOf(agent);
     // A failure someone dealt with says so, as the board does.
-    const dealt = status === "failed" && agent.dismissed ? " · dismissed" : "";
+    const dealt = status === "failed" && agent.dealt ? " · dismissed" : "";
     const when = agent.busy
         ? agent.askedAt && elapsed(agent.askedAt)
         : agent.answeredAt && `${status} ${timeAgo(fromServer(agent.answeredAt))}${dealt}`;
