@@ -175,3 +175,17 @@ test("maskable icons keep the frame and π inside the safe zone, and plain ones 
         assert.deepEqual(cut.slice(0, 5), [], `${src}: ${cut.length} pixels outside the safe zone`);
     }
 });
+
+test("the showcase site's icon is the app's, drawn the same", () => {
+    // Its comments aside: what each says about where it is used differs.
+    const drawing = (path: URL) =>
+        readFileSync(path, "utf8")
+            .replace(/<!--[\s\S]*?-->/g, "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+    assert.equal(
+        drawing(new URL("../site/icon.svg", import.meta.url)),
+        drawing(new URL("icon.svg", WEB)),
+    );
+});
