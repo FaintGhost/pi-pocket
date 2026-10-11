@@ -524,9 +524,9 @@ export class Pip {
 
     /**
      * What PiP's person said to it in their own words: their messages in its context now, newest first (since its last
-     * new context, and those its last compaction kept), and the standing instructions of their watches and webhooks to
-     * it, which they gave (a watch's passed this check when it was set up). Never what was posted to a webhook, what
-     * GitHub said, a report, or anything else sent for them.
+     * new context, and those its last compaction kept), and the standing instructions of the watches and webhooks to it
+     * that they set up. Never the instructions of a watch PiP set up (its own words, checked against the models signed
+     * in then), what was posted to a webhook, what GitHub said, a report, or anything else sent for them.
      */
     async #personWords(pipId: ConversationId, user: User): Promise<string> {
         const app = this.#app;
@@ -569,7 +569,7 @@ export class Pip {
         const target = Number(pipId);
         const standing = [
             ...(await app.repoWatches.list(user)).filter(
-                (watch) => watch.by === user.id && watch.target === target,
+                (watch) => watch.by === user.id && !watch.byPi && watch.target === target,
             ),
             ...(await app.hooks.list(user)).filter(
                 (hook) => hook.by === user.id && hook.target === target,

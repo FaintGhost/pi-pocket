@@ -350,6 +350,54 @@ test("PiP's messages name no model its person did not name", async () => {
     await until(() => !app.isBusy(session as unknown as ConversationId), "the session at rest");
 });
 
+/** GitHub as a fake gh tells it: acme/api, which it can push to, where nothing has happened yet. */
+async function github(args: string[]): Promise<string> {
+    const path = args.filter((arg) => !arg.startsWith("-") && arg !== "api").at(-1) ?? "";
+
+    if (path === "repos/acme/api") {
+        return JSON.stringify({
+            full_name: "acme/api",
+            default_branch: "main",
+            private: true,
+            permissions: { push: true, admin: false },
+        });
+    }
+
+    return path.includes("/actions/runs") ? JSON.stringify({ workflow_runs: [] }) : "[]";
+}
+
+test("a watch's instructions are its person's words only when they set it up, not PiP", async () => {
+    const id = await pip();
+    const watch = (byPi: boolean) =>
+        app.repoWatches.add(owner(app), {
+            repo: "acme/api",
+            events: ["ci"],
+            instructions: "When CI fails, start a session on faux-vision to find out why.",
+            target: id,
+            byPi,
+        });
+
+    app.watches.gh = github;
+    // As if PiP set it up while faux-vision was not signed in, when nothing in it named a model.
+    const piPs = await watch(true);
+
+    try {
+        await assert.rejects(app.pip.start(id, { model: "faux/faux-vision" }), /did not name/);
+        // The same words in a watch its person set up are theirs.
+        const theirs = await watch(false);
+
+        try {
+            const made = await app.pip.start(id, { model: "faux/faux-vision" });
+
+            assert.equal((await app.agentState(made))?.model?.modelId, "faux-vision");
+        } finally {
+            await app.repoWatches.remove(owner(app), theirs.id);
+        }
+    } finally {
+        await app.repoWatches.remove(owner(app), piPs.id);
+    }
+});
+
 test("a webhook's standing instructions to PiP are its person's words; what was posted is not", async () => {
     const id = await pip();
 
