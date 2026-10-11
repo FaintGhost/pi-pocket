@@ -201,7 +201,7 @@ function phrases(model: Model<Api>, loosely: boolean): Phrase[] {
 
 const modelKey = (model: Model<Api>) => `${model.provider}/${model.id}`;
 
-/** The words a person names a provider after, as the one to pay: "on copilot", "via OpenRouter". */
+/** The words a person names a provider after, as the one to pay: "on GitHub Copilot", "via OpenRouter". */
 const VIA = new Set(["on", "via", "through", "with", "using", "from"]);
 
 /**
@@ -257,8 +257,8 @@ export function sharePhrase(text: string | Indexed, a: Model<Api>, b: Model<Api>
  * Whether a person's `text` names `model`, as they would say it, among the `models` signed in: words that name a longer
  * one of them, or of `among` (every model Pi knows), do not name `model` ("gpt-5-nano" is not gpt-5). When the same
  * words name it at another provider too (Claude Opus 4.5 is at Anthropic and GitHub Copilot), the provider must be
- * named as well, by a word of its id or name that the others do not share ("copilot", "codex"), right after one of
- * `VIA` ("on copilot"): which one pays is theirs to say, and its word elsewhere ("go ahead") is ordinary text.
+ * named as well, by its whole id or name, right after one of `VIA` ("on GitHub Copilot"): which one pays is theirs to
+ * say. One word of it is ordinary text, there too ("write it with Go"), and elsewhere ("go ahead").
  */
 export function personNamed(
     text: string | Indexed,
@@ -281,30 +281,28 @@ export function personNamed(
         return true;
     }
 
-    const providerWords = (provider: string) =>
-        new Set([...words(provider), ...words(providerName(provider))]);
-    const own = providerWords(model.provider);
-    const shared = new Set([
-        ...twins.flatMap((other) => [...providerWords(other.provider)]),
-        ...words(model.id),
-        ...words(model.name),
-    ]);
-
-    // Its words right after "on" (or "via"…), in its message, one of them not the others': "on Kiwi Coding" names Kiwi
-    // Coding.
-    return [...VIA].some((via) =>
-        (said.at.get(via) ?? []).some((index) => {
-            for (
-                let next = index + 1;
-                said.messages[next] === said.messages[index] && own.has(said.words[next] ?? "");
-                next++
-            ) {
-                if (!shared.has(said.words[next]!)) {
-                    return true;
-                }
-            }
-
-            return false;
-        }),
+    // Its whole id or name, right after "on" (or "via"…) in its message: "on GitHub Copilot", "through acme-go". Words
+    // there that run on into a longer name, another provider's or the model's, name that one: "on Kiwi Coding" is not
+    // Kiwi, nor is "using Kiwi K3".
+    const vias = new Set([...VIA].flatMap((via) => said.at.get(via) ?? []));
+    const after = (phrase: Phrase) =>
+        starts(said, phrase)
+            .filter(
+                (start) => vias.has(start - 1) && said.messages[start - 1] === said.messages[start],
+            )
+            .map((start) => ({ start, length: phrase.words.length }));
+    const providers = [...new Set([model.provider, ...twins.map((other) => other.provider)])];
+    const named = providers.map((provider) =>
+        [provider, providerName(provider)].flatMap((full) => after({ words: words(full) })),
     );
+    const longest = new Map<number, number>();
+
+    for (const { start, length } of [
+        ...named.flat(),
+        ...[model, ...twins].flatMap((each) => phrases(each, true).flatMap(after)),
+    ]) {
+        longest.set(start, Math.max(longest.get(start) ?? 0, length));
+    }
+
+    return named[0]!.some(({ start, length }) => length === longest.get(start));
 }

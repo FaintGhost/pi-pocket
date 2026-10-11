@@ -167,12 +167,16 @@ test("model names are matched by words, as people write them", () => {
 
     assert.equal(personNamed("use claude opus 4.5 through OpenRouter", routed, all, names), true);
     assert.equal(personNamed("use claude opus 4.5 through OpenRouter", opus, all, names), false);
-    // A word of the provider's that the others lack is enough, and one they share is not.
+    // Its whole name or id, not a word of it.
     const copilot = model("github-copilot", "claude-opus-4.5", "Claude Opus 4.5");
     const both = [opus, copilot];
+    const titled = (provider: string) =>
+        provider === "github-copilot" ? "GitHub Copilot" : provider;
 
-    assert.equal(personNamed("opus 4.5 on copilot", copilot, both), true);
-    assert.equal(personNamed("opus 4.5 on copilot", opus, both), false);
+    assert.equal(personNamed("opus 4.5 on GitHub Copilot", copilot, both, titled), true);
+    assert.equal(personNamed("opus 4.5 on github-copilot", copilot, both), true);
+    assert.equal(personNamed("opus 4.5 on GitHub Copilot", opus, both, titled), false);
+    assert.equal(personNamed("opus 4.5 on copilot", copilot, both, titled), false);
     assert.equal(personNamed("opus 4.5", opus, both), false);
     // The same words at two providers name both: PiP passing them on picks no provider.
     assert.equal(sharePhrase("Review it on claude-opus-4-5.", copilot, opus), true);
@@ -247,6 +251,8 @@ test("who pays is named after on, via, or the like, not by everyday words", () =
         "acme-go": "Acme Go",
         "kiwi-coding": "Kiwi Coding",
         "zeta-gateway": "Zeta AI Gateway",
+        "hub-copilot": "Hub Copilot",
+        kiwi: "Kiwi",
     };
     const at = Object.keys(names).map((provider) => model(provider, "kiwi-k3", "Kiwi K3"));
     const pays = (text: string) =>
@@ -254,21 +260,26 @@ test("who pays is named after on, via, or the like, not by everyday words", () =
             .filter((each) => personNamed(text, each, at, (provider) => names[provider]!))
             .map((each) => each.provider);
 
-    // A provider's word as an everyday word picks none of them.
+    // A provider's word as an everyday word picks none of them, after "on" or "with" too.
     for (const text of [
         "use Kiwi K3",
         "use Kiwi K3, go ahead",
         "use Kiwi K3 for the coding task",
         "use Kiwi K3 via the AI gateway",
+        "write the server with Go using Kiwi K3",
+        "use Kiwi K3 and push it on hub",
+        "use Kiwi K3 from coding notes",
     ]) {
         assert.deepEqual(pays(text), [], text);
     }
 
-    // Its words after on, via, through, and the like do, one of them not the others'.
+    // Its whole name or id after on, via, through, and the like does; of two from the same word, the longer one.
     assert.deepEqual(pays("use Kiwi K3 on Acme Go"), ["acme-go"]);
     assert.deepEqual(pays("use Kiwi K3 on Kiwi Coding"), ["kiwi-coding"]);
+    assert.deepEqual(pays("use Kiwi K3 on Kiwi"), ["kiwi"]);
     assert.deepEqual(pays("use Kiwi K3 via Zeta AI Gateway"), ["zeta-gateway"]);
     assert.deepEqual(pays("use Kiwi K3 through acme-go"), ["acme-go"]);
+    assert.deepEqual(pays("push it on Hub Copilot with Kiwi K3"), ["hub-copilot"]);
 });
 
 test("a two-character short name counts only with its family's word in the same message", () => {
@@ -324,7 +335,7 @@ test("a model's name, and who pays after on or via, stay in one message", () => 
             )
             .map((each) => each.provider);
 
-    assert.deepEqual(pays(["use kiwi k3 on", "go ahead"]), []);
+    assert.deepEqual(pays(["use kiwi k3 on", "acme go is fine"]), []);
     assert.deepEqual(pays(["use kiwi k3 on acme go", "thanks"]), ["acme-go"]);
 });
 
