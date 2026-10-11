@@ -537,13 +537,42 @@ test("PiP takes its person's bare answer to which provider pays, right after it 
     await say(app, id, "Hub Copilot");
     await assert.rejects(app.pip.start(id, z8("hub-copilot")), twice);
 
-    // A question from before Start fresh is not the one answered.
-    await ask();
-    const fresh = await pip();
+    // A question from before Start fresh is not the one answered, even by the first thing said after it: the model named
+    // only in a webhook's instructions they set up, so it is named after Start fresh too, with a message of theirs before
+    // the question, or none.
+    const hook = await app.hooks.add(owner(app), id, {
+        name: "reviews",
+        instructions: "use faux z8 for every review",
+    });
 
-    await say(app, fresh, "start a session on faux z8 for the review");
-    await say(app, fresh, "hub-copilot");
-    await assert.rejects(app.pip.start(fresh, z8("hub-copilot")), twice);
+    try {
+        for (const earlier of ["hello", undefined]) {
+            await pip();
+
+            if (earlier !== undefined) {
+                await say(app, id, earlier);
+            }
+
+            await assert.rejects(app.pip.start(id, z8("hub-copilot")), twice);
+            await app.commands.reset(id, owner(app), undefined);
+            await say(app, id, "Hub Copilot");
+            await assert.rejects(
+                app.pip.start(id, z8("hub-copilot")),
+                twice,
+                earlier ?? "no message before",
+            );
+        }
+
+        // Without Start fresh between, the same answer picks it.
+        await pip();
+        await assert.rejects(app.pip.start(id, z8("hub-copilot")), twice);
+        await say(app, id, "Hub Copilot");
+        const answered = await app.pip.start(id, z8("hub-copilot"));
+
+        assert.equal((await app.agentState(answered))?.model?.provider, "hub-copilot");
+    } finally {
+        await app.hooks.remove(owner(app), hook.id);
+    }
 });
 
 test("PiP's question of which provider pays, from before Start fresh, is never answered after it", async () => {
