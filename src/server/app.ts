@@ -2408,7 +2408,10 @@ export class PocketApp {
         return this.config.subagentModels;
     }
 
-    /** Keep the models for subagents, rebuild the subagent tool to match, and tell every tab. */
+    /**
+     * Keep the models for subagents, rebuild the subagent tool to match, and tell the owner's tabs, the only ones whose
+     * hello carries the list.
+     */
     async #saveSubagentModels(chosen: readonly string[]): Promise<void> {
         const before = this.config.subagentModels;
 
@@ -2427,20 +2430,28 @@ export class PocketApp {
             }
         }
 
-        await this.#refreshClients();
-        // The owner's setting, which only their hello carries: so does the notice.
-        this.ownerNotice(
-            "info",
-            chosen.length === 0
-                ? `Subagents run only on their session's model now.`
-                : `Subagents may also run on ${chosen.join(", ")} now.`,
-        );
+        await this.#refreshClients((user) => user.role === "owner");
+        // What changed: the checklist shows the rest.
+        const added = chosen.filter((each) => !before.includes(each));
+        const removed = before.filter((each) => !chosen.includes(each));
+        const said = [
+            ...(added.length === 0 ? [] : [`${added.join(", ")} allowed for subagents`]),
+            ...(removed.length === 0
+                ? []
+                : [`${removed.join(", ")} no longer allowed for subagents`]),
+        ];
+
+        if (said.length > 0) {
+            this.ownerNotice("info", `${said.join("; ")}.`);
+        }
     }
 
-    /** Send every client a fresh hello: the guard's status and the extension names changed. */
-    async #refreshClients(): Promise<void> {
+    /** Send clients a fresh hello, every one or those of the people `to` names: what it carries changed. */
+    async #refreshClients(to: (user: User) => boolean = () => true): Promise<void> {
         for (const client of this.#clients) {
-            client.send("hello", this.#helloFor(client, await this.hello(client.user)));
+            if (to(client.user)) {
+                client.send("hello", this.#helloFor(client, await this.hello(client.user)));
+            }
         }
     }
 

@@ -268,6 +268,41 @@ test("a subagent that failed for a reason not its model's is reported plainly, w
     assert.equal(said.includes(MODEL_FAILED), false);
 });
 
+test("each change to the models for subagents tells the owner of that model alone, and only the owner's tabs get it", async () => {
+    await app.setSubagentModels(owner(app), []);
+    const owners = fakeTab(undefined, owner(app));
+    const guests = fakeTab(undefined, app.config.addUser("Dee", "guest").user);
+    const notices = () =>
+        owners.events.filter((each) => each.event === "notice").map((each) => each.data.message);
+    const hellos = (tab: typeof owners) =>
+        tab.events.filter((each) => each.event === "hello").length;
+
+    await app.attach(owners.client);
+    await app.attach(guests.client);
+    const before = { owners: hellos(owners), guests: hellos(guests) };
+
+    try {
+        await app.allowSubagentModel(owner(app), "faux/mine", true);
+        await app.allowSubagentModel(owner(app), "faux/pricey", true);
+        await app.allowSubagentModel(owner(app), "faux/mine", false);
+        await app.allowSubagentModel(owner(app), "faux/pricey", false);
+
+        // The checklist shows the rest: the notice says what changed.
+        assert.deepEqual(notices(), [
+            "faux/mine allowed for subagents.",
+            "faux/pricey allowed for subagents.",
+            "faux/mine no longer allowed for subagents.",
+            "faux/pricey no longer allowed for subagents.",
+        ]);
+        // The owner's other tabs show the list; nobody else's hello carries it.
+        assert.equal(hellos(owners) - before.owners, 4);
+        assert.equal(hellos(guests) - before.guests, 0);
+    } finally {
+        app.detach(owners.client);
+        app.detach(guests.client);
+    }
+});
+
 test("the settings route changes the models for subagents, for the owner only, one setting at a time", async () => {
     const { createServer } = await import("node:http");
     const { createHandler } = await import("../src/server/http.ts");
