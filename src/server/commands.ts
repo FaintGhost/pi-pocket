@@ -42,7 +42,7 @@ import { mentionedPaths, viewFile } from "./files.ts";
 import { isThinkingLevel, THINKING_LEVELS } from "./models.ts";
 import { writePiSession } from "./pi-sessions.ts";
 import { snippet } from "./projection.ts";
-import { expandPromptTemplate, expandSkillCommand } from "./prompts.ts";
+import { expandPromptTemplate, expandSkillCommand, unwrapSkill } from "./prompts.ts";
 import { clientKey, ownRequest, requestFor } from "./requests.ts";
 import { type Resend, resendContent, resendRequest, ResendTask, userContent } from "./resend.ts";
 import { wantsTitle, writeTitle } from "./titles.ts";
@@ -635,7 +635,8 @@ export class Commands {
     /**
      * A session just got a message: it moves up the list, and its first message names it. A long first message gets a
      * short title written for it afterwards (`titles.ts`), and so does a command (`/skill:name`, a prompt template),
-     * whose name says little: written from the command and what it `expanded` to, which says what it asks.
+     * whose name says little: written from the command and what it `expanded` to, which says what it asks (a skill's
+     * instructions without the paths of its files, which would pull the title toward a folder's name).
      */
     async #touched(id: ConversationId, text: string, expanded?: string): Promise<void> {
         if (this.#app.sessionMeta(id) === undefined) {
@@ -662,7 +663,7 @@ export class Commands {
             void writeTitle(
                 this.#app,
                 id,
-                expanded === undefined ? text : `${text}\n\n${expanded}`,
+                expanded === undefined ? text : `${text}\n\n${unwrapSkill(expanded)}`,
                 provisional,
             );
         }

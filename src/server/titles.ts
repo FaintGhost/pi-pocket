@@ -16,8 +16,14 @@ const context = BACKGROUND_CONTEXT;
 /** First messages this long or longer get a written title; shorter ones are a title already. */
 const LONG_WORDS = 9;
 const MAX_TITLE = 60;
-/** More words than this is no title but prose, such as a model thinking aloud: the model is asked for 3 to 6. */
-const MAX_WORDS = 10;
+/**
+ * More words than this is no title but prose, such as a model thinking aloud. The model is asked for 3 to 6 words, but
+ * some languages put spaces between syllables (Vietnamese), and some models are wordy.
+ */
+const MAX_WORDS = 15;
+/** Reasoning some servers send in the reply's text: a block in tags, or one whose opening tag stayed behind. */
+const REASONING = /<(think|thinking|reasoning)>[\s\S]*?(<\/\1>|$)/gi;
+const REASONING_END = /^[\s\S]*<\/(think|thinking|reasoning)>/i;
 /** How much of the first message the model reads. */
 const READ_CHARS = 3000;
 const SMALL = /(^|[-_./])(haiku|mini|flash|nano|lite|small)([-_.]|$)/i;
@@ -49,12 +55,13 @@ export function titleModel(models: readonly Model<Api>[], current: Model<Api>): 
 
 /**
  * A model's reply as a title: its first line, without quotes or a label, and not too long. Undefined when that is
- * empty, or is a sentence rather than a title, as when a model thinks aloud in its reply. Reasoning in `<think>` tags,
- * as some servers send it, is left out.
+ * empty, or is a sentence rather than a title, as when a model thinks aloud in its reply. Reasoning in `<think>` tags
+ * (or `<thinking>`, `<reasoning>`), as some servers send it, is left out.
  */
 export function cleanTitle(reply: string): string | undefined {
     const line = reply
-        .replace(/<think>[\s\S]*?(<\/think>|$)/gi, "")
+        .replace(REASONING, "")
+        .replace(REASONING_END, "")
         .trim()
         .split("\n")[0]!
         .replace(/^(title|session title)\s*:\s*/i, "")
@@ -110,7 +117,13 @@ export async function writeTitle(
         const model = titleModel(app.models.getAvailableSnapshot(), current);
         // The conversation's own identity with the provider, as Pi Durable sends with its summaries: some providers
         // (OpenCode Go) refuse a request without one.
-        const sessionId = (await app.harness.snapshot(ProviderDoc, id, context))?.sessionId;
+        // A conversation older than that identity gets one, as Pi Durable gives it before its next request.
+        const sessionId =
+            (await app.harness.snapshot(ProviderDoc, id, context))?.sessionId ??
+            (await app.harness.commit(
+                async (tx) => (await tx.doc(ProviderDoc, id)).sessionId,
+                context,
+            ));
         const reply = await app.models.completeSimple(
             model,
             {
@@ -127,11 +140,7 @@ export async function writeTitle(
                     },
                 ],
             },
-            {
-                maxTokens: 1024,
-                cacheRetention: "none",
-                ...(sessionId === undefined ? {} : { sessionId }),
-            },
+            { maxTokens: 1024, cacheRetention: "none", sessionId },
         );
         const title = cleanTitle(
             reply.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""),
