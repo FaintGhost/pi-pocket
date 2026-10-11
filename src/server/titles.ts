@@ -1,7 +1,8 @@
 /**
- * Session titles. A session is named after its first message at once; when that message is long, a small model of the
- * session's provider writes a short title in its place, unless someone renamed the session first. What it costs counts
- * as the session's spend, like Pi's own requests.
+ * Session titles. A session is named after its first message at once; when that message is long, or is a command (a
+ * skill or prompt template), a small model of the session's provider writes a short title in its place, unless someone
+ * renamed the session first. A reply that is no title (the model thinking aloud, or cut off) leaves the first one. What
+ * it costs counts as the session's spend, like Pi's own requests.
  */
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Api, Model, Usage } from "@earendil-works/pi-ai";
@@ -15,6 +16,8 @@ const context = BACKGROUND_CONTEXT;
 /** First messages this long or longer get a written title; shorter ones are a title already. */
 const LONG_WORDS = 9;
 const MAX_TITLE = 60;
+/** More words than this is no title but prose, such as a model thinking aloud: the model is asked for 3 to 6. */
+const MAX_WORDS = 10;
 /** How much of the first message the model reads. */
 const READ_CHARS = 3000;
 const SMALL = /(^|[-_./])(haiku|mini|flash|nano|lite|small)([-_.]|$)/i;
@@ -44,16 +47,21 @@ export function titleModel(models: readonly Model<Api>[], current: Model<Api>): 
     return small[0] ?? current;
 }
 
-/** A model's reply as a title: one line, no quotes or label, not too long. Undefined when nothing is left. */
+/**
+ * A model's reply as a title: its first line, without quotes or a label, and not too long. Undefined when that is
+ * empty, or is a sentence rather than a title, as when a model thinks aloud in its reply. Reasoning in `<think>` tags,
+ * as some servers send it, is left out.
+ */
 export function cleanTitle(reply: string): string | undefined {
     const line = reply
+        .replace(/<think>[\s\S]*?(<\/think>|$)/gi, "")
         .trim()
         .split("\n")[0]!
         .replace(/^(title|session title)\s*:\s*/i, "")
         .replace(/^["'“‘*#\s]+|["'”’*\s.!?:;,]+$/g, "")
         .trim();
 
-    if (line === "") {
+    if (line === "" || line.split(/\s+/).length > MAX_WORDS) {
         return undefined;
     }
 
@@ -75,7 +83,8 @@ function addUsage(total: Usage, usage: Usage): void {
 
 /**
  * Ask for a title for a session whose first message is `text`, and use it if the session still has the title that
- * message gave it (`provisional`). Failures only leave that title in place.
+ * message gave it (`provisional`). Failures, and replies that are no title or were cut off, only leave that title in
+ * place.
  */
 export async function writeTitle(
     app: PocketApp,
@@ -135,7 +144,8 @@ export async function writeTitle(
             };
             addUsage(usage.models[key] as Usage, reply.usage);
 
-            if (title === undefined || reply.stopReason === "error") {
+            // Only a reply that ended by itself: one cut off at the token limit is a model that went on, not a title.
+            if (title === undefined || reply.stopReason !== "stop") {
                 return;
             }
 

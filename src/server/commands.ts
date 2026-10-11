@@ -546,7 +546,7 @@ export class Commands {
         );
 
         app.collab.setTyping(id, user, null);
-        await this.#touched(id, typed);
+        await this.#touched(id, typed, text === typed ? undefined : text);
         this.#reportUnanswered(id, submission.wait(context));
 
         return { submissionId: submission.id, requestId };
@@ -634,9 +634,10 @@ export class Commands {
 
     /**
      * A session just got a message: it moves up the list, and its first message names it. A long first message gets a
-     * short title written for it afterwards (`titles.ts`).
+     * short title written for it afterwards (`titles.ts`), and so does a command (`/skill:name`, a prompt template),
+     * whose name says little: written from the command and what it `expanded` to, which says what it asks.
      */
-    async #touched(id: ConversationId, text: string): Promise<void> {
+    async #touched(id: ConversationId, text: string, expanded?: string): Promise<void> {
         if (this.#app.sessionMeta(id) === undefined) {
             return;
         }
@@ -657,8 +658,13 @@ export class Commands {
             }
         }, context);
 
-        if (provisional !== undefined && wantsTitle(text)) {
-            void writeTitle(this.#app, id, text, provisional);
+        if (provisional !== undefined && (expanded !== undefined || wantsTitle(text))) {
+            void writeTitle(
+                this.#app,
+                id,
+                expanded === undefined ? text : `${text}\n\n${expanded}`,
+                provisional,
+            );
         }
     }
 

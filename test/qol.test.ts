@@ -21,17 +21,32 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxText } from "@earendil-works/pi-ai/providers/faux";
+import { UsageDoc } from "@earendil-works/pi-durable";
 import { ShellRequestsDoc } from "../src/server/docs.ts";
 import { mentionedPaths } from "../src/server/files.ts";
 import type { ClientEntry } from "../src/server/projection.ts";
 import { cleanTitle, TITLE_PROMPT, titleModel, wantsTitle } from "../src/server/titles.ts";
 
-/** Echoes, except that it names sessions when asked to. */
+/**
+ * Echoes, except that it names sessions when asked to: a command by what it sends, and with a model that thinks aloud,
+ * or goes on until it is cut off, when the message asks for that.
+ */
 const route: FauxResponseStep = (request) => {
     const { text } = lastText(request as never);
 
     if (text.startsWith(TITLE_PROMPT)) {
-        return fauxAssistantMessage([fauxText('"Tidy The Release Script."')]);
+        const thinking =
+            "The user wants me to name a chat session with a title of 3 to 6 words for a session that starts with the message below";
+
+        return text.includes("think aloud")
+            ? fauxAssistantMessage([fauxText(`${thinking}.\n\nRelease Script Tags`)])
+            : text.includes("go on and on")
+              ? fauxAssistantMessage([fauxText("Release")], { stopReason: "length" })
+              : text.includes("Read the code, then write up how it works")
+                ? fauxAssistantMessage([fauxText("Research How Sign-In Works")])
+                : text.includes("Review src/auth.ts for bugs")
+                  ? fauxAssistantMessage([fauxText("Review Auth For Bugs")])
+                  : fauxAssistantMessage([fauxText('"Tidy The Release Script."')]);
     }
 
     return fauxAssistantMessage([fauxText(`echo: ${text}`)]);
@@ -483,6 +498,13 @@ test("a long first message gets a short written title; a short one is the title"
     assert.equal(wantsTitle("one\ntwo"), true);
     assert.equal(cleanTitle('Title: "Fix the login flow."\nmore'), "Fix the login flow");
     assert.equal(cleanTitle("  \n"), undefined);
+    // A model thinking aloud in its reply (#52) gives no title, and its reasoning in tags is left out.
+    assert.equal(
+        cleanTitle("The user wants me to name a chat session with a title of 3 to 6 words"),
+        undefined,
+    );
+    assert.equal(cleanTitle("<think>\nA title for it.\n</think>\n\nFix Login"), "Fix Login");
+    assert.equal(cleanTitle("<think>\nA title for it, about"), undefined);
     const model = (id: string, provider = "p", cost = 1) =>
         ({ id, provider, input: ["text"], cost: { input: cost, output: cost } }) as never;
 
@@ -520,4 +542,66 @@ test("a long first message gets a short written title; a short one is the title"
         app.sessions().find((each) => each.id === Number(short))?.title,
         "fix the login bug",
     );
+});
+
+test("a reply that is no title leaves the first message's; a command gets one written from what it sends", async () => {
+    const title = (id: unknown) => app.sessions().find((each) => each.id === Number(id))?.title;
+    const tokens = async (id: unknown) =>
+        (await app.harness.snapshot(UsageDoc, id as never, context))?.models["faux/faux-1"]
+            ?.totalTokens ?? 0;
+    const complete = app.models.completeSimple;
+    let letGo: (() => void) | undefined;
+
+    // Title requests wait to be let go: the session's own answer is counted first, and then the title's usage shows
+    // when the commit that would rename the session is done.
+    app.models.completeSimple = async function (...args) {
+        await new Promise<void>((resolve) => (letGo = resolve));
+
+        return complete.apply(app.models, args);
+    } as typeof complete;
+
+    try {
+        for (const text of [
+            "please think aloud, then tidy up the release script's tags",
+            "please go on and on, then tidy up the release script's tags",
+        ]) {
+            const id = await newSession(app, folder);
+
+            letGo = undefined;
+            await say(app, id, text);
+            await until(() => letGo !== undefined, "the title request");
+            const answered = await tokens(id);
+
+            letGo!();
+            await until(async () => (await tokens(id)) > answered, "the title's usage");
+            assert.equal(title(id), text);
+        }
+
+        app.models.completeSimple = complete;
+
+        const skill = join(process.env.PI_CODING_AGENT_DIR!, "skills", "research-codebase");
+
+        mkdirSync(skill, { recursive: true });
+        writeFileSync(
+            join(skill, "SKILL.md"),
+            "---\nname: research-codebase\ndescription: Explain how a feature works\n---\nRead the code, then write up how it works.\n",
+        );
+        const prompts = join(process.env.PI_CODING_AGENT_DIR!, "prompts");
+
+        mkdirSync(prompts, { recursive: true });
+        writeFileSync(join(prompts, "review.md"), "Review $1 for $2");
+
+        for (const [text, written] of [
+            ["/skill:research-codebase", "Research How Sign-In Works"],
+            ["/review src/auth.ts bugs", "Review Auth For Bugs"],
+        ]) {
+            const id = await newSession(app, folder);
+
+            await say(app, id, text!);
+            await until(() => title(id) === written, `the title written for ${text}`);
+        }
+    } finally {
+        app.models.completeSimple = complete;
+        letGo?.();
+    }
 });
