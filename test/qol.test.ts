@@ -519,6 +519,7 @@ test("a long first message gets a short written title; a short one is the title"
     const model = (id: string, provider = "p", cost = 1) =>
         ({ id, provider, input: ["text"], cost: { input: cost, output: cost } }) as never;
 
+    // The session's own model writes its title: never a cheaper one of its provider that nobody chose.
     assert.equal(
         titleModel(
             [
@@ -529,7 +530,7 @@ test("a long first message gets a short written title; a short one is the title"
             ],
             model("big"),
         ).id,
-        "big-mini",
+        "big",
     );
     assert.equal(titleModel([model("gemini-pro")], model("big")).id, "big");
 

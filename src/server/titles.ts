@@ -26,7 +26,6 @@ const REASONING = /<(think|thinking|reasoning)>[\s\S]*?(<\/\1>|$)/gi;
 const REASONING_END = /^[\s\S]*<\/(think|thinking|reasoning)>/i;
 /** How much of the first message the model reads. */
 const READ_CHARS = 3000;
-const SMALL = /(^|[-_./])(haiku|mini|flash|nano|lite|small)([-_.]|$)/i;
 
 /** What the model is asked, before the first message. */
 export const TITLE_PROMPT =
@@ -39,18 +38,12 @@ export function wantsTitle(text: string): boolean {
     return words >= LONG_WORDS || text.trim().includes("\n");
 }
 
-/** The cheapest small model of the same provider that can be used now, or the session's own. */
-export function titleModel(models: readonly Model<Api>[], current: Model<Api>): Model<Api> {
-    const small = models
-        .filter(
-            (model) =>
-                model.provider === current.provider &&
-                model.input.includes("text") &&
-                SMALL.test(model.id),
-        )
-        .sort((a, b) => a.cost.input + a.cost.output - (b.cost.input + b.cost.output));
-
-    return small[0] ?? current;
+/**
+ * The model a title is written with: the session's own, which a person chose. Never another one picked on the side,
+ * such as a cheaper model of the same provider: nobody chose that one, and it may cost what nobody agreed to.
+ */
+export function titleModel(_models: readonly Model<Api>[], current: Model<Api>): Model<Api> {
+    return current;
 }
 
 /**

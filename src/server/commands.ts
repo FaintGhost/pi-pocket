@@ -354,8 +354,11 @@ export class Commands {
     }
 
     /**
-     * The model a new session starts with: `prefer` (with its thinking level) when it is signed in here, or the owner's
-     * default, or the one last picked, or Pi's default, or the first there is.
+     * The model a new session starts with, always one a person chose: `prefer` (with its thinking level) when it is
+     * signed in here, or else the owner's default, even when it is not signed in now: the session then shows that, and
+     * its first message fails in sight, where another model would spend on what nobody chose for it. Without an owner's
+     * default, the one last picked, or Pi's default, when signed in. Never the first model there is: with none of
+     * these, the session starts without a model, and someone picks one.
      */
     #defaultModel(prefer?: {
         model: { provider: string; modelId: string } | null;
@@ -373,25 +376,26 @@ export class Commands {
         const last = config.lastModel;
         const preferred = pick(prefer?.model?.provider, prefer?.model?.modelId);
         const chosen = config.defaultModel;
-        const fallback = pick(chosen?.provider, chosen?.modelId);
-        const model =
-            preferred ??
-            fallback ??
-            pick(last?.provider, last?.modelId) ??
-            pick(settings.getDefaultProvider(), settings.getDefaultModel()) ??
-            available[0];
+        const owners =
+            chosen === undefined ? undefined : models.getModel(chosen.provider, chosen.modelId);
+        const lastPicked = chosen === undefined ? pick(last?.provider, last?.modelId) : undefined;
+        const pis =
+            chosen === undefined && lastPicked === undefined
+                ? pick(settings.getDefaultProvider(), settings.getDefaultModel())
+                : undefined;
+        const model = preferred ?? owners ?? lastPicked ?? pis;
 
         if (model === undefined) {
             return {};
         }
 
-        const level = ((preferred === undefined ? undefined : prefer?.thinkingLevel) ??
-            (preferred === undefined && fallback !== undefined
-                ? chosen?.thinkingLevel
-                : undefined) ??
-            last?.thinkingLevel ??
-            settings.getDefaultThinkingLevel() ??
-            "off") as ModelThinkingLevel;
+        const level = ((preferred !== undefined
+            ? prefer?.thinkingLevel
+            : owners !== undefined
+              ? chosen?.thinkingLevel
+              : lastPicked !== undefined
+                ? last?.thinkingLevel
+                : settings.getDefaultThinkingLevel()) ?? "off") as ModelThinkingLevel;
 
         return {
             model: { provider: model.provider, modelId: model.id },
