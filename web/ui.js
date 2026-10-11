@@ -588,6 +588,19 @@ export async function copyText(text) {
     }
 }
 
+/** How full a context is, as Pi's own TUI colors its footer: `warn` above 70%, `err` above 90%. */
+export function contextLevel(percent) {
+    if (percent > 90) {
+        return "err";
+    }
+
+    if (percent > 70) {
+        return "warn";
+    }
+
+    return "";
+}
+
 export function formatTokens(count) {
     if (count === undefined || count === null) {
         return "?";

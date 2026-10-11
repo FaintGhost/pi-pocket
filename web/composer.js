@@ -29,7 +29,16 @@ import { SubagentsBar } from "./subagents.js";
 import { TrustBar } from "./trust.js";
 import { prefs } from "./theme.js";
 import { MicButton, useDictation } from "./voice.js";
-import { formatBytes, formatTokens, html, Icon, Marked, modelLabel, Spinner } from "./ui.js";
+import {
+    contextLevel,
+    formatBytes,
+    formatTokens,
+    html,
+    Icon,
+    Marked,
+    modelLabel,
+    Spinner,
+} from "./ui.js";
 
 const coarse = matchMedia("(pointer: coarse)").matches;
 /** The newest "Send to Pi" text already put into a message box (see `insertIntoComposer`). */
@@ -1396,7 +1405,7 @@ function StatusLine() {
         parts.push(
             html`<span class="context" title=${title}>
                 context
-                <span class="meter" aria-hidden="true">
+                <span class=${`meter ${contextLevel(percent)}`} aria-hidden="true">
                     <span style=${`width:${percent}%`}></span>
                 </span>
                 ${about}${percent}%
