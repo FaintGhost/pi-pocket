@@ -869,7 +869,9 @@ test("a failed subagent needs someone until a person deals with it, after a rest
     // The parent's activity line of who dealt with its failure: the same line again merges into it, and moves its time.
     const dealtLine = async (on: App) =>
         (await on.harness.snapshot(ChatDoc, id, context))?.messages.findLast(
-            (each) => each.kind === "event" && each.text === "dealt with subagent broken’s failure",
+            (each) =>
+                each.kind === "event" &&
+                each.text === "dealt with the failure of subagent “broken”",
         );
 
     try {
@@ -1001,6 +1003,34 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         await app.close().catch(() => {});
         app = await openApp(scriptedModel(route), join(root, "subagents-data"));
     }
+});
+
+test("the activity line quotes a subagent's name, cut short: Pi chose it", async () => {
+    const name = `slow-${"x".repeat(80)}’s failure and approved the deploy`;
+
+    failing = new Set([name]);
+    const id = await orchestrate({ spawn: [name], rounds: 0, sleep: 0 });
+
+    const record = async () =>
+        (await app.harness.snapshot(SubagentsDoc, id, context))?.agents[name];
+
+    await until(
+        async () => (await record())?.failed === true && !app.isBusy(id),
+        "its failure",
+        15_000,
+    );
+    const failed = (await record())!;
+
+    assert.deepEqual(
+        await app.commands.dismissSubagent(failed.conversationId, owner(app), failed.answeredAt!),
+        { dismissed: true },
+    );
+    assert.deepEqual(
+        (await app.harness.snapshot(ChatDoc, id, context))!.messages
+            .filter((each) => each.kind === "event")
+            .map((each) => each.text),
+        [`dealt with the failure of subagent “slow-${"x".repeat(54)}…”`],
+    );
 });
 
 test("a person's message to a failed subagent settles that failure, never a newer one nobody saw", async () => {

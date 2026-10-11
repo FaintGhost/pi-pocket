@@ -90,8 +90,9 @@ const IMAGE_MIME: Record<string, string> = {
 const MAX_TITLE = 120;
 /** A title as stored: one line, so it cannot pass for more lines where it is quoted (PiP's lists, reports). */
 const oneLine = (title: string): string => title.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE);
-/** A person's activity line when they dealt with a subagent's failure, in its parent session. */
-const dealtWith = (name: string): string => `dealt with subagent ${name}’s failure`;
+/** A person's activity line when they dealt with a subagent's failure, in its parent session: Pi named it, so quoted. */
+const dealtWith = (name: string): string =>
+    `dealt with the failure of subagent “${snippet(name, 60)}”`;
 
 /** What dismissing a subagent's failure came to: `newer` when it failed again since the failure seen. */
 type Dismissal = { dismissed: boolean; newer?: true };
