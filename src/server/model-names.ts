@@ -41,8 +41,17 @@ function distinct(phrase: readonly string[]): boolean {
 }
 
 /**
+ * Whether a phrase starts with a word of its own, three letters or more, as "opus 4 5" does. Without its first word, a
+ * name that starts with a number or a lone letter is said in ordinary text too: "4 mini" (o4-mini) in "build 4 mini
+ * apps", "k 3" (Kimi K3) in "K-3".
+ */
+function startsWithWord(phrase: readonly string[]): boolean {
+    return /^\p{L}{3,}$/u.test(phrase[0] ?? "");
+}
+
+/**
  * The phrases that name a model: its id, its name, and its provider with its id. `loosely` adds its id and its name
- * without their first word, as people say them ("opus 4.5" for claude-opus-4-5).
+ * without their first word, as people say them ("opus 4.5" for claude-opus-4-5), when what is left starts with a word.
  */
 function phrases(model: Model<Api>, loosely: boolean): string[][] {
     const id = words(model.id);
@@ -50,7 +59,7 @@ function phrases(model: Model<Api>, loosely: boolean): string[][] {
     const all = [id, name, words(`${model.provider} ${model.id}`)];
 
     if (loosely) {
-        all.push(id.slice(1), name.slice(1));
+        all.push(...[id.slice(1), name.slice(1)].filter(startsWithWord));
     }
 
     return all.filter(distinct);

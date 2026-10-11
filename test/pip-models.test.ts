@@ -169,6 +169,36 @@ test("a model's name that runs on into another's names only the longer one", () 
     assert.equal(personNamed("try z3-mini", z3, [z3]), true);
 });
 
+test("ordinary words name no model, and a short name that starts with a word still does", () => {
+    const q4 = model("acme", "q4-mini");
+    const kiwi = model("acme", "kiwi-k3", "Kiwi K3");
+    const zeta = model("acme", "zeta-5-mini", "Zeta 5 Mini");
+    const nova = model("acme", "nova-4o", "Nova 4o");
+    const lyra = model("acme", "lyra-opus-4-5", "Lyra Opus 4.5");
+    const all = [q4, kiwi, zeta, nova, lyra];
+
+    // Without its first word, a name that starts with a number or a lone letter is ordinary words.
+    for (const text of [
+        "Build 4 mini apps",
+        "Build 5 mini apps",
+        "teach K-3 classes",
+        "meet at 4 o'clock",
+    ]) {
+        assert.deepEqual(modelsNamed(text, all, true), [], text);
+    }
+
+    assert.equal(personNamed("Build 4 mini apps", q4, all), false);
+    assert.equal(personNamed("teach K-3 classes", kiwi, all), false);
+    // Spelled out, each is named, and a short name that starts with a word of its own still is.
+    assert.deepEqual(modelsNamed("use q4-mini, Kiwi K3, zeta-5-mini, or nova-4o", all, true), [
+        q4,
+        kiwi,
+        zeta,
+        nova,
+    ]);
+    assert.equal(personNamed("use opus 4.5", lyra, all), true);
+});
+
 test("PiP's prompt puts checking before acting, and never picking a model", async () => {
     const id = await pip();
 
