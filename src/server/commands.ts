@@ -15,13 +15,15 @@ import {
     type TextContent,
 } from "@earendil-works/pi-ai";
 import { resizeImage } from "@earendil-works/pi-coding-agent";
-import type {
-    AgentChange,
-    ConversationCreateOptions,
-    ConversationId,
-    EntryId,
-    ModelRef,
-    SubmissionId,
+import {
+    type AgentChange,
+    type ConversationCreateOptions,
+    type ConversationId,
+    defineTask,
+    type EntryId,
+    type ModelRef,
+    type SubmissionId,
+    type Task,
 } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
@@ -34,6 +36,7 @@ import {
     type Schedule,
     SessionsDoc,
     STOPPED,
+    type SubagentRecord,
     SubagentsDoc,
 } from "./docs.ts";
 import { ATTACHMENTS_HEADING, FILE_BLOCK, FROM_PREFIX, NOTE_ENTRY } from "./entry-format.ts";
@@ -145,11 +148,106 @@ function checkModel(asked: { provider?: unknown; modelId?: unknown } | undefined
     }
 }
 
+/** A person's message to a failed subagent (`subagent`, its conversation), followed to its end; `failure`, its own then. */
+type Followed = { subagent: number; requestId: string; failure: number; by: string };
+
+/**
+ * What a person's run of subagent `id` came to, on its record in its parent's `doc`, kept as its reports keep what Pi's
+ * work came to: answered, it is done and needs nobody; unanswered, it failed again (or was stopped), which is its
+ * failure now, and needs someone even if the one before was dismissed. Not while its record holds a failure newer than
+ * `failure`, the one they wrote to: nobody saw that one. The subagent's name when this cleared its failure.
+ */
+function settle(
+    doc: { agents: Record<string, SubagentRecord> },
+    id: ConversationId,
+    failure: number,
+    result: { status: string; reason?: string; detail?: unknown },
+): string | undefined {
+    const name = Object.keys(doc.agents).find((each) => doc.agents[each]!.conversationId === id);
+    const record = name === undefined ? undefined : doc.agents[name]!;
+
+    if (record === undefined || (record.failed === true && (record.answeredAt ?? 0) !== failure)) {
+        return undefined;
+    }
+
+    const cleared = record.failed === true && result.status !== "unanswered" ? name : undefined;
+
+    record.answeredAt = Date.now();
+    record.failed = result.status === "unanswered";
+
+    if (result.status === "unanswered") {
+        record.error = whyUnanswered(result.reason ?? "", result.detail);
+    } else {
+        delete record.error;
+    }
+
+    return cleared;
+}
+
 export class Commands {
     readonly #app: PocketApp;
+    /**
+     * Follows a person's message to a failed subagent to its end and settles the failure by it (`settle`): a task of the
+     * parent's, beside its work, so a restart before the run ends still settles it, as the subagent's reports do Pi's
+     * work. It finds the message by its request id, and never sends one. Answered, the parent's activity says who dealt
+     * with the failure.
+     */
+    readonly followTask: Task<Followed, { phase: "wait" }, null, object>;
 
     constructor(app: PocketApp) {
         this.#app = app;
+        this.followTask = defineTask<Followed, { phase: "wait" }, null>({
+            name: "pocket.follow-failure",
+            version: 1,
+            initial: () => ({ phase: "wait" }),
+            phases: {
+                wait: async (task, runtime, context) => {
+                    const { subagent, requestId, failure, by } = task.input;
+                    const id = subagent as unknown as ConversationId;
+                    let sent = false;
+
+                    await runtime.commit(async (tx) => {
+                        sent = (await tx.submissionByRequest(id, requestId)) !== undefined;
+                    }, context);
+                    // Its known request id gives back the message sent, as it is now: nothing is sent again.
+                    const conversation = sent ? await runtime.conversation(id, context) : undefined;
+                    const settled = await (
+                        await conversation?.submit(
+                            { type: "input", content: "", requestId },
+                            context,
+                        )
+                    )?.wait(context);
+                    let cleared: string | undefined;
+
+                    await runtime.commit(async (tx) => {
+                        if (settled !== undefined) {
+                            cleared = settle(
+                                await tx.doc(SubagentsDoc, runtime.conversationId),
+                                id,
+                                failure,
+                                settled,
+                            );
+                        }
+
+                        return {
+                            status: "terminal",
+                            outcome: { status: "completed", result: null },
+                        };
+                    }, context);
+
+                    const user = app.config.userById(by);
+
+                    if (cleared !== undefined && user !== undefined) {
+                        await app.collab.activity(runtime.conversationId, user, dealtWith(cleared));
+                    }
+                },
+            },
+            abort: (_task, runtime, context) =>
+                runtime.commit(
+                    () => ({ status: "terminal", outcome: { status: "aborted" } }),
+                    context,
+                ),
+        });
     }
 
     /** Start a session in a folder; with `worktree`, in a git worktree of its own made from that folder. */
@@ -561,12 +659,10 @@ export class Commands {
 
         app.collab.setTyping(id, user, null);
         await this.#touched(id, typed, text === typed ? undefined : text);
-        const settled = submission.wait(context);
-
-        this.#reportUnanswered(id, settled);
+        this.#reportUnanswered(id, submission.wait(context));
 
         if (failure !== undefined) {
-            this.#settleFailure(id, user, failure, settled);
+            await this.#followFailure(id, user, failure, requestId);
         }
 
         return { submissionId: submission.id, requestId };
@@ -589,66 +685,37 @@ export class Commands {
     }
 
     /**
-     * What a person's message to a failed subagent (`id`) came to, kept as its reports keep what Pi's work came to:
-     * answered, it is done and needs nobody; unanswered, it failed again (or was stopped), which is its failure now. Not
-     * while its record holds a failure newer than the one they wrote to (`failure`): nobody saw that one. Answered, it
-     * says in the parent's activity that they dealt with it. Nothing here reaches the person, whose message went: a
-     * commit that fails is logged. Not kept over a restart: the failure then stays as it was.
+     * Follow a person's message (`requestId`) to failed subagent `id` to its end, in a task of its parent's (`followTask`).
+     * The message went: a failure to start following it is logged, not answered.
      */
-    #settleFailure(
+    async #followFailure(
         id: ConversationId,
         user: User,
         failure: number,
-        settled: Promise<{ status: string; reason?: string; detail?: unknown }>,
-    ): void {
+        requestId: string,
+    ): Promise<void> {
         const app = this.#app;
         const parent = app.parentOf(id);
-        // The subagent whose failure its answer cleared.
-        let cleared: string | undefined;
 
         if (parent === undefined) {
             return;
         }
 
-        void settled
-            .then(async (result) => {
-                await app.harness.commit(async (tx) => {
-                    const agents = (await tx.doc(SubagentsDoc, parent)).agents;
-                    const name = Object.keys(agents).find(
-                        (each) => agents[each]!.conversationId === id,
-                    );
-                    const record = name === undefined ? undefined : agents[name]!;
-
-                    cleared = undefined;
-
-                    if (
-                        record === undefined ||
-                        (record.failed === true && (record.answeredAt ?? 0) !== failure)
-                    ) {
-                        return;
-                    }
-
-                    if (record.failed === true && result.status !== "unanswered") {
-                        cleared = name;
-                    }
-
-                    record.answeredAt = Date.now();
-                    record.failed = result.status === "unanswered";
-
-                    if (result.status === "unanswered") {
-                        record.error = whyUnanswered(result.reason ?? "", result.detail);
-                    } else {
-                        delete record.error;
-                    }
-                }, context);
-
-                if (cleared !== undefined) {
-                    await app.collab.activity(parent, user, dealtWith(cleared));
-                }
-            })
-            .catch((error: unknown) =>
-                app.log(`what a message to ${String(id)} came to: ${describe(error)}`),
-            );
+        try {
+            await app.harness.commit(async (tx) => {
+                await tx.createTask(
+                    this.followTask,
+                    { subagent: Number(id), requestId, failure, by: user.id },
+                    {
+                        ownership: { kind: "conversation" },
+                        background: true,
+                        conversationId: parent,
+                    },
+                );
+            }, context);
+        } catch (error) {
+            app.log(`not following a message to ${String(id)}: ${describe(error)}`);
+        }
     }
 
     /**

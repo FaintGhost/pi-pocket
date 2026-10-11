@@ -387,7 +387,10 @@ export class PocketApp {
         registry.install(CodingTools);
         // Durable work of the app itself, whatever extension modules are on.
         registry.install(
-            defineExtension({ name: "pocket-core", tasks: [ResendTask, this.shell.task] }),
+            defineExtension({
+                name: "pocket-core",
+                tasks: [ResendTask, this.shell.task, this.commands.followTask],
+            }),
         );
         const host: PocketHost = {
             guard: this.guard,
