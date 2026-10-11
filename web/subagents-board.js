@@ -206,7 +206,7 @@ function Mark({ state, glyph = true }) {
     </span>`;
 }
 
-/** The subagents that need you: waiting for an approval first, then failed. */
+/** The subagents that need you: waiting for an approval first, then failed with nobody dealing with it yet. */
 function NeedsYou({ needs, titles, selected, onPick }) {
     return html`<div class="board-needs">
         <div class="label">Needs you <span class="board-needs-count">${needs.length}</span></div>
