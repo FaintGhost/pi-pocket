@@ -325,7 +325,7 @@ test("the owner allows many models one at a time, and changes that come together
 
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const port = (server.address() as { port: number }).port;
-    const toggle = (body: object, token = app.config.ownerToken) =>
+    const toggle = (body: unknown, token = app.config.ownerToken) =>
         fetch(`http://127.0.0.1:${port}/api/subagent-models`, {
             method: "POST",
             headers: {
@@ -382,6 +382,15 @@ test("the owner allows many models one at a time, and changes that come together
         assert.equal((await toggle({ model: "faux/nothing", allowed: true })).status, 400);
         assert.equal((await toggle({ model: "faux/other", allowed: "yes" })).status, 400);
         assert.equal((await toggle({ allowed: true })).status, 400);
+
+        // A body that is no JSON object (null, a list, a bare value) is refused as such, not a server error.
+        for (const body of [null, [], 42, "faux/other"]) {
+            const answer = await toggle(body);
+
+            assert.equal(answer.status, 400, JSON.stringify(body));
+            assert.deepEqual(await answer.json(), { error: "Send a JSON object." });
+        }
+
         assert.deepEqual(kept(), ["faux/pricey"], "unchanged");
     } finally {
         server.closeAllConnections();
