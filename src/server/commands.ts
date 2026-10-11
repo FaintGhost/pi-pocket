@@ -90,6 +90,11 @@ const IMAGE_MIME: Record<string, string> = {
 const MAX_TITLE = 120;
 /** A title as stored: one line, so it cannot pass for more lines where it is quoted (PiP's lists, reports). */
 const oneLine = (title: string): string => title.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE);
+/** A person's activity line when they dealt with a subagent's failure, in its parent session. */
+const dealtWith = (name: string): string => `dealt with subagent ${name}’s failure`;
+
+/** What dismissing a subagent's failure came to: `newer` when it failed again since the failure seen. */
+type Dismissal = { dismissed: boolean; newer?: true };
 /** The extension that makes plan mode block changes; without it, plan mode would do nothing. */
 const PLAN_EXTENSION = "pocket-plan";
 /** What Pi is told when someone approves its plan. */
@@ -560,7 +565,7 @@ export class Commands {
         this.#reportUnanswered(id, settled);
 
         if (failure !== undefined) {
-            this.#settleFailure(id, failure, settled);
+            this.#settleFailure(id, user, failure, settled);
         }
 
         return { submissionId: submission.id, requestId };
@@ -585,33 +590,45 @@ export class Commands {
     /**
      * What a person's message to a failed subagent (`id`) came to, kept as its reports keep what Pi's work came to:
      * answered, it is done and needs nobody; unanswered, it failed again (or was stopped), which is its failure now. Not
-     * while its record holds a failure newer than the one they wrote to (`failure`): nobody saw that one. Nothing here
-     * reaches the person, whose message went: a commit that fails is logged. Not kept over a restart: the failure then
-     * stays as it was.
+     * while its record holds a failure newer than the one they wrote to (`failure`): nobody saw that one. Answered, it
+     * says in the parent's activity that they dealt with it. Nothing here reaches the person, whose message went: a
+     * commit that fails is logged. Not kept over a restart: the failure then stays as it was.
      */
     #settleFailure(
         id: ConversationId,
+        user: User,
         failure: number,
         settled: Promise<{ status: string; reason?: string; detail?: unknown }>,
     ): void {
         const app = this.#app;
+        const parent = app.parentOf(id);
+        // The subagent whose failure its answer cleared.
+        let cleared: string | undefined;
+
+        if (parent === undefined) {
+            return;
+        }
 
         void settled
-            .then((result) =>
-                app.harness.commit(async (tx) => {
-                    const parent = app.parentOf(id);
-                    const agents =
-                        parent === undefined ? {} : (await tx.doc(SubagentsDoc, parent)).agents;
+            .then(async (result) => {
+                await app.harness.commit(async (tx) => {
+                    const agents = (await tx.doc(SubagentsDoc, parent)).agents;
                     const name = Object.keys(agents).find(
                         (each) => agents[each]!.conversationId === id,
                     );
                     const record = name === undefined ? undefined : agents[name]!;
+
+                    cleared = undefined;
 
                     if (
                         record === undefined ||
                         (record.failed === true && (record.answeredAt ?? 0) !== failure)
                     ) {
                         return;
+                    }
+
+                    if (record.failed === true && result.status !== "unanswered") {
+                        cleared = name;
                     }
 
                     record.answeredAt = Date.now();
@@ -622,8 +639,12 @@ export class Commands {
                     } else {
                         delete record.error;
                     }
-                }, context),
-            )
+                }, context);
+
+                if (cleared !== undefined) {
+                    await app.collab.activity(parent, user, dealtWith(cleared));
+                }
+            })
             .catch((error: unknown) =>
                 app.log(`what a message to ${String(id)} came to: ${describe(error)}`),
             );
@@ -635,11 +656,7 @@ export class Commands {
      * newer one still needs them, and `newer` says so. Not dismissed either when it has no failure, or someone dealt
      * with it already.
      */
-    async dismissSubagent(
-        id: ConversationId,
-        user: User,
-        at: unknown,
-    ): Promise<{ dismissed: boolean; newer?: true }> {
+    async dismissSubagent(id: ConversationId, user: User, at: unknown): Promise<Dismissal> {
         const app = this.#app;
 
         app.requireSee(user, id);
@@ -653,23 +670,25 @@ export class Commands {
             throw new HttpError(404, "Not a subagent");
         }
 
-        return this.#dismissFailure(id, at);
+        return this.#dismissFailure(id, user, at);
     }
 
-    /** Mark a subagent's failure, the one at `at`, dealt with: as `dismissSubagent` answers. */
-    async #dismissFailure(
-        id: ConversationId,
-        at: number,
-    ): Promise<{ dismissed: boolean; newer?: true }> {
+    /**
+     * Mark a subagent's failure, the one at `at`, dealt with by `user`, as the parent's activity says: as
+     * `dismissSubagent` answers.
+     */
+    async #dismissFailure(id: ConversationId, user: User, at: number): Promise<Dismissal> {
         const parent = this.#app.parentOf(id);
+        let name: string | undefined;
 
         if (parent === undefined) {
             return { dismissed: false };
         }
 
-        return this.#app.harness.commit(async (tx) => {
+        const answer = await this.#app.harness.commit(async (tx): Promise<Dismissal> => {
             const agents = (await tx.doc(SubagentsDoc, parent)).agents;
-            const name = Object.keys(agents).find((each) => agents[each]!.conversationId === id);
+
+            name = Object.keys(agents).find((each) => agents[each]!.conversationId === id);
             const record = name === undefined ? undefined : agents[name]!;
             // Its failure is known by when it failed; a failure from before that was recorded has none.
             const failure = record?.answeredAt ?? 0;
@@ -691,6 +710,12 @@ export class Commands {
 
             return { dismissed: true };
         }, context);
+
+        if (answer.dismissed && name !== undefined) {
+            await this.#app.collab.activity(parent, user, dealtWith(name));
+        }
+
+        return answer;
     }
 
     /**

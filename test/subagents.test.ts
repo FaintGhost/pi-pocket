@@ -23,7 +23,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { type ConversationId, InboxDoc, type TaskId } from "@earendil-works/pi-durable";
-import { SubagentsDoc } from "../src/server/docs.ts";
+import { ChatDoc, SubagentsDoc } from "../src/server/docs.ts";
 
 /** What the parent does: the subagents it starts, then how many rounds of `sleep` it works through. */
 let plan = { spawn: [] as string[], rounds: 0, sleep: 0.2 };
@@ -866,6 +866,11 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         ((tab.field("subagents") ?? []) as { name: string; dealt?: boolean }[]).find(
             (each) => each.name === "broken",
         );
+    // The parent's activity line of who dealt with its failure: the same line again merges into it, and moves its time.
+    const dealtLine = async (on: App) =>
+        (await on.harness.snapshot(ChatDoc, id, context))?.messages.findLast(
+            (each) => each.kind === "event" && each.text === "dealt with subagent broken’s failure",
+        );
 
     try {
         await until(
@@ -895,15 +900,21 @@ test("a failed subagent needs someone until a person deals with it, after a rest
             /Not a subagent/,
         );
         assert.deepEqual(counts(first), { failed: 1 });
+        assert.equal(await dealtLine(first), undefined);
 
-        // Dismissed, it is still a failure, and needs nobody: in the session list, on the board, and in the bar.
+        // Dismissed, it is still a failure, and needs nobody: in the session list, on the board, and in the bar. The
+        // session's activity says who dealt with it.
         assert.deepEqual(await first.commands.dismissSubagent(sub, owner(first), at), {
             dismissed: true,
         });
+        const line = (await dealtLine(first))!;
+
+        assert.equal(line.userId, owner(first).id);
         // Once is enough: dealt with, there is nothing newer to say.
         assert.deepEqual(await first.commands.dismissSubagent(sub, owner(first), at), {
             dismissed: false,
         });
+        assert.equal((await dealtLine(first))?.at, line.at, "no activity for a refusal");
         await until(
             () => isDeepStrictEqual(counts(first!), { failed: 1, dealt: 1 }),
             "the session list says it was dealt with",
@@ -958,20 +969,31 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         assert.equal(now.failed, true);
         assert.match(String(now.error), /Bad request/);
         await until(() => isDeepStrictEqual(counts(app), { failed: 1 }), "it still needs someone");
+        assert.equal((await dealtLine(app))?.at, line.at, "no activity for a failed message");
         assert.deepEqual(await app.commands.dismissSubagent(sub, owner(app), now.answeredAt!), {
             dismissed: true,
         });
+        const lineAt = (await dealtLine(app))!.at;
+
+        assert.ok(lineAt > line.at, "dismissed again, said again");
         await until(() => isDeepStrictEqual(counts(app), { failed: 1, dealt: 1 }), "dismissed");
         now = await settled("And again.", now.answeredAt!);
         assert.equal(now.failed, true);
         await until(() => isDeepStrictEqual(counts(app), { failed: 1 }), "it needs someone again");
 
-        // Answered, it is done.
+        assert.equal((await dealtLine(app))?.at, lineAt, "no activity for a failed message");
+
+        // Answered, it is done, dealt with by the person who wrote to it.
         failing = new Set();
         now = await settled("Try once more.", now.answeredAt!);
         assert.equal(now.failed, false);
         assert.equal(now.error, undefined);
         await until(() => isDeepStrictEqual(counts(app), { done: 1 }), "done");
+        await until(
+            async () => ((await dealtLine(app))?.at ?? 0) > lineAt,
+            "the session's activity says who dealt with it",
+        );
+        assert.equal((await dealtLine(app))?.userId, owner(app).id);
     } finally {
         failing = new Set();
         await first?.close();
