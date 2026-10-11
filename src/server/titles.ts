@@ -1,6 +1,6 @@
 /**
  * Session titles. A session is named after its first message at once; when that message is long, or is a command (a
- * skill or prompt template), a small model of the session's provider writes a short title in its place, unless someone
+ * skill or prompt template), the session's own model writes a short title in its place, unless someone
  * renamed the session first. A reply that is no title (the model thinking aloud, or cut off) leaves the first one. What
  * it costs counts as the session's spend, like Pi's own requests.
  */
@@ -42,7 +42,7 @@ export function wantsTitle(text: string): boolean {
  * The model a title is written with: the session's own, which a person chose. Never another one picked on the side,
  * such as a cheaper model of the same provider: nobody chose that one, and it may cost what nobody agreed to.
  */
-export function titleModel(_models: readonly Model<Api>[], current: Model<Api>): Model<Api> {
+export function titleModel(current: Model<Api>): Model<Api> {
     return current;
 }
 
@@ -107,7 +107,7 @@ export async function writeTitle(
             return;
         }
 
-        const model = titleModel(app.models.getAvailableSnapshot(), current);
+        const model = titleModel(current);
         // The conversation's own identity with the provider, as Pi Durable sends with its summaries: some providers
         // (OpenCode Go) refuse a request without one.
         // A conversation older than that identity gets one, as Pi Durable gives it before its next request.

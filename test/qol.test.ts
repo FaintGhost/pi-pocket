@@ -516,23 +516,10 @@ test("a long first message gets a short written title; a short one is the title"
         cleanTitle("Tối ưu hóa hiệu suất truy vấn cơ sở dữ liệu cho ứng dụng"),
         "Tối ưu hóa hiệu suất truy vấn cơ sở dữ liệu cho ứng dụng",
     );
-    const model = (id: string, provider = "p", cost = 1) =>
-        ({ id, provider, input: ["text"], cost: { input: cost, output: cost } }) as never;
+    const model = (id: string) => ({ id, provider: "p", input: ["text"] }) as never;
 
     // The session's own model writes its title: never a cheaper one of its provider that nobody chose.
-    assert.equal(
-        titleModel(
-            [
-                model("big"),
-                model("big-mini", "p", 0.5),
-                model("gemini-pro"),
-                model("other-haiku", "q"),
-            ],
-            model("big"),
-        ).id,
-        "big",
-    );
-    assert.equal(titleModel([model("gemini-pro")], model("big")).id, "big");
+    assert.equal(titleModel(model("big")).id, "big");
 
     const id = await newSession(app, folder);
 
