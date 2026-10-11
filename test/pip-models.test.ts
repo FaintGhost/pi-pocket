@@ -10,14 +10,18 @@ import {
     owner,
     root,
     say,
-    scriptedModel,
     until,
 } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { Api, FauxResponseStep, Model } from "@earendil-works/pi-ai";
-import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
+import {
+    fauxAssistantMessage,
+    fauxProvider,
+    fauxText,
+    fauxToolCall,
+} from "@earendil-works/pi-ai/providers/faux";
 import type { ConversationId } from "@earendil-works/pi-durable";
 import { modelsNamed, personNamed, sharePhrase, words } from "../src/server/model-names.ts";
 
@@ -49,10 +53,23 @@ const route: FauxResponseStep = (request) => {
           );
 };
 
+// The scripted models, and faux-2-mini, whose name runs on from faux-2's.
+const faux = fauxProvider({
+    tokensPerSecond: 2000,
+    models: [
+        { id: "faux-1" },
+        { id: "faux-2" },
+        { id: "faux-2-mini" },
+        { id: "faux-vision", input: ["text", "image"] },
+    ],
+});
+
+faux.setResponses(Array.from({ length: 1000 }, () => route));
+
 let app: App;
 
 before(async () => {
-    app = await openApp(scriptedModel(route), join(root, "pip-models-data"));
+    app = await openApp(faux, join(root, "pip-models-data"));
 });
 
 after(async () => {
@@ -124,6 +141,32 @@ test("model names are matched by words, as people write them", () => {
     // The same words at two providers name both: PiP passing them on picks no provider.
     assert.equal(sharePhrase("Review it on claude-opus-4-5.", copilot, opus), true);
     assert.equal(sharePhrase("Review it on claude-opus-4-5.", kimi, opus), false);
+});
+
+test("a model's name that runs on into another's names only the longer one", () => {
+    const alpha = model("acme", "alpha", "Alpha");
+    const mini = model("acme", "alpha-mini", "Alpha Mini");
+    const point = model("acme", "alpha.2", "Alpha 2");
+    const z3 = model("acme", "z3", "Z3");
+    const z3mini = model("acme", "z3-mini", "Z3 Mini");
+    const all = [alpha, mini, point, z3, z3mini];
+
+    // "acme alpha" names alpha, but in "acme alpha mini" it is the start of alpha-mini's name.
+    assert.deepEqual(modelsNamed("use acme/alpha-mini", all, true), [mini]);
+    assert.deepEqual(modelsNamed("use acme alpha.2", all, true), [point]);
+    assert.deepEqual(modelsNamed("try z3-mini", all, true), [z3mini]);
+    assert.deepEqual(modelsNamed("try z3-mini", all), [z3mini]);
+    assert.equal(personNamed("use acme/alpha-mini", alpha, all), false);
+    assert.equal(personNamed("use acme/alpha-mini", mini, all), true);
+    assert.equal(personNamed("use acme/alpha.2", alpha, all), false);
+    assert.equal(personNamed("try z3-mini", z3, all), false);
+    // The shorter one is named on its own, and next to the longer one.
+    assert.deepEqual(modelsNamed("use acme/alpha", all, true), [alpha]);
+    assert.deepEqual(modelsNamed("try z3, not z3-mini", all, true), [z3, z3mini]);
+    assert.equal(personNamed("use acme/alpha", alpha, all), true);
+    assert.equal(personNamed("try z3, then z3-mini", z3, all), true);
+    // Where the longer model is not there, its words name the shorter one as before.
+    assert.equal(personNamed("try z3-mini", z3, [z3]), true);
 });
 
 test("PiP's prompt puts checking before acting, and never picking a model", async () => {
@@ -212,6 +255,25 @@ test("PiP starts a session on a model only when its person named it, in their ow
         app.pip.start(id, { model: "faux/nothing" }),
         /not a model signed in here/,
     );
+});
+
+test("PiP takes a longer model's name for that model only", async () => {
+    const id = await pip();
+    const session = Number(await newSession(app));
+
+    await app.pip.read(id, session);
+    await say(app, id, "start a session on faux-2-mini");
+    await assert.rejects(
+        app.pip.start(id, { model: "faux/faux-2" }),
+        /Your person did not name faux\/faux-2\. Models are theirs to choose/,
+    );
+    await assert.rejects(
+        app.pip.send(id, session, "Spawn a reviewer subagent on faux-2.", false, "longer-1"),
+        /names faux\/faux-2, which your person did not name/,
+    );
+    const made = await app.pip.start(id, { model: "faux/faux-2-mini" });
+
+    assert.equal((await app.agentState(made))?.model?.modelId, "faux-2-mini");
 });
 
 test("PiP's messages name no model its person did not name", async () => {

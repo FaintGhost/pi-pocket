@@ -1,7 +1,7 @@
 /**
  * Which models a text names, so PiP passes a model, or names one in a task, only when its person named that model.
  * Words are compared, not characters: "GPT 5.1 Codex", "gpt-5.1-codex", and "gpt5.1 codex" name the same model, and
- * "auto" alone names none.
+ * "auto" alone names none. Words that name a longer model name only that one: "gpt-5-nano" is not "gpt-5".
  */
 import type { Api, Model } from "@earendil-works/pi-ai";
 
@@ -13,19 +13,26 @@ export function words(text: string): string[] {
         .filter((word) => word !== "");
 }
 
-/** Whether `phrase` is a run of `text`'s words. */
-function contains(text: readonly string[], phrase: readonly string[]): boolean {
+/** Where `phrase` is a run of `text`'s words: the index of its first word, each time. */
+function starts(text: readonly string[], phrase: readonly string[]): number[] {
+    const found: number[] = [];
+
     if (phrase.length === 0) {
-        return false;
+        return found;
     }
 
     for (let start = 0; start + phrase.length <= text.length; start++) {
         if (phrase.every((word, offset) => text[start + offset] === word)) {
-            return true;
+            found.push(start);
         }
     }
 
-    return false;
+    return found;
+}
+
+/** Whether `phrase` is a run of `text`'s words. */
+function contains(text: readonly string[], phrase: readonly string[]): boolean {
+    return starts(text, phrase).length > 0;
 }
 
 /** Spelled out enough to name a model: two words or more, one of them made of letters. "auto" or "4 5" is not. */
@@ -49,16 +56,30 @@ function phrases(model: Model<Api>, loosely: boolean): string[][] {
     return all.filter(distinct);
 }
 
-/** The models among `models` that `text` names, by the phrases above. */
+/**
+ * The models among `models` that `text` names, by the phrases above. Where a phrase of one model runs on into a longer
+ * phrase of another, from the same word, the text names only the longer one: "gpt-5-nano" names gpt-5-nano, not gpt-5.
+ */
 export function modelsNamed(
     text: string,
     models: readonly Model<Api>[],
     loosely = false,
 ): Model<Api>[] {
     const said = words(text);
+    const found = models.map((model) =>
+        phrases(model, loosely).flatMap((phrase) =>
+            starts(said, phrase).map((start) => ({ start, length: phrase.length })),
+        ),
+    );
+    // The most words any model's phrase takes from each word on.
+    const longest = new Map<number, number>();
 
-    return models.filter((model) =>
-        phrases(model, loosely).some((phrase) => contains(said, phrase)),
+    for (const { start, length } of found.flat()) {
+        longest.set(start, Math.max(longest.get(start) ?? 0, length));
+    }
+
+    return models.filter((_, index) =>
+        found[index]!.some(({ start, length }) => length === longest.get(start)),
     );
 }
 
@@ -73,9 +94,10 @@ export function sharePhrase(text: string, a: Model<Api>, b: Model<Api>): boolean
 }
 
 /**
- * Whether a person's `text` names `model`, as they would say it. When the same words name it at another provider too
- * (Claude Opus 4.5 is at Anthropic and GitHub Copilot), the provider must be named as well, by a word of its id or name
- * that the others do not share ("copilot", "codex"): which one pays is theirs to say.
+ * Whether a person's `text` names `model`, as they would say it, among the `models` there are: words that name a longer
+ * one of them ("gpt-5-nano") do not name `model` (gpt-5). When the same words name it at another provider too (Claude
+ * Opus 4.5 is at Anthropic and GitHub Copilot), the provider must be named as well, by a word of its id or name that
+ * the others do not share ("copilot", "codex"): which one pays is theirs to say.
  */
 export function personNamed(
     text: string,
@@ -83,7 +105,7 @@ export function personNamed(
     models: readonly Model<Api>[],
     providerName: (provider: string) => string = (provider) => provider,
 ): boolean {
-    if (modelsNamed(text, [model], true).length === 0) {
+    if (!modelsNamed(text, [model, ...models], true).includes(model)) {
         return false;
     }
 

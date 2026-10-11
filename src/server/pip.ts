@@ -594,15 +594,16 @@ export class Pip {
         }
 
         const said = await this.#personWords(pipId, user);
+        const available = app.models.getAvailableSnapshot();
         const named = personNamed(
             said,
             model,
-            app.models.getAvailableSnapshot(),
+            available,
             (provider) => app.models.getProvider(provider)?.name ?? provider,
         );
 
         // Their words name it, but at more than one provider: which one pays is theirs to say.
-        if (!named && modelsNamed(said, [model], true).length > 0) {
+        if (!named && modelsNamed(said, [model, ...available], true).includes(model)) {
             throw new Error(
                 `Your person named ${model.name}, which more than one signed-in provider has. Ask them which provider to use; do not pick one.`,
             );
