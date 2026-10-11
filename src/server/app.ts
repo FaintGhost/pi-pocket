@@ -573,9 +573,17 @@ export class PocketApp {
             } else if (change.type === "submission") {
                 this.attribution.submissionCommitted(change.value);
 
-                // A run that failed because its provider's sign-in could not be renewed marks that provider.
+                // A run that failed because its provider's sign-in could not be renewed marks that provider; one that
+                // was answered shows its provider works, and a mark it had (signed in again in Pi's terminal app, say)
+                // is asked again.
                 if (change.value.status === "unanswered" && change.value.reason === "model_error") {
                     this.providers.runFailed(change.value.detail);
+                } else if (change.value.status === "done") {
+                    const provider = this.#agents.get(change.value.conversationId)?.model?.provider;
+
+                    if (provider !== undefined) {
+                        this.providers.runAnswered(provider);
+                    }
                 }
             }
         }
@@ -786,6 +794,27 @@ export class PocketApp {
             if (reaches) {
                 client.send("notice", { level, message });
             }
+        }
+    }
+
+    /** A notice for the owner's tabs alone: about what only they may change. */
+    ownerNotice(level: "info" | "warning" | "error", message: string): void {
+        this.#log(`[${level}] ${message}`);
+
+        for (const client of this.#clients) {
+            if (client.user.role === "owner") {
+                client.send("notice", { level, message });
+            }
+        }
+    }
+
+    /** Every open view builds itself again: what it shows from outside its documents changed (a model's sign-in). */
+    refreshViews(): void {
+        for (const pending of this.#rooms.values()) {
+            void pending.then(
+                (room) => room.schedule(),
+                () => {},
+            );
         }
     }
 
@@ -2334,11 +2363,12 @@ export class PocketApp {
         }
 
         await this.#refreshClients();
-        this.notice(
+        // The owner's setting, which only their hello carries: so does the notice.
+        this.ownerNotice(
             "info",
             chosen.length === 0
-                ? `${user.name} let subagents run only on their session's model.`
-                : `${user.name} let subagents also run on ${chosen.join(", ")}.`,
+                ? `Subagents run only on their session's model now.`
+                : `Subagents may also run on ${chosen.join(", ")} now.`,
         );
     }
 

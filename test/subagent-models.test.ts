@@ -30,6 +30,8 @@ import { MODEL_FAILED } from "../src/server/extensions/subagents.ts";
 let offered: Record<string, unknown> | undefined;
 /** Subagents whose model fails, as a provider whose sign-in expired would. */
 const failing = new Set<string>();
+/** Subagents whose request fails for a reason of its own, not their model's or provider's. */
+const refused = new Set<string>();
 
 /**
  * The parent does as its message says: `spawn <name> [model]` or `send <name>`. Subagents answer, or fail when their
@@ -42,6 +44,10 @@ const route: FauxResponseStep = (request) => {
     // With more than one person on the server, a message starts with who sent it.
     const text = said.replace(/^\[from: [^\]]+\] /, "");
     const subagent = /You are the subagent \\"([^\\]+)\\"/.exec(all)?.[1];
+
+    if (subagent !== undefined && refused.has(subagent)) {
+        return fauxAssistantMessage([], { stopReason: "error", errorMessage: "Bad request" });
+    }
 
     if (subagent !== undefined) {
         return failing.has(subagent)
@@ -233,6 +239,33 @@ test("a subagent its model failed is reported with the model, Pi is told to stop
 
     assert.equal(agent?.failed, true);
     assert.match(String(agent?.error), /faux\/mine: OAuth refresh failed/);
+});
+
+test("a subagent that failed for a reason not its model's is reported plainly, with no word about models", async () => {
+    const id = await session();
+
+    refused.add("plain-fail");
+
+    try {
+        await ask(id, "spawn plain-fail");
+        await until(
+            async () =>
+                JSON.stringify(
+                    (await (await app.harness.conversation(id, context))!.context(context))
+                        .messages,
+                ).includes("[subagent plain-fail failed"),
+            "the failure's report",
+        );
+    } finally {
+        refused.delete("plain-fail");
+    }
+
+    const said = JSON.stringify(
+        (await (await app.harness.conversation(id, context))!.context(context)).messages,
+    );
+
+    assert.match(said, /\[subagent plain-fail failed: Bad request\]/);
+    assert.equal(said.includes(MODEL_FAILED), false);
 });
 
 test("the settings route changes the models for subagents, for the owner only, one setting at a time", async () => {

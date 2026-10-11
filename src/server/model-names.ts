@@ -62,9 +62,20 @@ export function modelsNamed(
     );
 }
 
+const key = (phrase: readonly string[]) => phrase.join(" ");
+
+/** Whether a phrase in `text` names both `a` and `b`: the same model at two providers, as far as those words go. */
+export function sharePhrase(text: string, a: Model<Api>, b: Model<Api>): boolean {
+    const said = words(text);
+    const theirs = new Set(phrases(b, true).map(key));
+
+    return phrases(a, true).some((phrase) => theirs.has(key(phrase)) && contains(said, phrase));
+}
+
 /**
  * Whether a person's `text` names `model`, as they would say it. When the same words name it at another provider too
- * (Claude Opus 4.5 is at Anthropic and OpenRouter), the provider must be named as well: which one pays is theirs to say.
+ * (Claude Opus 4.5 is at Anthropic and GitHub Copilot), the provider must be named as well, by a word of its id or name
+ * that the others do not share ("copilot", "codex"): which one pays is theirs to say.
  */
 export function personNamed(
     text: string,
@@ -72,27 +83,26 @@ export function personNamed(
     models: readonly Model<Api>[],
     providerName: (provider: string) => string = (provider) => provider,
 ): boolean {
-    const said = words(text);
-    const mine = phrases(model, true).filter((phrase) => contains(said, phrase));
-
-    if (mine.length === 0) {
+    if (modelsNamed(text, [model], true).length === 0) {
         return false;
     }
 
-    const key = (phrase: readonly string[]) => phrase.join(" ");
-    const matched = new Set(mine.map(key));
-    const elsewhere = models.some(
-        (other) =>
-            other.provider !== model.provider &&
-            phrases(other, true).some(
-                (phrase) => matched.has(key(phrase)) && contains(said, phrase),
-            ),
+    const twins = models.filter(
+        (other) => other.provider !== model.provider && sharePhrase(text, model, other),
     );
 
-    return (
-        !elsewhere ||
-        [words(model.provider), words(providerName(model.provider))].some(
-            (provider) => provider.length > 0 && contains(said, provider),
-        )
-    );
+    if (twins.length === 0) {
+        return true;
+    }
+
+    const providerWords = (provider: string) =>
+        new Set([...words(provider), ...words(providerName(provider))]);
+    const shared = new Set([
+        ...twins.flatMap((other) => [...providerWords(other.provider)]),
+        ...words(model.id),
+        ...words(model.name),
+    ]);
+    const said = new Set(words(text));
+
+    return [...providerWords(model.provider)].some((word) => !shared.has(word) && said.has(word));
 }

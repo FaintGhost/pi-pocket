@@ -19,9 +19,12 @@ import { modelList } from "./models.ts";
 /** How long asking a provider's sign-in afresh may take: a renewal's own limit is 15 seconds. */
 const CHECK_MS = 20_000;
 
-/** What a provider says when it will not renew a sign-in, as opposed to a network that failed on the way. */
+/**
+ * What a provider's token endpoint says when it will not renew a sign-in (OAuth's error codes, or a 400 or 401 from
+ * it), as opposed to a network, a proxy, or a server that failed on the way.
+ */
 const REFUSED =
-    /invalid_grant|invalid_token|invalid_client|unauthori[sz]ed|revoked|expired|reauth|sign in again|log ?in again|\b40[013]\b/i;
+    /invalid_grant|invalid_token|invalid_client|unauthorized_client|revoked|expired|reauth|sign in again|log ?in again|\b40[01]\b/i;
 
 /** What a failed run says when its provider's sign-in could not be renewed (pi-ai's `ModelsError`), and whose. */
 const RENEWAL_FAILED = /OAuth (?:refresh|auth derivation) failed for ([\w.-]+)/;
@@ -72,6 +75,11 @@ export class Providers {
     readonly #expired = new Map<string, string>();
     /** Checks under way, by provider, so asking twice at once asks once. */
     readonly #checking = new Map<string, Promise<string | undefined>>();
+    /**
+     * Each provider's sign-ins and sign-outs here, counted: a check that began before one does not mark what it ended
+     * (a sign-in that just worked would be marked as expired again).
+     */
+    readonly #signIns = new Map<string, number>();
 
     constructor(app: PocketApp) {
         this.#app = app;
@@ -100,6 +108,7 @@ export class Providers {
 
     async #check(providerId: string): Promise<string | undefined> {
         const models = this.#app.models;
+        const began = this.#signIns.get(providerId) ?? 0;
 
         if (!models.isUsingOAuth(providerId)) {
             this.#clear(providerId);
@@ -111,7 +120,7 @@ export class Providers {
             await models.getAuth(providerId, { signal: AbortSignal.timeout(CHECK_MS) });
             this.#clear(providerId);
         } catch (error) {
-            if (renewalRefused(error)) {
+            if (renewalRefused(error) && (this.#signIns.get(providerId) ?? 0) === began) {
                 this.#mark(providerId, chain((error as Error).cause));
             }
         }
@@ -119,16 +128,26 @@ export class Providers {
         return this.#expired.get(providerId);
     }
 
-    /** Ask every subscription's sign-in afresh, as the Providers sheet opens. */
-    async checkAll(): Promise<void> {
+    /**
+     * Ask every subscription's sign-in afresh, as the Providers sheet opens, waiting `waitMs` at most: a renewal can take
+     * seconds, and a mark found later reaches the sheet with the models it marks.
+     */
+    async checkAll(waitMs = CHECK_MS): Promise<void> {
         const models = this.#app.models;
-
-        await Promise.all(
+        const checks = Promise.all(
             models
                 .getProviders()
                 .filter((provider) => models.isUsingOAuth(provider.id))
-                .map((provider) => this.check(provider.id)),
+                .map((provider) => this.check(provider.id).catch(() => undefined)),
         );
+        let timer: NodeJS.Timeout | undefined;
+
+        await Promise.race([
+            checks,
+            new Promise<void>((resolve) => {
+                timer = setTimeout(resolve, waitMs);
+            }),
+        ]).finally(() => clearTimeout(timer));
     }
 
     /** A run failed with `detail`: when its provider's sign-in could not be renewed, ask it, to mark it. */
@@ -137,6 +156,13 @@ export class Providers {
 
         if (provider !== undefined && this.#app.models.getProvider(provider) !== undefined) {
             void this.check(provider).catch(() => {});
+        }
+    }
+
+    /** A run was answered by a provider's model: when it was marked, ask it again, which clears a mark that is stale. */
+    runAnswered(providerId: string): void {
+        if (this.#expired.has(providerId)) {
+            void this.check(providerId).catch(() => {});
         }
     }
 
@@ -171,18 +197,31 @@ export class Providers {
         if (!known) {
             const name = this.#app.models.getProvider(providerId)?.name ?? providerId;
 
-            this.#app.notice(
+            // The owner's to fix: only they sign in.
+            this.#app.ownerNotice(
                 "warning",
                 `The sign-in to ${name} expired and could not be renewed. Sign in again in Providers; until then its models are not used by Pi, subagents, or PiP.`,
             );
-            this.#sendModels();
+            this.#changed();
         }
     }
 
     #clear(providerId: string): void {
         if (this.#expired.delete(providerId)) {
-            this.#sendModels();
+            this.#changed();
         }
+    }
+
+    /** A sign-in or sign-out here: no mark stays, and a check under way leaves none. */
+    #signedInOrOut(providerId: string): void {
+        this.#signIns.set(providerId, (this.#signIns.get(providerId) ?? 0) + 1);
+        this.#expired.delete(providerId);
+    }
+
+    /** A mark came or went: tabs get the models marked again, and sessions' views their model's state. */
+    #changed(): void {
+        this.#sendModels();
+        this.#app.refreshViews();
     }
 
     /** Every provider and its sign-in. What a provider said when it refused to renew one is for the `owner` only. */
@@ -263,9 +302,9 @@ export class Providers {
             .then(
                 async () => {
                     await app.models.getAvailable().catch(() => []);
-                    this.#expired.delete(providerId);
+                    this.#signedInOrOut(providerId);
                     send({ step: "done", ok: true });
-                    this.#sendModels();
+                    this.#changed();
                 },
                 (error: unknown) => send({ step: "done", ok: false, error: describe(error) }),
             )
@@ -316,8 +355,8 @@ export class Providers {
     async logout(providerId: string): Promise<void> {
         await this.#app.models.logout(providerId);
         await this.#app.models.getAvailable().catch(() => []);
-        this.#expired.delete(providerId);
-        this.#sendModels();
+        this.#signedInOrOut(providerId);
+        this.#changed();
     }
 
     /** Every tab gets the models available now, marked when their sign-in needs renewing. */

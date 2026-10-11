@@ -138,7 +138,7 @@ function reporterFor(Courier: CourierTask, host: Pick<PocketHost, "notice">) {
                 const modelFailed =
                     !withdrawn &&
                     settled.status === "unanswered" &&
-                    MODEL_FAILURES.has(settled.reason);
+                    modelFailure(settled.reason, settled.detail);
                 const ran = modelFailed
                     ? (await runtime.snapshot(AgentDoc, conversationId, context))?.model
                     : undefined;
@@ -249,8 +249,20 @@ function reporterFor(Courier: CourierTask, host: Pick<PocketHost, "notice">) {
 /** Tasks of a conversation that run beside its work: its Esc and idle waits do not reach them. */
 const BACKGROUND = { ownership: { kind: "conversation" }, background: true } as const;
 
-/** Why a run ends unanswered when its model or provider failed: an error from the provider, or no model to use. */
-const MODEL_FAILURES: ReadonlySet<string> = new Set(["model_error", "no_model"]);
+/**
+ * What a provider says when the model or its account is the problem (a sign-in, a model that is gone or refused, a
+ * quota or rate limit, an overload), not the request: a context that will not fit, say, is Pi's to work around.
+ */
+const PROVIDER_TROUBLE =
+    /oauth|sign.?in|auth|api.?key|unauthori[sz]ed|forbidden|permission|\b(401|402|403|404|429|503|529)\b|not found|does not exist|no such model|not available|not configured|unsupported model|quota|rate.?limit|insufficient|billing|credit|usage limit|overloaded/i;
+
+/** Whether a run ended unanswered because of its model or provider: no model to use, or the provider's trouble. */
+function modelFailure(reason: string, detail: unknown): boolean {
+    return (
+        reason === "no_model" ||
+        (reason === "model_error" && typeof detail === "string" && PROVIDER_TROUBLE.test(detail))
+    );
+}
 
 /** What a report of a subagent its model failed tells Pi, after why. */
 export const MODEL_FAILED =
@@ -726,6 +738,12 @@ async function chosenModel(
     }
 
     let ref: ModelRef;
+    const named = refOf(asked.trim());
+
+    // Its sign-in asked afresh first, so a mark that is out of date neither refuses it nor lets it through.
+    if (named !== undefined && allowed.includes(keyOf(named))) {
+        await problemOf(host, named, true);
+    }
 
     try {
         ref = host.resolveModel(asked);
@@ -741,7 +759,7 @@ async function chosenModel(
         );
     }
 
-    const problem = await problemOf(host, ref, true);
+    const problem = await problemOf(host, ref, named === undefined);
 
     if (problem !== undefined) {
         throw new Error(
@@ -884,8 +902,23 @@ export default function createSubagents(host: PocketHost) {
             // Work goes to a subagent only on this session's model, or one the owner allows: one started on a model the
             // owner no longer allows (or before there was a choice) gets none. A model a person set there is the
             // owner's to allow too.
+            // A subagent started before thinking was capped, or one a person raised, thinks no harder than the session
+            // for this work: lowered (never raised) as the work is sent.
+            let lowered: ModelThinkingLevel | undefined;
+
             if (action === "send") {
-                const runs = (await api.snapshot(AgentDoc, agent!.conversationId, context))?.model;
+                const child = await api.snapshot(AgentDoc, agent!.conversationId, context);
+                const runs = child?.model;
+                const most = parent.thinkingLevel ?? "off";
+                const level = child?.thinkingLevel;
+                const found =
+                    runs === undefined
+                        ? undefined
+                        : api.models.getModel(runs.provider, runs.modelId);
+
+                if (level !== undefined && rank(level) > rank(most)) {
+                    lowered = (found === undefined ? undefined : levelAtMost(found, most)) ?? most;
+                }
 
                 if (runs !== undefined && !same(runs, parent.model)) {
                     if (!allowedModels(host).includes(keyOf(runs))) {
@@ -987,6 +1020,10 @@ export default function createSubagents(host: PocketHost) {
                 const conversationId = record.conversationId;
                 const requestedBy = host.requesterOf(api.conversationId);
 
+                if (lowered !== undefined) {
+                    await configure(tx, conversationId, { thinkingLevel: lowered });
+                }
+
                 // For the subagents bar: what it works on now, and since when.
                 record.asked = message.trim().slice(0, 300);
                 record.askedAt = Date.now();
@@ -1001,7 +1038,9 @@ export default function createSubagents(host: PocketHost) {
                 state.reporters[api.taskId] = await tx.createTask(Reporter, input, BACKGROUND);
 
                 if (action === "send") {
-                    return `Sent to ${name}.`;
+                    return lowered === undefined
+                        ? `Sent to ${name}.`
+                        : `Sent to ${name}, thinking at ${lowered} now: no higher than this session's.`;
                 }
 
                 const runs = model ?? parent.model;

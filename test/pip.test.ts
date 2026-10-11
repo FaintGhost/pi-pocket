@@ -527,6 +527,8 @@ test("a follow keeps a session's own push back only while PiP will report on tha
 
     await app.commands.submit(session, me, { text: "a sleepy job", requestId: "r-1" });
     await until(() => app.isBusy(session), "the session at work");
+    // PiP looks at a session before it follows its run.
+    await app.pip.read(id, Number(session));
     await app.pip.follow(id, Number(session), undefined, "follow-quiet");
     assert.equal(await reports(), true, "a live follow reports");
 

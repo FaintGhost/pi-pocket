@@ -584,11 +584,12 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, await app.extensions(user));
         }
 
-        // For the owner, each subscription's sign-in is asked afresh first: one that can no longer be renewed shows as
-        // needing sign-in. Others see what was last found, so nobody else makes the server ask providers.
+        // For the owner, each subscription's sign-in is asked afresh first (three seconds at most; a mark found later
+        // comes with the models): one that can no longer be renewed shows as needing sign-in. Others see what was last
+        // found, so nobody else makes the server ask providers.
         if (first === "providers" && second === undefined && method === "GET") {
             if (user.role === "owner") {
-                await app.providers.checkAll();
+                await app.providers.checkAll(3_000);
             }
 
             return json(response, 200, app.providers.list(user.role === "owner"));

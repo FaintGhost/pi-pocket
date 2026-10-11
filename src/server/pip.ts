@@ -22,9 +22,13 @@ import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
     AgentDoc,
     AssistantEntry,
+    CompactionEntry,
     type ConversationId,
+    type Cursor,
     defineTask,
+    InboxDoc,
     LiveDoc,
+    ResetEntry,
     type Task,
     type TaskRuntime,
     type Tx,
@@ -37,7 +41,7 @@ import { describe, HttpError } from "./errors.ts";
 import { clip, defang, quoted } from "./fence.ts";
 import { git } from "./git.ts";
 import { originRepo, parseRepo, requirePush, sameRepo } from "./github.ts";
-import { modelsNamed, personNamed } from "./model-names.ts";
+import { modelsNamed, personNamed, sharePhrase } from "./model-names.ts";
 import { findModel } from "./models.ts";
 import { homePath } from "./paths.ts";
 import { type ClientEntry, projectEntry, snippet } from "./projection.ts";
@@ -82,8 +86,12 @@ const ORIGIN_FOR_MS = 5 * 60_000;
 const FOLLOW_MEMORY_MS = 24 * 3_600_000;
 /** How long PiP's look at a session (a read, its start, a report from it) counts as knowing what it is doing. */
 const CHECKED_FOR_MS = 15 * 60_000;
-/** How many of PiP's newest entries are searched for the models its person named. */
-const NAMED_IN_ENTRIES = 200;
+/**
+ * How many of PiP's newest entries are searched for the models its person named, at most, and how many at a time: its
+ * context (since its last compaction or new context) is searched whole, up to this many.
+ */
+const NAMED_IN_ENTRIES = 2_000;
+const NAMED_IN_PAGE = 200;
 /**
  * How long after a follow reported its session's "Pi finished" stays muted: long enough for the push of the same run's
  * end, which comes a few seconds later, and short enough not to mute the next run's.
@@ -515,30 +523,60 @@ export class Pip {
     }
 
     /**
-     * What PiP's person wrote to it in their own words, newest first, in its context now (since its last compaction or
-     * new context): not reports, webhooks, watches, or anything else sent for them.
+     * What PiP's person said to it in their own words: their messages in its context now, newest first (since its last
+     * new context, and those its last compaction kept), and the standing instructions of their watches and webhooks to
+     * it, which they gave (a watch's passed this check when it was set up). Never what was posted to a webhook, what
+     * GitHub said, a report, or anything else sent for them.
      */
     async #personWords(pipId: ConversationId, user: User): Promise<string> {
         const app = this.#app;
         const own = (await app.harness.snapshot(AuthorsDoc, pipId, context))?.entries ?? {};
-        const page = await (
-            await app.conversation(pipId)
-        ).entries({}, NAMED_IN_ENTRIES, undefined, context);
+        const conversation = await app.conversation(pipId);
         const words: string[] = [];
+        // A compaction keeps the newest messages before it as they were: down to its head, they are still in context.
+        let keptFrom: number | undefined;
+        let cursor: Cursor | undefined;
+        let read = 0;
 
-        for (const entry of page.items) {
-            const shown = projectEntry(entry);
+        scan: do {
+            const page = await conversation.entries({}, NAMED_IN_PAGE, cursor, context);
 
-            if (shown?.kind === "compaction" || shown?.kind === "reset") {
-                break;
+            for (const entry of page.items) {
+                if (
+                    entry.kind === ResetEntry.kind ||
+                    (keptFrom !== undefined && entry.id < keptFrom)
+                ) {
+                    break scan;
+                }
+
+                if (entry.kind === CompactionEntry.kind) {
+                    keptFrom ??= entry.head ?? Number(entry.id);
+
+                    continue;
+                }
+
+                const shown = projectEntry(entry);
+
+                if (shown?.kind === "user" && own[String(shown.id)] === user.id) {
+                    words.push(shown.text);
+                }
             }
 
-            if (shown?.kind === "user" && own[String(shown.id)] === user.id) {
-                words.push(shown.text);
-            }
-        }
+            read += page.items.length;
+            cursor = page.next;
+        } while (cursor !== undefined && read < NAMED_IN_ENTRIES);
 
-        return words.join("\n");
+        const target = Number(pipId);
+        const standing = [
+            ...(await app.repoWatches.list(user)).filter(
+                (watch) => watch.by === user.id && watch.target === target,
+            ),
+            ...(await app.hooks.list(user)).filter(
+                (hook) => hook.by === user.id && hook.target === target,
+            ),
+        ];
+
+        return [...words, ...standing.map((each) => each.instructions ?? "")].join("\n");
     }
 
     /**
@@ -555,12 +593,20 @@ export class Pip {
             );
         }
 
+        const said = await this.#personWords(pipId, user);
         const named = personNamed(
-            await this.#personWords(pipId, user),
+            said,
             model,
             app.models.getAvailableSnapshot(),
             (provider) => app.models.getProvider(provider)?.name ?? provider,
         );
+
+        // Their words name it, but at more than one provider: which one pays is theirs to say.
+        if (!named && modelsNamed(said, [model], true).length > 0) {
+            throw new Error(
+                `Your person named ${model.name}, which more than one signed-in provider has. Ask them which provider to use; do not pick one.`,
+            );
+        }
 
         if (!named) {
             throw new Error(
@@ -582,20 +628,25 @@ export class Pip {
         return { provider: model.provider, modelId: model.id };
     }
 
-    /** Refuse text from PiP that names a model its person did not name: which model to use is theirs to say. */
+    /**
+     * Refuse text from PiP that names a model its person did not name: which model to use is theirs to say. Words that
+     * name the same model at two providers pass when the person named either: text picks no provider (a subagent's
+     * model must be one the owner allows anyway).
+     */
     async #requireNoModelChoice(pipId: ConversationId, user: User, text: string): Promise<void> {
         const app = this.#app;
         const available = app.models.getAvailableSnapshot();
-        const named = modelsNamed(text, available);
+        const named = modelsNamed(text, available, true);
 
         if (named.length === 0) {
             return;
         }
 
-        const said = await this.#personWords(pipId, user);
-        const providerName = (provider: string) =>
-            app.models.getProvider(provider)?.name ?? provider;
-        const chosen = named.filter((model) => !personNamed(said, model, available, providerName));
+        const theirs = modelsNamed(await this.#personWords(pipId, user), available, true);
+        const chosen = named.filter(
+            (model) =>
+                !theirs.includes(model) && !theirs.some((other) => sharePhrase(text, model, other)),
+        );
 
         if (chosen.length > 0) {
             throw new Error(
@@ -605,20 +656,24 @@ export class Pip {
     }
 
     /** A session's state now, in a few words, for the results of PiP's tools that act on it. */
-    status(pipId: ConversationId, sessionId: number): string {
+    async status(pipId: ConversationId, sessionId: number): Promise<string> {
         const app = this.#app;
         const user = this.#person(pipId);
         const id = this.#session(pipId, user, sessionId);
         const meta = app.sessionMeta(id)!;
+        // Messages not taken yet, PiP's just now among them: a session about to start is not idle.
+        const waiting = (await app.harness.snapshot(InboxDoc, id, context))?.items.length ?? 0;
         const state = app.approvals
             .all()
             .some((request) => app.rootOf(request.conversationId) === id)
             ? "needs approval"
             : app.isBusy(id)
               ? "working"
-              : "idle";
+              : waiting > 0
+                ? "about to start"
+                : "idle";
 
-        return `/s/${String(sessionId)} now: ${state}${meta.archived === true ? ", archived" : ""}, last active ${ago(meta.updatedAt, Date.now())}.`;
+        return `/s/${String(sessionId)} now: ${state}${waiting > 0 ? `, ${String(waiting)} message${waiting === 1 ? "" : "s"} waiting` : ""}${meta.archived === true ? ", archived" : ""}, last active ${ago(meta.updatedAt, Date.now())}.`;
     }
 
     // ─── What PiP's tools do ────────────────────────────────────────────────
@@ -848,12 +903,12 @@ export class Pip {
 
         return {
             requestId: await this.#submit(id, user, message, key, steer, async () => {
-                // The first message of a session the same call started (`started`) needs no look: there is nothing to see.
+                // The first message of a session the same call started (`started`) needs no look, there being nothing to
+                // see, and was checked for model names as the session started.
                 if (options.started !== true) {
                     this.#requireLooked(pipId, sessionId, "message");
+                    await this.#requireNoModelChoice(pipId, user, message);
                 }
-
-                await this.#requireNoModelChoice(pipId, user, message);
             }),
         };
     }
@@ -1192,6 +1247,15 @@ export class Pip {
             this.#looked(pipId, id);
 
             return { now };
+        }
+
+        // Following a run of its own (no message of PiP's to wait for) is for a session PiP looked at: a report starts a
+        // run of PiP's. A replayed call finds the follow it made.
+        if (
+            requestId === undefined &&
+            (await app.harness.snapshot(FollowsDoc, pipId, context))?.items[key] === undefined
+        ) {
+            this.#requireLooked(pipId, sessionId, "follow");
         }
 
         await app.harness.commit(async (tx) => {

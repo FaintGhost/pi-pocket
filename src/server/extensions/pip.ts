@@ -122,13 +122,13 @@ export default function createPip(host: PocketHost) {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
     // A session's state after a tool acted on it, so PiP sees what it did; nothing on a server older than that.
-    const now = (api: { conversationId: ConversationId }, session: number): string => {
+    const now = async (api: { conversationId: ConversationId }, session: number) => {
         if (typeof host.pip.status !== "function") {
             return "";
         }
 
         try {
-            return `\n${host.pip.status(api.conversationId, session)}`;
+            return `\n${await host.pip.status(api.conversationId, session)}`;
         } catch {
             return "";
         }
@@ -316,11 +316,11 @@ export default function createPip(host: PocketHost) {
                 await host.pip.follow(api.conversationId, args.session, sent.requestId, key(api));
 
                 return reply(
-                    `Sent to /s/${String(args.session)}; a report comes back when Pi answers.${now(api, args.session)}`,
+                    `Sent to /s/${String(args.session)}; a report comes back when Pi answers.${await now(api, args.session)}`,
                 );
             }
 
-            return reply(`Sent to /s/${String(args.session)}.${now(api, args.session)}`);
+            return reply(`Sent to /s/${String(args.session)}.${await now(api, args.session)}`);
         },
     });
 
@@ -340,7 +340,7 @@ export default function createPip(host: PocketHost) {
 
             return reply(
                 followed.now ??
-                    `Following /s/${String(args.session)}; a report comes back when its run ends.${now(api, args.session)}`,
+                    `Following /s/${String(args.session)}; a report comes back when its run ends.${await now(api, args.session)}`,
             );
         },
     });
@@ -355,7 +355,7 @@ export default function createPip(host: PocketHost) {
                 ((await host.pip.stop(api.conversationId, args.session))
                     ? `Stopped /s/${String(args.session)}.`
                     : `/s/${String(args.session)} was not working; its queue is cleared.`) +
-                    now(api, args.session),
+                    (await now(api, args.session)),
             ),
     });
 
@@ -376,7 +376,7 @@ export default function createPip(host: PocketHost) {
             await host.pip.archive(api.conversationId, args.session, archived);
 
             return reply(
-                `${archived ? "Archived" : "Brought back"} /s/${String(args.session)}.${now(api, args.session)}`,
+                `${archived ? "Archived" : "Brought back"} /s/${String(args.session)}.${await now(api, args.session)}`,
             );
         },
     });
@@ -421,7 +421,7 @@ export default function createPip(host: PocketHost) {
                     ((await host.pip.cancelSchedule(api.conversationId, args.session, args.id)) ===
                     undefined
                         ? `There is no schedule ${args.id} there.`
-                        : `Cancelled ${args.id}.`) + now(api, args.session),
+                        : `Cancelled ${args.id}.`) + (await now(api, args.session)),
                 );
             }
 
@@ -438,7 +438,7 @@ export default function createPip(host: PocketHost) {
             );
 
             return reply(
-                `Scheduled in /s/${String(args.session)}: ${scheduleLine(added)}${now(api, args.session)}`,
+                `Scheduled in /s/${String(args.session)}: ${scheduleLine(added)}${await now(api, args.session)}`,
             );
         },
     });

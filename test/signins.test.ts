@@ -150,11 +150,20 @@ test("a sign-in that cannot be renewed needs sign-in: the sheet, the models, and
     assert.ok(renewed.length > 0, "the renewal was tried");
 
     const tab = fakeTab(undefined, owner(app));
+    const guest = fakeTab(undefined, app.config.addUser("Guest", "guest").user);
 
     await app.attach(tab.client);
+    await app.attach(guest.client);
     refusal = new Error('token refresh failed (400): {"error":"invalid_grant"}');
     await app.providers.checkAll();
     app.detach(tab.client);
+    app.detach(guest.client);
+    // Only the owner signs in again: only they are told.
+    assert.equal(
+        guest.events.some((event) => event.event === "notice"),
+        false,
+        "a guest is not told",
+    );
 
     assert.match(String(listed()?.needsSignIn), /invalid_grant/);
     // Only the owner sees what the provider said.
@@ -245,4 +254,35 @@ test("a run that fails on it marks it, and a sign-in that works again clears the
         agentInfo(app.models, (await app.agentState(id))!, work, app.signInNeeded).available,
         false,
     );
+
+    // Signed in again outside the app (Pi's terminal app, say): the next answer from it clears the mark.
+    refusal = undefined;
+    await say(app, id, "hello again");
+    await until(() => listed()?.needsSignIn === undefined, "the mark cleared by an answer");
+});
+
+test("a mark that is out of date does not refuse a subagent: its sign-in is asked afresh first", async () => {
+    expiredSignIn();
+    refusal = new Error('token refresh failed (400): {"error":"invalid_grant"}');
+    await app.providers.checkAll();
+    assert.notEqual(listed()?.needsSignIn, undefined);
+
+    // The provider renews it again, but nothing asked yet.
+    refusal = undefined;
+    const { id } = await app.commands.createSession(owner(app), { cwd: work });
+
+    await app.commands.configure(id, owner(app), {
+        model: { provider: "faux", modelId: "faux-1" },
+        thinkingLevel: "off",
+    });
+    await say(app, id, "spawn fresh expiring/exp-1");
+    await until(() => !app.isBusy(id), "the parent at rest");
+    const results = JSON.stringify(
+        (await (await app.harness.conversation(id, context))!.context(context)).messages.filter(
+            (message) => message.role === "toolResult",
+        ),
+    );
+
+    assert.match(results, /Started fresh on expiring\/exp-1\./);
+    assert.equal(listed()?.needsSignIn, undefined);
 });
