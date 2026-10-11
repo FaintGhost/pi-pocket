@@ -1404,3 +1404,78 @@ test(
         await page.setViewport(VIEWPORTS.mobile);
     },
 );
+
+test(
+    "Dismiss is off while it is asked, and says so when the subagent failed again since",
+    real,
+    async () => {
+        const { id } = await failed(VIEWPORTS.desktop, "broken-late");
+        const button = ".board-detail .board-dismiss";
+        const disabled = () =>
+            inPage<boolean | null>(
+                `return JSON.stringify(document.querySelector(${JSON.stringify(button)})?.disabled ?? null)`,
+            );
+
+        // Its requests wait to be let go. Stale, one names a failure older than the server's, as a board that has not
+        // shown the newer one yet does.
+        await page.evaluate(`
+            const fetched = window.fetch;
+
+            window.held = [];
+            window.stale = true;
+            window.fetch = async (input, init) => {
+                if (/\\/dismiss$/.test(String(input))) {
+                    const at = JSON.parse(init.body).at - (window.stale ? 1 : 0);
+
+                    await new Promise((resolve) => window.held.push(resolve));
+
+                    return fetched(input, { ...init, body: JSON.stringify({ at }) });
+                }
+
+                return fetched(input, init);
+            };
+
+            return "true";
+        `);
+        const letGo = () =>
+            page.evaluate(`window.held.splice(0).forEach((resolve) => resolve()); return "true"`);
+
+        await settled();
+        await page.click({ selector: ".rail-agents" });
+        await see(
+            `return JSON.stringify([...document.querySelectorAll(".board-need")].some((each) => each.textContent.includes("broken-late")))`,
+            "Needs you lists it",
+        );
+        await page.evaluate(
+            `[...document.querySelectorAll(".board-need")].find((each) => each.textContent.includes("broken-late")).click()`,
+        );
+        await says(".board-detail .board-detail-name", /^broken-late$/);
+        await settled();
+
+        // Refused, as it failed again since: it says so, and Dismiss is on again.
+        await page.click({ selector: button });
+        assert.equal(await disabled(), true, "off while it is asked");
+        await letGo();
+        await see(
+            `return JSON.stringify([...document.querySelectorAll(".notice")].some((notice) => notice.textContent.includes("Not dismissed: broken-late failed again since.")))`,
+            "the notice that says so",
+        );
+        assert.equal(await disabled(), false, "on again");
+        assert.equal(
+            (await app.harness.snapshot(SubagentsDoc, id, context))?.agents["broken-late"]?.dealtAt,
+            undefined,
+        );
+
+        // Dismissed: off until the board shows it.
+        await page.evaluate(`window.stale = false; return "true"`);
+        await page.click({ selector: button });
+        assert.equal(await disabled(), true, "off while it is asked");
+        await letGo();
+        await see(
+            `return JSON.stringify(document.querySelector(".board-detail-state")?.textContent.trim() === "Failed · dismissed" && document.querySelector(${JSON.stringify(button)}) === null)`,
+            "dismissed",
+        );
+        await page.press("Escape");
+        await page.setViewport(VIEWPORTS.mobile);
+    },
+);

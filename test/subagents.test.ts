@@ -886,7 +886,10 @@ test("a failed subagent needs someone until a person deals with it, after a rest
 
         // Someone who only watches cannot dismiss it; nor can anyone a failure other than the one it has now.
         await assert.rejects(first.commands.dismissSubagent(sub, viewer.user, at), /not steer/);
-        assert.equal(await first.commands.dismissSubagent(sub, owner(first), at - 1), false);
+        assert.deepEqual(await first.commands.dismissSubagent(sub, owner(first), at - 1), {
+            dismissed: false,
+            newer: true,
+        });
         await assert.rejects(
             first.commands.dismissSubagent(id, owner(first), at),
             /Not a subagent/,
@@ -894,7 +897,13 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         assert.deepEqual(counts(first), { failed: 1 });
 
         // Dismissed, it is still a failure, and needs nobody: in the session list, on the board, and in the bar.
-        assert.equal(await first.commands.dismissSubagent(sub, owner(first), at), true);
+        assert.deepEqual(await first.commands.dismissSubagent(sub, owner(first), at), {
+            dismissed: true,
+        });
+        // Once is enough: dealt with, there is nothing newer to say.
+        assert.deepEqual(await first.commands.dismissSubagent(sub, owner(first), at), {
+            dismissed: false,
+        });
         await until(
             () => isDeepStrictEqual(counts(first!), { failed: 1, dealt: 1 }),
             "the session list says it was dealt with",
@@ -949,7 +958,9 @@ test("a failed subagent needs someone until a person deals with it, after a rest
         assert.equal(now.failed, true);
         assert.match(String(now.error), /Bad request/);
         await until(() => isDeepStrictEqual(counts(app), { failed: 1 }), "it still needs someone");
-        assert.equal(await app.commands.dismissSubagent(sub, owner(app), now.answeredAt!), true);
+        assert.deepEqual(await app.commands.dismissSubagent(sub, owner(app), now.answeredAt!), {
+            dismissed: true,
+        });
         await until(() => isDeepStrictEqual(counts(app), { failed: 1, dealt: 1 }), "dismissed");
         now = await settled("And again.", now.answeredAt!);
         assert.equal(now.failed, true);

@@ -131,9 +131,7 @@ export async function conversationRoutes(
     if (third === "dismiss" && method === "POST") {
         const body = await readJson<{ at?: unknown }>(request);
 
-        return json(response, 200, {
-            dismissed: await app.commands.dismissSubagent(id, user, body.at),
-        });
+        return json(response, 200, await app.commands.dismissSubagent(id, user, body.at));
     }
 
     if (third === "withdraw" && method === "POST") {

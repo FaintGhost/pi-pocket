@@ -632,9 +632,14 @@ export class Commands {
     /**
      * A person dealt with a failed subagent (`id`, its conversation): seen or dismissed, it needs nobody now, on the
      * board, the rail, or the session list, until it fails again. `at` is the failure they saw (its `answeredAt`): a
-     * newer one still needs them. False when there was nothing to deal with: no such failure, or already dealt with.
+     * newer one still needs them, and `newer` says so. Not dismissed either when it has no failure, or someone dealt
+     * with it already.
      */
-    async dismissSubagent(id: ConversationId, user: User, at: unknown): Promise<boolean> {
+    async dismissSubagent(
+        id: ConversationId,
+        user: User,
+        at: unknown,
+    ): Promise<{ dismissed: boolean; newer?: true }> {
         const app = this.#app;
 
         app.requireSee(user, id);
@@ -651,12 +656,15 @@ export class Commands {
         return this.#dismissFailure(id, at);
     }
 
-    /** Mark a subagent's failure, the one at `at`, dealt with; false when it has no such failure, or it already was. */
-    async #dismissFailure(id: ConversationId, at: number): Promise<boolean> {
+    /** Mark a subagent's failure, the one at `at`, dealt with: as `dismissSubagent` answers. */
+    async #dismissFailure(
+        id: ConversationId,
+        at: number,
+    ): Promise<{ dismissed: boolean; newer?: true }> {
         const parent = this.#app.parentOf(id);
 
         if (parent === undefined) {
-            return false;
+            return { dismissed: false };
         }
 
         return this.#app.harness.commit(async (tx) => {
@@ -670,15 +678,18 @@ export class Commands {
                 record === undefined ||
                 record.failed !== true ||
                 record.error === STOPPED ||
-                record.dealtAt === failure ||
-                at !== failure
+                record.dealtAt === failure
             ) {
-                return false;
+                return { dismissed: false };
+            }
+
+            if (at !== failure) {
+                return { dismissed: false, newer: true };
             }
 
             record.dealtAt = failure;
 
-            return true;
+            return { dismissed: true };
         }, context);
     }
 

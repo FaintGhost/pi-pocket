@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { folderColor } from "./avatar.js";
 import { useBack } from "./back.js";
 import { fromServer, useOnScreen } from "./peeks.js";
-import { api, attempt, canSteer, navigate, store } from "./store.js";
+import { api, attempt, canSteer, navigate, notify, store } from "./store.js";
 import {
     dismiss,
     elapsed,
@@ -245,19 +245,41 @@ function open(agent) {
     navigate(agent.conversationId);
 }
 
-/** Dismiss a failure: dealt with, it no longer needs anyone, here and in the session list. */
+/**
+ * Dismiss a failure: dealt with, it no longer needs anyone, here and in the session list. Off while it is asked, and
+ * once dismissed until the board shows it; refused because it failed again since, it says so.
+ */
 function Dismiss({ agent }) {
-    return (
-        unresolved(agent) &&
-        canSteer() &&
-        html`<button
-            class="button board-dismiss"
-            title="It stays here as failed, and no longer needs you"
-            onClick=${() => attempt(() => dismiss(agent))}
-        >
-            Dismiss
-        </button>`
-    );
+    // The failure (by its time) it asked to dismiss: a newer one turns it back on.
+    const [asked, setAsked] = useState(null);
+
+    if (!unresolved(agent) || !canSteer()) {
+        return null;
+    }
+
+    const failure = agent.answeredAt ?? 0;
+
+    const run = async () => {
+        setAsked(failure);
+        const answer = await attempt(() => dismiss(agent));
+
+        if (answer?.dismissed !== true) {
+            setAsked(null);
+        }
+
+        if (answer?.newer === true) {
+            notify("info", `Not dismissed: ${agent.name} failed again since.`);
+        }
+    };
+
+    return html`<button
+        class="button board-dismiss"
+        title="It stays here as failed, and no longer needs you"
+        disabled=${asked === failure}
+        onClick=${run}
+    >
+        Dismiss
+    </button>`;
 }
 
 function openSession(id) {
