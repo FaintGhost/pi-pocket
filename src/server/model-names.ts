@@ -39,6 +39,37 @@ export function words(text: string): string[] {
     return split(text).words;
 }
 
+/**
+ * A text read for matching: its words and how they join (`split`), and where each word is. A phrase is looked up by its
+ * first word there, not sought at every word, so reading a text costs its length once, and matching it costs the
+ * phrases and the places they could start, however long the text is. PiP reads its person's words once per action.
+ */
+export type Indexed = {
+    words: readonly string[];
+    joins: readonly string[];
+    at: ReadonlyMap<string, readonly number[]>;
+};
+
+/** `text` read for matching. */
+export function indexed(text: string): Indexed {
+    const { words, joins } = split(text);
+    const at = new Map<string, number[]>();
+
+    words.forEach((word, index) => {
+        const places = at.get(word);
+
+        if (places === undefined) {
+            at.set(word, [index]);
+        } else {
+            places.push(index);
+        }
+    });
+
+    return { words, joins, at };
+}
+
+const read = (text: string | Indexed): Indexed => (typeof text === "string" ? indexed(text) : text);
+
 /** Words that name a model; for a short name, also how they must be joined (`split`'s, the first one aside). */
 type Phrase = { words: readonly string[]; joins?: readonly string[] };
 
@@ -46,36 +77,33 @@ type Phrase = { words: readonly string[]; joins?: readonly string[] };
  * Where `phrase` is a run of `text`'s words, joined as it says when it says, and not cut off in the middle of a written
  * word or a version ("zeta-5" in "zeta-5o" or "zeta-5.2"): the index of its first word, each time.
  */
-function starts(text: ReturnType<typeof split>, phrase: Phrase): number[] {
-    const found: number[] = [];
+function starts(text: Indexed, phrase: Phrase): number[] {
     const length = phrase.words.length;
 
     if (length === 0) {
-        return found;
+        return [];
     }
 
-    for (let start = 0; start + length <= text.words.length; start++) {
+    // Where its first word is; the rest are compared there.
+    return (text.at.get(phrase.words[0]!) ?? []).filter((start) => {
         const after = text.joins[start + length];
 
-        if (
+        return (
+            start + length <= text.joins.length &&
             (after === undefined || after === " ") &&
             phrase.words.every(
                 (word, offset) =>
-                    text.words[start + offset] === word &&
-                    (offset === 0 ||
-                        phrase.joins === undefined ||
-                        text.joins[start + offset] === phrase.joins[offset]),
+                    offset === 0 ||
+                    (text.words[start + offset] === word &&
+                        (phrase.joins === undefined ||
+                            text.joins[start + offset] === phrase.joins[offset])),
             )
-        ) {
-            found.push(start);
-        }
-    }
-
-    return found;
+        );
+    });
 }
 
 /** Whether `phrase` is a run of `text`'s words. */
-function contains(text: ReturnType<typeof split>, phrase: Phrase): boolean {
+function contains(text: Indexed, phrase: Phrase): boolean {
     return starts(text, phrase).length > 0;
 }
 
@@ -152,12 +180,12 @@ const VIA = new Set(["on", "via", "through", "with", "using", "from"]);
  * name a shorter one that is.
  */
 export function modelsNamed(
-    text: string,
+    text: string | Indexed,
     models: readonly Model<Api>[],
     loosely = false,
     among: readonly Model<Api>[] = models,
 ): Model<Api>[] {
-    const said = split(text);
+    const said = read(text);
     const all = [
         ...new Map([...among, ...models].map((model) => [modelKey(model), model])).values(),
     ];
@@ -187,8 +215,8 @@ export function modelsNamed(
 const key = (phrase: Phrase) => `${phrase.words.join(" ")}|${phrase.joins?.join(",") ?? ""}`;
 
 /** Whether a phrase in `text` names both `a` and `b`: the same model at two providers, as far as those words go. */
-export function sharePhrase(text: string, a: Model<Api>, b: Model<Api>): boolean {
-    const said = split(text);
+export function sharePhrase(text: string | Indexed, a: Model<Api>, b: Model<Api>): boolean {
+    const said = read(text);
     const theirs = new Set(phrases(b, true).map(key));
 
     return phrases(a, true).some((phrase) => theirs.has(key(phrase)) && contains(said, phrase));
@@ -202,18 +230,20 @@ export function sharePhrase(text: string, a: Model<Api>, b: Model<Api>): boolean
  * `VIA` ("on copilot"): which one pays is theirs to say, and its word elsewhere ("go ahead") is ordinary text.
  */
 export function personNamed(
-    text: string,
+    text: string | Indexed,
     model: Model<Api>,
     models: readonly Model<Api>[],
     providerName: (provider: string) => string = (provider) => provider,
     among: readonly Model<Api>[] = models,
 ): boolean {
-    if (!modelsNamed(text, [model], true, [...models, ...among]).includes(model)) {
+    const said = read(text);
+
+    if (!modelsNamed(said, [model], true, [...models, ...among]).includes(model)) {
         return false;
     }
 
     const twins = models.filter(
-        (other) => other.provider !== model.provider && sharePhrase(text, model, other),
+        (other) => other.provider !== model.provider && sharePhrase(said, model, other),
     );
 
     if (twins.length === 0) {
@@ -228,20 +258,17 @@ export function personNamed(
         ...words(model.id),
         ...words(model.name),
     ]);
-    const said = words(text);
 
     // Its words right after "on" (or "via"…), one of them not the others': "on Kiwi Coding" names Kiwi Coding.
-    return said.some((word, index) => {
-        if (!VIA.has(word)) {
-            return false;
-        }
-
-        for (let next = index + 1; own.has(said[next] ?? ""); next++) {
-            if (!shared.has(said[next]!)) {
-                return true;
+    return [...VIA].some((via) =>
+        (said.at.get(via) ?? []).some((index) => {
+            for (let next = index + 1; own.has(said.words[next] ?? ""); next++) {
+                if (!shared.has(said.words[next]!)) {
+                    return true;
+                }
             }
-        }
 
-        return false;
-    });
+            return false;
+        }),
+    );
 }

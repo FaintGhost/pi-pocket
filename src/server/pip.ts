@@ -41,7 +41,7 @@ import { describe, HttpError } from "./errors.ts";
 import { clip, defang, quoted } from "./fence.ts";
 import { git } from "./git.ts";
 import { originRepo, parseRepo, requirePush, sameRepo } from "./github.ts";
-import { modelsNamed, personNamed, sharePhrase } from "./model-names.ts";
+import { indexed, modelsNamed, personNamed, sharePhrase } from "./model-names.ts";
 import { findModel } from "./models.ts";
 import { homePath } from "./paths.ts";
 import { type ClientEntry, projectEntry, snippet } from "./projection.ts";
@@ -593,7 +593,8 @@ export class Pip {
             );
         }
 
-        const said = await this.#personWords(pipId, user);
+        // Read once for both checks below: it can be long.
+        const said = indexed(await this.#personWords(pipId, user));
         const available = app.models.getAvailableSnapshot();
         // Every model Pi knows: words that name one not signed in name no shorter one that is.
         const known = app.models.getModels();
@@ -641,7 +642,8 @@ export class Pip {
         const app = this.#app;
         const available = app.models.getAvailableSnapshot();
         const known = app.models.getModels();
-        const named = modelsNamed(text, available, true, known);
+        const written = indexed(text);
+        const named = modelsNamed(written, available, true, known);
 
         if (named.length === 0) {
             return;
@@ -650,7 +652,8 @@ export class Pip {
         const theirs = modelsNamed(await this.#personWords(pipId, user), available, true, known);
         const chosen = named.filter(
             (model) =>
-                !theirs.includes(model) && !theirs.some((other) => sharePhrase(text, model, other)),
+                !theirs.includes(model) &&
+                !theirs.some((other) => sharePhrase(written, model, other)),
         );
 
         if (chosen.length > 0) {

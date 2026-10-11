@@ -24,7 +24,14 @@ import {
     fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
 import type { ConversationId } from "@earendil-works/pi-durable";
-import { modelsNamed, personNamed, sharePhrase, words } from "../src/server/model-names.ts";
+import {
+    type Indexed,
+    indexed,
+    modelsNamed,
+    personNamed,
+    sharePhrase,
+    words,
+} from "../src/server/model-names.ts";
 
 /** PiP's last prompt, as its requests carry it. */
 let prompt = "";
@@ -195,6 +202,43 @@ test("a model's name that runs on into another's names only the longer one", () 
     assert.equal(personNamed("try z3, then z3-mini", z3, all), true);
     // Where the longer model is not there, its words name the shorter one as before.
     assert.equal(personNamed("try z3-mini", z3, [z3]), true);
+});
+
+test("matching reads a text once, then looks only where a model's name could start", () => {
+    const models = Array.from({ length: 200 }, (_, index) =>
+        model("acme", `zeta-${String(index)}-mini`, `Zeta ${String(index)} Mini`),
+    );
+
+    // How many of the text's words matching looks at, once it is read: counted, not timed.
+    const looks = (filler: number) => {
+        const text = indexed(
+            `${"so it goes, and ".repeat(filler)}use zeta-7-mini, then zeta-8-mini`,
+        );
+        let reads = 0;
+        const counted: Indexed = {
+            ...text,
+            words: new Proxy(text.words, {
+                get(target, key, receiver) {
+                    if (typeof key === "string" && /^\d+$/.test(key)) {
+                        reads += 1;
+                    }
+
+                    return Reflect.get(target, key, receiver);
+                },
+            }),
+        };
+
+        assert.equal(personNamed(counted, models[7]!, models), true);
+        assert.deepEqual(modelsNamed(counted, models, true), [models[7], models[8]]);
+
+        return reads;
+    };
+
+    const few = looks(100);
+
+    assert.ok(few > 0, "it looks where the names are");
+    // Ten times the words, not one look more: the cost is reading the text, not the text times the models.
+    assert.equal(looks(1000), few);
 });
 
 test("who pays is named after on, via, or the like, not by everyday words", () => {
