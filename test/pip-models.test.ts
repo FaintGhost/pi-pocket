@@ -4,13 +4,14 @@
 import {
     type App,
     cleanUp,
+    home,
     lastText,
     newSession,
-    openApp,
     owner,
     root,
     say,
     until,
+    work,
 } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { join } from "node:path";
@@ -66,10 +67,37 @@ const faux = fauxProvider({
 
 faux.setResponses(Array.from({ length: 1000 }, () => route));
 
+/** A provider Pi knows and nobody signed in to: faux-2-pro, whose name runs on from faux-2's, is known, not signed in. */
+const unsigned = {
+    ...fauxProvider({ provider: "unsigned", models: [{ id: "faux-2-pro" }] }).provider,
+    name: "Unsigned",
+    auth: {
+        apiKey: {
+            name: "Unsigned key",
+            login: async () => {
+                throw new Error("no sign-in in tests");
+            },
+            resolve: async () => undefined,
+        },
+    },
+};
+
+const { PocketApp } = await import("../src/server/app.ts");
+
 let app: App;
 
 before(async () => {
-    app = await openApp(faux, join(root, "pip-models-data"));
+    app = await PocketApp.open({
+        dataDir: join(root, "pip-models-data"),
+        defaultCwd: work,
+        supervised: false,
+        log: () => {},
+        home,
+        configureModels: (models) => {
+            models.registerNativeProvider(faux.provider);
+            models.registerNativeProvider(unsigned as never);
+        },
+    });
 });
 
 after(async () => {
@@ -167,6 +195,26 @@ test("a model's name that runs on into another's names only the longer one", () 
     assert.equal(personNamed("try z3, then z3-mini", z3, all), true);
     // Where the longer model is not there, its words name the shorter one as before.
     assert.equal(personNamed("try z3-mini", z3, [z3]), true);
+});
+
+test("words that name a model not signed in name no shorter one that is", () => {
+    const zeta = model("acme", "zeta-5", "Zeta 5");
+    const nano = model("acme", "zeta-5-nano", "Zeta 5 Nano");
+    const signedIn = [zeta];
+    const known = [zeta, nano];
+
+    assert.deepEqual(modelsNamed("use zeta-5-nano", signedIn, true, known), []);
+    assert.equal(personNamed("use zeta-5-nano", zeta, signedIn, undefined, known), false);
+
+    // Nor do a version or a written word that carries on, known here or not: those are other models.
+    for (const text of ["use zeta-5.2", "use zeta-5o"]) {
+        assert.deepEqual(modelsNamed(text, signedIn, true, known), [], text);
+    }
+
+    // Said on its own, or beside the longer one, it is named.
+    assert.deepEqual(modelsNamed("use zeta-5", signedIn, true, known), [zeta]);
+    assert.deepEqual(modelsNamed("zeta-5, not zeta-5-nano", signedIn, true, known), [zeta]);
+    assert.equal(personNamed("use Zeta 5 for it", zeta, signedIn, undefined, known), true);
 });
 
 test("a model's usual short name names it, as it is written; ordinary words name no model", () => {
@@ -314,6 +362,27 @@ test("PiP takes a longer model's name for that model only", async () => {
     const made = await app.pip.start(id, { model: "faux/faux-2-mini" });
 
     assert.equal((await app.agentState(made))?.model?.modelId, "faux-2-mini");
+});
+
+test("PiP takes the name of a model not signed in for no shorter one that is", async () => {
+    const id = await pip();
+    const session = Number(await newSession(app));
+
+    assert.equal(
+        app.models.getAvailableSnapshot().some((each) => each.id === "faux-2-pro"),
+        false,
+        "known, not signed in",
+    );
+    await app.pip.read(id, session);
+    await say(app, id, "start a session on faux-2-pro");
+    await assert.rejects(
+        app.pip.start(id, { model: "faux/faux-2" }),
+        /Your person did not name faux\/faux-2\. Models are theirs to choose/,
+    );
+    await assert.rejects(
+        app.pip.send(id, session, "Spawn a reviewer subagent on faux-2.", false, "unsigned-1"),
+        /names faux\/faux-2, which your person did not name/,
+    );
 });
 
 test("PiP's messages name no model its person did not name", async () => {

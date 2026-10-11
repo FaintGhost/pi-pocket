@@ -595,15 +595,18 @@ export class Pip {
 
         const said = await this.#personWords(pipId, user);
         const available = app.models.getAvailableSnapshot();
+        // Every model Pi knows: words that name one not signed in name no shorter one that is.
+        const known = app.models.getModels();
         const named = personNamed(
             said,
             model,
             available,
             (provider) => app.models.getProvider(provider)?.name ?? provider,
+            known,
         );
 
         // Their words name it, but at more than one provider: which one pays is theirs to say.
-        if (!named && modelsNamed(said, [model, ...available], true).includes(model)) {
+        if (!named && modelsNamed(said, [model], true, [...available, ...known]).includes(model)) {
             throw new Error(
                 `Your person named ${model.name}, which more than one signed-in provider has. Ask them which provider to use; do not pick one.`,
             );
@@ -637,13 +640,14 @@ export class Pip {
     async #requireNoModelChoice(pipId: ConversationId, user: User, text: string): Promise<void> {
         const app = this.#app;
         const available = app.models.getAvailableSnapshot();
-        const named = modelsNamed(text, available, true);
+        const known = app.models.getModels();
+        const named = modelsNamed(text, available, true, known);
 
         if (named.length === 0) {
             return;
         }
 
-        const theirs = modelsNamed(await this.#personWords(pipId, user), available, true);
+        const theirs = modelsNamed(await this.#personWords(pipId, user), available, true, known);
         const chosen = named.filter(
             (model) =>
                 !theirs.includes(model) && !theirs.some((other) => sharePhrase(text, model, other)),

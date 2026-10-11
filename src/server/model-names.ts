@@ -42,7 +42,10 @@ export function words(text: string): string[] {
 /** Words that name a model; for a short name, also how they must be joined (`split`'s, the first one aside). */
 type Phrase = { words: readonly string[]; joins?: readonly string[] };
 
-/** Where `phrase` is a run of `text`'s words, joined as it says when it says: the index of its first word, each time. */
+/**
+ * Where `phrase` is a run of `text`'s words, joined as it says when it says, and not cut off in the middle of a written
+ * word or a version ("zeta-5" in "zeta-5o" or "zeta-5.2"): the index of its first word, each time.
+ */
 function starts(text: ReturnType<typeof split>, phrase: Phrase): number[] {
     const found: number[] = [];
     const length = phrase.words.length;
@@ -52,7 +55,10 @@ function starts(text: ReturnType<typeof split>, phrase: Phrase): number[] {
     }
 
     for (let start = 0; start + length <= text.words.length; start++) {
+        const after = text.joins[start + length];
+
         if (
+            (after === undefined || after === " ") &&
             phrase.words.every(
                 (word, offset) =>
                     text.words[start + offset] === word &&
@@ -134,17 +140,25 @@ function phrases(model: Model<Api>, loosely: boolean): Phrase[] {
     return all.filter(distinct);
 }
 
+const modelKey = (model: Model<Api>) => `${model.provider}/${model.id}`;
+
 /**
  * The models among `models` that `text` names, by the phrases above. Where a phrase of one model runs on into a longer
  * phrase of another, from the same word, the text names only the longer one: "gpt-5-nano" names gpt-5-nano, not gpt-5.
+ * The models of `among` (every model Pi knows) take part in that too, so words that name a model not signed in do not
+ * name a shorter one that is.
  */
 export function modelsNamed(
     text: string,
     models: readonly Model<Api>[],
     loosely = false,
+    among: readonly Model<Api>[] = models,
 ): Model<Api>[] {
     const said = split(text);
-    const found = models.map((model) =>
+    const all = [
+        ...new Map([...among, ...models].map((model) => [modelKey(model), model])).values(),
+    ];
+    const found = all.map((model) =>
         phrases(model, loosely).flatMap((phrase) =>
             starts(said, phrase).map((start) => ({ start, length: phrase.words.length })),
         ),
@@ -156,9 +170,15 @@ export function modelsNamed(
         longest.set(start, Math.max(longest.get(start) ?? 0, length));
     }
 
-    return models.filter((_, index) =>
-        found[index]!.some(({ start, length }) => length === longest.get(start)),
+    const named = new Set(
+        all
+            .filter((_, index) =>
+                found[index]!.some(({ start, length }) => length === longest.get(start)),
+            )
+            .map(modelKey),
     );
+
+    return models.filter((model) => named.has(modelKey(model)));
 }
 
 const key = (phrase: Phrase) => `${phrase.words.join(" ")}|${phrase.joins?.join(",") ?? ""}`;
@@ -172,18 +192,20 @@ export function sharePhrase(text: string, a: Model<Api>, b: Model<Api>): boolean
 }
 
 /**
- * Whether a person's `text` names `model`, as they would say it, among the `models` there are: words that name a longer
- * one of them ("gpt-5-nano") do not name `model` (gpt-5). When the same words name it at another provider too (Claude
- * Opus 4.5 is at Anthropic and GitHub Copilot), the provider must be named as well, by a word of its id or name that
- * the others do not share ("copilot", "codex"): which one pays is theirs to say.
+ * Whether a person's `text` names `model`, as they would say it, among the `models` signed in: words that name a longer
+ * one of them, or of `among` (every model Pi knows), do not name `model` ("gpt-5-nano" is not gpt-5). When the same
+ * words name it at another provider too (Claude Opus 4.5 is at Anthropic and GitHub Copilot), the provider must be
+ * named as well, by a word of its id or name that the others do not share ("copilot", "codex"): which one pays is
+ * theirs to say.
  */
 export function personNamed(
     text: string,
     model: Model<Api>,
     models: readonly Model<Api>[],
     providerName: (provider: string) => string = (provider) => provider,
+    among: readonly Model<Api>[] = models,
 ): boolean {
-    if (!modelsNamed(text, [model, ...models], true).includes(model)) {
+    if (!modelsNamed(text, [model], true, [...models, ...among]).includes(model)) {
         return false;
     }
 
