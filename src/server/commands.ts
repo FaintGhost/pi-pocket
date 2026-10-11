@@ -97,9 +97,15 @@ const IMAGE_MIME: Record<string, string> = {
 const MAX_TITLE = 120;
 /** A title as stored: one line, so it cannot pass for more lines where it is quoted (PiP's lists, reports). */
 const oneLine = (title: string): string => title.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE);
+/**
+ * What a subagent's name drops where it is quoted, to keep its letters, digits, spaces, and ". _ -" only: no mark of its
+ * own then closes the quotes, whether a quote mark, one that looks like one ("″", "ʺ"), or a control that turns the
+ * text around or hides.
+ */
+const UNQUOTED = /[^\p{L}\p{N}\s._-]|\p{Lm}/gu;
 /** A person's activity line when they dealt with a subagent's failure, in its parent session: Pi named it, so quoted. */
 const dealtWith = (name: string): string =>
-    `dealt with the failure of subagent “${snippet(name, 60)}”`;
+    `dealt with the failure of subagent “${snippet(name.replace(UNQUOTED, ""), 60)}”`;
 
 /** What dismissing a subagent's failure came to: `newer` when it failed again since the failure seen. */
 type Dismissal = { dismissed: boolean; newer?: true };
