@@ -511,6 +511,14 @@ test("a long first message gets a short written title; a short one is the title"
     assert.equal(cleanTitle("<think>\nA title for it, about"), undefined);
     assert.equal(cleanTitle("A title for it.</think>\n\nFix Login"), "Fix Login");
     assert.equal(cleanTitle("<thinking>\nA title.\n</thinking>\nFix Login"), "Fix Login");
+    // Such tags further on are the title's own words.
+    assert.equal(cleanTitle("Use <think> tags in prompts"), "Use <think> tags in prompts");
+    assert.equal(
+        cleanTitle("Write about <thinking> tag handling"),
+        "Write about <thinking> tag handling",
+    );
+    assert.equal(cleanTitle("Fix </think> x the bug"), "Fix </think> x the bug");
+    assert.equal(cleanTitle("<think>\nA title.\n</think>\nUse <think> tags"), "Use <think> tags");
     // Some languages put spaces between syllables: a title there has more "words".
     assert.equal(
         cleanTitle("Tối ưu hóa hiệu suất truy vấn cơ sở dữ liệu cho ứng dụng"),

@@ -21,9 +21,13 @@ const MAX_TITLE = 60;
  * some languages put spaces between syllables (Vietnamese), and some models are wordy.
  */
 const MAX_WORDS = 15;
-/** Reasoning some servers send in the reply's text: a block in tags, or one whose opening tag stayed behind. */
-const REASONING = /<(think|thinking|reasoning)>[\s\S]*?(<\/\1>|$)/gi;
-const REASONING_END = /^[\s\S]*<\/(think|thinking|reasoning)>/i;
+/**
+ * Reasoning some servers send at the start of the reply's text: a block in tags, or one whose closing tag never came.
+ * Such tags further on are the title's own words ("Use <think> tags in prompts").
+ */
+const REASONING = /^\s*<(think|thinking|reasoning)>[\s\S]*?(<\/\1>|$)/i;
+/** Reasoning whose opening tag the server left out: up to a closing tag that ends its line, as such reasoning's does. */
+const REASONING_END = /^[\s\S]*?<\/(think|thinking|reasoning)>[^\S\n]*(\n|$)/i;
 /** How much of the first message the model reads. */
 const READ_CHARS = 3000;
 
@@ -48,8 +52,8 @@ export function titleModel(current: Model<Api>): Model<Api> {
 
 /**
  * A model's reply as a title: its first line, without quotes or a label, and not too long. Undefined when that is
- * empty, or is a sentence rather than a title, as when a model thinks aloud in its reply. Reasoning in `<think>` tags
- * (or `<thinking>`, `<reasoning>`), as some servers send it, is left out.
+ * empty, or is a sentence rather than a title, as when a model thinks aloud in its reply. Reasoning at its start, in
+ * `<think>` tags (or `<thinking>`, `<reasoning>`) as some servers send it, is left out.
  */
 export function cleanTitle(reply: string): string | undefined {
     const line = reply
