@@ -327,6 +327,8 @@ test("a follow outlives a restart: the report comes once the session's run ends"
     const id = await pip();
     const session = await newSession(app);
 
+    // PiP looks at a session before it messages it.
+    await say(app, id, `read ${String(session)}`);
     await say(app, id, `send ${String(session)} a sleepy job`);
     assert.match((await said(id)).join("\n"), /done: Sent to \/s\/\d+; a report comes back/);
     await until(() => app.isBusy(session), "the session at work");
@@ -382,6 +384,7 @@ test("PiP's messages go once per call, whatever its call ids look like", async (
     // OpenAI-style call ids are long; codemode adds "/n" for each call a script makes.
     const call = `pip-7-call_${"x".repeat(70)}|fc_${"y".repeat(20)}`;
 
+    await app.pip.read(id, Number(session));
     await app.pip.send(id, Number(session), "first", false, `${call}/1`);
     await app.pip.send(id, Number(session), "second", false, `${call}/2`);
     // A replayed call finds what it sent.
@@ -877,6 +880,7 @@ test("a follow's report waits while PiP is off, and comes once it is back", asyn
         ).length;
 
     app.pip.holdMs = 100;
+    await say(app, id, `read ${String(session)}`);
     await say(app, id, `send ${String(session)} a sleepy job`);
     await until(() => app.isBusy(session), "the session at work");
     await app.setExtensionEnabled(me, "pip.ts", false);
@@ -902,6 +906,9 @@ test("schedules count against PiP's hourly actions, its own too, once each; refu
         app.pip.countSchedule(id, key, () =>
             app.schedules.add(id, { when, text: "check back", key }),
         );
+
+    // PiP looks at the session before it acts there.
+    await app.pip.read(id, Number(session));
 
     const tool = async (when: string) => {
         await say(

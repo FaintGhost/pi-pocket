@@ -4436,6 +4436,29 @@ button.chip:hover {
     justify-content: flex-end;
 }
 
+/* What a provider said when it would not renew a sign-in. */
+.provider-why {
+    overflow-wrap: anywhere;
+}
+
+/* The owner's choice of models for subagents, above the providers. */
+.subagent-models {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.6rem 0 0.8rem;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.subagent-models p {
+    margin: 0;
+}
+
+.subagent-models-add {
+    min-height: 40px;
+}
+
 .invite {
     display: flex;
     flex-direction: column;

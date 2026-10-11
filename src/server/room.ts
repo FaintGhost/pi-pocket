@@ -564,7 +564,12 @@ export class Room {
                           ...this.#app.attribution.submitterOf(item.id as unknown as number, this),
                       },
             ),
-            agent: agentInfo(this.#app.models, agentState, this.#app.defaultCwd),
+            agent: agentInfo(
+                this.#app.models,
+                agentState,
+                this.#app.defaultCwd,
+                this.#app.signInNeeded,
+            ),
             stats: projectStats(view.docs["pi.usage"] as UsageState | undefined, view.entries),
             clients: [...new Set([...this.clients].map((each) => each.id))].length,
             viewers: [...new Set([...this.clients].map((each) => each.user.name))],

@@ -8,6 +8,10 @@
  *
  * A follow is a durable task in PiP's conversation: it waits for the message PiP sent (or for the session to go idle),
  * then sends PiP a report. Request ids keep a restart from sending a message or a report twice.
+ *
+ * PiP checks before it acts: it messages, stops, archives, schedules in, or watches a PR from a session only after it
+ * looked at that session lately (read it, started it, or had a report from it). And it never chooses a model: it passes
+ * one, or names one in what it sends, only when its person named that model in their own words to it.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
@@ -27,13 +31,14 @@ import {
 } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
-import { FollowsDoc, SessionsDoc } from "./docs.ts";
+import { AuthorsDoc, FollowsDoc, SessionsDoc } from "./docs.ts";
 import { NOTE_ENTRY } from "./entry-format.ts";
 import { describe, HttpError } from "./errors.ts";
 import { clip, defang, quoted } from "./fence.ts";
 import { git } from "./git.ts";
 import { originRepo, parseRepo, requirePush, sameRepo } from "./github.ts";
-import { resolveModel } from "./models.ts";
+import { modelsNamed, personNamed } from "./model-names.ts";
+import { findModel } from "./models.ts";
 import { homePath } from "./paths.ts";
 import { type ClientEntry, projectEntry, snippet } from "./projection.ts";
 import type { RepoWatchRequest, RepoWatchView } from "./repo-watches.ts";
@@ -75,6 +80,10 @@ const CLONE_TIMEOUT_MS = 15 * 60_000;
 const ORIGIN_FOR_MS = 5 * 60_000;
 /** How long a follow that reported is remembered, so a replayed call that made it does not make another. */
 const FOLLOW_MEMORY_MS = 24 * 3_600_000;
+/** How long PiP's look at a session (a read, its start, a report from it) counts as knowing what it is doing. */
+const CHECKED_FOR_MS = 15 * 60_000;
+/** How many of PiP's newest entries are searched for the models its person named. */
+const NAMED_IN_ENTRIES = 200;
 /**
  * How long after a follow reported its session's "Pi finished" stays muted: long enough for the push of the same run's
  * end, which comes a few seconds later, and short enough not to mute the next run's.
@@ -171,6 +180,11 @@ export class Pip {
     /** Clones under way, by repository, so two asks clone once; and folders' repositories, kept a few minutes. */
     readonly #cloning = new Map<string, Promise<string>>();
     readonly #origins = new Map<string, { repo: string | undefined; at: number }>();
+    /**
+     * When each PiP last looked at each session (`pip:session`): read it, started it, or had a report from it. In
+     * memory: after a restart PiP looks again before it acts.
+     */
+    readonly #checked = new Map<string, number>();
     /** The durable task behind each follow; PiP's extension installs it. */
     readonly task: Task<FollowInput, FollowState, null, object>;
     /** How long a report waits before it looks again whether PiP is back on (tests shorten it). */
@@ -419,6 +433,7 @@ export class Pip {
         text: string,
         key: string,
         steer: boolean,
+        checks: () => Promise<void> = async () => {},
     ): Promise<string> {
         const app = this.#app;
         const asked = requestKey(key);
@@ -433,6 +448,8 @@ export class Pip {
             return requestId;
         }
 
+        // Only a message not sent yet: a replayed call finds the one it sent, whatever PiP knows after a restart.
+        await checks();
         this.#count(user, "act", ACTIONS_PER_HOUR);
 
         return (
@@ -476,6 +493,132 @@ export class Pip {
         this.#app.requireSee(user, id);
 
         return id;
+    }
+
+    /** PiP just looked at a session, and knows what it is doing. */
+    #looked(pipId: ConversationId, sessionId: ConversationId | number): void {
+        this.#checked.set(`${String(pipId)}:${String(sessionId)}`, Date.now());
+    }
+
+    /**
+     * Refuse to act on a session PiP has not looked at lately: what it would send or stop may be what the session does
+     * not need. `doing` says what in a few words ("message", "stop").
+     */
+    #requireLooked(pipId: ConversationId, sessionId: number, doing: string): void {
+        const at = this.#checked.get(`${String(pipId)}:${String(sessionId)}`);
+
+        if (at === undefined || Date.now() - at > CHECKED_FOR_MS) {
+            throw new Error(
+                `Check /s/${String(sessionId)} first with session_read (a few entries may be enough): see what it is doing now, and ${doing} it only if it needs that.`,
+            );
+        }
+    }
+
+    /**
+     * What PiP's person wrote to it in their own words, newest first, in its context now (since its last compaction or
+     * new context): not reports, webhooks, watches, or anything else sent for them.
+     */
+    async #personWords(pipId: ConversationId, user: User): Promise<string> {
+        const app = this.#app;
+        const own = (await app.harness.snapshot(AuthorsDoc, pipId, context))?.entries ?? {};
+        const page = await (
+            await app.conversation(pipId)
+        ).entries({}, NAMED_IN_ENTRIES, undefined, context);
+        const words: string[] = [];
+
+        for (const entry of page.items) {
+            const shown = projectEntry(entry);
+
+            if (shown?.kind === "compaction" || shown?.kind === "reset") {
+                break;
+            }
+
+            if (shown?.kind === "user" && own[String(shown.id)] === user.id) {
+                words.push(shown.text);
+            }
+        }
+
+        return words.join("\n");
+    }
+
+    /**
+     * The signed-in model PiP may start a session on: one its person named, whose sign-in works now. Anything else is
+     * refused, telling PiP to leave the model out or ask, never to pick another.
+     */
+    async #personsModel(pipId: ConversationId, user: User, spec: string) {
+        const app = this.#app;
+        const model = findModel(app.models, spec);
+
+        if (model === undefined) {
+            throw new Error(
+                `${spec} is not a model signed in here. Leave model out (the session starts on the default model), or ask your person which model they mean; do not pick another.`,
+            );
+        }
+
+        const named = personNamed(
+            await this.#personWords(pipId, user),
+            model,
+            app.models.getAvailableSnapshot(),
+            (provider) => app.models.getProvider(provider)?.name ?? provider,
+        );
+
+        if (!named) {
+            throw new Error(
+                `Your person did not name ${model.provider}/${model.id}. Models are theirs to choose: leave model out (the session starts on the default model), or ask them which model to use.`,
+            );
+        }
+
+        const problem = await app.providers.problem(
+            { provider: model.provider, modelId: model.id },
+            true,
+        );
+
+        if (problem !== undefined) {
+            throw new Error(
+                `${model.provider}/${model.id} cannot be used now: ${problem}. Tell your person; do not pick another model.`,
+            );
+        }
+
+        return { provider: model.provider, modelId: model.id };
+    }
+
+    /** Refuse text from PiP that names a model its person did not name: which model to use is theirs to say. */
+    async #requireNoModelChoice(pipId: ConversationId, user: User, text: string): Promise<void> {
+        const app = this.#app;
+        const available = app.models.getAvailableSnapshot();
+        const named = modelsNamed(text, available);
+
+        if (named.length === 0) {
+            return;
+        }
+
+        const said = await this.#personWords(pipId, user);
+        const providerName = (provider: string) =>
+            app.models.getProvider(provider)?.name ?? provider;
+        const chosen = named.filter((model) => !personNamed(said, model, available, providerName));
+
+        if (chosen.length > 0) {
+            throw new Error(
+                `This names ${chosen.map((model) => `${model.provider}/${model.id}`).join(", ")}, which your person did not name. Which model to use is theirs to say: take it out (sessions and their subagents use their own model), or ask them first.`,
+            );
+        }
+    }
+
+    /** A session's state now, in a few words, for the results of PiP's tools that act on it. */
+    status(pipId: ConversationId, sessionId: number): string {
+        const app = this.#app;
+        const user = this.#person(pipId);
+        const id = this.#session(pipId, user, sessionId);
+        const meta = app.sessionMeta(id)!;
+        const state = app.approvals
+            .all()
+            .some((request) => app.rootOf(request.conversationId) === id)
+            ? "needs approval"
+            : app.isBusy(id)
+              ? "working"
+              : "idle";
+
+        return `/s/${String(sessionId)} now: ${state}${meta.archived === true ? ", archived" : ""}, last active ${ago(meta.updatedAt, Date.now())}.`;
     }
 
     // ─── What PiP's tools do ────────────────────────────────────────────────
@@ -621,6 +764,8 @@ export class Pip {
                           .join("; ")}`,
                   ]),
         ];
+
+        this.#looked(pipId, id);
         const head = [
             `#${String(sessionId)} ${quoted(meta.title ?? "New session")} · ${state}${meta.archived === true ? " · archived" : ""}`,
             `Folder: ${snippet(homePath(app.cwdOf(id)), 300)}${meta.worktree === undefined ? "" : ` (worktree, branch ${snippet(meta.worktree.branch, 120)})`}`,
@@ -634,8 +779,9 @@ export class Pip {
     }
 
     /**
-     * Start a session for PiP's person, in a folder (the default one when absent), with a model when one is named. Its
-     * first message goes with `send`, so a replayed call that made the session sends it once.
+     * Start a session for PiP's person, in a folder (the default one when absent), with a model only when its person
+     * named it. Its first message goes with `send`, so a replayed call that made the session sends it once; it is checked
+     * here first (`message`), so a message that names a model nobody chose leaves no session behind.
      */
     async start(
         pipId: ConversationId,
@@ -645,13 +791,22 @@ export class Pip {
             title?: string;
             worktree?: boolean;
             model?: string;
+            message?: string;
         },
     ): Promise<ConversationId> {
         const app = this.#app;
         const user = this.#person(pipId);
-        // Before anything is made: a model that is not there leaves no session behind.
+        // Before anything is made: a model that is not there, or that nobody chose, leaves no session behind.
         const model =
-            request.model === undefined ? undefined : resolveModel(app.models, request.model);
+            request.model === undefined
+                ? undefined
+                : await this.#personsModel(pipId, user, request.model);
+
+        await this.#requireNoModelChoice(
+            pipId,
+            user,
+            `${request.title ?? ""}\n${request.message ?? ""}`,
+        );
 
         if (request.folder !== undefined && request.repo !== undefined) {
             throw new Error("Give a folder or a repository, not both.");
@@ -670,6 +825,9 @@ export class Pip {
             await app.commands.configure(id, user, { model });
         }
 
+        // PiP made it, and knows what it is doing: nothing yet.
+        this.#looked(pipId, id);
+
         return id;
     }
 
@@ -683,11 +841,21 @@ export class Pip {
         message: string,
         steer: boolean,
         key: string,
+        options: { started?: boolean } = {},
     ): Promise<{ requestId: string }> {
         const user = this.#person(pipId);
         const id = this.#session(pipId, user, sessionId);
 
-        return { requestId: await this.#submit(id, user, message, key, steer) };
+        return {
+            requestId: await this.#submit(id, user, message, key, steer, async () => {
+                // The first message of a session the same call started (`started`) needs no look: there is nothing to see.
+                if (options.started !== true) {
+                    this.#requireLooked(pipId, sessionId, "message");
+                }
+
+                await this.#requireNoModelChoice(pipId, user, message);
+            }),
+        };
     }
 
     // ─── GitHub ─────────────────────────────────────────────────────────────
@@ -817,6 +985,11 @@ export class Pip {
         const user = this.#person(pipId);
         const id = this.#session(pipId, user, sessionId);
 
+        // A replayed call finds the watch it started; anything else is looked at first.
+        if ((await this.#app.watches.get(id))?.key !== key) {
+            this.#requireLooked(pipId, sessionId, "watch a pull request from");
+        }
+
         // Counted even when refused: it asked GitHub, which the hourly count also keeps in bounds.
         this.#count(user, "act", ACTIONS_PER_HOUR);
 
@@ -831,6 +1004,10 @@ export class Pip {
     async prWatch(pipId: ConversationId, sessionId: number, stop: boolean) {
         const user = this.#person(pipId);
         const id = this.#session(pipId, user, sessionId);
+
+        if (stop) {
+            this.#requireLooked(pipId, sessionId, "stop the PR watch of");
+        }
 
         return stop ? this.#app.watches.stop(id) : this.#app.watches.get(id);
     }
@@ -852,6 +1029,9 @@ export class Pip {
         }
 
         const target = to === undefined ? pipId : this.#session(pipId, user, to);
+
+        // What each event will have done: no model in it that its person did not name.
+        await this.#requireNoModelChoice(pipId, user, rest.instructions ?? "");
 
         // Counted even when refused: it asked GitHub, which the hourly count also keeps in bounds.
         this.#count(user, "act", ACTIONS_PER_HOUR);
@@ -883,6 +1063,8 @@ export class Pip {
     async stop(pipId: ConversationId, sessionId: number): Promise<boolean> {
         const user = this.#person(pipId);
         const id = this.#session(pipId, user, sessionId);
+
+        this.#requireLooked(pipId, sessionId, "stop");
         const busy = this.#app.isBusy(id);
 
         await this.#app.commands.abort(id, this.#through(user));
@@ -894,6 +1076,11 @@ export class Pip {
     async archive(pipId: ConversationId, sessionId: number, archived: boolean): Promise<void> {
         const user = this.#person(pipId);
         const id = this.#session(pipId, user, sessionId);
+
+        // Bringing one back hides nothing; archiving it hides what may still need its person.
+        if (archived && this.#app.sessionMeta(id)?.archived !== true) {
+            this.#requireLooked(pipId, sessionId, "archive");
+        }
 
         await this.#app.commands.updateSession(id, this.#through(user), { archived });
     }
@@ -949,6 +1136,13 @@ export class Pip {
 
         await app.requireDriver(id, user);
 
+        // A replayed call finds the schedule it made; a new one is for a session PiP looked at, naming no model nobody
+        // chose.
+        if (!(await app.schedules.list(id)).some((item) => item.key === key)) {
+            this.#requireLooked(pipId, sessionId, "schedule messages in");
+            await this.#requireNoModelChoice(pipId, user, message);
+        }
+
         // A schedule is work to come, counted like a message.
         return this.countSchedule(
             id,
@@ -970,6 +1164,7 @@ export class Pip {
         const id = this.#session(pipId, user, sessionId);
 
         await app.requireDriver(id, user);
+        this.#requireLooked(pipId, sessionId, "cancel schedules in");
 
         return app.schedules.cancel(id, scheduleId);
     }
@@ -992,7 +1187,11 @@ export class Pip {
         const title = app.sessionMeta(id)?.title ?? "New session";
 
         if (requestId === undefined && !app.isBusy(id)) {
-            return { now: await this.#lastWords(id, title, "is idle") };
+            const now = await this.#lastWords(id, title, "is idle");
+
+            this.#looked(pipId, id);
+
+            return { now };
         }
 
         await app.harness.commit(async (tx) => {
@@ -1291,6 +1490,9 @@ export class Pip {
 
         const pip = await this.#app.harness.conversation(pipId, context);
         const requestId = requestFor(input.userId, `pip-report-${String(runtime.taskId)}`);
+
+        // The report says what the session did: PiP has looked at it.
+        this.#looked(pipId, input.sessionId);
 
         if (pip !== undefined) {
             try {

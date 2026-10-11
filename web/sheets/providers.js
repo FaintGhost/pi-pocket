@@ -1,7 +1,87 @@
-// Model providers: signing in and out, and the dialog a sign-in uses to ask for a code or a key.
+// Model providers: signing in and out, the models subagents may use besides their session's own, and the dialog a
+// sign-in uses to ask for a code or a key.
 import { useEffect, useState } from "preact/hooks";
 import { api, attempt, closeSheet, store } from "../store.js";
 import { html, Icon, Loader, Sheet } from "../ui.js";
+
+/**
+ * The owner's choice of the models Pi may start subagents on besides their session's own. None, the default: subagents
+ * always run on their session's model, and Pi is offered no model to pick.
+ */
+function SubagentModels() {
+    const { models, server } = store.state;
+    const allowed = server?.subagentModels;
+
+    // A server that does not keep the choice sends none.
+    if (!Array.isArray(allowed)) {
+        return null;
+    }
+
+    const save = (next) => attempt(() => api("settings", { subagentModels: next }));
+    const find = (spec) => models.find((model) => `${model.provider}/${model.id}` === spec);
+    const addable = models.filter((model) => !allowed.includes(`${model.provider}/${model.id}`));
+
+    return html`<div class="subagent-models">
+        <div class="label">Models for subagents</div>
+        <p class="muted small">
+            Subagents always run on their session's model, the one people picked. Pi cannot choose another model unless you allow it here.
+        </p>
+        ${
+            allowed.length === 0
+                ? html`<p class="small">None allowed: Pi never picks a model.</p>`
+                : allowed.map((spec) => {
+                      const model = find(spec);
+
+                      return html`<div class="provider" key=${spec}>
+                          <div>
+                              <div>${model?.name ?? spec}</div>
+                              <div class="muted small">
+                                  ${spec}
+                                  ${
+                                      !model
+                                          ? html` · <span class="warn">not signed in</span>`
+                                          : model.signIn &&
+                                            html` · <span class="warn">needs sign-in</span>`
+                                  }
+                              </div>
+                          </div>
+                          <button
+                              class="button small ghost"
+                              aria-label=${`Stop allowing ${model?.name ?? spec}`}
+                              onClick=${() => save(allowed.filter((each) => each !== spec))}
+                          >
+                              Remove
+                          </button>
+                      </div>`;
+                  })
+        }
+        ${
+            addable.length > 0 &&
+            html`<select
+                class="subagent-models-add"
+                aria-label="Allow a model for subagents"
+                value=""
+                onChange=${(event) => {
+                    const spec = event.currentTarget.value;
+
+                    event.currentTarget.value = "";
+
+                    if (spec) {
+                        save([...allowed, spec]);
+                    }
+                }}
+            >
+                <option value="">Allow a model for subagents…</option>
+                ${addable.map(
+                    (model) =>
+                        html`<option value=${`${model.provider}/${model.id}`}>
+                            ${model.name} (${model.provider})
+                        </option>`,
+                )}
+            </select>`
+        }
+    </div>`;
+}
 
 export function ProvidersSheet() {
     const { me } = store.state;
@@ -30,13 +110,17 @@ export function ProvidersSheet() {
                 needle === "" || `${provider.id} ${provider.name}`.toLowerCase().includes(needle),
         )
         .sort(
-            (a, b) => Number(b.configured) - Number(a.configured) || a.name.localeCompare(b.name),
+            (a, b) =>
+                Number(Boolean(b.needsSignIn)) - Number(Boolean(a.needsSignIn)) ||
+                Number(b.configured) - Number(a.configured) ||
+                a.name.localeCompare(b.name),
         );
 
     return html`<${Sheet} title="Providers" onClose=${closeSheet}>
         <p class="muted small">
             Pi Pocket shares Pi's sign-ins (<span class="mono">~/.pi/agent/auth.json</span>). ${owner ? "" : "Only the owner can change them."}
         </p>
+        ${owner && html`<${SubagentModels} />`}
         <label class="search">
             <${Icon} name="search" size=${16} />
             <input
@@ -50,11 +134,20 @@ export function ProvidersSheet() {
             (provider) => html`<div class="provider">
                 <div>
                     <div>
-                        ${provider.name} ${provider.configured && html`<span class="ok">✓</span>`}
+                        ${provider.name}
+                        ${
+                            provider.needsSignIn
+                                ? html` <span class="warn">needs sign-in</span>`
+                                : provider.configured && html` <span class="ok">✓</span>`
+                        }
                     </div>
                     <div class="muted small">
-                        ${provider.configured ? `signed in${provider.label ? ` · ${provider.label}` : provider.source ? ` · ${provider.source}` : ""}` : "not configured"} · ${provider.models} models
+                        ${provider.needsSignIn ? "the sign-in expired and could not be renewed: sign in again. Until then, Pi, subagents, and PiP do not use its models" : provider.configured ? `signed in${provider.label ? ` · ${provider.label}` : provider.source ? ` · ${provider.source}` : ""}` : "not configured"} · ${provider.models} models
                     </div>
+                    ${
+                        provider.needsSignIn &&
+                        html`<div class="muted small mono provider-why">${provider.needsSignIn}</div>`
+                    }
                 </div>
                 ${
                     owner &&

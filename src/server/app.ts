@@ -115,6 +115,10 @@ const BROWSER_FILE = "browser.ts";
 const BROWSER_EXTENSION = "pocket-browser";
 /** The extension module that is PiP. */
 const PIP_FILE = "pip.ts";
+/** The extension module with the subagent tool, rebuilt when the models subagents may use change. */
+const SUBAGENTS_FILE = "subagents.ts";
+/** The most models the owner may allow subagents besides their session's own. */
+const MAX_SUBAGENT_MODELS = 50;
 
 /** The most peek tiles a tab gets live at once: the ones on its screen, which a tall screen fits a handful of. */
 export const MAX_PEEKS = 12;
@@ -389,9 +393,11 @@ export class PocketApp {
                 }
             },
             skills: (cwd) => this.skills(cwd),
-            resolveModel: (spec) => resolveModel(this.models, spec),
+            resolveModel: (spec) => resolveModel(this.models, spec, this.signInNeeded),
+            subagentModels: () => this.config.subagentModels,
+            modelProblem: (ref, fresh) => this.providers.problem(ref, fresh),
             requesterOf: (conversationId) => this.attribution.requesterOf(conversationId),
-            notice: (level, message) => this.notice(level, message),
+            notice: (level, message, conversationId) => this.notice(level, message, conversationId),
             heldBack: (conversationId) => this.spend.heldBack(conversationId),
             onLimitsChanged: (listener) => this.spend.onLimitsChanged(listener),
             schedules: this.schedules,
@@ -566,6 +572,11 @@ export class PocketApp {
                 }
             } else if (change.type === "submission") {
                 this.attribution.submissionCommitted(change.value);
+
+                // A run that failed because its provider's sign-in could not be renewed marks that provider.
+                if (change.value.status === "unanswered" && change.value.reason === "model_error") {
+                    this.providers.runFailed(change.value.detail);
+                }
             }
         }
 
@@ -1461,7 +1472,7 @@ export class PocketApp {
                 ...(user.sessions === undefined ? {} : { sessions: user.sessions.map(Number) }),
             },
             users: this.people(user),
-            models: modelList(this.models),
+            models: modelList(this.models, this.signInNeeded),
             guard: await this.guardStatus(),
             server: {
                 supervised: this.supervised,
@@ -1481,6 +1492,10 @@ export class PocketApp {
                 approvalRule: this.config.approvalRule,
                 // The model and thinking level new sessions start with, or null for the last one picked.
                 defaultModel: this.config.defaultModel ?? null,
+                // The models Pi may start subagents on besides their session's own: the owner's to see and change.
+                ...(user.role === "owner"
+                    ? { subagentModels: [...this.config.subagentModels] }
+                    : {}),
                 // This person may have a PiP, the assistant over every screen (`pip.ts`).
                 pip: this.pip.available(user),
                 // Tokens of context above which PiP compacts itself once idle; 0: only as sessions do.
@@ -2254,6 +2269,77 @@ export class PocketApp {
 
         this.config.defaultModel = { provider: model.provider, modelId: model.id, thinkingLevel };
         await this.#refreshClients();
+    }
+
+    /** Whether a provider's sign-in expired and needs a person to sign in again: its models are offered to no one. */
+    readonly signInNeeded = (provider: string): boolean =>
+        this.providers.needsSignIn(provider) !== undefined;
+
+    /**
+     * The owner picks the models Pi may start subagents on besides their session's own (`provider/modelId`, models Pi
+     * knows). Empty, the default: none, and the subagent tool offers Pi no choice of model at all. The tool is rebuilt
+     * to match, so its description and parameters say what Pi may do.
+     */
+    async setSubagentModels(user: User, models: unknown): Promise<void> {
+        if (user.role !== "owner") {
+            throw new HttpError(403, "Only the owner can do that");
+        }
+
+        if (
+            !Array.isArray(models) ||
+            models.length > MAX_SUBAGENT_MODELS ||
+            models.some((each) => typeof each !== "string")
+        ) {
+            throw new HttpError(
+                400,
+                `subagentModels must be a list of at most ${String(MAX_SUBAGENT_MODELS)} models, each provider/modelId`,
+            );
+        }
+
+        const chosen: string[] = [];
+
+        for (const spec of models as string[]) {
+            const slash = spec.indexOf("/");
+            const model =
+                slash > 0
+                    ? this.models.getModel(spec.slice(0, slash), spec.slice(slash + 1))
+                    : undefined;
+
+            if (model === undefined) {
+                throw new HttpError(400, `${spec} is not a model Pi knows (provider/modelId).`);
+            }
+
+            const key = `${model.provider}/${model.id}`;
+
+            if (!chosen.includes(key)) {
+                chosen.push(key);
+            }
+        }
+
+        const before = this.config.subagentModels;
+
+        if (JSON.stringify(before) === JSON.stringify(chosen)) {
+            return;
+        }
+
+        this.config.subagentModels = chosen;
+
+        // The tool offers a model only while some are allowed: rebuilt now, for the next request of every session.
+        if (this.loader.enabled(SUBAGENTS_FILE)) {
+            try {
+                await this.loader.reload(SUBAGENTS_FILE);
+            } catch (error) {
+                this.notice("error", `Subagents failed to reload: ${describe(error)}`);
+            }
+        }
+
+        await this.#refreshClients();
+        this.notice(
+            "info",
+            chosen.length === 0
+                ? `${user.name} let subagents run only on their session's model.`
+                : `${user.name} let subagents also run on ${chosen.join(", ")}.`,
+        );
     }
 
     /** Send every client a fresh hello: the guard's status and the extension names changed. */
