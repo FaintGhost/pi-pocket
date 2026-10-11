@@ -1,7 +1,7 @@
 // Model providers: signing in and out, the models subagents may use besides their session's own, and the dialog a
 // sign-in uses to ask for a code or a key.
 import { useEffect, useState } from "preact/hooks";
-import { api, attempt, closeSheet, store } from "../store.js";
+import { api, attempt, closeSheet, closeSignIn, signInAnswered, store } from "../store.js";
 import { html, Icon, Loader, Sheet } from "../ui.js";
 
 /** Models past this many get a box to find them by. */
@@ -251,16 +251,21 @@ export function AuthDialog() {
     const { auth } = store.state;
     const [value, setValue] = useState("");
 
+    // Each question starts empty, also one that came before the reply to the answer before it.
+    useEffect(() => setValue(""), [auth?.flowId, auth?.prompt?.id]);
+
     if (!auth) {
         return null;
     }
 
-    const answer = (payload) =>
-        attempt(async () => {
-            await api(`auth/${auth.flowId}/${auth.prompt.id}`, payload);
-            setValue("");
-            store.set({ auth: { ...store.state.auth, prompt: null } });
+    const answer = (payload) => {
+        const { flowId, prompt: asked } = auth;
+
+        return attempt(async () => {
+            await api(`auth/${flowId}/${asked.id}`, payload);
+            signInAnswered(flowId, asked.id);
         });
+    };
 
     const close = () => {
         // Stop the sign-in on the server too, also while it waits without a question (an OAuth callback holds a port).
@@ -268,7 +273,7 @@ export function AuthDialog() {
             api(`auth/${encodeURIComponent(auth.flowId)}/cancel`, {}).catch(() => {});
         }
 
-        store.set({ auth: null });
+        closeSignIn(auth.flowId);
     };
 
     const prompt = auth.prompt;

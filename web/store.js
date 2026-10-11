@@ -679,7 +679,19 @@ function pollEvents(query) {
     return connection;
 }
 
+/** Sign-ins that ended, or whose dialog was closed here: what the server still says about them shows nothing. */
+const endedSignIns = new Set();
+
+/** The dialog of a sign-in (`AuthDialog`), as the server's words about it come. */
 function handleAuth(data) {
+    if (endedSignIns.has(data.flowId)) {
+        return;
+    }
+
+    if (data.step === "done") {
+        endedSignIns.add(data.flowId);
+    }
+
     store.set((state) => {
         const flow =
             state.auth?.flowId === data.flowId
@@ -714,6 +726,25 @@ function handleAuth(data) {
 
         return {};
     });
+}
+
+/**
+ * A sign-in's question was answered, and the server took the answer. The server's next words may have come first (the
+ * next question, or the end, which closes the dialog or shows why it failed): the dialog waits for the provider only
+ * while it still shows that sign-in asking that question.
+ */
+export function signInAnswered(flowId, promptId) {
+    store.set((state) =>
+        state.auth?.flowId === flowId && state.auth.prompt?.id === promptId
+            ? { auth: { ...state.auth, prompt: null } }
+            : {},
+    );
+}
+
+/** A sign-in's dialog was closed: it stays closed, whatever the server still says about that sign-in. */
+export function closeSignIn(flowId) {
+    endedSignIns.add(flowId);
+    store.set((state) => (state.auth?.flowId === flowId ? { auth: null } : {}));
 }
 
 export function navigate(conversationId, { replace = false, sheet = null } = {}) {
