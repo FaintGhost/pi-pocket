@@ -164,6 +164,87 @@ function assertNoReloadAndNoDataChanges(state: UiState, initial: UiState) {
 }
 
 test(
+    "upstream speed and unread controls retain live translations on phone and desktop",
+    real,
+    async () => {
+        assert.ok(app && mobile && desktop);
+        const pages: BrowserPage[] = [mobile, desktop];
+
+        for (const enabled of [true, false]) {
+            assert.equal((await postExtension(app.config.ownerToken, enabled)).status, 200);
+
+            for (const page of pages) {
+                await until(
+                    async () => (await ui(page)).lang === (enabled ? "zh-CN" : "en"),
+                    "locale changed",
+                );
+                await page.evaluate(`(async () => {
+                    const { store } = await import('/store.js');
+                    const { setPrefs } = await import('/theme.js');
+                    setPrefs({ speed: true });
+                    store.set({ view: { ...store.state.view, stats: { ...store.state.view.stats,
+                        tokensPerSec: 87.4, ttftMs: 1240, cacheRate: 0.83, contextTokens: 98000 } } });
+                })()`);
+                await until(
+                    async () =>
+                        (
+                            await page.evaluate(`document.querySelector('.speed')?.title ?? ''`)
+                        ).includes(enabled ? "每秒 87.4 个 token" : "87.4 tokens a second"),
+                    "speed tooltip translated",
+                );
+                const tooltip = await page.evaluate(`document.querySelector('.speed').title`);
+
+                assert.ok(tooltip.includes(enabled ? "1.24 秒" : "1.24s"));
+                await page.evaluate(
+                    `(async () => { const { openSheet } = await import('/store.js'); openSheet({ type: 'appearance' }); })()`,
+                );
+                await until(
+                    async () =>
+                        (
+                            await page.evaluate(
+                                `document.querySelector('.sheet')?.textContent ?? ''`,
+                            )
+                        ).includes(enabled ? "回复速度" : "Reply speed"),
+                    "appearance translated",
+                );
+                await page.evaluate(
+                    `(async () => { const { openSheet, store } = await import('/store.js'); openSheet({ type: 'session', id: store.state.conversationId }); })()`,
+                );
+                await until(
+                    async () =>
+                        (
+                            await page.evaluate(
+                                `document.querySelector('.sheet')?.textContent ?? ''`,
+                            )
+                        ).includes(enabled ? "标记为未读" : "Mark unread"),
+                    "session menu translated",
+                );
+                const result = await page.evaluate(`
+                const { t } = await import('/i18n.js');
+                return JSON.stringify([t('How fast the last answer came: {{detail}}', { detail: 'Menu {{detail}} <img>' }), t('Unknown fixed key')]);
+            `);
+
+                assert.deepEqual(JSON.parse(result), [
+                    (enabled ? "上一条回复的生成速度：" : "How fast the last answer came: ") +
+                        "Menu {{detail}} <img>",
+                    "Unknown fixed key",
+                ]);
+                assert.ok((await ui(page)).pageWidth <= (await ui(page)).innerWidth);
+                await page.evaluate(
+                    `(async () => { const { closeSheet } = await import('/store.js'); closeSheet(); })()`,
+                );
+            }
+        }
+
+        for (const page of [mobile, desktop]) {
+            await page.evaluate(
+                `(async () => { const { setPrefs } = await import('/theme.js'); setPrefs({ speed: false }); })()`,
+            );
+        }
+    },
+);
+
+test(
     "live locale hello updates open guest menus on mobile and desktop, then restores English",
     real,
     async () => {

@@ -2,6 +2,21 @@
 import { defineExtension } from "@earendil-works/pi-durable";
 
 const strings: Record<string, string> = {
+    Select: "选择",
+    "this browser; opening it again clears it": "仅此浏览器；再次打开会清除标记",
+    "then tap others to add them": "然后点击其他会话以加入选择",
+    "theme, tiling, motion, text size, reply speed": "主题、平铺、动效、字号、回复速度",
+    "Show reply speed": "显示回复速度",
+    "Hide reply speed": "隐藏回复速度",
+    "how fast the last answer came, under the message box": "在输入框下方显示上一条回复的生成速度",
+    "Marked unread": "标记为未读",
+    "Mark unread": "标记为未读",
+    "Mark read": "标记为已读",
+    "Status line": "状态栏",
+    "Reply speed": "回复速度",
+    "Under the message box: how fast the last answer came, in tokens a second, and how long its first token took":
+        "在输入框下方显示上一条回复的每秒 token 数，以及首个 token 的等待时间",
+    "first token": "首个 token",
     "done · new": "已完成 · 有新内容",
     "just left": "刚刚离开",
     pinned: "已置顶",
@@ -1050,6 +1065,9 @@ const strings: Record<string, string> = {
 };
 
 const templates: Record<string, string> = {
+    "{{rate}} tokens a second": "每秒 {{rate}} 个 token",
+    "its first token after {{seconds}}s": "首个 token 耗时 {{seconds}} 秒",
+    "How fast the last answer came: {{detail}}": "上一条回复的生成速度：{{detail}}",
     "Invite code {{code}}": "邀请码 {{code}}",
     "pinned by {{name}} {{when}}": "由 {{name}} 于 {{when}} 置顶",
     "{{count}} message waiting for Pi": "{{count}} 条消息等待 Pi 处理",

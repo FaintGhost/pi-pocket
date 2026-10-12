@@ -8,7 +8,16 @@ import { useBack } from "./back.js";
 import { useDragToClose } from "./gestures.js";
 import { api, attempt, isRow, navigate, notify, store, uid } from "./store.js";
 import { itemsOf, says, summarize } from "./turns.js";
-import { formatTokens, html, Icon, Markdown, readable, Spinner, usePresence } from "./ui.js";
+import {
+    contextLevel,
+    formatTokens,
+    html,
+    Icon,
+    Markdown,
+    readable,
+    Spinner,
+    usePresence,
+} from "./ui.js";
 import { MicButton, useDictation } from "./voice.js";
 
 const OPEN_KEY = "pocket.pip";
@@ -258,7 +267,7 @@ function PipContext({ stats, window }) {
         aria-label=${t("Context {{percent}}% full", { percent: `${about}${percent}` })}
         title=${title}
     >
-        <span class="meter"><span style=${`width:${percent}%`}></span></span>
+        <span class=${`meter ${contextLevel(percent)}`}><span style=${`width:${percent}%`}></span></span>
         ${about}${percent}%
     </span>`;
 }

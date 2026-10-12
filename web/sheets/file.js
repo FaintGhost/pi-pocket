@@ -152,7 +152,16 @@ export function FileView({ path, line, onOpen = openFile, onLoad }) {
                 }
             </div>`
         }
-        ${file?.kind === "text" && preview && markdown && html`<${Markdown} text=${file.text} />`}
+        ${
+            file?.kind === "text" &&
+            preview &&
+            markdown &&
+            html`<${Markdown}
+                text=${file.text}
+                base=${file.path.replace(/[^/]*$/, "")}
+                breaks=${false}
+            />`
+        }
         ${
             file?.kind === "text" &&
             preview &&
@@ -218,7 +227,7 @@ function FileLines({ lines, colored, all, line }) {
 
 /**
  * The viewer's buttons: Preview or Source for Markdown and pages, Run for a previewed page (`running` is null where it
- * does not apply), Copy, and @ ${t("Mention")}.
+ * does not apply), Copy, and @ Mention.
  */
 function FileActions({ file, shown, previewable, preview, onPreview, running, onRun }) {
     return html`${

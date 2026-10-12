@@ -12,9 +12,11 @@ import {
     collab,
     navigate,
     notify,
+    isUnread,
     openSheet,
     scoped,
     sessionUnread,
+    setUnread,
     stillMoving,
     store,
 } from "./store.js";
@@ -264,6 +266,7 @@ function SessionRow({
     const { conversationId, server, me } = store.state;
     const pinned = isPinned(session.id);
     const open = session.id === conversationId && !session.archived;
+    const marked = isUnread(session.id);
     const unread = collab() && sessionUnread(session) && !open;
     const moving = store.state.moving[session.id] !== undefined;
     const title = session.title ?? t("New session");
@@ -280,11 +283,11 @@ function SessionRow({
     // Subagents at work, or failed ones nobody dealt with, but not over a call waiting for you: that says more.
     const fork = !session.waiting && (live > 0 || failed > 0);
     const person = collab() ? (session.people ?? []).find((each) => each.id !== me?.id) : undefined;
-    // Archive and pin show on hover; an archived session only comes back, and only for people who steer.
-    const acts = (canSteer() ? 1 : 0) + (session.archived ? 0 : 1);
+    // Archive, pin, and mark-unread show on hover; an archived session only comes back, and only for people who steer.
+    const acts = (canSteer() ? 1 : 0) + (session.archived ? 0 : 2);
 
     return html`<div
-        class=${`session-row ${open ? "active" : ""} ${selected ? "selected" : ""} ${pressing ? "pressing" : ""} ${moving ? "moving" : ""} ${["no-acts", "one-act", ""][acts]}`}
+        class=${`session-row ${open ? "active" : ""} ${selected ? "selected" : ""} ${pressing ? "pressing" : ""} ${moving ? "moving" : ""} ${marked ? "marked-unread" : ""} ${["no-acts", "one-act", "", "three-acts"][acts]}`}
         data-id=${session.id}
         style=${`--i:${index}`}
     >
@@ -331,7 +334,13 @@ function SessionRow({
                     session.waiting &&
                     html`<span class="state-warn" title=${t("Waiting for approval")}>!</span>`
                 }
-                ${unread && html`<span class="unread-dot" title=${t("New chat messages")}></span>`}
+                ${
+                    (unread || marked) &&
+                    html`<span
+                        class="unread-dot"
+                        title=${t(marked ? "Marked unread" : "New chat messages")}
+                    ></span>`
+                }
                 <span class="session-time">${timeAgo(session.updatedAt)}</span>
                 ${
                     number !== undefined &&
@@ -361,6 +370,17 @@ function SessionRow({
                     onClick=${() => togglePin(session.id)}
                 >
                     <${Icon} name="pin" size=${14} />
+                </button>`
+            }
+            ${
+                !session.archived &&
+                html`<button
+                    class=${`session-act session-unread ${marked ? "on" : ""}`}
+                    title=${t(marked ? "Mark read" : "Mark unread")}
+                    aria-label=${t(marked ? "Mark read" : "Mark unread")}
+                    onClick=${() => setUnread(session.id, !marked)}
+                >
+                    <${Icon} name=${marked ? "check" : "unread"} size=${14} />
                 </button>`
             }
         </span>
@@ -1078,8 +1098,7 @@ function RailTiles() {
             >
                 ${index < 9 ? index + 1 : initials(session.title ?? t("New session"))}
                 ${
-                    collab() &&
-                    sessionUnread(session) &&
+                    ((collab() && sessionUnread(session)) || isUnread(session.id)) &&
                     session.id !== conversationId &&
                     html`<span class="unread-dot"></span>`
                 }

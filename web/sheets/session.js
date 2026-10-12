@@ -1,10 +1,14 @@
 // A session's actions from its row in the session list, for touch screens, which cannot hover to show them.
+import { t } from "../i18n.js";
 import { selectFromList, setArchived } from "../sessions.js";
-import { canSteer, closeSheet, store } from "../store.js";
+import { canSteer, closeSheet, isUnread, setUnread, store } from "../store.js";
 import { isPinned, togglePin } from "../theme.js";
 import { html, item, Sheet } from "../ui.js";
 
-/** What a finger held on a row offers: pin it, archive it or bring it back, or select it to act on more at once. */
+/**
+ * What a finger held on a row offers: pin it, mark it unread (or read), archive it or bring it back, or select it to
+ * act on more at once.
+ */
 export function SessionSheet({ id }) {
     const session = store.state.sessions.find((each) => each.id === id);
     const steer = canSteer();
@@ -14,26 +18,34 @@ export function SessionSheet({ id }) {
         run();
     };
 
-    return html`<${Sheet} title=${session.title ?? "New session"} onClose=${closeSheet}>
+    return html`<${Sheet} title=${session.title ?? t("New session")} onClose=${closeSheet}>
         ${
             !session.archived &&
             item(
-                isPinned(id) ? "Unpin from the top" : "Pin to the top",
+                t(isPinned(id) ? "Unpin from the top" : "Pin to the top"),
                 then(() => togglePin(id)),
-                "this browser",
+                t("this browser"),
+            )
+        }
+        ${
+            !session.archived &&
+            item(
+                t(isUnread(id) ? "Mark read" : "Mark unread"),
+                then(() => setUnread(id, !isUnread(id))),
+                t("this browser"),
             )
         }
         ${
             steer &&
             item(
-                session.archived ? "Unarchive" : "Archive",
+                t(session.archived ? "Unarchive" : "Archive"),
                 then(() => setArchived([id], !session.archived)),
             )
         }
         ${item(
-            "Select",
+            t("Select"),
             then(() => selectFromList(id)),
-            "then tap others to add them",
+            t("then tap others to add them"),
         )}
     <//>`;
 }

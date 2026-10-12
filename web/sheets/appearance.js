@@ -173,6 +173,19 @@ export function AppearanceSheet() {
                 </div>
             <//>
         </div>
+        <div class="label">${t("Status line")}</div>
+        <div>
+            <${SettingRow}
+                title=${t("Reply speed")}
+                detail=${t("Under the message box: how fast the last answer came, in tokens a second, and how long its first token took")}
+            >
+                <${Switch}
+                    on=${p.speed}
+                    label=${t("Reply speed")}
+                    onChange=${() => setPrefs({ speed: !p.speed })}
+                />
+            <//>
+        </div>
         <button class="button wide" onClick=${() => openSheet({ type: "shortcuts" })}>
             <${Icon} name="keyboard" size=${16} /> ${t("Keyboard shortcuts")}
         </button>
