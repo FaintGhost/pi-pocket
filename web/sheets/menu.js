@@ -2,6 +2,7 @@
 import { browserAvailable, displayUrl, setBrowserOpen } from "../browser.js";
 import { chatUnread } from "../chat.js";
 import { schedulesAvailable, triggersOn, watchAvailable, watchPr } from "../commands.js";
+import { extensionMenuItems } from "../extension-ui.js";
 import { filesAvailable, setFilesOpen } from "../files-panel.js";
 import { peeksOn, togglePeeks } from "../peeks.js";
 import { openPip, pipAvailable, pipUnread } from "../pip.js";
@@ -330,6 +331,7 @@ export function MenuSheet() {
             ${item("Spend", () => openSheet({ type: "spend" }), me?.role === "owner" ? "by person and session, limits" : "yours")}
             ${triggersOn() && me?.role !== "viewer" && item("Webhooks and watches", () => openSheet({ type: "hooks" }), "GitHub, other services")}
             ${item("Providers", () => openSheet({ type: "providers" }))}
+            ${extensionMenuItems().map((each) => item(each.label, each.run, each.hint))}
             ${item("Extensions", () => openSheet({ type: "extensions" }), store.state.guard?.enabled ? "Lancet Guard on" : store.state.guard?.available ? "Lancet Guard off" : "")}
             ${
                 me?.role === "owner" &&

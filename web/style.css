@@ -9540,6 +9540,33 @@ textarea.notes {
     margin-right: 0.2rem;
 }
 
+/* ─── Extensions' pages ──────────────────────────────────────── */
+
+/*
+ * A page an extension's browser module added, in the conversation's place as the subagents board is: the board's
+ * header, and what the extension draws below it, scrolling.
+ */
+.ext-page {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    animation: fade var(--t-fade) var(--ease-almost);
+}
+
+.ext-page-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 1rem 1rem calc(env(safe-area-inset-bottom) + 1rem);
+}
+
+.rail-ext.open {
+    color: var(--text);
+}
+
 /* ─── Subagents board ─────────────────────────────────────────── */
 
 /*

@@ -63,8 +63,9 @@ import {
     TurnsDoc,
 } from "./docs.ts";
 import { describe, HttpError } from "./errors.ts";
+import { ExtensionWebs, mayUse, POCKET_API } from "./extension-web.ts";
 import { Goals } from "./goals.ts";
-import { type ApprovalRequest, Approvals, type PocketHost } from "./host.ts";
+import { type ApprovalRequest, Approvals, type PocketHost, type WebAccess } from "./host.ts";
 import { type GuardStatus, LancetGuard } from "./lancet.ts";
 import { takeLock } from "./lock.ts";
 import { Memory } from "./memory.ts";
@@ -272,6 +273,11 @@ export class PocketApp {
     readonly memory = new Memory(this);
     /** Each conversation's browser page, which Pi and the people in the conversation share. */
     readonly browsers: Browsers;
+    /** What extension modules add to the app: their routes, browser modules, and events (`extension-web.ts`). */
+    readonly webs: ExtensionWebs;
+    #websTimer: NodeJS.Timeout | undefined;
+    /** Whose tabs the next `hello` for browser modules goes to: those who may use any of these. */
+    readonly #websFor = new Set<WebAccess>();
     readonly #clients = new Set<Client>();
     readonly #rooms = new Map<ConversationId, Promise<Room>>();
     readonly #envs = new Map<string, NodeExecutionEnv>();
@@ -344,6 +350,46 @@ export class PocketApp {
                     );
             },
         });
+        this.webs = new ExtensionWebs({
+            changed: (access) => this.#websChanged(access),
+            deliver: (part, access, event, data, to) => {
+                for (const client of this.#clients) {
+                    if (
+                        (to === undefined || client.user.id === to) &&
+                        mayUse(client.user, access)
+                    ) {
+                        client.send("ext", { module: part.module, event, data });
+                    }
+                }
+            },
+            log: (line) => this.#log(line),
+        });
+    }
+
+    /**
+     * Browser modules came, went, or changed: the tabs of the people they are for hear which to load, once for changes
+     * that come together.
+     */
+    #websChanged(access: readonly WebAccess[]): void {
+        if (this.#closing !== undefined) {
+            return;
+        }
+
+        for (const each of access) {
+            this.#websFor.add(each);
+        }
+
+        if (this.#websTimer !== undefined) {
+            return;
+        }
+
+        this.#websTimer = setTimeout(() => {
+            const changed = [...this.#websFor];
+
+            this.#websTimer = undefined;
+            this.#websFor.clear();
+            void this.#refreshClients((user) => changed.some((each) => mayUse(user, each)));
+        }, 50);
     }
 
     /** Write a line to the server log. */
@@ -439,6 +485,7 @@ export class PocketApp {
             host,
             { builtIn: join(APP_ROOT, "src", "server", "extensions"), dropIn },
             (file) => this.config.extensionChoice(file),
+            this.webs,
         );
         await this.loader.loadAll();
 
@@ -1523,6 +1570,9 @@ export class PocketApp {
                 home: homedir(),
                 defaultCwd: this.defaultCwd,
                 extensions: this.loader.extensionNames(),
+                // The version of the extension API, and the browser modules this person's tabs load (`extension-ui.js`).
+                extensionApi: POCKET_API,
+                ui: this.webs.clients(user),
                 // Tells the web app this server has people chat and typing indicators.
                 chat: true,
                 // Tells the web app this server sends peek tiles (`POST /api/peeks`, `peek` events).
@@ -2117,15 +2167,20 @@ export class PocketApp {
     ): Promise<{ modules: ExtensionInfo[]; guard: GuardStatus; dropIns?: string }> {
         const owner = user.role === "owner";
         // A load error can name the server's folders too.
-        const modules = this.loader.list().map(({ path, error, ...module }) =>
+        // Modules' routes are the owner's to know: others see only whose tabs load a browser module.
+        const modules = this.loader.list().map(({ path, error, web, ...module }) =>
             owner
                 ? {
                       ...module,
                       ...(path === undefined ? {} : { path }),
+                      ...(web === undefined ? {} : { web }),
                       ...(error === undefined ? {} : { error }),
                   }
                 : {
                       ...module,
+                      ...(web?.client === undefined
+                          ? {}
+                          : { web: { routes: [], client: web.client } }),
                       ...(error === undefined ? {} : { error: "It failed to load." }),
                   },
         );
@@ -2485,6 +2540,8 @@ export class PocketApp {
             this.#unsubscribeApprovals?.();
             this.#unsubscribeBrowsers?.();
             this.loader?.close();
+            // After the loader: its last changes could set it again.
+            clearTimeout(this.#websTimer);
 
             for (const client of this.#clients) {
                 client.send("closing", {});

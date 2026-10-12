@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Avatar, folderColor, initials } from "./avatar.js";
 import { useBack } from "./back.js";
+import { ExtensionRailButtons } from "./extension-ui.js";
 import { useDragToClose } from "./gestures.js";
 import { PipRailButton } from "./pip.js";
 import {
@@ -1070,7 +1071,9 @@ export function subagentTotals(sessions = store.state.sessions) {
 /** Open the subagents board in the conversation's place, or close it. */
 export const toggleBoard = () =>
     store.set((state) =>
-        state.board ? { board: false, boardAgents: null } : { board: true, drawer: false },
+        state.board
+            ? { board: false, boardAgents: null }
+            : { board: true, drawer: false, page: null },
     );
 
 /** The folded sidebar's sessions, numbered like Waybar's workspaces. */
@@ -1193,6 +1196,7 @@ export function RailNav({ foldable = false, folded = false }) {
                 html`<span class="rail-trouble" aria-hidden="true"></span>`
             }
         </button>
+        <${ExtensionRailButtons} />
         ${
             collab()
                 ? html`<button

@@ -1,6 +1,7 @@
 // Extensions: the modules the owner can turn on and off, Lancet Guard, who may allow risky calls, and when PiP compacts
 // its context.
 import { useEffect, useState } from "preact/hooks";
+import { browserModuleState } from "../extension-ui.js";
 import { api, attempt, closeSheet, store } from "../store.js";
 import { html, Loader, Sheet, shortPath, Switch } from "../ui.js";
 
@@ -50,6 +51,37 @@ function ApprovalRule({ owner }) {
             onChange=${change}
         />
     </div>`;
+}
+
+/** Who loads a module's browser module, in words. */
+const ACCESS_WORDS = {
+    owner: "the owner",
+    steer: "people who can steer",
+    view: "everyone who sees every session",
+};
+
+/** What a module adds to the app: its routes, and its browser module with how it stands in this browser. */
+function WebPart({ module }) {
+    const web = module.web;
+
+    if (!web || !module.enabled) {
+        return null;
+    }
+
+    const here = browserModuleState(module.file.replace(/\.ts$/, ""));
+    const parts = [
+        web.routes.length > 0 && `routes: ${web.routes.join(", ")}`,
+        web.client && `browser module for ${ACCESS_WORDS[web.client] ?? web.client}`,
+        here?.status === "loading" && "loading here",
+    ].filter(Boolean);
+
+    return html`${parts.length > 0 && html`<div class="muted small mono">${parts.join(" · ")}</div>`}
+    ${
+        here?.status === "failed" &&
+        html`<div class="error-box small">
+            In this browser: ${here.error}. An edit to it, or reloading the page, tries again.
+        </div>`
+    }`;
 }
 
 /** When PiP compacts its own context: once idle above so many tokens (`pip-compact.ts`), or only as sessions do. */
@@ -145,7 +177,7 @@ export function ExtensionsSheet() {
 
     return html`<${Sheet} title="Extensions" onClose=${closeSheet}>
         <p class="muted small">
-            Extensions give Pi its tools and checks in Pi Pocket. A change applies to every session right away and stays after restarts.${owner ? "" : " Only the owner can change them."}
+            Extensions give Pi its tools and checks in Pi Pocket, and can add pages and buttons to the app. A change applies to every session right away and stays after restarts.${owner ? "" : " Only the owner can change them."}
         </p>
         ${problem && html`<div class="error-box">${problem}</div>`}
         ${!data && !problem && html`<${Loader} label="Loading extensions" />`}
@@ -175,6 +207,7 @@ export function ExtensionsSheet() {
                         html`<${PipCompactAt} owner=${owner} />`
                     }
                     ${module.error && html`<div class="error-box small">${module.error}</div>`}
+                    <${WebPart} module=${module} />
                     <div class="muted small mono">
                         ${module.source === "drop-in" ? `drop-in${module.path ? ` · ${shortPath(module.path, store.state.server?.home)}` : ""}` : module.file}
                         ${tools.length > 0 ? ` · tools: ${tools.join(", ")}` : ""}

@@ -103,6 +103,10 @@ export const store = {
         board: false,
         /** Every subagent in every session, while the board shows; null until the server's first list arrives. */
         boardAgents: null,
+        /** An extension's page in the conversation's place, as the board shows (`extension-ui.js`): `{ module, id }`. */
+        page: null,
+        /** Counts changes to what extensions' browser modules add (`extension-ui.js`), so what shows them draws again. */
+        extensionsRev: 0,
         /** Counts the lists of files for @ mentions that arrived; the lists themselves are kept in `files.js`. */
         filesLoaded: 0,
         /** `!` commands this tab started that have no entry yet: `{ taskId, command, conversationId, at }`. */
@@ -306,10 +310,12 @@ class ApiError extends Error {
     }
 }
 
+/** Call the server's API: a GET without `body`, a POST with one, or `options.method`; `options.signal` stops it. */
 export async function api(path, body, options = {}) {
     const init = {
         method: body === undefined && !options.method ? "GET" : (options.method ?? "POST"),
         headers: { "X-Pocket": "1" },
+        ...(options.signal ? { signal: options.signal } : {}),
     };
 
     if (body !== undefined) {
@@ -445,6 +451,16 @@ export function stillMoving(moving, sessions) {
     return next;
 }
 
+/** Who hears extensions' events: `extension-ui.js`, which imports this module and so cannot be imported here. */
+const extensionListeners = new Set();
+
+/** Hear the events extension modules send their browser modules: `{ module, event, data }`. */
+export function onExtensionEvent(listener) {
+    extensionListeners.add(listener);
+
+    return () => extensionListeners.delete(listener);
+}
+
 /** What the server sends, by event name. Both transports deliver the same events. */
 const handlers = {
     hello: (data) =>
@@ -486,6 +502,12 @@ const handlers = {
     // Pi's lessons changed somewhere: a Memory sheet or menu that shows them fetches them again (`sheets/memory.js`).
     memory: () => store.set((state) => ({ memoryRev: (state.memoryRev ?? 0) + 1 })),
     missing: (data) => store.set({ missing: data.message }),
+    // An event an extension module sent its browser module (`extension-ui.js`).
+    ext: (data) => {
+        for (const listener of extensionListeners) {
+            listener(data);
+        }
+    },
     // A notice may link to a conversation, such as a mention elsewhere: tapping it goes there.
     notice: (data) =>
         notify(
@@ -796,9 +818,10 @@ export function navigate(conversationId, { replace = false, sheet = null } = {})
         pushRoute(path, { replace });
     }
 
-    // The subagents board shows in the conversation's place: going to one, even the one under it, closes it.
-    if (store.state.board) {
-        store.set({ board: false, boardAgents: null });
+    // The subagents board and extensions' pages show in the conversation's place: going to one, even the one under it,
+    // closes them.
+    if (store.state.board || store.state.page) {
+        store.set({ board: false, boardAgents: null, page: null });
     }
 
     // Its row tapped again counts too.

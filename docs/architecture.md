@@ -38,7 +38,7 @@ Some state lives in this process alone, and a restart forgets it. For example:
 
 The harness, models, and settings exist only once `#open` has set them up, after the parts are made. So a part made with the app must not read them in its constructor; it reads them when it is called.
 
-Extensions never see `PocketApp`. They get `PocketHost` (`host.ts`), whose functions call into the app lazily. The HTTP layer parses a request, checks it, calls a part, and writes the answer; it holds no state of its own beyond invites and the event streams' pollers.
+Extensions never see `PocketApp`. They get `PocketHost` (`host.ts`), whose functions call into the app lazily, and `web`, through which they add routes and a browser module to the app. `ExtensionWebs` (`extension-web.ts`) keeps what each module's version added, which the loader commits once the module installed and removes with it, running its cleanups. The HTTP layer parses a request, checks it, calls a part, and writes the answer; it holds no state of its own beyond invites and the event streams' pollers.
 
 ## PiP's conversation
 
@@ -127,6 +127,8 @@ A message to Pi names its person in its request id (`requests.ts`):
 
 A conversation's routes (`/api/c/:id`) run only after `requireSee`.
 
+`/api/x/:module/…` (`http/extension-routes.ts`) is an extension module's own route: after the checks above, and the `X-Pocket` header on a GET too (a module's GET may change things, and the cookie goes along with a link from another site), it answers only the people its `access` lets in (`mayUse`: the owner by default; never someone invited to one session), and only the owner reads a 500's words. `/x/:module/:rev/…` serves its browser module's files, outside `/api` but after a sign-in, to the same people: one file, or a folder's web files, never its `.ts` files, hidden files, or a link out of it.
+
 Where the other checks live:
 
 - **Commands and collaboration** check steering and driving themselves (`requireSteer`, `requireDriver`). They are called from routes, from tasks, and from each other.
@@ -155,10 +157,13 @@ Plain ES modules, served as they are, with no build. Editing a file under `web/`
 - A finger's or a mouse's press and click within 280 ms of a layer opening or closing, or a route opening, at a tap (a pointer let go in the 400 ms before) is let go, focus and all: a quick second tap would land on whatever slid in under it (a tile of the sheet that rose, the scrim that closes it). What moves on its own (a reply opening a session, the server closing a sheet, Escape) holds nothing back, and keys and scripts never are.
 - New entries wait for the page's first tap or key, since Chrome's back button skips entries a page adds before anyone touches it: the list's entry under a conversation opened straight away on a narrow screen, and the entries of layers already open at load (the chat a notification opened, a panel the tab kept).
 
+**Extensions' browser modules (`extension-ui.js`).** `hello` lists the browser modules a person's tabs load (`server.ui`: each module's name, title, and address, with its version in it). The tab imports each, and imports it again when its address changes: the server sends `hello` again when a module is turned on, off, or reloaded, or a browser file changes. A browser module is meant to add only through `pocket` (it runs in the page, so nothing stops it from more), and one that throws is caught there: its notice, its row in the Extensions sheet, its page's error box. Its events come as `ext` (`{ module, event, data }`).
+
 **Contracts with the server.**
 
-- Event names and shapes (`hello`, `view`, `chat`, `peek`, `subagents`, …) and the sheet types the server names (`sheet: "chat"`).
+- Event names and shapes (`hello`, `view`, `chat`, `peek`, `subagents`, `ext`, …) and the sheet types the server names (`sheet: "chat"`).
 - The `pocket.*` keys in local and session storage.
+- Extensions' API: `web` on the server and `pocket` in the browser, at `POCKET_API`. Modules outside this repository depend on them: add to them freely, and change what they do only with a new version.
 - `ATTACHMENTS_HEADING`, which `ui.js` repeats from `entry-format.ts`.
 
 ## Checking a change

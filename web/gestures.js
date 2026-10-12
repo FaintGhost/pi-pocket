@@ -379,7 +379,8 @@ function scrollsSideways(target, root) {
  * right goes back, left opens a place (the Files tile), each with a mark that follows the finger and lights when
  * letting go would act; the conversation leans a little the same way. In the Files tile, right goes back too. Up from
  * the message box (not its text, nor the queue and bars above it) opens the places; on the subagents board, right goes
- * back. `swipes(where)` says, when a touch starts on `"conversation"`, `"files"`, or `"board"`, what each does now:
+ * back, and on an extension's page too (`"board"` as well). `swipes(where)` says, when a touch starts on
+ * `"conversation"`, `"files"`, or `"board"`, what each does now:
  * `{ right, left }` as `{ path, label, run }`, and `up` as a function, or none.
  */
 export function startSwipes(swipes) {
@@ -425,12 +426,12 @@ export function startSwipes(swipes) {
             }
 
             const root = target.closest?.(
-                ".pane > .scroller, .files-tile:not(.leaving), .board.phone",
+                ".pane > .scroller, .files-tile:not(.leaving), .board.phone, .ext-page",
             );
             const acts = swipes(
                 root?.classList.contains("files-tile")
                     ? "files"
-                    : root?.classList.contains("board")
+                    : root?.classList.contains("board") || root?.classList.contains("ext-page")
                       ? "board"
                       : "conversation",
             );

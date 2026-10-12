@@ -1,6 +1,7 @@
 // The open sheet: which component shows it. The sheets themselves are in web/sheets/, and a few beside their features
 // (chat.js, notify.js, share.js).
 import { ChatSheet } from "./chat.js";
+import { ExtensionSheet } from "./extension-ui.js";
 import { NotificationsSheet } from "./notify.js";
 import { ShareSheet } from "./share.js";
 import { AppearanceSheet } from "./sheets/appearance.js";
@@ -137,6 +138,10 @@ function sheetBody(sheet) {
             break;
         case "extensions":
             body = html`<${ExtensionsSheet} />`;
+            break;
+        // A sheet an extension's browser module added (`extension-ui.js`).
+        case "ext":
+            body = html`<${ExtensionSheet} sheet=${sheet} />`;
             break;
         case "image":
             body = html`<${ImageViewer} src=${sheet.src} alt=${sheet.alt} />`;

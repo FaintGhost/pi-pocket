@@ -6,7 +6,8 @@
  * Modules come from two folders: Pi Pocket's own (`src/server/extensions/`), and the owner's drop-ins
  * (`extensions/` in the data folder), which load after them and stay off until the owner turns them on. The owner
  * can turn modules off and on from the app. A module that is off is not loaded, and turning one off uninstalls what
- * it installed; a tool call already running still finishes.
+ * it installed; a tool call already running still finishes. What a module adds to the app (routes, a browser module)
+ * is kept by `ExtensionWebs` and goes in and out with its extensions.
  */
 import {
     type FSWatcher,
@@ -23,7 +24,8 @@ import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Extension, Registry } from "@earendil-works/pi-durable";
 import { describe } from "./errors.ts";
-import type { ExtensionModule, PocketHost } from "./host.ts";
+import { ExtensionWebs, POCKET_API } from "./extension-web.ts";
+import type { ExtensionModule, PocketHost, WebAccess } from "./host.ts";
 
 /** Built-in extension modules, in install order. Other `.ts` files in the directory load after them, by name. */
 const ORDER = [
@@ -107,6 +109,8 @@ export interface ExtensionInfo {
     required: boolean;
     /** What the module installed, with the tools each extension provides. */
     extensions: { name: string; tools: string[] }[];
+    /** What it adds to the app: its routes (`GET status`), and who loads its browser module, when it has one. */
+    web?: { routes: string[]; client?: WebAccess };
     /** Why the module is not loaded, when it failed. */
     error?: string;
 }
@@ -159,6 +163,7 @@ export class ExtensionLoader {
     readonly #builtIn: string;
     readonly #dropIn: string | undefined;
     readonly #choice: (file: string) => boolean | undefined;
+    readonly #webs: ExtensionWebs;
     /** Extension names each file installed, to uninstall the ones a new version no longer provides. */
     readonly #installed = new Map<string, Extension[]>();
     readonly #errors = new Map<string, string>();
@@ -170,19 +175,21 @@ export class ExtensionLoader {
     /**
      * `folders` are where the built-in modules and the owner's drop-ins are. `choice` says whether the owner turned a
      * module on (true) or off (false), or never chose (undefined, so the module's default applies). It is read again
-     * on every load.
+     * on every load. `webs` keeps what modules add to the app.
      */
     constructor(
         registry: Registry,
         host: PocketHost,
         folders: { builtIn: string; dropIn?: string },
         choice: (file: string) => boolean | undefined = () => undefined,
+        webs: ExtensionWebs = new ExtensionWebs(),
     ) {
         this.#registry = registry;
         this.#host = host;
         this.#builtIn = folders.builtIn;
         this.#dropIn = folders.dropIn;
         this.#choice = choice;
+        this.#webs = webs;
     }
 
     /** Every module, built-in ones first in install order. A drop-in with a built-in's name is left out. */
@@ -293,6 +300,7 @@ export class ExtensionLoader {
             this.#registry.uninstall(extension);
         }
 
+        this.#webs.remove(file);
         this.#installed.delete(file);
         this.#errors.delete(file);
     }
@@ -312,10 +320,11 @@ export class ExtensionLoader {
         return this.#modules().map((module) => {
             const { file } = module;
             const error = this.#errors.get(file);
+            const web = this.#webs.describe(file);
 
             return {
                 file,
-                title: TITLES[file] ?? file.replace(/\.ts$/, ""),
+                title: titleOf(file),
                 source: module.source,
                 ...(module.source === "drop-in" ? { path: join(module.directory, file) } : {}),
                 summary: summary(join(module.directory, file)),
@@ -325,6 +334,7 @@ export class ExtensionLoader {
                     name: extension.name,
                     tools: (extension.tools ?? []).map((tool) => tool.name),
                 })),
+                ...(web === undefined ? {} : { web }),
                 ...(error === undefined ? {} : { error }),
             };
         });
@@ -350,29 +360,59 @@ export class ExtensionLoader {
             throw new Error("the module has no default export function");
         }
 
-        const built = loaded.default(this.#host);
-        const extensions = (Array.isArray(built) ? built : [built]) as Extension[];
+        const needs = loaded.pocketApi;
 
-        if (module.source === "drop-in") {
-            this.#checkNames(file, extensions);
+        if (needs !== undefined && (typeof needs !== "number" || !(needs <= POCKET_API))) {
+            throw new Error(
+                `the module needs version ${String(needs)} of Pi Pocket's extension API, and this Pi Pocket has ${POCKET_API}: update Pi Pocket`,
+            );
         }
 
-        const previous = this.#installed.get(file) ?? [];
+        // What it adds to the app counts only once it installed; a version that fails leaves the one before in place,
+        // and what it set up (its cleanups) goes. The new version starts before the old one's cleanups run.
+        const { part, web } = this.#webs.stage(file, module.directory, titleOf(file));
+        let committed = false;
 
-        for (const extension of extensions) {
-            this.#registry.install(extension);
-        }
+        try {
+            const built = loaded.default(this.#host, web);
+            const extensions = (
+                built === undefined || built === null ? [] : Array.isArray(built) ? built : [built]
+            ) as Extension[];
 
-        for (const old of previous) {
-            if (!extensions.some((extension) => extension.name === old.name)) {
-                this.#registry.uninstall(old);
+            // A default export that forgot to return its extensions would load as nothing at all.
+            if ((built === undefined || built === null) && part.empty) {
+                throw new Error(
+                    "the module returned no extensions and added nothing to the app: return its extensions",
+                );
+            }
+
+            if (module.source === "drop-in") {
+                this.#checkNames(file, extensions);
+            }
+
+            const previous = this.#installed.get(file) ?? [];
+
+            for (const extension of extensions) {
+                this.#registry.install(extension);
+            }
+
+            for (const old of previous) {
+                if (!extensions.some((extension) => extension.name === old.name)) {
+                    this.#registry.uninstall(old);
+                }
+            }
+
+            this.#installed.set(file, extensions);
+            this.#errors.delete(file);
+            this.#webs.commit(part);
+            committed = true;
+
+            return extensions;
+        } finally {
+            if (!committed) {
+                this.#webs.discard(part);
             }
         }
-
-        this.#installed.set(file, extensions);
-        this.#errors.delete(file);
-
-        return extensions;
     }
 
     /**
@@ -428,6 +468,8 @@ export class ExtensionLoader {
 
     /** Watch both folders and reload a module shortly after it changes. Keeps the old code when the new one fails. */
     watch(): void {
+        this.#webs.watch();
+
         for (const directory of [this.#builtIn, this.#dropIn]) {
             if (directory === undefined) {
                 continue;
@@ -451,6 +493,9 @@ export class ExtensionLoader {
     }
 
     #changed(file: string, directory: string): void {
+        // A browser module's file, or its folder: tabs load the new version.
+        this.#webs.touched(directory, file);
+
         if (!file.endsWith(".ts") || file.endsWith(".test.ts") || file.startsWith("_")) {
             return;
         }
@@ -512,7 +557,14 @@ export class ExtensionLoader {
         for (const timer of this.#timers.values()) {
             clearTimeout(timer);
         }
+
+        this.#webs.close();
     }
+}
+
+/** A module's title in the Extensions sheet: a built-in's own, or a drop-in's file name. */
+function titleOf(file: string): string {
+    return TITLES[file] ?? file.replace(/\.ts$/, "");
 }
 
 /** The first sentence of a module's doc comment: its description in the Extensions sheet. */

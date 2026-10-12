@@ -880,7 +880,8 @@ export function Marked({ text, hits }) {
     return parts;
 }
 
-export function Icon({ name, size = 20, class: className = "", stroke = 2 }) {
+/** One of the app's icons by `name`, or any 24×24 stroked path as `path` (extensions' own icons). */
+export function Icon({ name, path, size = 20, class: className = "", stroke = 2 }) {
     return html`<svg
         class=${`icon ${className}`}
         width=${size}
@@ -893,7 +894,7 @@ export function Icon({ name, size = 20, class: className = "", stroke = 2 }) {
         stroke-linejoin="round"
         aria-hidden="true"
     >
-        <path d=${ICONS[name] ?? ""} />
+        <path d=${path ?? ICONS[name] ?? ""} />
     </svg>`;
 }
 

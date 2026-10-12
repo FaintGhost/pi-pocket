@@ -27,6 +27,7 @@ import { serveImage } from "./assets.ts";
 import { browserRoutes } from "./browser-routes.ts";
 import { conversationRoutes } from "./conversation-routes.ts";
 import { createEventStreams } from "./events.ts";
+import { extensionRoute } from "./extension-routes.ts";
 import { type ApiRequest, conversationId, type HttpOptions, json, readJson } from "./io.ts";
 import { pushRoutes } from "./push-routes.ts";
 
@@ -557,6 +558,11 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, {
                 subagentModels: await app.allowSubagentModel(user, body.model, body.allowed),
             });
+        }
+
+        // Routes extension modules add, each checking who may use it (`extension-routes.ts`).
+        if (first === "x" && second !== undefined) {
+            return extensionRoute(route, parts.slice(1));
         }
 
         if (first === "extensions" && second === undefined && method === "GET") {

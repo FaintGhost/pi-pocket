@@ -69,7 +69,8 @@ before(async () => {
 
     mkdirSync(dropIns, { recursive: true });
 
-    for (const file of readdirSync(EXAMPLES).filter((each) => each.endsWith(".ts"))) {
+    // The modules, and the browser module beside one of them.
+    for (const file of readdirSync(EXAMPLES).filter((each) => /\.(ts|js)$/.test(each))) {
         copyFileSync(join(EXAMPLES, file), join(dropIns, file));
     }
 
@@ -94,11 +95,12 @@ test("the example extensions load as drop-ins, off until the owner turns them on
         [
             ["clock.ts", false],
             ["no-force-push.ts", false],
+            ["server-status.ts", false],
         ],
     );
     assert.ok(listed.every((module) => module.summary.length > 20));
 
-    for (const file of ["clock.ts", "no-force-push.ts"]) {
+    for (const file of ["clock.ts", "no-force-push.ts", "server-status.ts"]) {
         await app.setExtensionEnabled(owner(app), file, true);
     }
 
@@ -113,6 +115,19 @@ test("the example extensions load as drop-ins, off until the owner turns them on
 
     await say(app, id, "now a plain push");
     assert.match(await answer(id), /tool said: git push origin main/);
+
+    // Server status adds to the app, not to Pi: a route, and a browser module for the owner's tabs.
+    const status = app.webs.match("server-status", "GET", ["status"]);
+
+    assert.ok(status !== undefined && "route" in status, "its route is there");
+    const reading = (await status.route.handle({} as never)) as { cpus: number; load: number[] };
+
+    assert.ok(reading.cpus > 0 && reading.load.length === 3);
+    const [client] = app.webs.clients(owner(app));
+
+    assert.equal(client?.module, "server-status");
+    assert.match(client.url, /^\/x\/server-status\/[0-9a-f]+\/server-status\.js$/);
+    assert.ok(app.webs.file("server-status", ["server-status.js"], owner(app)));
 });
 
 test("extensions.md names every built-in tool and extension a drop-in must not take the name of", async () => {

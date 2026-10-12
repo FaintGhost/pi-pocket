@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browserAvailable, toggleBrowser } from "./browser.js";
 import { planAvailable, schedulesAvailable } from "./commands.js";
+import { extensionLauncherItems } from "./extension-ui.js";
 import { filesAvailable, toggleFiles } from "./files-panel.js";
 import { togglePeeks } from "./peeks.js";
 import { openPip, pipAvailable } from "./pip.js";
@@ -274,13 +275,15 @@ function actionItems() {
             icon: "users",
             run: () => openSheet({ type: "name" }),
         },
+        // What extensions' browser modules added (`extension-ui.js`).
+        ...extensionLauncherItems(),
     ];
 
     return list.filter(Boolean).map((item) => ({
         ...item,
         kind: "action",
-        key: `action:${item.label}`,
-        text: `${item.label} ${item.detail ?? ""}`,
+        key: item.key ?? `action:${item.label}`,
+        text: `${item.label} ${item.detail ?? ""} ${item.keywords ?? ""}`,
     }));
 }
 
@@ -412,6 +415,8 @@ export function Launcher({ leaving }) {
         // Who you are and what the server keeps (the default model is the owner's), once they are known.
         store.state.me,
         store.state.server,
+        // What extensions' browser modules add, which come and go while it is open.
+        store.state.extensionsRev,
     ]);
 
     const flat = groups.flatMap((group) => group.items);
@@ -583,7 +588,11 @@ export function Launcher({ leaving }) {
                                         ${
                                             item.kind === "session" && item.id === conversationId
                                                 ? "●"
-                                                : html`<${Icon} name=${item.icon} size=${15} />`
+                                                : html`<${Icon}
+                                                      name=${item.icon}
+                                                      path=${item.iconPath}
+                                                      size=${15}
+                                                  />`
                                         }
                                     </span>`
                             }

@@ -15,6 +15,7 @@ import {
     setFilesOpen,
     toggleFiles,
 } from "./files-panel.js";
+import { ExtensionPage } from "./extension-ui.js";
 import { startEdgeBack, startSwipes } from "./gestures.js";
 import { Splash } from "./home.js";
 import { Launcher } from "./launcher.js";
@@ -318,20 +319,23 @@ function App() {
 
     const inConversation = state.conversationId !== null;
     const rail = prefs().sidebar === "rail";
-    // The subagents board takes the conversation's place, and the panels beside it give it their room.
+    // The subagents board, or an extension's page, takes the conversation's place, and the panels beside it give it
+    // their room.
     const board = state.board;
+    const page = !board && state.page !== null;
+    const placed = board || page;
     const browsing =
-        inConversation && !board && state.browserOpen && browserAvailable() && !state.missing;
-    const filing = !board && filesShown(state);
-    const people = !board && !browsing && !filing && peopleDocked(state);
-    const peeking = !board && peeksWanted(state);
+        inConversation && !placed && state.browserOpen && browserAvailable() && !state.missing;
+    const filing = !placed && filesShown(state);
+    const people = !placed && !browsing && !filing && peopleDocked(state);
+    const peeking = !placed && peeksWanted(state);
     const tiles = peeking ? peekTiles(state) : [];
     // The column takes the place beside the conversation when Browser and People leave it free; otherwise a strip,
     // which only shows when there are tiles.
     const peekColumn = peeking && PEEK_WIDE.matches && !browsing && !filing && !people;
 
     return html`<div
-        class=${`layout ${inConversation || board ? "" : "home"} ${browsing ? "browsing" : ""} ${filing ? "filing" : ""}`}
+        class=${`layout ${inConversation || placed ? "" : "home"} ${browsing ? "browsing" : ""} ${filing ? "filing" : ""}`}
     >
         <aside class="sidebar window">
             <div class="sidebar-clip">
@@ -340,12 +344,14 @@ function App() {
             </div>
             ${!rail && html`<${ResizeHandle} />`}
         </aside>
-        <div class=${`pane window ${board ? "boarded" : ""}`}>
+        <div class=${`pane window ${placed ? "boarded" : ""}`}>
             ${
                 board
                     ? html`<${SubagentsBoard} />`
-                    : inConversation
-                      ? html`<${Topbar} />
+                    : page
+                      ? html`<${ExtensionPage} key=${`${state.page.module}:${state.page.id}`} />`
+                      : inConversation
+                        ? html`<${Topbar} />
                     ${
                         peeking &&
                         tiles.length > 0 &&
@@ -358,7 +364,7 @@ function App() {
                         !state.missing &&
                         html`<${Composer} key=${state.conversationId} />`
                     }`
-                      : html`<div class="home-list">
+                        : html`<div class="home-list">
                           <${RailNav} />
                           <${SessionList} />
                       </div>
@@ -469,7 +475,8 @@ addEventListener("keydown", (event) => {
         key === "f" &&
         store.state.view.conversation &&
         !store.state.launcher &&
-        !store.state.board
+        !store.state.board &&
+        !store.state.page
     ) {
         event.preventDefault();
         openSheet({ type: "find" });
@@ -529,11 +536,12 @@ addEventListener("keydown", (event) => {
             return;
         }
 
-        // The panels are not beside the subagents board.
+        // The panels are not beside the subagents board, nor an extension's page.
         if (
             event.code === "KeyB" &&
             store.state.conversationId !== null &&
             !store.state.board &&
+            !store.state.page &&
             browserAvailable()
         ) {
             event.preventDefault();
@@ -542,7 +550,7 @@ addEventListener("keydown", (event) => {
             return;
         }
 
-        if (event.code === "KeyE" && !store.state.board && filesAvailable()) {
+        if (event.code === "KeyE" && !store.state.board && !store.state.page && filesAvailable()) {
             event.preventDefault();
             toggleFiles();
 
@@ -607,10 +615,10 @@ const ESCAPE_TWICE_MS = 1500;
 
 /** Esc twice stops Pi, as Esc does in other agents' terminals. Twice, since Esc also closes things and leaves fields. */
 function stopOnSecondEscape() {
-    const { view, sheet, launcher, board } = store.state;
+    const { view, sheet, launcher, board, page } = store.state;
 
     // Esc closes these first.
-    if (sheet || launcher || board || !view.live?.busy || !canSteer()) {
+    if (sheet || launcher || board || page || !view.live?.busy || !canSteer()) {
         return;
     }
 
@@ -641,7 +649,8 @@ startEdgeBack();
 startSwipes((where) => {
     const { conversationId, view, missing } = store.state;
 
-    // The subagents board in the conversation's place (or the home screen's): right goes back, as its × does.
+    // The subagents board or an extension's page in the conversation's place (or the home screen's): right goes back,
+    // as its × does.
     if (where === "board") {
         return { right: { path: iconPath("back"), label: "Back", run: goBack } };
     }

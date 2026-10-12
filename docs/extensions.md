@@ -1,6 +1,6 @@
 # Writing extensions
 
-An extension gives Pi something new: a **tool** it can call, a **section** of its system prompt, a **hook** that checks or changes its tool calls and answers, or a durable **task**. Pi Pocket's own features are built this way (`src/server/extensions/`), and the owner can add their own without touching Pi Pocket's code.
+An extension gives Pi something new: a **tool** it can call, a **section** of its system prompt, a **hook** that checks or changes its tool calls and answers, or a durable **task**. It can also add to the app itself: **routes** on the server, and a **browser module** with rail buttons, pages, sheets, menu rows, and launcher actions ([Adding to the app](#adding-to-the-app)). Pi Pocket's own features are built this way (`src/server/extensions/`), and the owner can add their own without touching Pi Pocket's code.
 
 Extensions are Pi Durable's. Its README covers the parts in depth: `node_modules/@earendil-works/pi-durable/README.md` in Pi Pocket's folder (Extensions, Tools, System Prompt, Hooks, Your Own State). This page is what Pi Pocket adds, and how to write one that holds up.
 
@@ -8,13 +8,13 @@ Extensions are Pi Durable's. Its README covers the parts in depth: `node_modules
 
 - **Drop-in**: a file in `~/.pi-pocket/extensions/` (the data folder's `extensions/`). It survives updates to Pi Pocket, starts off, and the owner turns it on in Menu → Extensions. Use this for anything one person or one machine wants.
 
-A drop-in runs inside the server, with the owner's rights: it can read `config.json` (the owner's token with it) and every session, and Lancet Guard never sees what its code does. Show the owner the whole file, and say what it does, before you ask them to turn it on.
+A drop-in runs inside the server, with the owner's rights: it can read `config.json` (the owner's token with it) and every session, and Lancet Guard never sees what its code does. Its browser module, if it has one, runs in the app's own page, with the rights of whoever's tab loads it. Show the owner the whole module, its browser files too, and say what it does, before you ask them to turn it on.
 
 - **Built-in**: a file in `src/server/extensions/`. It is part of Pi Pocket for everyone who uses this copy. Use this only for a change to Pi Pocket itself, and read [self-editing.md](self-editing.md) first.
 
 ## A module
 
-One `.ts` file that default-exports a function. Pi Pocket calls it with the host (below) and installs what it returns: one extension, or a list.
+One `.ts` file that default-exports a function. Pi Pocket calls it with the host (below) and `web` (what it adds to the app, [below](#adding-to-the-app)), and installs what it returns: one extension, a list, or nothing, for a module that only adds to the app.
 
 ```typescript
 /**
@@ -48,6 +48,7 @@ Working examples, tested with every `npm test` (`test/docs-examples.test.ts`):
 
 - [examples/clock.ts](examples/clock.ts): a tool.
 - [examples/no-force-push.ts](examples/no-force-push.ts): a hook that blocks some bash calls, and a prompt section that says so.
+- [examples/server-status.ts](examples/server-status.ts) with [examples/server-status.js](examples/server-status.js): a page on the rail, with a route that reads the machine's load and memory, and events that keep it live.
 
 The file:
 
@@ -66,11 +67,13 @@ Installing an extension with a name already installed replaces it, and a tool wi
 
 Give every extension and tool a name of your own, with a prefix (`example-clock`, `acme_lookup`). To change how a built-in tool works, wrap it (`wrapTool` in Pi Durable's README) or check its calls with a hook, rather than replacing it.
 
+What a module adds to the app goes by its file's name: `server-status.ts` is `server-status`, at `/api/x/server-status/` and `/x/server-status/`. File names are unique across both folders, so these never collide; a module that adds to the app needs a name of letters, digits, `-`, and `_`.
+
 ## Loading, reloading, and errors
 
-- A drop-in shows in Menu → Extensions as soon as its file is there, off. Turning it on loads it; turning it off uninstalls what it installed.
-- Saving a module that is on reloads it about 300 ms later. A tool call already running finishes on the old code; the next one gets the new code.
-- A module that fails to load (a syntax error, a throw while building) is reported in the app and in the Extensions sheet. An edit that fails keeps the previous version running.
+- A drop-in shows in Menu → Extensions as soon as its file is there, off. Turning it on loads it; turning it off uninstalls what it installed, its routes and browser module too.
+- Saving a module that is on reloads it about 300 ms later. A tool call already running finishes on the old code; the next one gets the new code. Saving a browser module's file has tabs load its new version.
+- A module that fails to load (a syntax error, a throw while building) is reported in the app and in the Extensions sheet. An edit that fails keeps the previous version running, its routes and browser module included.
 - A restart installs every module that is on again. Work an extension's tasks left pending resumes once it is installed.
 
 You cannot turn a drop-in on yourself: ask the owner to, in Menu → Extensions.
@@ -105,7 +108,7 @@ Sections render before every request, and only those that changed are sent again
 
 ## The host
 
-What the default export receives. Extensions reach the app only through it; it stays the same while modules reload.
+What the default export receives first. Extensions reach the app only through it (and add to it through `web`, [above](#adding-to-the-app)); it stays the same while modules reload.
 
 | Member                           | What it is                                                                                                                    |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -137,11 +140,136 @@ To type it, import the type by the absolute path of `src/server/host.ts`: `impor
 - **Do not get around a block.** A guard or a person said no for a reason.
 - **Secrets stay out.** Text in a section, a tool's description, or a result goes to the model provider.
 
+## Adding to the app
+
+A module can add to the app what a tool cannot: a page that shows something without asking Pi, a button on the rail, a row in the menu. Its default export's second argument, `web`, registers two parts while the module loads:
+
+- **Routes** on the server, under `/api/x/<module>/`: what the browser module calls. Credentials and other secrets stay here.
+- A **browser module**: a `.js` file the app loads in the tabs of the people it is for. It adds rail buttons, pages, sheets, menu rows, and launcher actions through `pocket`, the app's API for extensions.
+
+They install and go with the module's extensions: an edit swaps them in one step, a version that fails keeps the one before, and turning the module off removes them, closing a page of it that is open. [examples/server-status.ts](examples/server-status.ts) and [examples/server-status.js](examples/server-status.js) are a whole one.
+
+```typescript
+import type { ExtensionWeb } from "/path/to/pi-pocket/src/server/host.ts";
+
+export default function createUsage(_host: unknown, web: ExtensionWeb) {
+    web.route("GET", "usage", async ({ signal }) => fetchUsage(signal)); // GET /api/x/usage/usage
+    web.client("usage.js"); // the browser module beside this file
+}
+```
+
+### Routes
+
+`web.route(method, path, handle, { access })`. `method` is GET, POST, PUT, PATCH, or DELETE. `path` is relative to the module's own: `"status"`, or `"items/:id"`, where `:id` matches one part of the address.
+
+`handle(request)` gets `{ method, params, query, body, user, signal }`: the `:name` parts, the query string (`URLSearchParams`, from `pocket.api("usage?days=7")`), the JSON object sent (empty for GET and DELETE), who asked (`{ id, name, role }`), and a signal aborted when the browser stops waiting. What it returns goes back as JSON (`undefined` as `{}`).
+
+- Throw `web.error(status, message)` (a status from 400 to 599) to answer with it and its message, as they are: `throw web.error(404, "No such item")`.
+- Any other throw is a 500, even an error that carries a `status` of its own (as a provider's SDK's do, with words that can quote a key). The owner sees its message; anyone else sees only that the extension failed. The server log has it whole.
+- The app's own checks come first: a sign-in, and the `X-Pocket` header, which a link or form on another site cannot send. A module's routes need it on GET too, so a GET can never be made from elsewhere; `pocket.api` always sends it, and so must anything else that calls them (`curl -H 'X-Pocket: 1'`). A route answers only the people its `access` lets in.
+
+### The browser module
+
+`web.client(entry, { access })`. `entry` is right beside the module: a `.js` file, served alone, or a folder, whose `index.js` loads first and may import the folder's other files. A folder serves its `.js`, `.mjs`, `.css`, `.json`, images, and fonts, never `.ts` files, hidden files, `node_modules`, or a link out of it.
+
+The app imports it and calls its default export with `pocket`. What that returns, if a function, runs when the module goes, as `pocket.onDispose` does.
+
+```javascript
+export const pocketApi = 1;
+
+export default function setup(pocket) {
+    const { html, useEffect, useState } = pocket;
+
+    function Usage() {
+        const [usage, setUsage] = useState(null);
+        const [error, setError] = useState(null);
+
+        useEffect(() => {
+            const stop = new AbortController();
+
+            pocket.api("usage", undefined, { signal: stop.signal }).then(setUsage, (failure) => {
+                if (!stop.signal.aborted) {
+                    setError(failure.message);
+                }
+            });
+
+            return () => stop.abort();
+        }, []);
+
+        if (error) {
+            return html`<div class="error-box">${error}</div>`;
+        }
+
+        return usage ? html`<p>${usage.total} tokens today</p>` : html`<${pocket.Loader} />`;
+    }
+
+    pocket.page({ id: "usage", title: "Usage", component: Usage });
+    pocket.rail({ id: "usage", title: "Usage", icon: "pulse", page: "usage" });
+}
+```
+
+| `pocket`                                                              | What it is                                                                                                                                                                                      |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`, `module`, `title`                                          | The API's version (1); the module's name; its title                                                                                                                                             |
+| `html`, `h`, `Fragment`, `useState`, `useEffect`, and the hooks       | The app's own Preact and htm: a component of the module's renders as the app's do                                                                                                               |
+| `Icon`, `Loader`, `Spinner`, `Markdown`, `Switch`                     | The app's pieces, so the module looks like the rest of the app. `Markdown` cleans the HTML it makes, as replies' does                                                                           |
+| `api(path, body?, { method, signal })`                                | Call one of the module's routes: a GET without `body`, a POST with one; a query string in `path` reaches `query`. `signal` stops it. Throws an error with the server's words (and its `status`) |
+| `on(event, run)`                                                      | Hear an event the module sends; returns how to stop                                                                                                                                             |
+| `rail`, `menu`, `launcher`, `page`, `sheet`                           | Add a button on the rail, a row in the menu, a launcher action, a page, or a sheet (below). Each returns `{ update(patch), remove() }`                                                          |
+| `openPage(id)`, `closePage()`, `openSheet(id, props)`, `closeSheet()` | Show or close the module's own page or sheet; a sheet's component gets `props`. A version that is gone opens nothing                                                                            |
+| `notify(level, message)`                                              | A notice, as the app's own: `info`, `warning`, or `error`                                                                                                                                       |
+| `me()`, `conversationId()`                                            | Who uses this tab (`{ id, name, role }`); the session it shows, or null                                                                                                                         |
+| `style(path)`                                                         | Load a stylesheet from beside the browser module (in its folder); it goes with this version                                                                                                     |
+| `onDispose(run)`                                                      | Run `run` when this version goes: an edit, or the module turned off                                                                                                                             |
+
+Each thing it adds has an `id` of its own, and adding one with the same `id` again replaces it.
+
+- `rail({ id, title, icon or iconPath, badge, … })`: a button on the rail after the subagents button, in the sidebar, the drawer, and a phone's home screen. `icon` is one of the app's (`pulse`, `grid`, `globe`, `key`, `chat`, `folder`, `search`, …; an unknown name shows `grid`); `iconPath` is a 24×24 stroked SVG path of its own. `badge` is a short count on it.
+- `menu({ id, label, hint, … })` is a row in the menu's App group; `launcher({ id, label, detail, icon or iconPath, keywords, … })` an action in the launcher (Ctrl/⌘+K).
+- Each of those three does one thing when used: `page: "id"` opens a page, `sheet: "id"` a sheet, `run: () => …` runs a function. A rail button that opens a page shows it is open, and closes it on a second tap.
+- `page({ id, title, component })` shows in the conversation's place, as the subagents board does, with its title and a close button; Esc and back close it, and on a phone it fills the screen. `sheet({ id, title, component, wide })` is a sheet like the app's. Their components get `pocket` and `close`, and a sheet's the `props` it was opened with.
+
+The pieces take what the app's own do: `Icon({ name or path, size })`, `Loader({ label })`, `Spinner({ label })`, `Markdown({ text })`, `Switch({ on, label, onChange, disabled })`. To look like the app, use its colors, `var(--text)`, `var(--muted)`, `var(--accent)`, `var(--bg)`, `var(--card)`, `var(--line)`, `var(--err)`, and `var(--ok)`, which follow the theme, and these classes: `button` (with `primary`), `error-box`, `muted`, `small`, `mono`, and `setting` (a row with a label and a control). Pi Pocket keeps those names; the rest of its CSS may change.
+
+Events are not kept for a page that was closed: one that opens fetches what is now, then listens, as the example does.
+
+It fails alone. A module that throws while it loads or sets up says so in a notice and in Menu → Extensions ("In this browser: …"), and what it added goes; a page or sheet whose component throws shows the error in its place, and a `run` that throws or rejects says so in a notice. The rest of the app goes on. An edit loads it again; a module that failed to import for another reason (the network) loads again when the page reloads.
+
+The page allows nothing from another site (the app's content security policy: scripts and requests only to the app itself). To show what another service knows, fetch it in a route, on the server, where its key stays.
+
+### Who may use it
+
+Routes and the browser module are the owner's alone unless their `access` says more:
+
+| `access`            | Who                                                  |
+| ------------------- | ---------------------------------------------------- |
+| `"owner"` (default) | The owner                                            |
+| `"steer"`           | The owner, and guests who can steer every session    |
+| `"view"`            | The owner, guests, and viewers who see every session |
+
+Someone invited to one session never may: these belong to the whole app. Each route checks its own `access`, so a browser module for everyone can have a route for the owner alone. A browser module runs with the rights of whoever's tab loads it, so it can do nothing in a guest's tab that the guest could not.
+
+### Events
+
+`web.send(event, data, { to })` sends `data` (JSON, up to 256 KB) to every tab that loads the browser module, or only to the tabs of the person whose id is `to`; there `pocket.on(event, run)` hears it. A version that was replaced or turned off sends nothing. It never throws, as it is mostly called from timers, where a throw would stop the server: an event it cannot send goes to the server's log.
+
+### Cleanups
+
+`web.onDispose(run)` runs `run` when this version of the module goes: an edit replaces it, the owner turns it off, or the server stops. Stop timers and close connections there: a reload starts the module over, and the old version's timers would otherwise run on. `pocket.onDispose` does the same in the browser.
+
+The new version starts before the old one's cleanups run, so that an edit that fails leaves the old one whole. Something only one of them can hold at a time (a port, a lock) cannot be taken while the module loads: take it at its first use, or try again a moment later.
+
+### Versions
+
+`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not loaded by an older Pi Pocket, which says so instead.
+
 ## Testing
 
 Copy the module into a test app's data folder and turn it on, as `test/docs-examples.test.ts` does: `openApp` with a scripted model (`test/helpers.ts`), the file in `<dataDir>/extensions/`, `app.setExtensionEnabled(owner, file, true)`, then a session whose scripted model calls the tool. Nothing reaches a real provider, and nothing touches the live data.
 
 For a drop-in, run the test from Pi Pocket's folder with the module copied in, or check it by hand: turn it on, ask Pi to use it in a session made for the purpose, and watch Menu → Extensions and the app's notices for errors.
+
+For what a module adds to the app, `test/extension-web.test.ts` calls routes over HTTP as different people, and `test/extension-ui.test.ts` loads the app in a real Chromium and uses a module's rail button, page, menu row, and sheet. On a copy (`node test/serve.ts`), turn the module on, open the app, and keep the browser's console open.
 
 ## A built-in extension
 
