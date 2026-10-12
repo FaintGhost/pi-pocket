@@ -155,6 +155,8 @@ before(async () => {
     writeFileSync(join(work, "src", "main.ts"), "export const answer = 42;\n");
     writeFileSync(join(work, "web.env"), "PORT=3000\nHOST=127.0.0.1\n");
     writeFileSync(join(work, "magpie.service"), "[Service]\nExecStart=/usr/bin/magpie\n");
+    mkdirSync(join(work, "docs"), { recursive: true });
+    writeFileSync(join(work, "docs", "guide.md"), "# Guide\n\n[The code](../src/main.ts:1)\n");
     // A repository with a change, for Changes and the branch in the top bar.
     const git = (...args: string[]) =>
         execFileSync("git", ["-C", work, "-c", "user.name=T", "-c", "user.email=t@t.t", ...args]);
@@ -367,6 +369,35 @@ test(
         );
         await back();
         await reach({ sheet: null, layers: 0 }, "back from line three");
+        // Text selected elsewhere neither holds the link back nor lets it leave the app.
+        await page.evaluate(`
+            const range = document.createRange();
+
+            range.selectNodeContents(document.querySelector(".reply .md code[data-path]"));
+            getSelection().removeAllRanges();
+            getSelection().addRange(range);
+        `);
+        await tap('.reply .md a[data-path="web.env"]');
+        await reach(
+            { sheet: "file", layers: 1, path: `/s/${linked}` },
+            "the file, with a selection elsewhere",
+        );
+        await back();
+        await reach({ sheet: null, layers: 0 }, "back from the file");
+        await page.evaluate(`getSelection().removeAllRanges()`);
+        // A link in a Markdown file names a file beside it, not in the session's folder.
+        await page.evaluate(`(await import("/ui.js")).openFile("docs/guide.md")`);
+        await reach({ sheet: "file", layers: 1 }, "the guide");
+        await tap('.file-viewer .md a[data-path$="/src/main.ts:1"]');
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".file-viewer")?.textContent.includes("answer = 42") === true)`,
+                )) === true,
+            "the file the guide links to",
+        );
+        await back();
+        await reach({ sheet: null, layers: 0, path: `/s/${linked}` }, "back from the guide");
         await page.setViewport({ width: 1440, height: 900, scale: 1, mobile: false });
         await openFiles();
         await reach({ files: true }, "the docked Files tile");

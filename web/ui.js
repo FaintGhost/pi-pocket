@@ -253,7 +253,7 @@ function sanitize(html, fold) {
         const path = linkedPath(link.getAttribute("href") ?? "");
 
         if (path !== null) {
-            link.dataset.path = path;
+            link.dataset.path = fromBase(path);
             link.removeAttribute("target");
         }
     }
@@ -384,8 +384,8 @@ const MARKDOWN_CACHE = 500;
  * order, and evicting the oldest insert would miss on every row once a thread outgrew the cache. Text still changing
  * (`cache` false) is not kept, and its long code blocks are not folded while they grow.
  */
-function markdownParts(text, conversationId = currentConversation(), cache = true) {
-    const key = `${conversationId ?? ""}\u0000${text}`;
+function markdownParts(text, conversationId = currentConversation(), cache = true, base = null) {
+    const key = `${conversationId ?? ""}\u0000${base ?? ""}\u0000${text}`;
     let out = markdownCache.get(key);
 
     if (out !== undefined) {
@@ -396,8 +396,10 @@ function markdownParts(text, conversationId = currentConversation(), cache = tru
     }
 
     rendering = conversationId ?? null;
+    linkBase = base;
     out = partsOf(sanitize(marked.parse(fencePage(text), { async: false }), cache));
     rendering = null;
+    linkBase = null;
 
     if (cache) {
         if (markdownCache.size >= MARKDOWN_CACHE) {
@@ -421,8 +423,8 @@ export function setRichBlock(component) {
  * Rendered markdown. `cache={false}` for text that is still changing, such as a streaming answer: its pages, images, and
  * diffs show as code until it is whole.
  */
-export function Markdown({ text, class: className = "", cache = true }) {
-    const parts = markdownParts(text, undefined, cache);
+export function Markdown({ text, class: className = "", cache = true, base = null }) {
+    const parts = markdownParts(text, undefined, cache, base);
 
     if (parts.length === 1 && parts[0].kind === undefined) {
         return html`<div
@@ -500,6 +502,30 @@ function linkedPath(href) {
     return looksLikePath(path) ? path : null;
 }
 
+/** The folder of the Markdown file being rendered (`Markdown`'s `base`): its relative links name its neighbors. */
+let linkBase = null;
+
+/** A linked path as the viewer opens it: relative to the Markdown file it is in, if any, else as written. */
+function fromBase(path) {
+    if (linkBase === null || /^[~/]/.test(path)) {
+        return path;
+    }
+
+    const parts = linkBase.replace(/\/+$/, "").split("/");
+
+    for (const part of path.split("/")) {
+        if (part === "..") {
+            if (parts.length > 1) {
+                parts.pop();
+            }
+        } else if (part !== ".") {
+            parts.push(part);
+        }
+    }
+
+    return parts.join("/");
+}
+
 /**
  * Open a file (or folder) of the session in the viewer: in the Files tile while it is open, otherwise in a sheet.
  * `path:42` opens it at line 42.
@@ -526,11 +552,20 @@ export function openFile(path) {
 document.addEventListener("click", (event) => {
     const target = event.target.closest?.(".md code[data-path], .md a[data-path]");
 
-    if (!target || getSelection()?.toString()) {
+    if (!target) {
         return;
     }
 
+    // A file link stays in the app even when selecting its text keeps it from opening: its href is a path, not a page.
     event.preventDefault();
+
+    const selection = getSelection();
+
+    // Selecting a link's text does not change the selection elsewhere: only one in it holds the file back.
+    if (selection?.toString() && selection.containsNode(target, true)) {
+        return;
+    }
+
     event.stopPropagation();
     openFile(target.dataset.path);
 });

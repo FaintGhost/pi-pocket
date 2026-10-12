@@ -151,7 +151,12 @@ export function FileView({ path, line, onOpen = openFile, onLoad }) {
                 }
             </div>`
         }
-        ${file?.kind === "text" && preview && markdown && html`<${Markdown} text=${file.text} />`}
+        ${
+            file?.kind === "text" &&
+            preview &&
+            markdown &&
+            html`<${Markdown} text=${file.text} base=${file.path.replace(/[^/]*$/, "")} />`
+        }
         ${
             file?.kind === "text" &&
             preview &&
