@@ -655,7 +655,11 @@ test(
         assert.equal(held.pressed, true, "the row shows the press while it is held");
         assert.notEqual(held.during, held.before, "the press is visible");
         await settled(
-            { sheet: "session", items: ["Pin to the top", "Archive", "Select"], path: "/" },
+            {
+                sheet: "session",
+                items: ["Pin to the top", "Mark unread", "Archive", "Select"],
+                path: "/",
+            },
             "the row's actions, open",
         );
         await new Promise((resolve) => setTimeout(resolve, 300));
@@ -664,7 +668,7 @@ test(
         await settled({ sheet: null, pinned: [Number(active)] }, "pinned, and the sheet closed");
         await finger(active, { ms: 600 });
         await settled(
-            { sheet: "session", items: ["Unpin from the top", "Archive", "Select"] },
+            { sheet: "session", items: ["Unpin from the top", "Mark unread", "Archive", "Select"] },
             "the pinned row offers Unpin",
         );
         await choose("Unpin from the top");
@@ -879,6 +883,86 @@ test(
         await until(async () => !(await drawerOpen()), "the drawer, dragged closed");
     },
 );
+
+/** What this browser marked unread, and which rows show it. */
+const marks = () =>
+    inPage<{ stored: number[]; dots: number[]; bold: number[] }>(`
+        const rows = [...document.querySelectorAll(${JSON.stringify(`${list} .session-row`)})];
+
+        return JSON.stringify({
+            stored: JSON.parse(localStorage.getItem("pocket.unread") ?? "[]"),
+            dots: rows.filter((each) => each.querySelector(".unread-dot")).map((each) => Number(each.dataset.id)),
+            bold: rows
+                .filter((each) => getComputedStyle(each.querySelector(".session-title")).fontWeight === "700")
+                .map((each) => Number(each.dataset.id)),
+        });
+    `);
+
+async function marked(ids: ConversationId[], what: string): Promise<void> {
+    const want = JSON.stringify({
+        stored: ids.map(Number),
+        dots: ids.map(Number),
+        bold: ids.map(Number),
+    });
+    let last = "";
+
+    try {
+        await until(async () => (last = JSON.stringify(await marks())) === want, what);
+    } catch {
+        assert.fail(`${what}: ${last}`);
+    }
+}
+
+test("a session marked unread shows it until it is opened, however it opens", real, async () => {
+    const [one, two] = folderSessions as [ConversationId, ConversationId];
+    const click = (selector: string) =>
+        page.evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+
+    await fresh();
+    await click(`${row(one)} [aria-label="Mark unread"]`);
+    await marked([one], "marked: stored, a dot, and a bold title");
+    await click(`${row(one)} [aria-label="Mark read"]`);
+    await marked([], "read again from the row");
+
+    // A tap on the row opens it.
+    await click(`${row(one)} [aria-label="Mark unread"]`);
+    await marked([one], "marked again");
+    await click(`${row(one)} > .session`);
+    await until(async () => (await touched()).path === `/s/${one}`, "opened");
+    await marked([], "opening it read it");
+
+    // Back to it.
+    await click(`${row(two)} > .session`);
+    await until(async () => (await touched()).path === `/s/${two}`, "the other one");
+    await click(`${row(one)} [aria-label="Mark unread"]`);
+    await marked([one], "marked from the other session");
+    await page.evaluate("history.back()");
+    await until(async () => (await touched()).path === `/s/${one}`, "back to it");
+    await marked([], "back read it");
+
+    // A link, or a notification, opens it with the page.
+    await click(`${row(two)} [aria-label="Mark unread"]`);
+    await marked([two], "the other one marked");
+    await page.navigate(`${base}/s/${two}`);
+    await until(async () => (await touched()).path === `/s/${two}`, "loaded with it open");
+    await marked([], "a page load read it");
+});
+
+test("touch screens: a finger held on a row marks it unread, and read again", real, async () => {
+    await fresh(true);
+    await finger(active, { ms: 600 });
+    await settled({ sheet: "session" }, "the row's actions");
+    await choose("Mark unread");
+    await settled({ sheet: null, path: "/" }, "closed, still on the list");
+    await marked([active], "marked");
+    await finger(active, { ms: 600 });
+    await settled(
+        { sheet: "session", items: ["Pin to the top", "Mark read", "Archive", "Select"] },
+        "a marked row offers Mark read",
+    );
+    await choose("Mark read");
+    await marked([], "read again");
+});
 
 test(
     "touch screens: a selected row that is archived leaves the selection, and taps open sessions again",

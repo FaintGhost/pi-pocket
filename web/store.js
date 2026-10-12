@@ -25,7 +25,9 @@ const UNREAD_KEY = "pocket.unread";
 /** Sessions this browser has marked unread, like the pinned list beside it (`pocket.unread`). */
 function unreadOf() {
     try {
-        return JSON.parse(localStorage.getItem(UNREAD_KEY) ?? "[]") ?? [];
+        const ids = JSON.parse(localStorage.getItem(UNREAD_KEY) ?? "[]");
+
+        return Array.isArray(ids) ? ids : [];
     } catch {
         return [];
     }
@@ -153,7 +155,7 @@ export const store = {
 
 export const isUnread = (id) => store.state.unread.includes(id);
 
-/** Mark a session unread, or clear it again, in this browser only. Opening the session clears it (`navigate`). */
+/** Mark a session unread, or clear it again, in this browser only. Opening the session clears it (`opened`). */
 export function setUnread(id, unread) {
     const next = unread
         ? [...new Set([...store.state.unread, id])]
@@ -162,6 +164,15 @@ export function setUnread(id, unread) {
     localStorage.setItem(UNREAD_KEY, JSON.stringify(next));
     store.set({ unread: next });
 }
+
+/** Opening a session is reading it, however it opens (a tap, back, a link, a notification): its mark goes. */
+function opened(id) {
+    if (id !== null && isUnread(id)) {
+        setUnread(id, false);
+    }
+}
+
+opened(store.state.conversationId);
 
 function routeConversation() {
     const match = /^\/s\/(\d+)/.exec(location.pathname);
@@ -790,6 +801,9 @@ export function navigate(conversationId, { replace = false, sheet = null } = {})
         store.set({ board: false, boardAgents: null });
     }
 
+    // Its row tapped again counts too.
+    opened(conversationId);
+
     if (store.state.conversationId === conversationId && source) {
         if (sheet) {
             openSheet(sheet);
@@ -798,19 +812,8 @@ export function navigate(conversationId, { replace = false, sheet = null } = {})
         return;
     }
 
-    // Opening a session is reading it: its marked-unread dot goes, here and in the list.
-    const unread =
-        conversationId === null
-            ? store.state.unread
-            : store.state.unread.filter((each) => each !== conversationId);
-
-    if (unread.length !== store.state.unread.length) {
-        localStorage.setItem(UNREAD_KEY, JSON.stringify(unread));
-    }
-
     store.set((state) => ({
         conversationId,
-        unread,
         view: emptyView(),
         ...peopleFor(conversationId),
         browser: null,
@@ -828,6 +831,7 @@ onRoute(() => {
     const id = routeConversation();
 
     if (id !== store.state.conversationId) {
+        opened(id);
         store.set({
             conversationId: id,
             view: emptyView(),

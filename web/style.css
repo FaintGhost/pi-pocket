@@ -3481,7 +3481,7 @@ button.chip:hover {
     display: none;
 }
 
-/* Archive and pin: on the row's right, shown on hover or while the row has focus. */
+/* Archive, pin, and mark unread: on the row's right, shown on hover or while the row has focus. */
 .session-actions {
     position: absolute;
     top: 50%;
@@ -3532,7 +3532,7 @@ button.chip:hover {
     }
 }
 
-/* The buttons take the right side's place, widened so a long title ends before them (one or two 26px buttons). */
+/* The buttons take the right side's place, widened so a long title ends before them (one to three 26px buttons). */
 @media (hover: hover) {
     .session-row:hover .session-act,
     .session-act:focus-visible {
