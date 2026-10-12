@@ -153,6 +153,8 @@ before(async () => {
     mkdirSync(join(work, "src"), { recursive: true });
     writeFileSync(join(work, "README.md"), "# Hello\n\nA file to read.\n");
     writeFileSync(join(work, "src", "main.ts"), "export const answer = 42;\n");
+    writeFileSync(join(work, "web.env"), "PORT=3000\nHOST=127.0.0.1\n");
+    writeFileSync(join(work, "magpie.service"), "[Service]\nExecStart=/usr/bin/magpie\n");
     // A repository with a change, for Changes and the branch in the top bar.
     const git = (...args: string[]) =>
         execFileSync("git", ["-C", work, "-c", "user.name=T", "-c", "user.email=t@t.t", ...args]);
@@ -245,6 +247,137 @@ test("back closes the open file, then the Files tile, then leaves the session", 
     await back();
     await reach({ path: "/" }, "back to the list");
 });
+
+test(
+    "local Markdown file links use the viewer, line numbers, and its back stack",
+    real,
+    async () => {
+        const linked = await newSession(app);
+        const startup = `${join(work, "magpie.service")}:2`;
+
+        await say(
+            app,
+            linked,
+            [
+                "[web.env](web.env)",
+                `[**Startup**](${startup})`,
+                "[Line](README.md:3)",
+                "[Encoded](src%2Fmain.ts)",
+                "[Home](~/notes.md)",
+                "[Relative](./README.md)",
+                "[Website](https://example.com/web.env)",
+                "[Network](//example.com/web.env)",
+                "[Session](/s/12)",
+                "[Image API](/api/c/1/file?path=web.env)",
+                "[Fragment](#web.env)",
+                "[Unsafe](javascript:alert%281%29)",
+                '<a href="https://example.com" data-path="web.env">Forged</a>',
+                "`web.env`",
+                "```\nweb.env\n```",
+            ].join("\n\n"),
+        );
+        await fresh();
+        await goTo(linked);
+        await reach({ path: `/s/${linked}` }, "the reply with file links");
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector('.reply .md a[data-path="web.env"]') !== null)`,
+                )) === true,
+            "the rendered links",
+        );
+        const links = await inPage<
+            Record<string, { path: string | null; target: string | null; href: string | null }>
+        >(`
+        return JSON.stringify(Object.fromEntries(
+            [...document.querySelectorAll(".reply .md a")].map((link) => [link.textContent, {
+                path: link.getAttribute("data-path"),
+                target: link.getAttribute("target"),
+                href: link.getAttribute("href"),
+            }]),
+        ));
+    `);
+
+        assert.equal(links["web.env"]?.path, "web.env");
+        assert.equal(links.Startup?.path, startup);
+        assert.equal(
+            links.Line?.path,
+            "./README.md:3",
+            "a bare filename with a line survives sanitizing",
+        );
+        assert.equal(links.Encoded?.path, "src/main.ts");
+        assert.equal(links.Home?.path, "~/notes.md");
+        assert.equal(links.Relative?.path, "./README.md");
+        assert.equal(links["web.env"]?.target, null, "local links stay in the app");
+
+        for (const label of [
+            "Website",
+            "Network",
+            "Session",
+            "Image API",
+            "Fragment",
+            "Unsafe",
+            "Forged",
+        ]) {
+            assert.equal(links[label]?.path, null, `${label} stays outside the file viewer`);
+        }
+
+        assert.equal(links.Website?.target, "_blank");
+        assert.equal(links.Unsafe?.href, null, "unsafe schemes are still stripped");
+        assert.equal(
+            await inPage<number>(
+                `return JSON.stringify(document.querySelectorAll(".reply .md code[data-path]").length)`,
+            ),
+            1,
+            "inline paths still work, code blocks stay code",
+        );
+        await page.evaluate(`document.querySelector('.reply .md a[data-path="web.env"]').focus()`);
+        await page.press("Enter");
+        await reach({ sheet: "file", layers: 1 }, "the file opened by keyboard");
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".file-viewer")?.textContent.includes("PORT=3000") === true)`,
+                )) === true,
+            "the environment file contents",
+        );
+        await back();
+        await reach({ sheet: null, layers: 0, path: `/s/${linked}` }, "back to the reply");
+        await tap(".reply .md a[data-path] strong");
+        await reach({ sheet: "file", layers: 1 }, "the startup configuration");
+        await until(
+            async () =>
+                (
+                    await inPage<string>(
+                        `return JSON.stringify(document.querySelector('.file-line.on[data-line="2"]')?.textContent ?? "")`,
+                    )
+                ).includes("ExecStart=/usr/bin/magpie"),
+            "the startup line",
+        );
+        await back();
+        await reach({ sheet: null, layers: 0 }, "back from the startup configuration");
+        await tap('.reply .md a[data-path="./README.md:3"]');
+        await reach({ sheet: "file", layers: 1 }, "the bare filename with a line");
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector('.file-line.on[data-line="3"]') !== null)`,
+                )) === true,
+            "line three",
+        );
+        await back();
+        await reach({ sheet: null, layers: 0 }, "back from line three");
+        await page.setViewport({ width: 1440, height: 900, scale: 1, mobile: false });
+        await openFiles();
+        await reach({ files: true }, "the docked Files tile");
+        await tap('.reply .md a[data-path="web.env"]');
+        await reach(
+            { file: "web.env", sheet: null, layers: 0 },
+            "the linked file in the Files tile",
+        );
+        await page.evaluate(`(await import("/files-panel.js")).setFilesOpen(false)`);
+    },
+);
 
 test("a reload keeps the steps back: the file, then the tile", real, async () => {
     await fresh();
