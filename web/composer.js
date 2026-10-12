@@ -1383,7 +1383,8 @@ function PlacesButton() {
     </button>`;
 }
 
-/** Under the message box: who is here, how full the context is, the cache, the spend, and Lancet Guard. */
+/** Under the message box: who is here, how fast the last answer came, how full the context is, the cache, the
+ *  spend, and Lancet Guard. */
 function StatusLine() {
     const { view, connection, guard } = store.state;
     const stats = view.stats ?? {};
@@ -1408,6 +1409,24 @@ function StatusLine() {
             ${here} here
         </span>`,
     );
+
+    // Speed of the newest response: its tokens per second and its time to first token.
+    if (stats.tokensPerSec !== undefined) {
+        parts.push(
+            html`<span title="Tokens per second of the last response">
+                ${stats.tokensPerSec.toFixed(1)} tok/s
+            </span>`,
+        );
+    }
+
+    if (stats.ttftMs !== undefined) {
+        const ttft =
+            stats.ttftMs >= 10_000
+                ? `${Math.round(stats.ttftMs / 1000)}s`
+                : `${(stats.ttftMs / 1000).toFixed(1)}s`;
+
+        parts.push(html`<span title="Time to first token of the last response">${ttft} TTFT</span>`);
+    }
 
     if (window) {
         const used = stats.contextTokens ?? 0;
