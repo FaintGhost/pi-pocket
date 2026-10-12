@@ -312,6 +312,24 @@ kbd {
     flex: 1;
 }
 
+.meter {
+    display: inline-flex;
+    height: 4px;
+    background: var(--line);
+}
+
+.meter > span {
+    background: var(--accent);
+}
+
+.meter.warn > span {
+    background: var(--warn);
+}
+
+.meter.err > span {
+    background: var(--err);
+}
+
 .warn {
     color: var(--warn);
 }
@@ -2608,14 +2626,7 @@ button.chip:hover {
 }
 
 .status-line .meter {
-    display: inline-flex;
     width: 36px;
-    height: 4px;
-    background: var(--line);
-}
-
-.status-line .meter > span {
-    background: var(--accent);
 }
 
 .status-line .guard {
@@ -10330,14 +10341,7 @@ textarea.notes {
 }
 
 .pip-context .meter {
-    display: inline-flex;
     width: 28px;
-    height: 4px;
-    background: var(--line);
-}
-
-.pip-context .meter > span {
-    background: var(--accent);
 }
 
 .pip-mark {
