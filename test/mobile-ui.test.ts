@@ -396,6 +396,9 @@ test(
                 )) === true,
             "the file the guide links to",
         );
+        await reach({ sheet: "file", layers: 2 }, "the linked file, a step above the guide");
+        await back();
+        await reach({ sheet: "file", layers: 1 }, "back to the guide");
         await back();
         await reach({ sheet: null, layers: 0, path: `/s/${linked}` }, "back from the guide");
         await page.setViewport({ width: 1440, height: 900, scale: 1, mobile: false });
