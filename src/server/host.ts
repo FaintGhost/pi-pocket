@@ -160,6 +160,7 @@ export interface PocketHost {
         level: "info" | "warning" | "error",
         message: string,
         conversationId?: ConversationId,
+        ui?: { key: string; params?: Record<string, string | number> },
     ): void;
     /**
      * Why work Pi would start in a conversation with nobody asking (a subagent's report, say) may not start now: the

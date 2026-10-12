@@ -308,11 +308,11 @@ export async function api(path, body, options = {}) {
 let nextNotice = 1;
 
 /** Show a short notice. With `action`, tapping it runs the action as well as dismissing it. */
-export function notify(level, message, action) {
+export function notify(level, message, action, ui) {
     const id = nextNotice++;
 
     store.set((state) => ({
-        notices: [...state.notices, { id, level, message, action }].slice(-4),
+        notices: [...state.notices, { id, level, message, action, ui }].slice(-4),
     }));
     setTimeout(() => dismiss(id), level === "error" ? 9000 : 4500);
 }
@@ -468,6 +468,7 @@ const handlers = {
                           sheet: data.link.sheet ? { type: data.link.sheet } : null,
                       })
                 : undefined,
+            data.ui,
         ),
     auth: (data) => handleAuth(data),
     closing: () => store.set({ connection: "closed" }),
@@ -733,7 +734,12 @@ function handleAuth(data) {
 
         if (data.step === "done") {
             if (data.ok) {
-                notify("info", t("Signed in to {{provider}}.", { provider: data.providerName ?? data.providerId }));
+                notify(
+                    "info",
+                    t("Signed in to {{provider}}.", {
+                        provider: data.providerName ?? data.providerId,
+                    }),
+                );
             }
 
             return { auth: data.ok ? null : { ...flow, prompt: null, done: data } };

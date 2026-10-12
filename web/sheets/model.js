@@ -215,7 +215,7 @@ export function ModelPicker() {
                 ${
                     models.length > 0 &&
                     shown.length === 0 &&
-                    html`<p class="muted pop-menu-note">${t("No model matches “")}${query.trim()}”.</p>`
+                    html`<p class="muted pop-menu-note">${t("No model matches “{{query}}”.", { query: query.trim() })}</p>`
                 }
                 ${shown.map(
                     (model, index) => html`<button
@@ -223,7 +223,7 @@ export function ModelPicker() {
                         class=${`pop-menu-row ${index === active ? "on" : ""}`}
                         role="option"
                         aria-selected=${isCurrent(model)}
-                        title=${`${model.provider}/${model.id} · ${formatTokens(model.contextWindow)} context${model.images ? " · images" : ""}`}
+                        title=${`${model.provider}/${model.id} · ${t("{{tokens}} context", { tokens: formatTokens(model.contextWindow) })}${model.images ? ` · ${t("images")}` : ""}`}
                         onMouseMove=${() => index !== active && setPicked(index)}
                         onClick=${() => pick(model)}
                     >
@@ -250,7 +250,7 @@ export function ModelPicker() {
                                     class=${level === each ? "on" : ""}
                                     onClick=${() => think(each)}
                                 >
-                                    ${each}
+                                    ${t(each)}
                                 </button>`,
                         )}
                     </div>

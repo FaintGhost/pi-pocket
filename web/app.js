@@ -258,7 +258,7 @@ function Notices() {
                     notice.action?.();
                 }}
             >
-                ${notice.message}
+                ${notice.ui ? t(notice.ui.key, notice.ui.params) : notice.message}
             </button>`;
         })}
     </div>`;
@@ -312,7 +312,7 @@ function App() {
 
     if (state.me === undefined) {
         return html`<${Boot}
-            caption=${state.notices.some((notice) => notice.level === "error") ? "waiting for the server" : "starting"}
+            caption=${t(state.notices.some((notice) => notice.level === "error") ? "waiting for the server" : "starting")}
         />
         <${Notices} />`;
     }

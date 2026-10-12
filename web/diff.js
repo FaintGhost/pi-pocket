@@ -767,7 +767,7 @@ function DiffSettings() {
             aria-pressed=${wrap ? "true" : "false"}
             onClick=${() => setDiffPrefs({ wrap: !wrap })}
         >
-            Wrap
+            ${t("Wrap")}
         </button>
     </span>`;
 }
@@ -1604,7 +1604,7 @@ export function DiffReview({ active = true, autoFocus = false, covering = false 
                     ${
                         changes.more > 0 &&
                         html`<p class="muted small">
-                            And ${changes.more} more changed ${changes.more === 1 ? "file" : "files"}, not listed here.
+                            ${t(changes.more === 1 ? "And {{count}} more changed file, not listed here." : "And {{count}} more changed files, not listed here.", { count: changes.more })}
                         </p>`
                     }
                 </div>

@@ -46,7 +46,7 @@ export function RunningSheet() {
                     ${
                         session.approvals > 0 &&
                         html`<span class="warn small">
-                            ${session.approvals} waiting for approval
+                            ${t("{{count}} waiting for approval", { count: session.approvals })}
                         </span>`
                     }
                     ${

@@ -97,14 +97,14 @@ function actionItems() {
             run: () => openSheet({ type: "cwd", mode: "new" }),
         },
         piSessionsAvailable() && {
-            label: "Continue a Pi session",
-            detail: "from Pi in the terminal",
+            label: t("Continue a Pi session"),
+            detail: t("from Pi in the terminal"),
             icon: "terminal",
             run: () => openSheet({ type: "pi-sessions" }),
         },
         conversationId !== null && {
             label: t("All sessions"),
-            detail: "home",
+            detail: t("home"),
             icon: "home",
             run: () => navigate(null),
         },
@@ -121,8 +121,8 @@ function actionItems() {
             run: () => openSheet({ type: "appearance" }),
         },
         wide && {
-            label: prefs().tiling ? "Turn tiling off" : "Turn tiling on",
-            detail: "gaps and window borders",
+            label: t(prefs().tiling ? "Turn tiling off" : "Turn tiling on"),
+            detail: t("gaps and window borders"),
             icon: "swatch",
             run: () => setPrefs({ tiling: !prefs().tiling }),
         },
@@ -141,15 +141,15 @@ function actionItems() {
             },
         store.state.me?.role === "owner" &&
             store.state.server?.defaultModel !== undefined && {
-                label: "Default model",
-                detail: "the model and thinking new sessions start with",
+                label: t("Default model"),
+                detail: t("the model and thinking new sessions start with"),
                 icon: "sparkle",
                 run: () => openSheet({ type: "model", id: "default", forDefault: true }),
             },
         conversation &&
             browserAvailable() && {
                 label: store.state.browserOpen ? t("Close the browser") : t("Open the browser"),
-                detail: "see and test pages with Pi",
+                detail: t("see and test pages with Pi"),
                 icon: "globe",
                 keys: "Alt B",
                 run: toggleBrowser,
@@ -165,7 +165,7 @@ function actionItems() {
                     store.state.filesOpen && store.state.filesTab === "files"
                         ? t("Close the files")
                         : t("Files"),
-                detail: "browse the folder, read files",
+                detail: t("browse the folder, read files"),
                 icon: "folder",
                 keys: "Alt E",
                 run: () => toggleFiles("files"),
@@ -173,14 +173,14 @@ function actionItems() {
         conversation &&
             filesAvailable() && {
                 label: t("Changes"),
-                detail: "review what changed, file by file",
+                detail: t("review what changed, file by file"),
                 icon: "fork",
                 run: () => toggleFiles("changes"),
             },
         conversation &&
             branchAvailable() && {
                 label: t("Switch branch"),
-                detail: `on ${headLabel(view.branch)}`,
+                detail: t("on {{branch}}", { branch: headLabel(view.branch) }),
                 icon: "fork",
                 run: () => openSheet({ type: "branch" }),
             },
@@ -199,8 +199,8 @@ function actionItems() {
         session &&
             steer &&
             planAvailable() && {
-                label: view.plan?.on ? "Turn plan mode off" : "Turn plan mode on",
-                detail: "Pi proposes, changes nothing",
+                label: t(view.plan?.on ? "Turn plan mode off" : "Turn plan mode on"),
+                detail: t("Pi proposes, changes nothing"),
                 icon: "shield",
                 run: () => attempt(() => actions.setPlan(!view.plan?.on)),
             },
@@ -221,7 +221,7 @@ function actionItems() {
         },
         session &&
             steer && {
-                label: conversation.archived ? "Unarchive session" : "Archive session",
+                label: t(conversation.archived ? "Unarchive session" : "Archive session"),
                 icon: "archive",
                 run: () => setArchived([conversation.id], !conversation.archived),
             },

@@ -107,7 +107,7 @@ export function InviteSheet({ session = null }) {
             if (asOwner && answer.grant?.role !== "owner") {
                 setFailed(true);
 
-                throw new Error("Restart Pi Pocket to sign in another device as the owner.");
+                throw new Error(t("Restart Pi Pocket to sign in another device as the owner."));
             }
 
             shown.current = answer;
@@ -239,7 +239,7 @@ export function InviteSheet({ session = null }) {
                         </div>
                         <div
                             class="invite-code-value"
-                            aria-label=${`Invite code ${invite.code.split("").join(" ")}`}
+                            aria-label=${t("Invite code {{code}}", { code: invite.code.split("").join(" ") })}
                         >
                             <span>${invite.code.slice(0, 5)}</span>
                             <span>${invite.code.slice(5)}</span>
@@ -269,7 +269,7 @@ export function InviteSheet({ session = null }) {
                     ${
                         invite.alternatives?.length > 0 &&
                         html`<p class="muted small">
-                            Also reachable at: ${invite.alternatives.map(
+                            ${t("Also reachable at:")} ${invite.alternatives.map(
                                 (url) => html`<span class="mono">${url} </span>`,
                             )}
                         </p>`

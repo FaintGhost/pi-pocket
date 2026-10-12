@@ -51,9 +51,9 @@ function NewFolder({ folder, onMake, onCancel }) {
             }}
         />
         <button class="button small primary" type="submit" disabled=${name.trim() === ""}>
-            Create
+            ${t("Create")}
         </button>
-        <button class="icon-button" type="button" aria-label="Cancel" onClick=${onCancel}>
+        <button class="icon-button" type="button" aria-label=${t("Cancel")} onClick=${onCancel}>
             <${Icon} name="close" size=${16} />
         </button>
     </form>`;

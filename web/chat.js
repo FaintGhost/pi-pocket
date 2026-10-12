@@ -67,7 +67,7 @@ export function PeopleButton() {
     const docked = peopleDocked();
     const label =
         others.length === 0
-            ? "Chat"
+            ? t("Chat")
             : t("Chat with {{names}}", { names: others.map((person) => person.name).join(", ") });
 
     // Quiet with no one else here and nothing unread, unless the panel is open: the menu has the chat.
@@ -535,7 +535,7 @@ function ChatTab({ highlight, focus }) {
 function PinsTab({ onShowChat }) {
     const { view, users } = store.state;
     const pins = [...(view.pins ?? [])].reverse();
-    const by = (id) => users.find((user) => user.id === id)?.name ?? "someone";
+    const by = (id) => users.find((user) => user.id === id)?.name ?? t("someone");
 
     if (pins.length === 0) {
         return html`<p class="muted">
@@ -558,7 +558,7 @@ function PinsTab({ onShowChat }) {
                             ${pin.author}
                         </span>
                         <span class="muted">
-                            ${pin.chatId ? "in chat" : "in the conversation"} · pinned by ${by(pin.by)} ${timeAgo(pin.at)}
+                            ${t(pin.chatId ? "in chat" : "in the conversation")} · ${t("pinned by {{name}} {{when}}", { name: by(pin.by), when: timeAgo(pin.at) })}
                         </span>
                     </div>
                     <div class="pin-text">${pin.text}</div>
@@ -588,7 +588,7 @@ function NotesTab() {
 
     const editing = draft !== null;
     const changedMeanwhile = editing && notes.rev !== base;
-    const by = notes.by ? (users.find((user) => user.id === notes.by)?.name ?? "someone") : null;
+    const by = notes.by ? (users.find((user) => user.id === notes.by)?.name ?? t("someone")) : null;
 
     const save = async (rev = base) => {
         setSaving(true);
@@ -646,7 +646,7 @@ function NotesTab() {
                 class="button small"
                 onClick=${() => insertIntoComposer(`Shared notes:\n\n${notes.text}\n\n`)}
             >
-                Send to Pi
+                ${t("Send to Pi")}
             </button>`
         }
         ${

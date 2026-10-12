@@ -63,7 +63,7 @@ export function Thumb({ src, alt = "image" }) {
     const [broken, setBroken] = useState(false);
 
     if (broken) {
-        return html`<span class="chip" title="This image could not be loaded">🖼 ${alt}</span>`;
+        return html`<span class="chip" title=${t("This image could not be loaded")}>🖼 ${alt}</span>`;
     }
 
     return html`<button
@@ -617,7 +617,7 @@ export function formatBytes(bytes) {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const currentUiLocale = () => store.state.uiLocale || "en";
+const currentUiLocale = () => (store.state.uiLocale === "en" ? undefined : store.state.uiLocale);
 
 export function formatLocaleDate(ms, options) {
     return new Date(ms).toLocaleDateString(currentUiLocale(), options);

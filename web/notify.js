@@ -131,13 +131,13 @@ export function NotificationsSheet() {
 
             try {
                 if ((await Notification.requestPermission()) !== "granted") {
-                    throw new Error("Notifications were not allowed.");
+                    throw new Error(t("Notifications were not allowed."));
                 }
 
                 const registration = await registerWorker();
 
                 if (!registration) {
-                    throw new Error("The service worker did not start.");
+                    throw new Error(t("The service worker did not start."));
                 }
 
                 await navigator.serviceWorker.ready;

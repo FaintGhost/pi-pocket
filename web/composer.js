@@ -145,7 +145,7 @@ function DriverBar() {
         return null;
     }
 
-    const name = (id) => users.find((user) => user.id === id)?.name ?? "someone";
+    const name = (id) => users.find((user) => user.id === id)?.name ?? t("someone");
     const driving = turns.driver === me?.id;
     const driverHere =
         turns.driver !== undefined && presence.some((person) => person.id === turns.driver);
@@ -158,10 +158,10 @@ function DriverBar() {
         );
 
         return html`<div class="driver-bar mine">
-            <span class="driver-label">🚗 You're driving</span>
+            <span class="driver-label">🚗 ${t("You're driving")}</span>
             ${turns.asks.map(
                 (id) => html`<span class="driver-ask">
-                    ${name(id)} asks to drive <button class="link small" onClick=${() => run("handover", id)}>${t("Hand over")}</button>
+                    ${t("{{name}} asks to drive", { name: name(id) })} <button class="link small" onClick=${() => run("handover", id)}>${t("Hand over")}</button>
                 </span>`,
             )}
             <span class="grow"></span>
@@ -193,14 +193,14 @@ function DriverBar() {
 
     return html`<div class="driver-bar">
         <span class="driver-label">
-            ${turns.driver === undefined ? "🚗 No one is driving" : `🚗 ${name(turns.driver)} is driving${driverHere ? "" : " (away)"}`}
+            🚗 ${turns.driver === undefined ? t("No one is driving") : t(driverHere ? "{{name}} is driving" : "{{name}} is driving (away)", { name: name(turns.driver) })}
         </span>
         <span class="grow"></span>
         ${
             turns.driver !== undefined &&
             driverHere &&
             html`<button class="button small" disabled=${asked} onClick=${() => run("ask")}>
-                ${asked ? "Asked ✓" : "Ask to drive"}
+                ${t(asked ? "Asked ✓" : "Ask to drive")}
             </button>`
         }
         ${
@@ -225,7 +225,7 @@ function PlanBar({ blocked }) {
 
     return html`<div class="plan-bar">
         <span class="grow">
-            <strong>${t("Plan mode.")}</strong> ${subagent ? "This subagent follows its session: it reads, and changes nothing." : "Pi reads and proposes; nothing changes until you approve."}
+            <strong>${t("Plan mode.")}</strong> ${t(subagent ? "This subagent follows its session: it reads, and changes nothing." : "Pi reads and proposes; nothing changes until you approve.")}
         </span>
         ${
             !blocked &&
@@ -255,17 +255,17 @@ function GoalBar() {
     const command = html`<span class="mono">${goal.command}</span>`;
     const text =
         goal.status === "met"
-            ? html`<strong>Done:</strong> ${command} passes (check ${goal.tries} of ${goal.max}).`
+            ? html`<strong>${t("Done:")}</strong> ${command} ${t("passes (check {{tries}} of {{max}}).", { tries: goal.tries, max: goal.max })}`
             : goal.status === "gave-up"
-              ? html`<strong>Stopped:</strong> ${command} still fails after ${goal.max} checks.`
-              : html`<strong>Until</strong> ${command} passes${goal.tries > 0 ? ` · check ${goal.tries} of ${goal.max} failed` : ""}.`;
+              ? html`<strong>${t("Stopped:")}</strong> ${command} ${t("still fails after {{max}} checks.", { max: goal.max })}`
+              : html`<strong>${t("Until")}</strong> ${command} ${t("passes")}${goal.tries > 0 ? ` · ${t("check {{tries}} of {{max}} failed", { tries: goal.tries, max: goal.max })}` : ""}.`;
 
     return html`<div class=${`goal-bar ${goal.status}`}>
         <span class="grow">${text}</span>
         ${
             canSteer() &&
             html`<button class="link small" onClick=${() => attempt(actions.clearGoal)}>
-                ${goal.status === "working" ? "Drop" : "Dismiss"}
+                ${t(goal.status === "working" ? "Drop" : "Dismiss")}
             </button>`
         }
     </div>`;
@@ -281,15 +281,17 @@ const WATCH_CHECKS = {
 function watchEnded(watch) {
     switch (watch.status) {
         case "merged":
-            return "was merged.";
+            return t("was merged.");
         case "closed":
-            return "was closed.";
+            return t("was closed.");
         case "gave-up":
-            return `had more to tell than ${watch.max} messages: watch stopped.`;
+            return t("had more to tell than {{max}} messages: watch stopped.", { max: watch.max });
         case "expired":
-            return "had nothing new for two weeks: watch stopped.";
+            return t("had nothing new for two weeks: watch stopped.");
         default:
-            return `could not be watched: ${watch.note ?? "something went wrong"}.`;
+            return t("could not be watched: {{error}}.", {
+                error: watch.note ?? t("something went wrong"),
+            });
     }
 }
 
@@ -305,7 +307,7 @@ function WatchBar() {
     const checks = WATCH_CHECKS[watch.checks];
     const text =
         watch.status === "watching"
-            ? html`<strong>Watching</strong> ${pr}${checks ? ` · ${checks}` : ""}${watch.sent > 0 ? ` · ${watch.sent} of ${watch.max} sent` : ""}${watch.unchecked ? " · owner's comments only" : ""}${watch.errors > 0 ? " · last look failed" : watch.note ? " · waiting" : ""}`
+            ? html`<strong>${t("Watching")}</strong> ${pr}${checks ? ` · ${t(checks)}` : ""}${watch.sent > 0 ? ` · ${t("{{sent}} of {{max}} sent", { sent: watch.sent, max: watch.max })}` : ""}${watch.unchecked ? ` · ${t("owner's comments only")}` : ""}${watch.errors > 0 ? ` · ${t("last look failed")}` : watch.note ? ` · ${t("waiting")}` : ""}`
             : html`${pr} ${watchEnded(watch)}`;
 
     return html`<div
@@ -313,7 +315,9 @@ function WatchBar() {
         title=${[
             watch.title,
             watch.unchecked &&
-                "Only the repository owner's comments count: gh cannot push there, so GitHub does not say who else can write.",
+                t(
+                    "Only the repository owner's comments count: gh cannot push there, so GitHub does not say who else can write.",
+                ),
             watch.note,
         ]
             .filter(Boolean)
@@ -922,8 +926,8 @@ export function Composer() {
         item.by === undefined
             ? ""
             : item.by === me?.id
-              ? " · you"
-              : ` · ${users.find((user) => user.id === item.by)?.name ?? "someone"}`;
+              ? ` · ${t("you")}`
+              : ` · ${users.find((user) => user.id === item.by)?.name ?? t("someone")}`;
 
     useDock(dock);
     // View only now, or someone else took the wheel: the box goes, and dictation with it.
@@ -968,7 +972,7 @@ export function Composer() {
                 // How many wait: shown when the queue does not show them all (`dock.js`).
                 inbox.length > 0 &&
                 html`<div class="inbox-count">
-                    ${inbox.length} ${inbox.length === 1 ? "message" : "messages"} waiting for Pi
+                    ${t(inbox.length === 1 ? "{{count}} message waiting for Pi" : "{{count}} messages waiting for Pi", { count: inbox.length })}
                 </div>`
             }
             ${
@@ -1023,7 +1027,7 @@ export function Composer() {
                           ref=${list}
                       >
                           <div class="file-note">
-                              ${t("Sent before")}${text.trim() ? ` with “${text.trim()}”` : ""} · Enter puts it in the box · Esc closes
+                              ${t("Sent before")}${text.trim() ? t(" with “{{query}}”", { query: text.trim() }) : ""} · ${t("Enter puts it in the box · Esc closes")}
                           </div>
                           ${recalled.map(
                               (each) => html`<button
@@ -1044,7 +1048,7 @@ export function Composer() {
                           ${
                               recalled.length === 0 &&
                               html`<div class="file-note">
-                                  Nothing sent from this browser matches.
+                                  ${t("Nothing sent from this browser matches.")}
                               </div>`
                           }
                       </div>`
@@ -1052,14 +1056,14 @@ export function Composer() {
                 ${
                     shell &&
                     html`<div class="command-hint">
-                        <span class="command-name">${shell.context ? "!" : "!!"}</span> <span class="muted">· runs in this session's folder · ${shell.context ? "Pi sees the output (!! to keep it from Pi)" : "only the people here see the output"}</span>
+                        <span class="command-name">${shell.context ? "!" : "!!"}</span> <span class="muted">· ${t("runs in this session's folder")} · ${t(shell.context ? "Pi sees the output (!! to keep it from Pi)" : "only the people here see the output")}</span>
                     </div>`
                 }
                 ${
                     pasted &&
                     !shell &&
                     html`<div class="command-hint muted">
-                        Pasted text goes out in full where its placeholder is.
+                        ${t("Pasted text goes out in full where its placeholder is.")}
                     </div>`
                 }
                 ${
@@ -1119,7 +1123,7 @@ export function Composer() {
                         ${
                             found.truncated &&
                             html`<div class="file-note">
-                                A large folder: only the files nearest its top are listed.
+                                ${t("A large folder: only the files nearest its top are listed.")}
                             </div>`
                         }
                     </div>`
@@ -1138,9 +1142,9 @@ export function Composer() {
                                 <span class="command-name">/${command.name}</span>
                                 ${
                                     command.args &&
-                                    html`<span class="command-args">${command.args}</span>`
+                                    html`<span class="command-args">${command.template ? command.args : t(command.args)}</span>`
                                 }
-                                <span class="command-description">${command.description}</span>
+                                <span class="command-description">${command.template ? command.description : t(command.description)}</span>
                             </button>`,
                         )}
                     </div>`
@@ -1152,8 +1156,8 @@ export function Composer() {
                         <span class="command-name">/${parsed.command.name}</span>
                         ${
                             parsed.command.args &&
-                            html` <span class="command-args">${parsed.command.args}</span>`
-                        } <span class="muted">· ${parsed.command.description} · not sent to Pi</span>
+                            html` <span class="command-args">${parsed.command.template ? parsed.command.args : t(parsed.command.args)}</span>`
+                        } <span class="muted">· ${parsed.command.template ? parsed.command.description : t(parsed.command.description)} · ${t("not sent to Pi")}</span>
                     </div>`
                 }
                 ${
@@ -1252,13 +1256,13 @@ export function Composer() {
                         />
                         <button
                             class=${`model-chip ${agent?.available === false ? "warn" : ""}`}
-                            aria-label=${`Model: ${modelLabel(agent)}${level ? `, thinking ${level}` : ""}`}
-                            title=${`Model and thinking: ${modelLabel(agent)}${level ? `, ${level}` : ""}`}
+                            aria-label=${level ? t("Model: {{model}}, thinking {{level}}", { model: modelLabel(agent), level: t(level) }) : t("Model: {{model}}", { model: modelLabel(agent) })}
+                            title=${t("Model and thinking: {{model}}{{level}}", { model: modelLabel(agent), level: level ? `, ${t(level)}` : "" })}
                             onClick=${() => openSheet({ type: "model" })}
                         >
                             <${Icon} name="sparkle" size=${12} class="model-spark" />
                             <span class="model-name">${shortModel(agent)}</span>
-                            ${level && html`<span class="model-level">${level}</span>`}
+                            ${level && html`<span class="model-level">${t(level)}</span>`}
                         </button>
                         ${
                             planAvailable() &&
@@ -1394,7 +1398,7 @@ function StatusLine() {
     if (connection !== "open") {
         parts.push(
             html`<span class="warn">
-                ${connection === "connecting" ? "connecting…" : "reconnecting…"}
+                ${t(connection === "connecting" ? "connecting…" : "reconnecting…")}
             </span>`,
         );
     }
@@ -1404,9 +1408,9 @@ function StatusLine() {
 
     parts.push(
         html`<span
-            title=${`${(view.viewers ?? []).join(", ")}${view.clients > here ? ` · ${view.clients} tabs` : ""}`}
+            title=${`${(view.viewers ?? []).join(", ")}${view.clients > here ? ` · ${t("{{count}} tabs", { count: view.clients })}` : ""}`}
         >
-            ${here} here
+            ${t("{{count}} here", { count: here })}
         </span>`,
     );
 
@@ -1415,11 +1419,14 @@ function StatusLine() {
         const percent = Math.min(100, Math.round((used / window) * 100));
         // Compacted since the last answer: what is left, estimated until the next answer measures it.
         const about = stats.contextEstimated ? "~" : "";
-        const title = `${about}${formatTokens(used)} of ${formatTokens(window)} tokens in context`;
+        const title = t("{{used}} of {{total}} tokens in context", {
+            used: `${about}${formatTokens(used)}`,
+            total: formatTokens(window),
+        });
 
         parts.push(
             html`<span class="context" title=${title}>
-                context
+                ${t("context")}
                 <span class="meter" aria-hidden="true">
                     <span style=${`width:${percent}%`}></span>
                 </span>
@@ -1429,7 +1436,9 @@ function StatusLine() {
     }
 
     if (stats.cacheRate !== undefined) {
-        parts.push(html`<span>cache ${Math.round(stats.cacheRate * 100)}%</span>`);
+        parts.push(
+            html`<span>${t("cache {{percent}}%", { percent: Math.round(stats.cacheRate * 100) })}</span>`,
+        );
     }
 
     // The session's spend, its subagents' included, and its limit when it has one.
@@ -1454,7 +1463,7 @@ function StatusLine() {
                 onClick=${() => openSheet({ type: "extensions" })}
             >
                 <${Icon} name="shield" size=${11} />
-                ${failed ? "guard failed" : guard.enabled ? "guard on" : "guard off"}
+                ${t(failed ? "guard failed" : guard.enabled ? "guard on" : "guard off")}
             </button>`,
         );
     }

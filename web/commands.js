@@ -159,8 +159,8 @@ async function setThinking(arg) {
     if (!levels.includes(level)) {
         throw new Error(
             levels.length > 1
-                ? `Thinking can be ${levels.join(", ")}.`
-                : `${modelLabel(agent())} does not think.`,
+                ? t("Thinking can be {{levels}}.", { levels: levels.join(", ") })
+                : t("{{model}} does not think.", { model: modelLabel(agent()) }),
         );
     }
 
@@ -210,7 +210,10 @@ function showSession() {
 
     if (window) {
         parts.push(
-            `context ${Math.round(((stats.contextTokens ?? 0) / window) * 100)}% of ${formatTokens(window)}`,
+            t("context {{percent}}% of {{tokens}}", {
+                percent: Math.round(((stats.contextTokens ?? 0) / window) * 100),
+                tokens: formatTokens(window),
+            }),
         );
     }
 
@@ -317,8 +320,8 @@ const COMMANDS = [
             notify(
                 "info",
                 lesson.pending
-                    ? "Remembered. Pi uses it once the owner approves it."
-                    : "Remembered. Pi gets it from its next message.",
+                    ? t("Remembered. Pi uses it once the owner approves it.")
+                    : t("Remembered. Pi gets it from its next message."),
             );
         },
     },
@@ -329,7 +332,7 @@ const COMMANDS = [
         available: goalsAvailable,
         run: async (arg) => {
             if (arg === "") {
-                throw new Error("Say which command has to pass, such as /until npm test.");
+                throw new Error(t("Say which command has to pass, such as /until npm test."));
             }
 
             await actions.setGoal(arg);
@@ -456,7 +459,10 @@ function setTheme(arg) {
 
     if (!id) {
         throw new Error(
-            `No theme called “${arg}”. Try ${Object.keys(THEMES).slice(0, 4).join(", ")}, or desktop.`,
+            t("No theme called “{{name}}”. Try {{themes}}, or desktop.", {
+                name: arg,
+                themes: Object.keys(THEMES).slice(0, 4).join(", "),
+            }),
         );
     }
 

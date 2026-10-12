@@ -72,8 +72,8 @@ function SendAgain({ prompt, worktree }) {
     );
 
     return html`<div class="group">
-        <div class="group-title">Send again in a new session</div>
-        ${item(`With ${modelLabel(view.agent)}`, () => openBranch(() => actions.resend(prompt.id, { worktree })), t("same model"))}
+        <div class="group-title">${t("Send again in a new session")}</div>
+        ${item(t("With {{model}}", { model: modelLabel(view.agent) }), () => openBranch(() => actions.resend(prompt.id, { worktree })), t("same model"))}
         ${
             choosing
                 ? html`<label class="search">
@@ -113,7 +113,7 @@ export function MessageSheet({ entryId }) {
 
     if (entry?.kind !== "user" && entry?.kind !== "assistant") {
         return html`<${Sheet} title=${t("Message")} onClose=${closeSheet}>
-            <p class="muted">This message is not here anymore.</p>
+            <p class="muted">${t("This message is not here anymore.")}</p>
         <//>`;
     }
 
@@ -132,7 +132,7 @@ export function MessageSheet({ entryId }) {
     if (draft !== null) {
         return html`<${Sheet} title=${t("Edit and send again")} onClose=${closeSheet}>
             <p class="muted small">
-                Pi gets the edited message in a new session that forks just before the original. The original stays as it is.
+                ${t("Pi gets the edited message in a new session that forks just before the original. The original stays as it is.")}
             </p>
             <textarea
                 rows="6"
@@ -141,12 +141,12 @@ export function MessageSheet({ entryId }) {
                 onInput=${(event) => setDraft(event.currentTarget.value)}
             ></textarea>
             <div class="row">
-                <button class="button" onClick=${() => setDraft(null)}>Back</button>
+                <button class="button" onClick=${() => setDraft(null)}>${t("Back")}</button>
                 <button
                     class="button primary grow"
                     onClick=${() => openBranch(() => actions.resend(entry.id, { text: draft, worktree }))}
                 >
-                    Send in a new session
+                    ${t("Send in a new session")}
                 </button>
             </div>
         <//>`;

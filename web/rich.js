@@ -223,7 +223,7 @@ function RichBlock({ kind, lang, source, streaming }) {
                         class=${view === "code" ? "on" : ""}
                         onClick=${() => setView("code")}
                     >
-                        Code
+                        ${t("Code")}
                     </button>
                 </span>`
             }

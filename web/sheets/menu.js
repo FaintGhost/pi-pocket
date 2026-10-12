@@ -170,7 +170,7 @@ function trustHint() {
     }
 
     if (info.ask) {
-        return "not decided";
+        return t("not decided");
     }
 
     // No decision, and nothing waiting for one: there is nothing to say.
@@ -178,7 +178,7 @@ function trustHint() {
         return "";
     }
 
-    return info.trusted ? "trusted" : "not trusted";
+    return t(info.trusted ? "trusted" : "not trusted");
 }
 
 export function MenuSheet() {
@@ -259,34 +259,67 @@ export function MenuSheet() {
                 store.state.browser?.open && displayUrl(store.state.browser.url),
             )
         }
-                aria-label=${
-                    place.count > 0
-                        ? t("{{label}}, {{count}} {{kind}}", {
-                              label: place.label,
-                              count: place.count,
-                              kind: t(place.counted ?? ""),
-                          }).trim()
-                        : place.dot
-                          ? place.dotLabel
-                              ? t("{{label}}, {{detail}}", {
-                                    label: place.label,
-                                    detail: t(place.dotLabel),
-                                })
-                              : t("{{label}}, a page open", { label: place.label })
-                          : place.label
-                }
-
+        ${
+            conversation &&
+            trustAvailable() &&
+            item(t("Project trust"), () => openSheet({ type: "trust" }), trustHint())
+        }
+        ${
+            session &&
+            steer &&
+            driving &&
+            item(
+                t("Instructions for Pi"),
+                () => openSheet({ type: "instructions" }),
+                instructions ? t("on") : t("none"),
+            )
+        }
+        ${
+            conversation &&
+            steer &&
+            driving &&
+            item(
+                t("Compact context"),
+                () => openSheet({ type: "compact" }),
+                t("summarize older messages"),
+            )
+        }
+        ${
+            conversation &&
+            steer &&
+            driving &&
+            item(
+                t("New context"),
+                () => openSheet({ type: "reset" }),
+                t("Pi starts fresh; history stays"),
+            )
+        }
+        ${
+            conversation &&
+            memoryAvailable() &&
+            item(t("Memory"), () => openSheet({ type: "memory" }), memoryHint(memory))
+        }
+        ${
+            schedulesAvailable() &&
+            item(
+                t("Scheduled messages"),
+                () => openSheet({ type: "schedules" }),
+                view.schedules.length === 0
+                    ? t("none")
+                    : t("{{count}} coming", { count: view.schedules.length }),
+            )
+        }
         ${
             watchAvailable() &&
             steer &&
             view.watch?.status !== "watching" &&
             item(
-                "Watch pull request",
+                t("Watch pull request"),
                 () => {
                     closeSheet();
                     attempt(() => watchPr());
                 },
-                "fix CI, answer reviews",
+                t("fix CI, answer reviews"),
             )
         }
         ${
@@ -323,7 +356,6 @@ export function MenuSheet() {
 
                         () => openSubagent(agent.conversationId),
                         t(agent.busy ? "working" : "idle"),
-
                     ),
                 )}
             </div>`

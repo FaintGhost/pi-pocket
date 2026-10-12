@@ -49,7 +49,7 @@ function Track({ upstream }) {
     }
 
     if (upstream.gone) {
-        return html`<span class="branch-track warn" title=${t("{{name}} is gone", { name: upstream.name })}>{t("gone")}</span>`;
+        return html`<span class="branch-track warn" title=${t("{{name}} is gone", { name: upstream.name })}>${t("gone")}</span>`;
     }
 
     return (

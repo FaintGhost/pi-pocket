@@ -10,7 +10,7 @@ import {
     until,
 } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -26,29 +26,8 @@ const real = {
     skip: chromium === undefined ? "no Chromium-based browser on this machine" : false,
 } as const;
 const dataDir = join(root, "i18n-ui-data");
-const localeFile = "i18n-ui-fixture.ts";
+const localeFile = "zh-cn-ui.ts";
 const draft = "Draft stays here while the interface changes.";
-
-const localeModule = `/** A small test locale for the live UI translation test. */
-import { defineExtension } from "@earendil-works/pi-durable";
-
-export default () => ({
-    ...defineExtension({ name: "i18n-ui-fixture" }),
-    uiLocales: [
-        {
-            locale: "zh-CN",
-            label: "简体中文",
-            default: true,
-            strings: {
-                Menu: "菜单",
-                Extensions: "扩展",
-                Appearance: "外观",
-            },
-            templates: {},
-        },
-    ],
-});
-`;
 
 let app: App | undefined;
 let server: Server | undefined;
@@ -67,7 +46,10 @@ before(async () => {
     const dropIns = join(dataDir, "extensions");
 
     mkdirSync(dropIns, { recursive: true });
-    writeFileSync(join(dropIns, localeFile), localeModule);
+    copyFileSync(
+        join(import.meta.dirname, "../docs/examples/zh-cn-ui.ts"),
+        join(dropIns, localeFile),
+    );
     const active = await openApp(scriptedModel(), dataDir);
 
     app = active;
@@ -101,7 +83,11 @@ before(async () => {
                 ) === true,
             "the signed-in guest session",
             20_000,
-        );
+        ).catch((error) => {
+            throw new Error(`${String(error)}; browser logs: ${JSON.stringify(page.logs())}`, {
+                cause: error,
+            });
+        });
     }
 });
 
@@ -258,6 +244,32 @@ test(
             assertNoReloadAndNoDataChanges(state, initial);
         }
 
+        const rawError = "EXTERNAL RAW {{name}} <img>";
+        const attachment = "Menu {{name}} /some/path";
+        const notice = `Could not attach ${attachment}: ${rawError}`;
+
+        active.notice("error", notice, session, {
+            key: "Could not attach {{name}}: {{error}}",
+            params: { name: attachment, error: rawError },
+        });
+        active.notice("error", rawError, session);
+        await until(async () => {
+            const texts = await Promise.all(
+                [phonePage, computerPage].map((page) =>
+                    page.evaluate(`document.querySelector('.notices')?.textContent ?? ''`),
+                ),
+            );
+
+            return texts.every((text) => text.includes("无法附加") && text.includes(rawError));
+        }, "both pages render structured notices without translating raw errors");
+
+        for (const page of [phonePage, computerPage]) {
+            assert.equal(
+                await page.evaluate(`document.querySelectorAll('.notices img').length`),
+                "0",
+            );
+        }
+
         const disabled = await postExtension(active.config.ownerToken, false);
 
         assert.equal(disabled.status, 200, "the owner disables the test locale through the API");
@@ -292,6 +304,23 @@ test(
             assert.ok(state.labels.includes("Appearance"), `${label} restores Appearance`);
             assert.equal(state.menuButton, "Menu", `${label} restores the English Menu control`);
             assertNoReloadAndNoDataChanges(state, initial);
+        }
+
+        for (const page of [phonePage, computerPage]) {
+            const noticeText = await page.evaluate(
+                `document.querySelector('.notices').textContent`,
+            );
+
+            assert.ok(
+                noticeText.includes(notice),
+                "open structured notice switches back to English",
+            );
+            assert.ok(noticeText.includes(rawError), "raw external errors stay unchanged");
+            assert.deepEqual(
+                page.logs().filter((entry) => entry.level === "error"),
+                [],
+                "no browser console errors",
+            );
         }
     },
 );

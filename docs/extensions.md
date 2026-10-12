@@ -58,6 +58,12 @@ The file:
 
 ### UI locale packs (data only)
 
+[`examples/zh-cn-ui.ts`](examples/zh-cn-ui.ts) is an optional Simplified Chinese pack. Copy it into the data folder's `extensions/` directory, then turn it on in **Menu → Extensions**. Like other drop-ins, it starts off. Turning it off restores English, including in already-open panels. It adds no tools or hooks and does not change the model's language or a person's content.
+
+The pack covers fixed application strings, labels, and named templates, not every surface: pre-sign-in pages, persisted activity, raw provider/tool errors, and some dynamic status summaries remain English. Missing keys use their English source. Optional server notice metadata supplies a key and parameters for presentation only; its original message and log remain unchanged.
+
+This separate, data-only path translates fixed Pocket UI. It does not translate user-authored text, model output, provider names, or arbitrary HTML.
+
 A Pocket extension may also return optional `uiLocales` data alongside its ordinary tools, sections, hooks, or tasks. The shape is:
 
 ```typescript

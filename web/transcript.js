@@ -44,7 +44,9 @@ import {
     copyText,
     entryImageUrl,
     fileUrl,
+    formatLocaleDate,
     formatLocaleDateTime,
+    formatLocaleTime,
     html,
     Icon,
     Markdown,
@@ -214,7 +216,7 @@ function Report({ report, view, fresh }) {
             ${
                 child &&
                 html`<button class="link" onClick=${() => openSubagent(child.conversationId)}>
-                    Open →
+                    ${t("Open")} →
                 </button>`
             }
         </div>
@@ -241,11 +243,11 @@ function span(ms) {
 /** When a message was sent, from the server's time: "10:42" today, "Oct 3 10:42" before. */
 function clock(at) {
     const date = new Date(fromServer(at));
-    const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const time = formatLocaleTime(date.getTime(), { hour: "numeric", minute: "2-digit" });
 
     return date.toDateString() === new Date().toDateString()
         ? time
-        : `${date.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
+        : `${formatLocaleDate(date.getTime(), { month: "short", day: "numeric" })} ${time}`;
 }
 
 /**
@@ -901,7 +903,7 @@ function ToolStep({
                     onClick=${() => openSubagent(child)}
 
                 >
-                    Open →
+                    ${t("Open")} →
                 </button>`
             }
         </div>
@@ -1252,7 +1254,9 @@ function AnswerActions({ entry }) {
     const names = (ids) =>
         ids
             .map((id) =>
-                id === me?.id ? "you" : (users.find((user) => user.id === id)?.name ?? "someone"),
+                id === me?.id
+                    ? t("you")
+                    : (users.find((user) => user.id === id)?.name ?? t("someone")),
             )
             .join(", ");
 
@@ -1377,7 +1381,7 @@ function Divider({ entry }) {
 
     return html`<div class="divider">
         <button class="link" onClick=${() => setOpen(!open)}>
-            Context compacted ${open ? "▾" : "▸"}
+            ${t("Context compacted")} ${open ? "▾" : "▸"}
         </button>
         ${open && html`<div class="divider-body"><${Markdown} text=${entry.summary} /></div>`}
     </div>`;
@@ -1535,7 +1539,7 @@ function PendingShells({ conversationId, rows }) {
             <div class="shell-card">
                 <div class="shell-head">
                     <span class="mono shell-command">$ ${each.command}</span>
-                    <span class="muted small"><${Spinner} /> running</span>
+                    <span class="muted small"><${Spinner} /> ${t("running")}</span>
                     <button
                         class="link small"
                         onClick=${() => attempt(() => actions.stopShell(each.taskId))}
@@ -1880,7 +1884,7 @@ function LiveLine({ live, approvals, start }) {
                 : html`<${Spinner} hidden=${true} />`
         }
         <span class="live-state" role="status">
-            ${t(state)}${retry && !waiting && seconds > 0 && html`<span aria-hidden="true"> in ${seconds}s</span>`}
+            ${t(state)}${retry && !waiting && seconds > 0 && html`<span aria-hidden="true"> ${t("in {{seconds}}s", { seconds })}</span>`}
         </span>
         ${start !== undefined && html`<span aria-hidden="true">${span(Date.now() - start)}</span>`}
         ${
@@ -1888,7 +1892,7 @@ function LiveLine({ live, approvals, start }) {
             !waiting &&
             html`<span
                 class="live-why"
-                title=${`Attempt ${live.generation.attempt + 1}, after: ${retry.error}`}
+                title=${t("Attempt {{count}}, after: {{error}}", { count: live.generation.attempt + 1, error: retry.error })}
             >
                 ${retry.error}
             </span>`
@@ -2148,7 +2152,7 @@ export function Transcript() {
                         <${Icon} name="fork" size=${14} /> ${t("Forked from {{title}}", { title: source.title ?? t("New session") })}
                     </button>`
                     : html`<p class="muted small">
-                        <${Icon} name="fork" size=${14} /> Forked from another session
+                        <${Icon} name="fork" size=${14} /> ${t("Forked from another session")}
                     </p>`)
             }
             ${

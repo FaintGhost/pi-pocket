@@ -225,7 +225,7 @@ function sheetBody(sheet) {
                 title=${t("New context")}
                 hint=${t("Pi starts fresh: it no longer sees the messages so far, though everyone here still does.")}
                 label=${t("Handoff note (optional)")}
-                placeholder="e.g. We fixed the login bug; next is the signup form."
+                placeholder=${t("e.g. We fixed the login bug; next is the signup form.")}
                 multiline=${true}
                 button=${t("Start a new context")}
                 submit=${(value) => actions.reset(value)}

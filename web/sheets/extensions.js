@@ -190,7 +190,7 @@ export function ExtensionsSheet() {
                     }
                     ${module.error && html`<div class="error-box small">${module.error}</div>`}
                     <div class="muted small mono">
-                        ${module.source === "drop-in" ? `drop-in${module.path ? ` · ${shortPath(module.path, store.state.server?.home)}` : ""}` : module.file}
+                        ${module.source === "drop-in" ? `${t("drop-in")}${module.path ? ` · ${shortPath(module.path, store.state.server?.home)}` : ""}` : module.file}
                         ${tools.length > 0 ? ` · ${t("tools: {{tools}}", { tools: tools.join(", ") })}` : ""}
                         ${module.required ? ` · ${t("required")}` : ""}
                     </div>
@@ -199,7 +199,7 @@ export function ExtensionsSheet() {
                     <${Switch}
                         on=${module.enabled}
                         disabled=${!owner || module.required || busy !== null}
-                        label=${t("{{title}}: {{state}}", { title: module.title, state: t(module.enabled ? "on" : "off") })}
+                        label=${t("{{title}}: {{state}}", { title: module.source === "built-in" ? t(module.title) : module.title, state: t(module.enabled ? "on" : "off") })}
                         onChange=${() => toggle(module)}
                     />
                     ${

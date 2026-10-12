@@ -298,7 +298,7 @@ function Screen({ frame, interactive, send }) {
         return html`<img
             class="browser-screen"
             src=${frame.src}
-            alt="The page"
+            alt=${t("The page")}
             draggable="false"
         />`;
     }
@@ -444,7 +444,7 @@ function Screen({ frame, interactive, send }) {
         ref=${ref}
         class="browser-screen live"
         src=${frame.src}
-        alt="The page. Click to use it; once focused, keys go to the page."
+        alt=${t("The page. Click to use it; once focused, keys go to the page.")}
         tabindex="0"
         draggable="false"
         onPointerDown=${down}
@@ -568,7 +568,7 @@ function ConsolePane({ conversationId, logs, steer, onClose }) {
         <header>
             <strong>${t("Console")}</strong>
             <span class="muted small">
-                ${entries ? `${entries.filter((entry) => entry.level !== "nav").length} lines` : ""}
+                ${entries ? t("{{count}} lines", { count: entries.filter((entry) => entry.level !== "nav").length }) : ""}
             </span>
             <span class="spacer"></span>
             ${
@@ -808,7 +808,7 @@ export function BrowserPanel({ leaving = false }) {
         stage = html`<div class="browser-note">
             <${Icon} name="globe" size=${28} />
             <p>
-                No browser was found on the machine Pi Pocket runs on. Install Chromium or Google Chrome there (or set <code>PI_POCKET_BROWSER</code> to a browser's path), then restart Pi Pocket.
+                ${t("No browser was found on the machine Pi Pocket runs on. Install Chromium or Google Chrome there (or set PI_POCKET_BROWSER to a browser's path), then restart Pi Pocket.")}
             </p>
         </div>`;
     } else if (!open && why) {
@@ -896,7 +896,7 @@ export function BrowserPanel({ leaving = false }) {
             <form class="browser-address" onSubmit=${go}>
                 <input
                     value=${address ?? displayUrl(state?.url)}
-                    placeholder=${steer ? "Address, such as localhost:5173" : ""}
+                    placeholder=${steer ? t("Address, such as localhost:5173") : ""}
                     title=${state?.title || state?.url || ""}
                     readonly=${!steer}
                     autocapitalize="off"
@@ -920,8 +920,8 @@ export function BrowserPanel({ leaving = false }) {
             </form>
             <button
                 class="icon-button"
-                aria-label=${`Size: ${preset.id === "fit" ? `${state?.viewport?.width ?? ""}×${state?.viewport?.height ?? ""}` : preset.label}. Switch to ${nextPreset.label}`}
-                title=${`${preset.id === "fit" ? `${state?.viewport?.width}×${state?.viewport?.height}` : preset.label} · tap for ${nextPreset.label}`}
+                aria-label=${t("Size: {{size}}. Switch to {{preset}}", { size: preset.id === "fit" ? `${state?.viewport?.width ?? ""}×${state?.viewport?.height ?? ""}` : t(preset.label), preset: t(nextPreset.label) })}
+                title=${t("{{size}} · tap for {{preset}}", { size: preset.id === "fit" ? `${state?.viewport?.width}×${state?.viewport?.height}` : t(preset.label), preset: t(nextPreset.label) })}
                 disabled=${!steer || !open}
                 onClick=${resize}
             >

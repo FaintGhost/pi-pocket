@@ -553,14 +553,14 @@ function PeekApproval({ approval, me, rule, whole }) {
                       disabled=${busy}
                       onClick=${() => answer(true)}
                   >
-                      Allow
+                      ${t("Allow")}
                   </button>`
                 : html`<button
                       class="button small primary"
                       title=${t("See the whole command where it waits")}
                       onClick=${() => navigate(approval.conversationId)}
                   >
-                      Open
+                      ${t("Open")}
                   </button>`
         }
     </span>`;
@@ -610,7 +610,7 @@ class PeekTile extends Component {
     }
 
     render({ session, peek, status, label, number, compact, steer, home, me, rule }) {
-        const title = session.title ?? "New session";
+        const title = session.title ?? t("New session");
         const open = () => navigate(session.id);
         // A call answered elsewhere can stay on a tile scrolled away: the session list says whether one still waits.
         const approval = session.waiting ? peek?.approvals?.[0] : undefined;
@@ -712,7 +712,7 @@ function tileProps(tiles, compact) {
             session,
             peek: state.peeks?.[session.id],
             status,
-            label,
+            label: t(label),
             number: order.get(session.id),
             compact,
             steer,

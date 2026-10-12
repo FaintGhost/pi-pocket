@@ -102,7 +102,7 @@ export function ShareSheet({ share }) {
             !canSteer()
                 ? html`<p class="muted">${t("You can view sessions here but not send to Pi.")}</p>`
                 : html`<p class="muted small">
-                    It goes into the message box, so you can add to it before you send.
+                    ${t("It goes into the message box, so you can add to it before you send.")}
                 </p>
                 ${
                     !scoped() &&

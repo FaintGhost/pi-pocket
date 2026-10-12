@@ -71,7 +71,7 @@ export function ArtifactViewer({ id, version }) {
             <div class="viewer-title">
                 <strong>${artifact?.title ?? id}</strong>
                 <span class="muted small">
-                    ${artifact?.type ?? ""} · version ${shown}
+                    ${artifact?.type ?? ""} · ${t("version {{version}}", { version: shown })}
                     ${latest && shown !== latest ? html` · <button class="link" onClick=${() => setShown(latest)}>${t("latest is v{{version}}", { version: latest })}</button>` : ""}
                 </span>
             </div>
