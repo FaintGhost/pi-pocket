@@ -1434,7 +1434,9 @@ function StatusLine() {
                 ? `${Math.round(stats.ttftMs / 1000)}s`
                 : `${(stats.ttftMs / 1000).toFixed(1)}s`;
 
-        parts.push(html`<span title="Time to first token of the last response">${ttft} TTFT</span>`);
+        parts.push(
+            html`<span title="Time to first token of the last response">${ttft} TTFT</span>`,
+        );
     }
 
     if (window) {
