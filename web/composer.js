@@ -1,6 +1,6 @@
 // The message box: send, steer or queue while busy, attach files, mention files with @, run commands with !, recall
 // what was sent before (↑, Ctrl+R), fold long pastes, pick the model, stop.
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Avatar } from "./avatar.js";
 import { chatUnread, TypingLine } from "./chat.js";
 import {
@@ -1392,13 +1392,141 @@ function PlacesButton() {
     </button>`;
 }
 
-/** Under the message box: who is here, how fast the last answer came, how full the context is, the cache, the
- *  spend, and Lancet Guard. */
+/**
+ * The status line's shorter forms, in the order a narrow line takes them until it fits on one row: shorter words and
+ * gaps, no "1 here" while you are alone, the guard's and the context's labels, then the cache, then the wait for the
+ * first token.
+ */
+const SHORTER = ["words", "here", "guard", "context", "cache", "wait"];
+/** What each status line was last fitted for: the text size and its text. Its width is the observer's to watch. */
+const fitted = new WeakMap();
+
+/** Whether the items that show sit on one row: their middles line up. */
+function oneRow(line) {
+    const middles = [...line.children]
+        .map((child) => child.getBoundingClientRect())
+        .filter((box) => box.width > 0)
+        .map((box) => box.top + box.height / 2);
+
+    return middles.every((middle) => Math.abs(middle - middles[0]) < 2);
+}
+
+/**
+ * The whole line where it fits on one row; otherwise each shorter form in turn, until one does. Only when its text or
+ * the text size changed, or `again`: a render that changed neither measures nothing.
+ */
+function fitStatus(line, again = false) {
+    if (!line) {
+        return;
+    }
+
+    const key = `${prefs().text} ${line.textContent}`;
+
+    // Hidden, it has no width to fit: the observer hears it show.
+    if ((!again && fitted.get(line) === key) || line.clientWidth === 0) {
+        return;
+    }
+
+    fitted.set(line, key);
+
+    for (let step = 0; step <= SHORTER.length; step++) {
+        line.dataset.short = SHORTER.slice(0, step).join(" ");
+
+        if (oneRow(line)) {
+            return;
+        }
+    }
+}
+
+/** Keep the status line in `ref` on one row: after every render, when its width changes, and once the font loads. */
+function useStatusFit(ref) {
+    useLayoutEffect(() => fitStatus(ref.current));
+    useEffect(() => {
+        const line = ref.current;
+
+        if (!line) {
+            return;
+        }
+
+        let frame = 0;
+        let gone = false;
+        let width = -1;
+        // A new width only (fitting changes the line's height, which this hears too), fitted a frame later.
+        const observer = new ResizeObserver(([entry]) => {
+            if (entry.contentRect.width === width) {
+                return;
+            }
+
+            width = entry.contentRect.width;
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(() => fitStatus(line, true));
+        });
+
+        observer.observe(line);
+        document.fonts?.ready.then(() => !gone && fitStatus(line, true));
+
+        return () => {
+            gone = true;
+            cancelAnimationFrame(frame);
+            observer.disconnect();
+        };
+    }, []);
+}
+
+/** Seconds, as the status line says them: 0.4s, 3.2s, 14s. */
+const seconds = (ms) => (ms >= 10_000 ? `${Math.round(ms / 1000)}s` : `${(ms / 1000).toFixed(1)}s`);
+
+/**
+ * How fast the newest answer came, once Appearance turns it on: its tokens a second, and how long its first token
+ * took. Narrow, "42 tok/s · 1.2s"; an answer that came in one flush has no speed, only its wait.
+ */
+function SpeedPart({ stats }) {
+    const rate = stats.tokensPerSec;
+    const wait = stats.ttftMs;
+
+    if (rate === undefined && wait === undefined) {
+        return null;
+    }
+
+    const title = [
+        rate !== undefined && `${rate.toFixed(1)} tokens a second`,
+        wait !== undefined && `its first token after ${(wait / 1000).toFixed(2)}s`,
+    ]
+        .filter(Boolean)
+        .join(", ");
+
+    return html`<span
+        class=${`speed ${rate === undefined ? "wait-only" : ""}`}
+        title=${`How fast the last answer came: ${title}`}
+    >
+        ${
+            rate !== undefined &&
+            html`<span class="rate">
+                ${rate < 9.95 ? rate.toFixed(1) : Math.round(rate)}${" "}
+                <span class="long">tokens/s</span>
+                <span class="short">tok/s</span>
+            </span>`
+        }
+        ${
+            wait !== undefined &&
+            html`<span class="wait">
+                <span class="word">first token${" "}</span>
+                ${seconds(wait)}
+            </span>`
+        }
+    </span>`;
+}
+
+/** Under the message box: who is here, how fast the last answer came (when turned on), how full the context is, the
+ *  cache, the spend, and Lancet Guard. On one row: a narrow one takes shorter forms (`SHORTER`). */
 function StatusLine() {
     const { view, connection, guard } = store.state;
     const stats = view.stats ?? {};
     const window = view.agent?.contextWindow;
+    const line = useRef(null);
     const parts = [];
+
+    useStatusFit(line);
 
     if (connection !== "open") {
         parts.push(
@@ -1413,30 +1541,15 @@ function StatusLine() {
 
     parts.push(
         html`<span
+            class=${`here ${here === 1 ? "alone" : ""}`}
             title=${`${(view.viewers ?? []).join(", ")}${view.clients > here ? ` · ${view.clients} tabs` : ""}`}
         >
             ${here} here
         </span>`,
     );
 
-    // Speed of the newest response: its tokens per second and its time to first token.
-    if (stats.tokensPerSec !== undefined) {
-        parts.push(
-            html`<span title="Tokens per second of the last response">
-                ${stats.tokensPerSec.toFixed(1)} tok/s
-            </span>`,
-        );
-    }
-
-    if (stats.ttftMs !== undefined) {
-        const ttft =
-            stats.ttftMs >= 10_000
-                ? `${Math.round(stats.ttftMs / 1000)}s`
-                : `${(stats.ttftMs / 1000).toFixed(1)}s`;
-
-        parts.push(
-            html`<span title="Time to first token of the last response">${ttft} TTFT</span>`,
-        );
+    if (prefs().speed === true) {
+        parts.push(html`<${SpeedPart} stats=${stats} />`);
     }
 
     if (window) {
@@ -1448,7 +1561,7 @@ function StatusLine() {
 
         parts.push(
             html`<span class="context" title=${title}>
-                context
+                <span class="word">context</span>
                 <span class=${`meter ${contextLevel(percent)}`} aria-hidden="true">
                     <span style=${`width:${percent}%`}></span>
                 </span>
@@ -1458,7 +1571,7 @@ function StatusLine() {
     }
 
     if (stats.cacheRate !== undefined) {
-        parts.push(html`<span>cache ${Math.round(stats.cacheRate * 100)}%</span>`);
+        parts.push(html`<span class="cache">cache ${Math.round(stats.cacheRate * 100)}%</span>`);
     }
 
     // The session's spend, its subagents' included, and its limit when it has one.
@@ -1476,17 +1589,20 @@ function StatusLine() {
     const failed = guard?.enabled && guard.available === false;
 
     if (guard?.enabled || guard?.available) {
+        const state = failed ? "failed" : guard.enabled ? "on" : "off";
+
         parts.push(
             html`<button
                 class=${`guard ${guard.enabled && !failed ? "" : "off"}`}
+                aria-label=${`Lancet Guard ${state}`}
                 title=${guard.detail}
                 onClick=${() => openSheet({ type: "extensions" })}
             >
                 <${Icon} name="shield" size=${11} />
-                ${failed ? "guard failed" : guard.enabled ? "guard on" : "guard off"}
+                <span><span class="word">guard${" "}</span>${state}</span>
             </button>`,
         );
     }
 
-    return html`<div class="status-line">${parts}</div>`;
+    return html`<div class="status-line" ref=${line}>${parts}</div>`;
 }
