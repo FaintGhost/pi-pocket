@@ -1,7 +1,17 @@
 // Where the focus goes as a session opens, in a headless browser with a mouse: into its message box on a computer; not
 // on a touch screen, where the keyboard would come up over the conversation; and not after an Alt shortcut on an Apple
-// keyboard, where the box would take the next Alt shortcut as a character to type.
-import { type App, cleanUp, newSession, openApp, root, scriptedModel, until } from "./helpers.ts";
+// keyboard, where the box would take the next Alt shortcut as a character to type; nor from another field that has it,
+// such as the docked chat a mention opened.
+import {
+    type App,
+    cleanUp,
+    newSession,
+    openApp,
+    owner,
+    root,
+    scriptedModel,
+    until,
+} from "./helpers.ts";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -20,6 +30,8 @@ const real = {
     skip: chromium === undefined ? "no Chromium-based browser on this machine" : false,
 } as const;
 const BOX = ".composer textarea";
+/** Wide enough for the People panel to dock beside the conversation. */
+const WIDE = { width: 1440, height: 900, scale: 1, mobile: false };
 
 let app: App;
 let server: Server;
@@ -191,5 +203,45 @@ test(
         } finally {
             apple = false;
         }
+    },
+);
+
+test(
+    "on a wide screen, a mention's notice opens the docked chat, and the chat's box keeps the focus",
+    real,
+    async () => {
+        const alex = app.config.addUser("Alex", "guest").user;
+
+        await page.setViewport(WIDE);
+        await page.navigate(`${base}/s/${Number(one)}`);
+        await opened(one);
+        await until(boxFocused, "the message box, as the session opened");
+        await app.collab.postChat(two, alex, {
+            text: `@${owner(app).name} a word about this`,
+            requestId: "mention-1",
+        });
+        await until(
+            async () =>
+                await inPage<boolean>(
+                    `return JSON.stringify([...document.querySelectorAll(".notices .notice")].some((each) => each.textContent.includes("mentioned you")))`,
+                ),
+            "the mention's notice",
+        );
+        await page.click({ selector: ".notices .notice:not(.leaving)" });
+        await opened(two);
+        await until(
+            async () =>
+                await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".people.window .chat-compose textarea") !== null)`,
+                ),
+            "the chat, docked beside the conversation",
+        );
+        assert.equal(
+            await inPage<boolean>(
+                `return JSON.stringify(document.activeElement?.matches(".people.window .chat-compose textarea") ?? false)`,
+            ),
+            true,
+            "the chat's box has the focus, not Pi's",
+        );
     },
 );

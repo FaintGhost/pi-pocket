@@ -393,13 +393,19 @@ export function Composer() {
         setSearching(false);
     }, [conversationId]);
     // A session opens with the caret in its message box, ready to type: not on a touch screen, where the keyboard would
-    // come up over the conversation, nor after an Alt shortcut on an Apple keyboard (`openingByAlt`).
+    // come up over the conversation, nor after an Alt shortcut on an Apple keyboard (`openingByAlt`), nor while another
+    // text field has the focus (the docked chat a mention opened, the session search): words typed there stay there.
     useEffect(() => {
         const byAlt = openedByAlt === conversationId;
+        const active = document.activeElement;
+        const typingElsewhere =
+            active instanceof HTMLElement &&
+            active !== box.current &&
+            (active.isContentEditable || /^(INPUT|TEXTAREA)$/.test(active.tagName));
 
         openedByAlt = null;
 
-        if (!coarse && !byAlt) {
+        if (!coarse && !byAlt && !typingElsewhere) {
             box.current?.focus({ preventScroll: true });
         }
     }, []);
