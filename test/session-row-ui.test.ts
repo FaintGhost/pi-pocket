@@ -114,7 +114,7 @@ async function shown(id: ConversationId, actions: string[]): Promise<void> {
         );
     }, "actions shown, metadata hidden");
     const now = await appearance(id);
-    const reserved = actions.length === 1 ? 26 : 56;
+    const reserved = actions.length === 1 ? 26 : actions.length === 3 ? 86 : 56;
 
     assert.deepEqual(now.actions, actions);
     assert.deepEqual(
@@ -283,7 +283,7 @@ test(
             false,
             "keyboard focus alone, not hover",
         );
-        await shown(active, ["Archive", "Pin"]);
+        await shown(active, ["Archive", "Pin", "Mark unread"]);
         const outline = await appearance(active);
 
         assert.equal(outline.outlineStyle, "solid");
@@ -294,16 +294,19 @@ test(
         );
         await page.press("Tab");
         assert.ok(await focused(`${row(active)} [aria-label="Archive"]`));
-        await shown(active, ["Archive", "Pin"]);
+        await shown(active, ["Archive", "Pin", "Mark unread"]);
         await page.press("Tab");
         assert.ok(await focused(`${row(active)} [aria-label="Pin"]`));
-        await shown(active, ["Archive", "Pin"]);
+        await shown(active, ["Archive", "Pin", "Mark unread"]);
+        await page.press("Tab");
+        assert.ok(await focused(`${row(active)} [aria-label="Mark unread"]`));
+        await shown(active, ["Archive", "Pin", "Mark unread"]);
         await page.press("Tab");
         await hidden(active);
 
         // Hover still reveals the same controls, and leaving still restores metadata.
         await page.hover({ selector: `${row(active)} > .session` });
-        await shown(active, ["Archive", "Pin"]);
+        await shown(active, ["Archive", "Pin", "Mark unread"]);
         await page.hover({ x: 1, y: 1 });
         await hidden(active);
     },
@@ -453,7 +456,7 @@ for (const tab of ["Recent", "Folders"] as const) {
 
             for (const id of boundaries) {
                 await tabTo(`${row(id)} > .session`);
-                await shown(id, ["Archive", "Pin"]);
+                await shown(id, ["Archive", "Pin", "Mark unread"]);
                 await until(
                     async () =>
                         await inPage<boolean>(

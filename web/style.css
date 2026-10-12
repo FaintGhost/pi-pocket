@@ -3365,6 +3365,11 @@ button.chip:hover {
     font-weight: 700;
 }
 
+/* Marked unread (this browser): the title reads bold, like the dot beside the time says. */
+.session-row.marked-unread .session-title {
+    font-weight: 700;
+}
+
 .session-title mark,
 .launcher mark {
     background: none;
@@ -3516,7 +3521,11 @@ button.chip:hover {
     color: var(--brand);
 }
 
-/* Touch screens archive and pin from a long press on the row instead: an unseen button would take taps meant for it. */
+.session-unread.on {
+    color: var(--accent);
+}
+
+/* Touch screens archive, pin, and mark-unread from a long press on the row instead: an unseen button would take taps meant for it. */
 @media (hover: none) {
     .session-actions {
         display: none;
@@ -3537,6 +3546,10 @@ button.chip:hover {
     .session-row.one-act:hover .session-side {
         min-width: 26px;
     }
+    /* Three live buttons: archive, pin, and mark-unread. */
+    .session-row.three-acts:hover .session-side {
+        min-width: 86px;
+    }
     /* Keyboard focus in the row shows them too, not the focus a click leaves on the open session's row. Kept apart
        from the rules above: a browser without :has() drops only these. */
     .session-row:has(:focus-visible) .session-act {
@@ -3549,6 +3562,9 @@ button.chip:hover {
     }
     .session-row.one-act:has(:focus-visible) .session-side {
         min-width: 26px;
+    }
+    .session-row.three-acts:has(:focus-visible) .session-side {
+        min-width: 86px;
     }
     /* While Ctrl/⌘ drags a selection, rows do not show their buttons. */
     :root.selecting .session-row .session-act {
