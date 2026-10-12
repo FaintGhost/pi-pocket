@@ -115,7 +115,7 @@ function actionItems() {
         },
         {
             label: "Appearance",
-            detail: "theme, tiling, motion, text size",
+            detail: "theme, tiling, motion, text size, reply speed",
             icon: "palette",
             run: () => openSheet({ type: "appearance" }),
         },
@@ -131,6 +131,12 @@ function actionItems() {
             icon: "tiles",
             keys: "Alt P",
             run: togglePeeks,
+        },
+        {
+            label: prefs().speed ? "Hide reply speed" : "Show reply speed",
+            detail: "how fast the last answer came, under the message box",
+            icon: "pulse",
+            run: () => setPrefs({ speed: !prefs().speed }),
         },
         conversation &&
             steer && {
