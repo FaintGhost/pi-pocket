@@ -14,6 +14,12 @@ import {
     SHELL_ENTRY,
     type ShellData,
 } from "./entry-format.ts";
+import type { StreamTiming } from "./timing.ts";
+
+/** Shortest first-to-last-token window, in ms, that reads as a genuine stream rather than one buffered flush. */
+const MIN_STREAM_WINDOW_MS = 250;
+/** How many recent responses the speed averages cover. */
+const AVG_SAMPLES = 10;
 
 export type ClientBlock =
     | { type: "text"; text: string }
@@ -447,6 +453,16 @@ export type ClientStats = {
     cacheRate?: number;
     /** Tokens of the newest response's prompt plus answer: roughly what the context holds. */
     contextTokens?: number;
+    /** Output tokens per second of the newest response's stream, after its first token. */
+    tokensPerSec?: number;
+    /** Time to first token of the newest response, in milliseconds. */
+    ttftMs?: number;
+    /** Output tokens per second across the newest responses' streams, weighted by their lengths. */
+    avgTokensPerSec?: number;
+    /** Mean time to first token across the newest responses, in milliseconds. */
+    avgTtftMs?: number;
+    /** How many responses the averages cover. */
+    avgSamples?: number;
     /**
      * `contextTokens` is an estimate: no response came since the context was compacted or started fresh, so it is what
      * the summary and the messages kept come to, without the prompt.
@@ -492,6 +508,9 @@ export function projectStats(
 
     const prompt = input + cacheRead + cacheWrite;
     let contextTokens: number | undefined;
+    let tokensPerSec: number | undefined;
+    let ttftMs: number | undefined;
+    const samples: { output: number; windowMs: number; ttft: number }[] = [];
     let contextEstimated = false;
     // The newest compaction or fresh start: a response before it measured a context that is gone. By id, not place: a
     // conversation's view puts its head marker first, before the messages it keeps.
@@ -517,7 +536,8 @@ export function projectStats(
         }
 
         const message = entry.model?.[0] as
-            { usage?: UsageNumbers; stopReason?: string } | undefined;
+            | { usage?: UsageNumbers; stopReason?: string; pocketTiming?: StreamTiming }
+            | undefined;
         const used = message?.usage;
 
         if (
@@ -532,10 +552,33 @@ export function projectStats(
             (used.input ?? 0) + (used.output ?? 0) + (used.cacheRead ?? 0) + (used.cacheWrite ?? 0);
 
         if (total > 0) {
-            contextTokens = total;
-            break;
+            if (contextTokens === undefined) {
+                contextTokens = total;
+            }
+
+            const timing = message?.pocketTiming;
+            if (timing?.firstTokenAt !== undefined) {
+                const firstTtft = Math.max(0, timing.firstTokenAt - timing.startedAt);
+                if (ttftMs === undefined) ttftMs = firstTtft;
+
+                // A response delivered in one buffered flush measures a few milliseconds of stream time and an absurd
+                // rate; only trust the speed when the window is long enough to be a real measurement.
+                const windowMs = timing.endedAt - timing.firstTokenAt;
+                if (windowMs >= MIN_STREAM_WINDOW_MS && (used.output ?? 0) > 0) {
+                    if (tokensPerSec === undefined) tokensPerSec = (used.output ?? 0) / (windowMs / 1000);
+                    if (samples.length < AVG_SAMPLES) {
+                        samples.push({ output: used.output ?? 0, windowMs, ttft: firstTtft });
+                    }
+                }
+            }
+
+            if (samples.length >= AVG_SAMPLES) break;
         }
     }
+
+    // The speed average is weighted by response length; the TTFT average is a plain mean.
+    const streamMs = samples.reduce((sum, sample) => sum + sample.windowMs, 0);
+    const streamTokens = samples.reduce((sum, sample) => sum + sample.output, 0);
 
     // Nothing measured since: what the summary and the messages kept after it come to, until an answer measures it.
     if (contextTokens === undefined && boundary !== undefined) {
@@ -563,6 +606,15 @@ export function projectStats(
         cost,
         ...(prompt > 0 ? { cacheRate: cacheRead / prompt } : {}),
         ...(contextTokens === undefined ? {} : { contextTokens }),
+        ...(tokensPerSec === undefined ? {} : { tokensPerSec }),
+        ...(ttftMs === undefined ? {} : { ttftMs }),
+        ...(streamTokens > 0
+            ? {
+                  avgTokensPerSec: streamTokens / (streamMs / 1000),
+                  avgTtftMs: samples.reduce((sum, sample) => sum + sample.ttft, 0) / samples.length,
+                  avgSamples: samples.length,
+              }
+            : {}),
         ...(contextEstimated ? { contextEstimated } : {}),
     };
 }
