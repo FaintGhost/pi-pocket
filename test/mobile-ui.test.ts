@@ -1052,6 +1052,81 @@ test(
     },
 );
 
+// Issue #63: a short update written a line at a time, as Pi's terminal shows it, not run together into one paragraph.
+test(
+    "a reply keeps its single line breaks; a Markdown file's hard-wrapped lines stay one paragraph",
+    real,
+    async () => {
+        const updates = await newSession(app);
+        // Outside the session's repository: a file there would be one more change for the tests after this one.
+        const wrapped = join(root, "wrapped.md");
+
+        await say(
+            app,
+            updates,
+            [
+                "✅ Checks pass.",
+                "📌 [The guide](docs/guide.md) · `src/main.ts`",
+                "👉 Approve it?",
+                "",
+                "A paragraph of its own.",
+            ].join("\n"),
+        );
+        writeFileSync(
+            wrapped,
+            "# Wrapped\n\nA paragraph wrapped\nat a narrow column,\nas files often are.\n\nAnother.\n",
+        );
+        await fresh();
+        await goTo(updates);
+        await reach({ path: `/s/${updates}` }, "the reply");
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".reply .md")?.textContent.includes("of its own") === true)`,
+                )) === true,
+            "the reply, rendered",
+        );
+        const paragraphs = (selector: string) =>
+            inPage<string[]>(`
+                return JSON.stringify(
+                    [...document.querySelectorAll(${JSON.stringify(selector)})].map((p) => p.innerText),
+                );
+            `);
+        const reply = await paragraphs(".reply .md p");
+
+        assert.equal(reply.length, 2, `two paragraphs: ${JSON.stringify(reply)}`);
+        assert.match(
+            reply[0]!,
+            /✅ Checks pass\.\n📌 The guide · src\/main\.ts\n👉 Approve it\?$/,
+            "each line on its own line",
+        );
+        assert.equal(reply[1], "A paragraph of its own.");
+        assert.equal(
+            await inPage<number>(
+                `return JSON.stringify(document.querySelectorAll('.reply .md a[data-path="docs/guide.md"], .reply .md code[data-path="src/main.ts"]').length)`,
+            ),
+            2,
+            "the link and the path on those lines still open files",
+        );
+
+        await page.evaluate(`(await import("/ui.js")).openFile(${JSON.stringify(wrapped)})`);
+        await reach({ sheet: "file", layers: 1 }, "the Markdown file");
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify(document.querySelector(".file-viewer .md p") !== null)`,
+                )) === true,
+            "the file, rendered",
+        );
+        assert.deepEqual(await paragraphs(".file-viewer .md p"), [
+            "A paragraph wrapped at a narrow column, as files often are.",
+            "Another.",
+        ]);
+        await back();
+        await reach({ sheet: null, layers: 0 }, "back to the reply");
+    },
+);
+
 test("on a phone, the controls are thumb-sized", real, async () => {
     await fresh();
     await goTo(rich);

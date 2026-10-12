@@ -82,7 +82,8 @@ export function Thumb({ src, alt = "image" }) {
 
 // ─── Markdown ──────────────────────────────────────────────────────────────────
 
-marked.setOptions({ gfm: true, breaks: false });
+// Line breaks are each `Markdown`'s to choose (`breaks`).
+marked.setOptions({ gfm: true });
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
@@ -382,10 +383,17 @@ const MARKDOWN_CACHE = 500;
 /**
  * Markdown as sanitized parts (`partsOf`). Cached, least recently used out first: a transcript renders its rows in
  * order, and evicting the oldest insert would miss on every row once a thread outgrew the cache. Text still changing
- * (`cache` false) is not kept, and its long code blocks are not folded while they grow.
+ * (`cache` false) is not kept, and its long code blocks are not folded while they grow. With `breaks`, a single line
+ * break is a new line rather than a space.
  */
-function markdownParts(text, conversationId = currentConversation(), cache = true, base = null) {
-    const key = `${conversationId ?? ""}\u0000${base ?? ""}\u0000${text}`;
+function markdownParts(
+    text,
+    conversationId = currentConversation(),
+    cache = true,
+    base = null,
+    breaks = true,
+) {
+    const key = `${conversationId ?? ""}\u0000${base ?? ""}\u0000${breaks ? "br" : ""}\u0000${text}`;
     let out = markdownCache.get(key);
 
     if (out !== undefined) {
@@ -397,7 +405,7 @@ function markdownParts(text, conversationId = currentConversation(), cache = tru
 
     rendering = conversationId ?? null;
     linkBase = base;
-    out = partsOf(sanitize(marked.parse(fencePage(text), { async: false }), cache));
+    out = partsOf(sanitize(marked.parse(fencePage(text), { async: false, breaks }), cache));
     rendering = null;
     linkBase = null;
 
@@ -421,10 +429,18 @@ export function setRichBlock(component) {
 
 /**
  * Rendered markdown. `cache={false}` for text that is still changing, such as a streaming answer: its pages, images, and
- * diffs show as code until it is whole.
+ * diffs show as code until it is whole. A single line break is a new line, as Pi's terminal shows a reply and GitHub a
+ * comment; `breaks={false}` for a Markdown file, where it is a space, as GitHub shows the file (hard-wrapped prose
+ * stays one paragraph).
  */
-export function Markdown({ text, class: className = "", cache = true, base = null }) {
-    const parts = markdownParts(text, undefined, cache, base);
+export function Markdown({
+    text,
+    class: className = "",
+    cache = true,
+    base = null,
+    breaks = true,
+}) {
+    const parts = markdownParts(text, undefined, cache, base, breaks);
 
     if (parts.length === 1 && parts[0].kind === undefined) {
         return html`<div
