@@ -316,6 +316,14 @@ test("a click opens a session without leaving its row's actions shown", real, as
     await fresh();
     await page.click({ selector: `${row(active)} > .session` });
     await page.hover({ x: 1, y: 1 });
+    // The session's message box takes the focus once it shows.
+    await until(() => focused(".composer textarea"), "the message box took the focus");
+    await hidden(active);
+    // A click on the open session's row keeps the focus there: still no actions. Past the moment after the click that
+    // opened it, when the next click is held back (`back.js`).
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await page.click({ selector: `${row(active)} > .session` });
+    await page.hover({ x: 1, y: 1 });
     assert.ok(await focused(`${row(active)} > .session`), "the click left focus on the row");
     await hidden(active);
 });

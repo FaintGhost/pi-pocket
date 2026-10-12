@@ -31,6 +31,7 @@ import { TrustBar } from "./trust.js";
 import { prefs } from "./theme.js";
 import { MicButton, useDictation } from "./voice.js";
 import {
+    APPLE,
     contextLevel,
     formatBytes,
     formatTokens,
@@ -62,6 +63,13 @@ function ParentSessionButton() {
 }
 
 const coarse = matchMedia("(pointer: coarse)").matches;
+/**
+ * A session opened by an Alt shortcut on an Apple keyboard, whose message box leaves the focus where it is: Option types
+ * characters in a box, where the app's Alt shortcuts do nothing, so the next Alt+1…9 would type ™ there instead.
+ */
+let openedByAlt = null;
+
+export const openingByAlt = (id) => (openedByAlt = APPLE ? id : null);
 /** The newest "Send to Pi" text already put into a message box (see `insertIntoComposer`). */
 let insertedUpTo = 0;
 
@@ -384,6 +392,17 @@ export function Composer() {
         setBrowsing(null);
         setSearching(false);
     }, [conversationId]);
+    // A session opens with the caret in its message box, ready to type: not on a touch screen, where the keyboard would
+    // come up over the conversation, nor after an Alt shortcut on an Apple keyboard (`openingByAlt`).
+    useEffect(() => {
+        const byAlt = openedByAlt === conversationId;
+
+        openedByAlt = null;
+
+        if (!coarse && !byAlt) {
+            box.current?.focus({ preventScroll: true });
+        }
+    }, []);
     // Text sent here from the chat, the notes ("Send to Pi"), or another app (Share) goes after whatever is in the box,
     // once: the message box is made again for every session, and must not add the same text there. Shared files are
     // attached the same way.
