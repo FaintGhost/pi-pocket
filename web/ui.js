@@ -731,6 +731,7 @@ const ICONS = {
     home: "M3 11l9-7 9 7M5 10v10h14V10",
     archive: "M3 4h18v4H3zM5 8v12h14V8M10 12h4",
     unarchive: "M3 4h18v4H3zM5 8v12h14V8M12 18v-6M9 15l3-3 3 3",
+    unread: "M3 6h18v12H3zM3 7l9 5 9-5M20.5 3.5h.01",
     check: "M5 12l5 5L20 7",
     logout: "M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10",
     globe: "M12 21a9 9 0 100-18 9 9 0 000 18zM3.5 9h17M3.5 15h17M12 3a14 14 0 010 18M12 3a14 14 0 000 18",
