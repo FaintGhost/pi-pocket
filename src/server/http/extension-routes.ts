@@ -7,7 +7,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PocketApp } from "../app.ts";
 import type { User } from "../config.ts";
 import { describe, HttpError } from "../errors.ts";
-import { exposedError, mayUse } from "../extension-web.ts";
+import { exposedError } from "../extension-web.ts";
 import { type ApiRequest, json, readJson, send } from "./io.ts";
 
 /** Opened on its own, an SVG could run script with the app's origin: give it an opaque one. */
@@ -18,9 +18,17 @@ export async function extensionRoute(
     { app, request, response, url, user }: ApiRequest,
     parts: string[],
 ): Promise<void> {
+    // First, on a GET too: the sign-in cookie goes along with a link from another site, and a module's GET may change
+    // things. The app's own calls always send the header. Before the route is looked up, so such a request learns
+    // nothing of the routes.
+    if (request.headers["x-pocket"] !== "1") {
+        throw new HttpError(403, "Missing X-Pocket header");
+    }
+
     const [module, ...path] = parts;
     const method = request.method ?? "GET";
-    const match = module === undefined ? undefined : app.webs.match(module, method, path);
+    // Only routes this person may use: one they may not is not there for them (404), and its methods are not told.
+    const match = module === undefined ? undefined : app.webs.match(module, method, path, user);
 
     if (match === undefined) {
         throw new HttpError(404, "Unknown extension route");
@@ -34,19 +42,15 @@ export async function extensionRoute(
 
     const { route, part, params } = match;
 
-    // On a GET too: the sign-in cookie goes along with a link from another site, and a module's GET may change things.
-    // The app's own calls always send the header.
-    if (request.headers["x-pocket"] !== "1") {
-        throw new HttpError(403, "Missing X-Pocket header");
-    }
-
-    if (!mayUse(user, route.access)) {
-        throw new HttpError(
-            403,
-            route.access === "owner"
-                ? "Only the owner can use this."
-                : "You cannot use this extension.",
-        );
+    // The path was decoded before it was split, so `..%2F` is a part `..`: a handler that makes a file's path of a
+    // part must never get one that leads elsewhere.
+    if (
+        Object.values(params).some(
+            (value) =>
+                value === "." || value === ".." || value.includes("\\") || value.includes("\0"),
+        )
+    ) {
+        throw new HttpError(400, "Bad path");
     }
 
     const body =

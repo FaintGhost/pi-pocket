@@ -171,25 +171,37 @@ export class ExtensionLoader {
     /** Drop-ins already reported for having a built-in module's name, so each is reported once. */
     readonly #clashes = new Set<string>();
     readonly #watchers: FSWatcher[] = [];
+    readonly #notify: (level: "info" | "warning" | "error", message: string) => void;
+    /**
+     * Each file's latest load, counted. A load counts only while it is the latest: one that finishes after a newer load
+     * started, or after the module was turned off or removed, or after the server began to stop, installs nothing.
+     */
+    readonly #generations = new Map<string, number>();
+    #closed = false;
 
     /**
      * `folders` are where the built-in modules and the owner's drop-ins are. `choice` says whether the owner turned a
      * module on (true) or off (false), or never chose (undefined, so the module's default applies). It is read again
-     * on every load. `webs` keeps what modules add to the app.
+     * on every load. `webs` keeps what modules add to the app. `notify` tells about modules (loaded, failed, removed):
+     * the owner's, as a module's errors can name the server's folders or quote what a provider said.
      */
     constructor(
         registry: Registry,
         host: PocketHost,
         folders: { builtIn: string; dropIn?: string },
         choice: (file: string) => boolean | undefined = () => undefined,
-        webs: ExtensionWebs = new ExtensionWebs(),
+        options: {
+            webs?: ExtensionWebs;
+            notify?: (level: "info" | "warning" | "error", message: string) => void;
+        } = {},
     ) {
         this.#registry = registry;
         this.#host = host;
         this.#builtIn = folders.builtIn;
         this.#dropIn = folders.dropIn;
         this.#choice = choice;
-        this.#webs = webs;
+        this.#webs = options.webs ?? new ExtensionWebs();
+        this.#notify = options.notify ?? ((level, message) => host.notice(level, message));
     }
 
     /** Every module, built-in ones first in install order. A drop-in with a built-in's name is left out. */
@@ -231,7 +243,7 @@ export class ExtensionLoader {
             }
 
             this.#clashes.add(file);
-            this.#host.notice(
+            this.#notify(
                 "warning",
                 `The drop-in extension ${file} has the name of a built-in one and is not loaded. Rename it.`,
             );
@@ -268,8 +280,12 @@ export class ExtensionLoader {
             try {
                 await this.#load(module.file, false);
             } catch (error) {
+                if (error instanceof Overtaken) {
+                    continue;
+                }
+
                 this.#errors.set(module.file, describe(error));
-                this.#host.notice(
+                this.#notify(
                     "error",
                     `Extension ${module.file} failed to load: ${describe(error)}`,
                 );
@@ -296,6 +312,9 @@ export class ExtensionLoader {
     }
 
     #uninstall(file: string): void {
+        // A load still running for it installs nothing.
+        this.#generation(file);
+
         for (const extension of this.#installed.get(file) ?? []) {
             this.#registry.uninstall(extension);
         }
@@ -305,14 +324,42 @@ export class ExtensionLoader {
         this.#errors.delete(file);
     }
 
-    /** Import a module again and install what it builds. */
+    /**
+     * Import a module again and install what it builds. When a newer load (or turning the module off) overtakes this
+     * one, it installs nothing and answers what is installed: the newer one reports for itself.
+     */
     async reload(file: string): Promise<Extension[]> {
+        return (await this.#reload(file)) ?? this.#installed.get(file) ?? [];
+    }
+
+    /** `reload`, answering nothing when a newer load overtook this one. */
+    async #reload(file: string): Promise<Extension[] | undefined> {
         try {
             return await this.#load(file, true);
         } catch (error) {
+            if (error instanceof Overtaken) {
+                return undefined;
+            }
+
             this.#errors.set(file, describe(error));
 
             throw error;
+        }
+    }
+
+    /** Start a file's next load, or end the one running: the number of the load that counts from now. */
+    #generation(file: string): number {
+        const next = (this.#generations.get(file) ?? 0) + 1;
+
+        this.#generations.set(file, next);
+
+        return next;
+    }
+
+    /** Throw when a load no longer counts. */
+    #stillLatest(file: string, generation: number): void {
+        if (this.#closed || this.#generations.get(file) !== generation) {
+            throw new Overtaken(file);
         }
     }
 
@@ -351,10 +398,14 @@ export class ExtensionLoader {
             throw new Error(`There is no extension module ${file}`);
         }
 
+        const generation = this.#generation(file);
         const url =
             pathToFileURL(join(module.directory, file)).href +
             (cacheBust ? `?v=${Date.now()}` : "");
         const loaded = (await import(url)) as ExtensionModule;
+
+        // The import can take a while (a module may wait at its top level): the module may be off by now, or edited.
+        this.#stillLatest(file, generation);
 
         if (typeof loaded.default !== "function") {
             throw new Error("the module has no default export function");
@@ -374,13 +425,22 @@ export class ExtensionLoader {
         let committed = false;
 
         try {
-            const built = loaded.default(this.#host, web);
+            const returned = loaded.default(this.#host, web) as unknown;
+            // An async default export: it may register until it settles.
+            const built = isThenable(returned) ? await returned : returned;
+
+            this.#stillLatest(file, generation);
+
             const extensions = (
                 built === undefined || built === null ? [] : Array.isArray(built) ? built : [built]
             ) as Extension[];
 
             // A default export that forgot to return its extensions would load as nothing at all.
-            if ((built === undefined || built === null) && part.empty) {
+            if (
+                (built === undefined || built === null) &&
+                part.empty &&
+                part.disposers.length === 0
+            ) {
                 throw new Error(
                     "the module returned no extensions and added nothing to the app: return its extensions",
                 );
@@ -392,9 +452,7 @@ export class ExtensionLoader {
 
             const previous = this.#installed.get(file) ?? [];
 
-            for (const extension of extensions) {
-                this.#registry.install(extension);
-            }
+            this.#installAll(extensions, previous);
 
             for (const old of previous) {
                 if (!extensions.some((extension) => extension.name === old.name)) {
@@ -412,6 +470,40 @@ export class ExtensionLoader {
             if (!committed) {
                 this.#webs.discard(part);
             }
+        }
+    }
+
+    /**
+     * Install a version's extensions, all or none: when one is refused, the ones before it are put back as they were,
+     * so the previous version stays whole.
+     */
+    #installAll(extensions: readonly Extension[], previous: readonly Extension[]): void {
+        const done: Extension[] = [];
+
+        try {
+            for (const extension of extensions) {
+                this.#registry.install(extension);
+                done.push(extension);
+            }
+        } catch (error) {
+            for (const extension of done.reverse()) {
+                const before = previous.find((old) => old.name === extension.name);
+
+                try {
+                    if (before === undefined) {
+                        this.#registry.uninstall(extension);
+                    } else {
+                        this.#registry.install(before);
+                    }
+                } catch (undo) {
+                    this.#notify(
+                        "error",
+                        `Could not put back the extension ${extension.name}: ${describe(undo)}`,
+                    );
+                }
+            }
+
+            throw error;
         }
     }
 
@@ -484,7 +576,7 @@ export class ExtensionLoader {
                     ),
                 );
             } catch (error) {
-                this.#host.notice(
+                this.#notify(
                     "warning",
                     `Extensions in ${directory} are not reloaded when edited: ${describe(error)}`,
                 );
@@ -504,12 +596,25 @@ export class ExtensionLoader {
             this.#reportClashes();
         }
 
+        // A moment later, for an edit and a removal alike: an editor that saves by writing a new file and renaming it
+        // over the old one removes the file for an instant, and that is no removal.
+        clearTimeout(this.#timers.get(file));
+        this.#timers.set(
+            file,
+            setTimeout(() => {
+                this.#timers.delete(file);
+                this.#settle(file, directory);
+            }, 300),
+        );
+    }
+
+    /** After a module's file changed: take away a drop-in that is gone, or load the new version of one that is on. */
+    #settle(file: string, directory: string): void {
         const module = this.#module(file);
 
-        // A drop-in that was removed takes away what it installed.
         if (module === undefined && directory === this.#dropIn && this.#installed.has(file)) {
             this.#uninstall(file);
-            this.#host.notice("info", `Removed the drop-in extension ${file}.`);
+            this.#notify("info", `Removed the drop-in extension ${file}.`);
 
             return;
         }
@@ -519,37 +624,32 @@ export class ExtensionLoader {
             return;
         }
 
-        clearTimeout(this.#timers.get(file));
-        this.#timers.set(
-            file,
-            setTimeout(() => {
-                this.#timers.delete(file);
+        const loaded = this.#installed.has(file);
 
-                if (!this.enabled(file)) {
-                    return;
+        this.#reload(file).then(
+            (extensions) => {
+                if (extensions !== undefined) {
+                    this.#notify(
+                        "info",
+                        `Reloaded ${file}: ${extensions.map((extension) => extension.name).join(", ") || "it adds to the app"}`,
+                    );
                 }
-
-                const loaded = this.#installed.has(file);
-
-                this.reload(file).then(
-                    (extensions) =>
-                        this.#host.notice(
-                            "info",
-                            `Reloaded ${file}: ${extensions.map((extension) => extension.name).join(", ")}`,
-                        ),
-                    (error: unknown) =>
-                        this.#host.notice(
-                            "error",
-                            loaded
-                                ? `Kept the previous ${file}; the edited one failed to load: ${describe(error)}`
-                                : `${file} failed to load: ${describe(error)}`,
-                        ),
-                );
-            }, 300),
+            },
+            (error: unknown) =>
+                this.#notify(
+                    "error",
+                    loaded
+                        ? `Kept the previous ${file}; the edited one failed to load: ${describe(error)}`
+                        : `${file} failed to load: ${describe(error)}`,
+                ),
         );
     }
 
-    close(): void {
+    /** Stop watching, and run every module's cleanups: settles once they finished, the ones that wait included. */
+    close(): Promise<void> {
+        // Loads still running install nothing.
+        this.#closed = true;
+
         for (const watcher of this.#watchers) {
             watcher.close();
         }
@@ -558,8 +658,23 @@ export class ExtensionLoader {
             clearTimeout(timer);
         }
 
-        this.#webs.close();
+        return this.#webs.close();
     }
+}
+
+/** A load that a newer one, or turning the module off, overtook: it installs nothing, and is no failure. */
+class Overtaken extends Error {
+    constructor(file: string) {
+        super(`a newer load of ${file} replaced this one`);
+    }
+}
+
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        typeof (value as { then?: unknown }).then === "function"
+    );
 }
 
 /** A module's title in the Extensions sheet: a built-in's own, or a drop-in's file name. */

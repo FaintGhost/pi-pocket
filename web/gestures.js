@@ -381,7 +381,8 @@ function scrollsSideways(target, root) {
  * the message box (not its text, nor the queue and bars above it) opens the places; on the subagents board, right goes
  * back, and on an extension's page too (`"board"` as well). `swipes(where)` says, when a touch starts on
  * `"conversation"`, `"files"`, or `"board"`, what each does now:
- * `{ right, left }` as `{ path, label, run }`, and `up` as a function, or none.
+ * `{ right, left }` as `{ path, label, run }`, and `up` as a function, or none. No swipe starts in a field, nor in
+ * anything marked `data-no-swipe` (what an extension's page keeps its sideways swipes for, or the whole page).
  */
 export function startSwipes(swipes) {
     let swipe = null;
@@ -421,7 +422,11 @@ export function startSwipes(swipes) {
             const target = event.target;
             const touch = event.touches[0];
 
-            if (target.closest?.("input, textarea, select, [contenteditable], .commands")) {
+            if (
+                target.closest?.(
+                    "input, textarea, select, [contenteditable], .commands, [data-no-swipe]",
+                )
+            ) {
                 return;
             }
 

@@ -117,7 +117,7 @@ test("the example extensions load as drop-ins, off until the owner turns them on
     assert.match(await answer(id), /tool said: git push origin main/);
 
     // Server status adds to the app, not to Pi: a route, and a browser module for the owner's tabs.
-    const status = app.webs.match("server-status", "GET", ["status"]);
+    const status = app.webs.match("server-status", "GET", ["status"], owner(app));
 
     assert.ok(status !== undefined && "route" in status, "its route is there");
     const reading = (await status.route.handle({} as never)) as { cpus: number; load: number[] };

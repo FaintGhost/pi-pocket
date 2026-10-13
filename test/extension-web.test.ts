@@ -11,7 +11,8 @@ import {
     until,
 } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
@@ -62,6 +63,24 @@ before(async () => {
     writeFileSync(join(dropIns, "panel-web", "node_modules", "dep.js"), "export {};\n");
     writeFileSync(join(root, "outside.js"), "export const outside = true;\n");
     symlinkSync(join(root, "outside.js"), join(dropIns, "panel-web", "link.js"));
+    // Links that stay in the folder but lead to what is not served, or to what is: none is followed.
+    mkdirSync(join(dropIns, "panel-web", ".secret"));
+    writeFileSync(join(dropIns, "panel-web", ".secret", "key.json"), '{"key":"sk-secret"}\n');
+    symlinkSync("notes.ts", join(dropIns, "panel-web", "alias.js"));
+    symlinkSync(".secret", join(dropIns, "panel-web", "visible"));
+    symlinkSync("node_modules", join(dropIns, "panel-web", "deps"));
+    symlinkSync("part.js", join(dropIns, "panel-web", "same.js"));
+    // Routes whose paths overlap, registered least specific first.
+    writeFileSync(
+        join(dropIns, "order.ts"),
+        `/** Order: routes that overlap. */
+export default (_host, web) => {
+	web.route("GET", "items/:id", ({ params }) => ({ route: "items/:id", id: params.id }));
+	web.route("GET", ":kind/new", () => ({ route: ":kind/new" }));
+	web.route("GET", "items/new", () => ({ route: "items/new" }));
+};
+`,
+    );
     // One file as the browser module: only it is served, not the files beside it.
     writeFileSync(
         join(dropIns, "solo.ts"),
@@ -105,6 +124,7 @@ before(async () => {
     people.owner = { token: app.config.ownerToken, id: owner(app).id };
     await app.setExtensionEnabled(owner(app), "panel.ts", true);
     await app.setExtensionEnabled(owner(app), "solo.ts", true);
+    await app.setExtensionEnabled(owner(app), "order.ts", true);
 });
 
 after(async () => {
@@ -180,29 +200,57 @@ test("a module's routes answer signed-in people, by method, path, and who may us
     assert.equal((await call("owner", "/api/x/panel/nope")).status, 404);
     assert.equal((await call("owner", "/api/x/nobody/status")).status, 404);
 
-    // Owner by default; "steer" lets guests in, "view" viewers too; someone invited to one session never.
-    assert.equal((await call("Gale", "/api/x/panel/status")).status, 403);
+    // Owner by default; "steer" lets guests in, "view" viewers too; someone invited to one session never. A route
+    // someone may not use is not there for them: the same 404 as a path the module lacks, and no methods told.
+    assert.equal((await call("Gale", "/api/x/panel/status")).status, 404);
     assert.equal(
         (await call("Gale", "/api/x/panel/steer", { method: "POST", body: {} })).status,
         200,
     );
     assert.equal(
         (await call("Vic", "/api/x/panel/steer", { method: "POST", body: {} })).status,
-        403,
+        404,
     );
     assert.deepEqual((await call("Vic", "/api/x/panel/who")).data, {
         id: people.Vic!.id,
         name: "Vic",
         role: "viewer",
     });
-    assert.equal((await call("Sid", "/api/x/panel/who")).status, 403);
+    assert.equal((await call("Sid", "/api/x/panel/who")).status, 404);
+
+    const asGuest = await call("Gale", "/api/x/panel/items");
+
+    assert.equal(asGuest.status, 404, "the owner's POST items is not told to a guest");
+    assert.equal(asGuest.headers.get("allow"), null);
+    // Without the header, nothing is looked up: a path that is there and one that is not answer alike.
+    assert.deepEqual(
+        [
+            (await call("Gale", "/api/x/panel/status", { header: false })).status,
+            (await call("Gale", "/api/x/panel/nope", { header: false })).status,
+            (await call("Gale", "/api/x/nobody/x", { header: false })).status,
+        ],
+        [403, 403, 403],
+    );
+
+    // A part decoded to a step out (`..%2F` is `../` once decoded), or with a backslash or NUL, is refused.
+    for (const path of ["items/..%2F", "items/a%5Cb", "items/a%00b"]) {
+        assert.equal((await call("owner", `/api/x/panel/${path}`)).status, 400, path);
+    }
+
+    // Of the routes a path matches, the most specific: a fixed part before a `:name` part.
+    assert.deepEqual((await call("owner", "/api/x/order/items/new")).data, { route: "items/new" });
+    assert.deepEqual((await call("owner", "/api/x/order/items/7")).data, {
+        route: "items/:id",
+        id: "7",
+    });
+    assert.deepEqual((await call("owner", "/api/x/order/a/new")).data, { route: ":kind/new" });
 });
 
 test("what a route throws becomes its answer: web.error's as it is, else a 500 whose words only the owner sees", async () => {
     const teapot = await call("Gale", "/api/x/panel/teapot");
 
-    // The teapot is the owner's: Gale may not use it. The owner gets the module's own status and words.
-    assert.equal(teapot.status, 403);
+    // The teapot is the owner's: for Gale it is not there. The owner gets the module's own status and words.
+    assert.equal(teapot.status, 404);
     assert.deepEqual((await call("owner", "/api/x/panel/teapot")).data, { error: "I am a teapot" });
     assert.equal((await call("owner", "/api/x/panel/teapot")).status, 418);
 
@@ -248,13 +296,18 @@ test("a browser module loads for the people it is for, and its folder serves onl
         "text/css; charset=utf-8",
     );
 
-    // Never server code, hidden files, dependencies, a link out of the folder, or a step out of it.
+    // Never server code, hidden files, dependencies, a link (out of the folder or in it), or a step out of it.
     for (const path of [
         "notes.ts",
         ".hidden.js",
         "node_modules/dep.js",
         "link.js",
+        "alias.js",
+        "visible/key.json",
+        "deps/dep.js",
+        "same.js",
         "%2E%2E/panel.ts",
+        "a%5C..%5Cpanel.ts",
     ]) {
         assert.equal((await call("owner", `${folder}${path}`)).status, 404, path);
     }
@@ -270,6 +323,21 @@ test("a browser module loads for the people it is for, and its folder serves onl
     assert.equal(solo.headers.get("cross-origin-resource-policy"), "same-origin");
     assert.equal((await call("owner", soloUrl, { method: "POST", body: {} })).status, 405);
     assert.equal((await call("owner", soloUrl.replace(/solo\.js$/, "other.js"))).status, 404);
+
+    // The Extensions sheet tells others who loads a browser module only when it loads for them; hello has no API
+    // version (the app's own files are always the server's).
+    const sheet = async (who: string) =>
+        (await app.extensions(app.config.userById(people[who]!.id)!)).modules;
+
+    assert.deepEqual((await sheet("Vic")).find((each) => each.file === "panel.ts")?.web, {
+        routes: [],
+        client: "view",
+    });
+    assert.equal((await sheet("Gale")).find((each) => each.file === "solo.ts")?.web, undefined);
+    assert.equal(
+        "extensionApi" in ((await call("owner", "/api/me")).data as { server: object }).server,
+        false,
+    );
 });
 
 test("events reach the tabs that load the browser module, or one person's, and what is not JSON goes nowhere", async () => {
@@ -400,14 +468,11 @@ test("a module needs a name fit for an address, good routes, and a version of th
     await app.setExtensionEnabled(owner(app), "panel.ts", true);
     assert.equal((await panelSeen("owner"))?.routes.length, 9);
     assert.deepEqual(await panelSeen("Gale"), { routes: [], client: "view" });
-    assert.equal(
-        ((await call("owner", "/api/me")).data as { server: { extensionApi: number } }).server
-            .extensionApi,
-        1,
-    );
 });
 
-test("a web part registers only while its module loads, and its cleanups run once it goes", () => {
+const OWNER = { role: "owner" as const };
+
+test("a web part registers only while its module loads, and its cleanups run once it goes", async () => {
     const webs = new ExtensionWebs();
     const { part, web } = webs.stage("late.ts", dropIns, "late");
     let cleaned = 0;
@@ -417,19 +482,176 @@ test("a web part registers only while its module loads, and its cleanups run onc
     assert.throws(() => web.route("GET", "now", () => 2), /registered twice/);
     assert.throws(() => web.route("TRACE" as never, "x", () => 1), /the method is/);
     assert.throws(() => web.route("GET", "a/:id/:id", () => 1), /names a part twice/);
+    assert.throws(() => web.route("GET", "", () => 1), /give the route a path/);
+    assert.throws(() => web.route("GET", "a/../b", () => 1), /not \. or \.\. alone/);
+    assert.throws(() => web.route("GET", "p/:__proto__", () => 1), /each part of a path/);
     assert.throws(() => web.client("../outside.js"), /right beside the module/);
+    assert.throws(() => web.client("a#b.js"), /right beside the module/);
     assert.throws(() => web.client("missing.js"), /there is no missing\.js/);
     assert.throws(() => web.error(200, "fine"), /from 400 to 599/);
     assert.equal(web.error(404, "No such item").message, "No such item");
+    assert.equal(web.error(500, { toString: 0 } as never).message, "The extension failed.");
     webs.commit(part);
     assert.throws(() => web.route("GET", "later", () => 1), /while the module loads/);
-    assert.ok(webs.match("late", "GET", ["now"]));
-    webs.close();
+    assert.ok(webs.match("late", "GET", ["now"], OWNER));
+    await webs.close();
     assert.equal(cleaned, 1);
-    assert.equal(webs.match("late", "GET", ["now"]), undefined);
+    assert.equal(webs.match("late", "GET", ["now"], OWNER), undefined);
     // Registered after it went: it runs at once.
     web.onDispose(() => cleaned++);
     assert.equal(cleaned, 2);
+});
+
+test("a cleanup added after the module loaded runs when it goes, and the server waits for cleanups that wait", async () => {
+    const webs = new ExtensionWebs();
+    // A module that added nothing to the app while it loaded, and a cleanup later (from a timer, say).
+    const quiet = webs.stage("quiet.ts", dropIns, "quiet");
+    let ran = false;
+
+    webs.commit(quiet.part);
+    quiet.web.onDispose(() => {
+        ran = true;
+    });
+    webs.remove("quiet.ts");
+    assert.equal(ran, true);
+
+    const slow = webs.stage("slow.ts", dropIns, "slow");
+    let finished = false;
+
+    slow.web.onDispose(
+        () =>
+            new Promise<void>((resolve) =>
+                setTimeout(() => {
+                    finished = true;
+                    resolve();
+                }, 30),
+            ),
+    );
+    webs.commit(slow.part);
+    await webs.close();
+    assert.equal(finished, true, "close settled after the cleanup that waits");
+});
+
+test("web.send never throws, logs each kind of mistake once, and drops what comes too fast", async () => {
+    const log: string[] = [];
+    const sent: unknown[] = [];
+    const folder = join(root, "send-test");
+
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, "send.js"), "export default () => {};\n");
+
+    const webs = new ExtensionWebs({
+        log: (line) => log.push(line),
+        deliver: (_part, _access, _event, data) => sent.push(data),
+    });
+    const { part, web } = webs.stage("send.ts", folder, "send");
+
+    // While it loads, nothing goes out yet.
+    web.send("early", 1);
+    web.client("send.js");
+    webs.commit(part);
+
+    // An event named with an object whose own `toString` throws: converting it to text for the log would throw.
+    for (let each = 0; each < 3; each++) {
+        assert.doesNotThrow(() => web.send(JSON.parse('{"toString":0}') as never, {}));
+    }
+
+    assert.doesNotThrow(() => web.send("to", 1, { to: { toString: 0 } as never }));
+
+    for (let each = 0; each < 150; each++) {
+        web.send("tick", each);
+    }
+
+    assert.equal(sent.length, 100, "100 events a second at most");
+    assert.equal(log.filter((line) => /once the module has loaded/.test(line)).length, 1);
+    assert.equal(log.filter((line) => /name the event/.test(line)).length, 1, "logged once");
+    assert.ok(log.some((line) => /`to` is a person's id/.test(line)));
+    assert.equal(log.filter((line) => /more than 100 events/.test(line)).length, 1);
+
+    // A module without a browser module: its events go nowhere, and the log says why.
+    const bare = webs.stage("bare.ts", folder, "bare");
+
+    webs.commit(bare.part);
+    bare.web.send("tick", 1);
+    assert.ok(log.some((line) => /bare\.ts: .*no browser module/.test(line)));
+    await webs.close();
+});
+
+test("a browser module that is a link, or not a regular file, is refused, and one swapped for a pipe is not served", async () => {
+    const folder = join(root, "kinds");
+
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(join(folder, "real.js"), "export default () => {};\n");
+    symlinkSync("real.js", join(folder, "linked.js"));
+    mkdirSync(join(folder, "linked-folder-target"));
+    writeFileSync(join(folder, "linked-folder-target", "index.js"), "export default () => {};\n");
+    symlinkSync("linked-folder-target", join(folder, "linked-folder"));
+    execFileSync("mkfifo", [join(folder, "pipe.js")]);
+
+    const webs = new ExtensionWebs();
+    const { part, web } = webs.stage("kinds.ts", folder, "kinds");
+
+    assert.throws(() => web.client("linked.js"), /is a link/);
+    assert.throws(() => web.client("linked-folder"), /is a link/);
+    assert.throws(() => web.client("pipe.js"), /is not a \.js file/);
+
+    web.client("real.js");
+    webs.commit(part);
+    const rev = webs.clients(OWNER)[0]!.url.split("/")[3]!;
+
+    assert.ok(webs.file("kinds", ["real.js"], OWNER));
+    // Swapped for a pipe after it loaded: reading it would wait forever, holding up the whole server.
+    rmSync(join(folder, "real.js"));
+    execFileSync("mkfifo", [join(folder, "real.js")]);
+    assert.equal(webs.file("kinds", ["real.js"], OWNER), undefined);
+    // And swapped for a link: not served either.
+    rmSync(join(folder, "real.js"));
+    symlinkSync(join(root, "outside.js"), join(folder, "real.js"));
+    assert.equal(webs.file("kinds", ["real.js"], OWNER), undefined);
+    assert.ok(rev.length > 0);
+    await webs.close();
+});
+
+test("edits anywhere in a browser module's folder reach the tabs, new folders included, but not other files", async (t) => {
+    const folder = join(root, "watched");
+
+    mkdirSync(join(folder, "watched-web"), { recursive: true });
+    writeFileSync(join(folder, "watched-web", "index.js"), "export default () => {};\n");
+
+    let changes = 0;
+    const webs = new ExtensionWebs({ changed: () => changes++ });
+    const { part, web } = webs.stage("watched.ts", folder, "watched");
+
+    web.client("watched-web");
+    webs.commit(part);
+    webs.watch();
+    // Watches keep the process alive: they stop whatever happens.
+    t.after(() => webs.close());
+
+    const url = () => webs.clients(OWNER)[0]!.url;
+    const first = url();
+
+    // A folder made after the module loaded, and then a file in it edited.
+    mkdirSync(join(folder, "watched-web", "parts"));
+    writeFileSync(join(folder, "watched-web", "parts", "one.js"), "export const one = 1;\n");
+    await until(() => url() !== first, "the new file gives a new version");
+
+    const second = url();
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    writeFileSync(join(folder, "watched-web", "parts", "one.js"), "export const one = 2;\n");
+    await until(() => url() !== second, "an edit in the new folder gives a new version");
+
+    // A log the module writes beside its files is no new version: tabs do not load it again.
+    const third = url();
+    const before = changes;
+
+    writeFileSync(join(folder, "watched-web", "debug.log"), "a line\n");
+    writeFileSync(join(folder, "watched-web", "cache.tmp"), "x");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(url(), third);
+    assert.equal(changes, before);
+    await webs.close();
 });
 
 test("the server's web and the app's pocket are the same version of the extension API", () => {

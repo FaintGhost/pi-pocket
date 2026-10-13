@@ -5,8 +5,16 @@
  * them. The browser module loads in the tabs of the people its access lets in, and gets the events the module sends.
  */
 import { createHash } from "node:crypto";
-import { type Dirent, type FSWatcher, readdirSync, realpathSync, statSync, watch } from "node:fs";
-import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+    type Dirent,
+    type FSWatcher,
+    lstatSync,
+    readdirSync,
+    realpathSync,
+    statSync,
+    watch,
+} from "node:fs";
+import { extname, join } from "node:path";
 import type { User } from "./config.ts";
 import { describe } from "./errors.ts";
 import type { ExtensionWeb, WebAccess, WebHandler, WebMethod } from "./host.ts";
@@ -22,9 +30,14 @@ const ACCESS: ReadonlySet<string> = new Set(["owner", "steer", "view"]);
 /** A module with a web part needs a name that is one part of an address as it is. */
 const MODULE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 const SEGMENT = /^(?::[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9._~-]+)$/;
+/** A browser module's file or folder: a name that is one part of an address as it is. */
+const ENTRY = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
 const EVENT = /^[A-Za-z0-9._:-]{1,64}$/;
 /** An event's data, as JSON, at most: the app's event streams carry it to every tab it is for. */
 const MAX_EVENT = 256 * 1024;
+/** How many events, and how many bytes of them, a module may send each second; more are dropped and logged. */
+const MAX_EVENTS_PER_SECOND = 100;
+const MAX_EVENT_BYTES_PER_SECOND = 1024 * 1024;
 /** How many files a browser module's folder may have for its version to be worked out; more are not looked at. */
 const MAX_FILES = 2000;
 /** How many of a browser module's folders are watched for edits; deeper or more are seen at the module's next load. */
@@ -41,7 +54,9 @@ export function exposedError(error: unknown): { status: number; message: string 
 
     const { status, message } = error as { status?: unknown; message?: unknown };
 
-    return typeof status === "number" ? { status, message: String(message) } : undefined;
+    return typeof status === "number"
+        ? { status, message: typeof message === "string" ? message : "The extension failed." }
+        : undefined;
 }
 
 /** The files a browser module's folder serves, by type. Never `.ts`: server code can hold secrets. */
@@ -88,6 +103,8 @@ interface Route {
 
 interface Client {
     access: WebAccess;
+    /** The entry file's or the folder's name, right beside the module. */
+    name: string;
     /** The entry file, or the folder everything is served from. */
     root: string;
     folder: boolean;
@@ -106,10 +123,15 @@ export class WebPart {
     readonly routes: Route[] = [];
     client: Client | undefined;
     readonly disposers: (() => void)[] = [];
-    watchers: FSWatcher[] = [];
+    /** The browser module's folders that are watched, by path. */
+    readonly watchers = new Map<string, FSWatcher>();
     /** Registering ends when the module's default export returns. */
     sealed = false;
     disposed = false;
+    /** What `web.send` already logged for this version, so a module in a loop does not fill the log. */
+    readonly warned = new Set<string>();
+    /** This second's sending, for the limit on events. */
+    sending = { second: 0, events: 0, bytes: 0 };
 
     constructor(file: string, directory: string, title: string) {
         this.file = file;
@@ -118,8 +140,9 @@ export class WebPart {
         this.title = title;
     }
 
+    /** Whether it added nothing to the app: no routes and no browser module (cleanups do not count). */
     get empty(): boolean {
-        return this.routes.length === 0 && this.client === undefined && this.disposers.length === 0;
+        return this.routes.length === 0 && this.client === undefined;
     }
 }
 
@@ -184,48 +207,23 @@ export class ExtensionWebs {
             // Never throws: it is mostly called from timers, where a throw would take the whole server down. What it
             // cannot send goes to the log.
             send: (event, data, options) => {
-                const problem = (why: string) =>
-                    this.#options.log?.(`${file}: web.send(${String(event)}) sent nothing: ${why}`);
-
-                if (typeof event !== "string" || !EVENT.test(event)) {
-                    return problem("name the event with up to 64 letters, digits, and . _ : -");
-                }
-
-                let json: string | undefined;
-
                 try {
-                    json = JSON.stringify(data ?? null) as string | undefined;
+                    this.#send(part, event, data, options);
                 } catch (error) {
-                    return problem(`its data is not JSON: ${describe(error)}`);
+                    this.#warn(part, "failed", `web.send failed: ${describe(error)}`);
                 }
-
-                if (json === undefined) {
-                    return problem("its data is not JSON");
-                }
-
-                if (Buffer.byteLength(json) > MAX_EVENT) {
-                    return problem(`its data is larger than ${MAX_EVENT} bytes`);
-                }
-
-                // Only the version in force, and only to a browser module: one replaced or removed sends nothing.
-                if (this.#parts.get(part.module) !== part || part.client === undefined) {
-                    return;
-                }
-
-                this.#options.deliver?.(
-                    part,
-                    part.client.access,
-                    event,
-                    JSON.parse(json),
-                    options?.to,
-                );
             },
             error: (status, message) => {
                 if (!Number.isInteger(status) || status < 400 || status > 599) {
                     throw new Error(`web.error: a status is from 400 to 599, not ${status}`);
                 }
 
-                return Object.assign(new Error(String(message)), { status, [EXPOSED]: true });
+                const words =
+                    typeof message === "string" || typeof message === "number"
+                        ? String(message)
+                        : "The extension failed.";
+
+                return Object.assign(new Error(words), { status, [EXPOSED]: true });
             },
             onDispose: (dispose) => {
                 if (typeof dispose !== "function") {
@@ -233,7 +231,7 @@ export class ExtensionWebs {
                 }
 
                 if (part.disposed) {
-                    runDispose(dispose, part, this.#options.log);
+                    void runDispose(dispose, part, this.#options.log);
 
                     return;
                 }
@@ -245,31 +243,107 @@ export class ExtensionWebs {
         return { part, web: Object.freeze(web) };
     }
 
+    #send(part: WebPart, event: unknown, data: unknown, options: unknown): void {
+        // Never the event as text when it is not text: an object's own `toString` could throw.
+        const name = typeof event === "string" ? event.slice(0, 64) : `a ${typeof event}`;
+        const problem = (key: string, why: string) =>
+            this.#warn(part, key, `web.send(${name}) sent nothing: ${why}`);
+
+        if (typeof event !== "string" || !EVENT.test(event)) {
+            return problem("name", "name the event with up to 64 letters, digits, and . _ : -");
+        }
+
+        const to = (options as { to?: unknown } | undefined)?.to;
+
+        if (to !== undefined && typeof to !== "string") {
+            return problem("to", "`to` is a person's id");
+        }
+
+        // A replaced or removed version sends nothing, and says nothing: its timers may still run for a moment.
+        if (part.disposed) {
+            return;
+        }
+
+        if (!part.sealed || this.#parts.get(part.module) !== part) {
+            return problem("loading", "send events once the module has loaded");
+        }
+
+        if (part.client === undefined) {
+            return problem("client", "the module has no browser module to send them to");
+        }
+
+        let json: string | undefined;
+
+        try {
+            json = JSON.stringify(data ?? null) as string | undefined;
+        } catch (error) {
+            return problem("json", `its data is not JSON: ${describe(error)}`);
+        }
+
+        if (json === undefined) {
+            return problem("json", "its data is not JSON");
+        }
+
+        const bytes = Buffer.byteLength(json);
+
+        if (bytes > MAX_EVENT) {
+            return problem("size", `its data is larger than ${MAX_EVENT} bytes`);
+        }
+
+        // A module that sends without end would fill every tab's queue: past the limit, events are dropped.
+        const second = Math.floor(Date.now() / 1000);
+
+        if (part.sending.second !== second) {
+            part.sending = { second, events: 0, bytes: 0 };
+        }
+
+        if (
+            part.sending.events >= MAX_EVENTS_PER_SECOND ||
+            part.sending.bytes + bytes > MAX_EVENT_BYTES_PER_SECOND
+        ) {
+            return problem(
+                "rate",
+                `more than ${MAX_EVENTS_PER_SECOND} events, or ${MAX_EVENT_BYTES_PER_SECOND} bytes of them, in a second: the rest of each such second is dropped`,
+            );
+        }
+
+        part.sending.events++;
+        part.sending.bytes += bytes;
+        this.#options.deliver?.(part, part.client.access, event, JSON.parse(json), to);
+    }
+
+    /** Log a problem with a module's use of `web`, once per version and kind, so a loop does not fill the log. */
+    #warn(part: WebPart, key: string, message: string): void {
+        if (part.warned.has(key)) {
+            return;
+        }
+
+        part.warned.add(key);
+        this.#options.log?.(`${part.file}: ${message}`);
+    }
+
     /** The module installed: what it registered replaces what its previous version had. */
     commit(part: WebPart): void {
         part.sealed = true;
 
         // Loaded while the server stopped: it goes at once.
         if (this.#closed) {
-            this.#dispose(part);
+            void this.#dispose(part);
 
             return;
         }
 
         const previous = this.#parts.get(part.module);
 
-        if (part.empty) {
-            this.#parts.delete(part.module);
-        } else {
-            this.#parts.set(part.module, part);
-            this.#watchFolder(part);
-        }
+        // Kept even when it added nothing to the app: cleanups it adds later run when it goes.
+        this.#parts.set(part.module, part);
+        this.#rewatch(part);
 
         if (previous !== undefined) {
-            this.#dispose(previous);
+            void this.#dispose(previous);
         }
 
-        if (clientKey(previous) !== clientKey(part.empty ? undefined : part)) {
+        if (clientKey(previous) !== clientKey(part)) {
             this.#changed(previous, part);
         }
     }
@@ -277,7 +351,7 @@ export class ExtensionWebs {
     /** The module failed to load: what it registered goes, and the version before stays. */
     discard(part: WebPart): void {
         part.sealed = true;
-        this.#dispose(part);
+        void this.#dispose(part);
     }
 
     /** The module was turned off or deleted. */
@@ -289,38 +363,47 @@ export class ExtensionWebs {
         }
 
         this.#parts.delete(part.module);
-        this.#dispose(part);
+        void this.#dispose(part);
 
         if (part.client !== undefined) {
             this.#changed(part);
         }
     }
 
-    /** The route a request to `module` means, the methods its path takes when none matches, or none. */
-    match(module: string, method: string, path: readonly string[]): RouteMatch | undefined {
+    /**
+     * The route a request from `user` to `module` means, the methods its path takes when none matches, or none. Only the
+     * routes `user` may use count: of the others they learn nothing, not even that they are there. Of the routes that
+     * match, the most specific wins: a fixed part before a `:name` part, from the left.
+     */
+    match(
+        module: string,
+        method: string,
+        path: readonly string[],
+        user: Pick<User, "role" | "sessions">,
+    ): RouteMatch | undefined {
         const part = this.#parts.get(module);
 
         if (part === undefined) {
             return undefined;
         }
 
-        const allow: WebMethod[] = [];
+        const found = part.routes.flatMap((route) => {
+            const params = mayUse(user, route.access) ? matchPath(route.segments, path) : undefined;
 
-        for (const route of part.routes) {
-            const params = matchPath(route.segments, path);
+            return params === undefined ? [] : [{ route, params }];
+        });
 
-            if (params === undefined) {
-                continue;
-            }
-
-            if (route.method === method) {
-                return { route, part, params };
-            }
-
-            allow.push(route.method);
+        if (found.length === 0) {
+            return undefined;
         }
 
-        return allow.length > 0 ? { allow } : undefined;
+        const best = found
+            .filter((each) => each.route.method === method)
+            .sort((a, b) => specificity(a.route).localeCompare(specificity(b.route)))[0];
+
+        return best === undefined
+            ? { allow: [...new Set(found.map((each) => each.route.method))] }
+            : { route: best.route, part, params: best.params };
     }
 
     /** The browser modules someone's tabs load: each module's name, title, and address. */
@@ -338,41 +421,56 @@ export class ExtensionWebs {
 
     /**
      * A file of a module's browser module that someone may load, by its path under the module's address, with its type;
-     * none for anything else. A folder serves its own files of the web types, never hidden ones or `node_modules`.
+     * none for anything else. A folder serves its own regular files of the web types, never hidden ones or
+     * `node_modules`, and nothing reached through a link: a link could lead to a file those rules leave out, or out of
+     * the folder.
      */
     file(
         module: string,
         path: readonly string[],
         user: Pick<User, "role" | "sessions">,
     ): { file: string; type: string } | undefined {
-        const client = this.#parts.get(module)?.client;
+        const part = this.#parts.get(module);
+        const client = part?.client;
 
-        if (client === undefined || !mayUse(user, client.access) || path.length === 0) {
+        if (
+            part === undefined ||
+            client === undefined ||
+            !mayUse(user, client.access) ||
+            path.length === 0
+        ) {
             return undefined;
         }
 
-        if (path.some((part) => part === "" || part.startsWith(".") || part === "node_modules")) {
+        if (
+            path.some(
+                (each) =>
+                    each === "" ||
+                    each.startsWith(".") ||
+                    each === "node_modules" ||
+                    each.includes("\\") ||
+                    each.includes("\0"),
+            )
+        ) {
             return undefined;
         }
 
         const type = WEB_FILE_TYPES[extname(path.at(-1)!).toLowerCase()];
 
-        if (type === undefined) {
+        if (
+            type === undefined ||
+            (!client.folder && (path.length > 1 || path[0] !== client.entry))
+        ) {
             return undefined;
         }
 
-        if (!client.folder) {
-            return path.length === 1 && path[0] === client.entry
-                ? { file: client.root, type }
-                : undefined;
-        }
-
-        // Inside the folder for real: a link out of it serves nothing.
         try {
-            const root = realpathSync(client.root);
-            const file = realpathSync(join(client.root, ...path));
+            // The file or folder itself, right beside the module, then the file in it, with no link on the way.
+            const root = join(realpathSync(part.directory), client.name);
+            const wanted = client.folder ? join(root, ...path) : root;
+            const file = realpathSync(client.folder ? join(client.root, ...path) : client.root);
 
-            return file.startsWith(root + sep) && statSync(file).isFile()
+            return realpathSync(client.root) === root && file === wanted && statSync(file).isFile()
                 ? { file, type }
                 : undefined;
         } catch {
@@ -399,7 +497,7 @@ export class ExtensionWebs {
         this.#watching = true;
 
         for (const part of this.#parts.values()) {
-            this.#watchFolder(part);
+            this.#rewatch(part);
         }
     }
 
@@ -414,14 +512,15 @@ export class ExtensionWebs {
         }
     }
 
-    close(): void {
+    /** The server stops: every module's cleanups run. Settles once they all finished, the ones that wait included. */
+    close(): Promise<void> {
         this.#closed = true;
 
-        for (const part of this.#parts.values()) {
-            this.#dispose(part);
-        }
+        const running = [...this.#parts.values()].map((part) => this.#dispose(part));
 
         this.#parts.clear();
+
+        return Promise.allSettled(running).then(() => {});
     }
 
     /** Tell the tabs of the people who load either part's browser module. */
@@ -445,6 +544,9 @@ export class ExtensionWebs {
                     return;
                 }
 
+                // Watch first, then look: an edit after the look is seen by the new watches.
+                this.#rewatch(part);
+
                 const rev = revision(client.root, client.folder);
 
                 if (rev !== client.rev) {
@@ -457,61 +559,93 @@ export class ExtensionWebs {
 
     /**
      * Watch a browser module's folder and the folders in it, each on its own: a recursive watch would walk and watch
-     * everything, `node_modules` included. Hidden folders and `node_modules` are left out, as `revision` leaves them out,
-     * and at most `MAX_WATCHED` folders are watched.
+     * everything, `node_modules` included. Watched again after each change, as folders come and go, and one replaced by
+     * another needs a watch of its own. Hidden folders, `node_modules`, and links are left out, as `revision` leaves
+     * them out, and at most `MAX_WATCHED` folders are watched.
      */
-    #watchFolder(part: WebPart): void {
-        if (!this.#watching || part.watchers.length > 0 || part.client?.folder !== true) {
+    #rewatch(part: WebPart): void {
+        const client = part.client;
+
+        if (
+            !this.#watching ||
+            part.disposed ||
+            client?.folder !== true ||
+            this.#parts.get(part.module) !== part
+        ) {
             return;
         }
 
-        for (const folder of folders(part.client.root).slice(0, MAX_WATCHED)) {
+        for (const watcher of part.watchers.values()) {
+            watcher.close();
+        }
+
+        part.watchers.clear();
+
+        for (const folder of folders(client.root).slice(0, MAX_WATCHED)) {
             try {
                 const watcher = watch(folder, () => this.#recheck(part));
 
                 watcher.on("error", () => {});
-                part.watchers.push(watcher);
+                part.watchers.set(folder, watcher);
             } catch (error) {
-                this.#options.log?.(
-                    `${part.file}'s browser module is not reloaded when ${folder} is edited: ${describe(error)}`,
+                this.#warn(
+                    part,
+                    `watch ${folder}`,
+                    `its browser module is not reloaded when ${folder} is edited: ${describe(error)}`,
                 );
             }
         }
     }
 
-    #dispose(part: WebPart): void {
+    /** A version goes: its watches stop and its cleanups run. Settles once the ones that wait finished too. */
+    #dispose(part: WebPart): Promise<void> {
         if (part.disposed) {
-            return;
+            return Promise.resolve();
         }
 
         part.disposed = true;
 
-        for (const watcher of part.watchers.splice(0)) {
+        for (const watcher of part.watchers.values()) {
             watcher.close();
         }
 
+        part.watchers.clear();
         clearTimeout(this.#timers.get(part));
         this.#timers.delete(part);
 
         // Last registered first, as cleanups nest.
-        for (const dispose of part.disposers.splice(0).reverse()) {
-            runDispose(dispose, part, this.#options.log);
-        }
+        const running = part.disposers
+            .splice(0)
+            .reverse()
+            .map((dispose) => runDispose(dispose, part, this.#options.log));
+
+        return Promise.allSettled(running).then(() => {});
     }
 }
 
-function runDispose(dispose: () => void, part: WebPart, log?: (message: string) => void): void {
+/** Run a cleanup, which may wait: never throws, and what fails goes to the log. */
+function runDispose(
+    dispose: () => void,
+    part: WebPart,
+    log?: (message: string) => void,
+): Promise<void> {
+    const failed = (error: unknown) => log?.(`${part.file}: a cleanup failed: ${describe(error)}`);
+
     try {
         const result = dispose() as unknown;
 
-        if (result instanceof Promise) {
-            result.catch((error: unknown) =>
-                log?.(`${part.file}: a cleanup failed: ${describe(error)}`),
-            );
+        if (
+            typeof result === "object" &&
+            result !== null &&
+            typeof (result as { then?: unknown }).then === "function"
+        ) {
+            return Promise.resolve(result).then(() => {}, failed);
         }
     } catch (error) {
-        log?.(`${part.file}: a cleanup failed: ${describe(error)}`);
+        failed(error);
     }
+
+    return Promise.resolve();
 }
 
 function checkRoute(
@@ -533,10 +667,19 @@ function checkRoute(
 
     const segments = path.split("/").filter((segment) => segment !== "");
 
+    if (segments.length === 0) {
+        throw new Error('web.route: give the route a path, such as "status"');
+    }
+
     for (const segment of segments) {
-        if (!SEGMENT.test(segment)) {
+        if (
+            !SEGMENT.test(segment) ||
+            segment === "." ||
+            segment === ".." ||
+            segment === ":__proto__"
+        ) {
             throw new Error(
-                `web.route: ${path}: each part of a path is letters, digits, and . _ ~ -, or :name`,
+                `web.route: ${path}: each part of a path is letters, digits, and . _ ~ - (not . or .. alone), or :name`,
             );
         }
     }
@@ -576,54 +719,70 @@ function checkRoute(
 }
 
 function checkClient(part: WebPart, entry: unknown, access: unknown = "owner"): Client {
-    if (typeof entry !== "string" || entry === "" || isAbsolute(entry)) {
-        throw new Error('web.client: name a file or folder beside the module, such as "status.js"');
+    // Right beside it, and named so its address needs no escaping: the folder of modules is watched for edits, not
+    // what is deeper in it.
+    if (typeof entry !== "string" || !ENTRY.test(entry) || entry === "node_modules") {
+        throw new Error(
+            'web.client: name a file or folder right beside the module, such as "status.js": letters, digits, and . _ -',
+        );
     }
 
     if (typeof access !== "string" || !ACCESS.has(access)) {
         throw new Error(`web.client: access is "owner", "steer", or "view", not ${String(access)}`);
     }
 
-    const root = resolve(part.directory, entry);
-    const inside = relative(part.directory, root);
+    const root = join(part.directory, entry);
 
-    // Right beside it: the folder of modules is watched for edits, not what is deeper in it.
-    if (
-        inside === "" ||
-        inside.startsWith(".") ||
-        inside.includes(sep) ||
-        inside === "node_modules"
-    ) {
-        throw new Error(`web.client: ${entry} is not a file or folder right beside the module`);
-    }
+    // The file or folder itself: links are not served.
+    const kind = (path: string) => {
+        try {
+            const stats = lstatSync(path);
 
-    let folder: boolean;
+            return stats.isSymbolicLink()
+                ? "link"
+                : stats.isDirectory()
+                  ? "folder"
+                  : stats.isFile()
+                    ? "file"
+                    : "other";
+        } catch {
+            return "none";
+        }
+    };
 
-    try {
-        folder = statSync(root).isDirectory();
-    } catch {
+    const found = kind(root);
+
+    if (found === "none") {
         throw new Error(`web.client: there is no ${entry} beside the module`);
     }
 
-    if (folder) {
-        try {
-            if (!statSync(join(root, "index.js")).isFile()) {
-                throw new Error("not a file");
-            }
-        } catch {
-            throw new Error(`web.client: the folder ${entry} has no index.js`);
-        }
-    } else if (![".js", ".mjs"].includes(extname(root).toLowerCase())) {
+    if (found === "link") {
+        throw new Error(`web.client: ${entry} is a link: give the file or folder itself`);
+    }
+
+    const folder = found === "folder";
+
+    if (folder && kind(join(root, "index.js")) !== "file") {
+        throw new Error(`web.client: the folder ${entry} has no index.js`);
+    }
+
+    if (!folder && (found !== "file" || ![".js", ".mjs"].includes(extname(root).toLowerCase()))) {
         throw new Error(`web.client: ${entry} is not a .js file`);
     }
 
     return {
         access: access as WebAccess,
+        name: entry,
         root,
         folder,
-        entry: folder ? "index.js" : basename(root),
+        entry: folder ? "index.js" : entry,
         rev: revision(root, folder),
     };
+}
+
+/** How specific a route is, to sort by: a fixed part sorts before a `:name` part, from the left. */
+function specificity(route: Route): string {
+    return route.segments.map((segment) => (segment.startsWith(":") ? "1" : "0")).join("");
 }
 
 /** The values of a path's `:name` parts, or none when it does not match. */
@@ -682,7 +841,10 @@ function folders(root: string): string[] {
     return found;
 }
 
-/** A browser module's version: from its files' sizes and times, so an edit to any of them gives a new one. */
+/**
+ * A browser module's version: from the sizes and times of the files it serves, so an edit to any of them gives a new
+ * one. Other files (a log or a cache the module writes beside them) and links are left out, as they are not served.
+ */
 function revision(root: string, folder: boolean): string {
     const hash = createHash("sha256");
     let count = 0;
@@ -698,33 +860,30 @@ function revision(root: string, folder: boolean): string {
     };
 
     const walk = (directory: string) => {
-        let names: string[];
+        let entries: Dirent[];
 
         try {
-            names = readdirSync(directory).sort();
+            entries = readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
+                a.name < b.name ? -1 : a.name > b.name ? 1 : 0,
+            );
         } catch {
             return;
         }
 
-        for (const name of names) {
-            if (count >= MAX_FILES || name.startsWith(".") || name === "node_modules") {
+        for (const entry of entries) {
+            if (count >= MAX_FILES || entry.name.startsWith(".") || entry.name === "node_modules") {
                 continue;
             }
-
-            const path = join(directory, name);
 
             count++;
 
-            try {
-                if (statSync(path).isDirectory()) {
-                    walk(path);
-                    continue;
-                }
-            } catch {
-                continue;
-            }
+            const path = join(directory, entry.name);
 
-            add(path);
+            if (entry.isDirectory()) {
+                walk(path);
+            } else if (entry.isFile() && WEB_FILE_TYPES[extname(entry.name).toLowerCase()]) {
+                add(path);
+            }
         }
     };
 

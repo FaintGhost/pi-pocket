@@ -63,7 +63,7 @@ import {
     TurnsDoc,
 } from "./docs.ts";
 import { describe, HttpError } from "./errors.ts";
-import { ExtensionWebs, mayUse, POCKET_API } from "./extension-web.ts";
+import { ExtensionWebs, mayUse } from "./extension-web.ts";
 import { Goals } from "./goals.ts";
 import { type ApprovalRequest, Approvals, type PocketHost, type WebAccess } from "./host.ts";
 import { type GuardStatus, LancetGuard } from "./lancet.ts";
@@ -112,6 +112,8 @@ export type AccessInfo = {
 
 /** The extension module that runs Lancet Guard on tool calls. */
 const GUARD_FILE = "guard.ts";
+/** How long the server waits, when it stops, for extension modules' cleanups that wait. */
+const CLEANUP_LIMIT_MS = 3000;
 /** The extension module with the browser tool. While it is off, the Browser panel is off too. */
 const BROWSER_FILE = "browser.ts";
 const BROWSER_EXTENSION = "pocket-browser";
@@ -485,7 +487,8 @@ export class PocketApp {
             host,
             { builtIn: join(APP_ROOT, "src", "server", "extensions"), dropIn },
             (file) => this.config.extensionChoice(file),
-            this.webs,
+            // What a module's load says can name the server's folders, or quote a provider: the owner's to read.
+            { webs: this.webs, notify: (level, message) => this.ownerNotice(level, message) },
         );
         await this.loader.loadAll();
 
@@ -1570,8 +1573,7 @@ export class PocketApp {
                 home: homedir(),
                 defaultCwd: this.defaultCwd,
                 extensions: this.loader.extensionNames(),
-                // The version of the extension API, and the browser modules this person's tabs load (`extension-ui.js`).
-                extensionApi: POCKET_API,
+                // The browser modules this person's tabs load (`extension-ui.js`).
                 ui: this.webs.clients(user),
                 // Tells the web app this server has people chat and typing indicators.
                 chat: true,
@@ -2178,7 +2180,7 @@ export class PocketApp {
                   }
                 : {
                       ...module,
-                      ...(web?.client === undefined
+                      ...(web?.client === undefined || !mayUse(user, web.client)
                           ? {}
                           : { web: { routes: [], client: web.client } }),
                       ...(error === undefined ? {} : { error: "It failed to load." }),
@@ -2539,7 +2541,10 @@ export class PocketApp {
             this.#unsubscribeCommits?.();
             this.#unsubscribeApprovals?.();
             this.#unsubscribeBrowsers?.();
-            this.loader?.close();
+
+            // Modules' cleanups may wait (closing a connection), but not for long: the rest must close too.
+            const cleaned = this.loader?.close();
+
             // After the loader: its last changes could set it again.
             clearTimeout(this.#websTimer);
 
@@ -2555,6 +2560,10 @@ export class PocketApp {
             }
 
             this.providers.close();
+            await Promise.race([
+                cleaned,
+                new Promise<void>((resolve) => setTimeout(resolve, CLEANUP_LIMIT_MS).unref()),
+            ]);
 
             try {
                 // Close writes no outcome: running work resumes when the next process opens the storage.

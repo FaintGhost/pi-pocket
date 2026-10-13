@@ -1,7 +1,7 @@
 // Extensions: the modules the owner can turn on and off, Lancet Guard, who may allow risky calls, and when PiP compacts
 // its context.
 import { useEffect, useState } from "preact/hooks";
-import { browserModuleState } from "../extension-ui.js";
+import { browserModuleState, leaveSafeMode, safeMode } from "../extension-ui.js";
 import { api, attempt, closeSheet, store } from "../store.js";
 import { html, Loader, Sheet, shortPath, Switch } from "../ui.js";
 
@@ -73,6 +73,7 @@ function WebPart({ module }) {
         web.routes.length > 0 && `routes: ${web.routes.join(", ")}`,
         web.client && `browser module for ${ACCESS_WORDS[web.client] ?? web.client}`,
         here?.status === "loading" && "loading here",
+        here?.status === "off" && "off in this tab",
     ].filter(Boolean);
 
     return html`${parts.length > 0 && html`<div class="muted small mono">${parts.join(" · ")}</div>`}
@@ -82,6 +83,21 @@ function WebPart({ module }) {
             In this browser: ${here.error}. An edit to it, or reloading the page, tries again.
         </div>`
     }`;
+}
+
+/**
+ * Safe mode (`?noext=1`): this tab loads no browser parts of extensions, so one that breaks the app can be turned off
+ * here. The button loads them again.
+ */
+function SafeMode() {
+    if (!safeMode()) {
+        return null;
+    }
+
+    return html`<div class="setting wrap safe-mode">
+        <div class="grow small">Extensions' browser parts are off in this tab.</div>
+        <button class="button" onClick=${leaveSafeMode}>Turn them back on</button>
+    </div>`;
 }
 
 /** When PiP compacts its own context: once idle above so many tokens (`pip-compact.ts`), or only as sessions do. */
@@ -179,6 +195,7 @@ export function ExtensionsSheet() {
         <p class="muted small">
             Extensions give Pi its tools and checks in Pi Pocket, and can add pages and buttons to the app. A change applies to every session right away and stays after restarts.${owner ? "" : " Only the owner can change them."}
         </p>
+        <${SafeMode} />
         ${problem && html`<div class="error-box">${problem}</div>`}
         ${!data && !problem && html`<${Loader} label="Loading extensions" />`}
         ${data?.modules.map((module) => {

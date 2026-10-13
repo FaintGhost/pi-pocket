@@ -1,7 +1,7 @@
 // The open sheet: which component shows it. The sheets themselves are in web/sheets/, and a few beside their features
 // (chat.js, notify.js, share.js).
 import { ChatSheet } from "./chat.js";
-import { ExtensionSheet } from "./extension-ui.js";
+import { ExtensionSheet, onExtensionsGone } from "./extension-ui.js";
 import { NotificationsSheet } from "./notify.js";
 import { ShareSheet } from "./share.js";
 import { AppearanceSheet } from "./sheets/appearance.js";
@@ -83,6 +83,17 @@ store.subscribe(({ sheet, conversationId }) => {
         store.set({ sheet: trail.at(-1)?.sheet ?? null });
     });
     trail.push(step);
+});
+
+// A module turned off: its sheets under the one open come out of the trail, with their steps back, so back never shows
+// one of a module that is gone. Its sheet that is open closes (`extension-ui.js`), and the whole trail with it.
+onExtensionsGone((gone) => {
+    const went = trail.filter((each) => each.sheet.type === "ext" && gone(each.sheet.module));
+
+    for (const step of went) {
+        trail.splice(trail.indexOf(step), 1);
+        removeLayer(step.layer);
+    }
 });
 
 /**

@@ -847,8 +847,9 @@ const ICONS = {
     compact: "M4 3h16M4 21h16M12 6v5M9 8l3 3 3-3M12 18v-5M9 16l3-3 3 3",
 };
 
-/** An icon's SVG path, for marks drawn outside Preact (gestures.js). */
-export const iconPath = (name) => ICONS[name] ?? "";
+/** An icon's SVG path, for marks drawn outside Preact (gestures.js); "" for a name that is not one of the icons. */
+export const iconPath = (name) =>
+    typeof name === "string" && Object.hasOwn(ICONS, name) ? ICONS[name] : "";
 
 /** Text with the letters at `hits` (indexes) marked, as matches of what someone searched for. */
 export function Marked({ text, hits }) {
@@ -894,7 +895,7 @@ export function Icon({ name, path, size = 20, class: className = "", stroke = 2 
         stroke-linejoin="round"
         aria-hidden="true"
     >
-        <path d=${path ?? ICONS[name] ?? ""} />
+        <path d=${typeof path === "string" ? path : iconPath(name)} />
     </svg>`;
 }
 

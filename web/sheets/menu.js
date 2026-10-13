@@ -2,7 +2,7 @@
 import { browserAvailable, displayUrl, setBrowserOpen } from "../browser.js";
 import { chatUnread } from "../chat.js";
 import { schedulesAvailable, triggersOn, watchAvailable, watchPr } from "../commands.js";
-import { extensionMenuItems } from "../extension-ui.js";
+import { extensionMenuItems, safeMode } from "../extension-ui.js";
 import { filesAvailable, setFilesOpen } from "../files-panel.js";
 import { peeksOn, togglePeeks } from "../peeks.js";
 import { openPip, pipAvailable, pipUnread } from "../pip.js";
@@ -28,6 +28,18 @@ import { branchAvailable } from "./branch.js";
 import { memoryAvailable, memoryHint, useMemory } from "./memory.js";
 import { defaultLabel, defaultsKept } from "./model.js";
 import { copyText, html, Icon, item, Sheet, shortPath } from "../ui.js";
+
+/** The Extensions row's hint: that this tab loads none of their browser parts (safe mode), and Lancet Guard. */
+function extensionsHint() {
+    const { guard } = store.state;
+
+    return [
+        safeMode() && "browser parts off here",
+        guard?.enabled ? "Lancet Guard on" : guard?.available ? "Lancet Guard off" : "",
+    ]
+        .filter(Boolean)
+        .join(" · ");
+}
 
 /**
  * The session's places as big tiles at the top of the menu: Files, Changes, the browser, artifacts, the chat, find,
@@ -332,7 +344,7 @@ export function MenuSheet() {
             ${triggersOn() && me?.role !== "viewer" && item("Webhooks and watches", () => openSheet({ type: "hooks" }), "GitHub, other services")}
             ${item("Providers", () => openSheet({ type: "providers" }))}
             ${extensionMenuItems().map((each) => item(each.label, each.run, each.hint))}
-            ${item("Extensions", () => openSheet({ type: "extensions" }), store.state.guard?.enabled ? "Lancet Guard on" : store.state.guard?.available ? "Lancet Guard off" : "")}
+            ${item("Extensions", () => openSheet({ type: "extensions" }), extensionsHint())}
             ${
                 me?.role === "owner" &&
                 server?.supervised &&
