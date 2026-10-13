@@ -812,6 +812,8 @@ const ICONS = {
     back: "M15 18l-6-6 6-6",
     chevron: "M9 6l6 6-6 6",
     down: "M6 9l6 6 6-6",
+    up: "M12 19V5M5 12l7-7 7 7",
+    eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 100-6 3 3 0 000 6z",
     search: "M11 18a7 7 0 100-14 7 7 0 000 14zM21 21l-4.3-4.3",
     shield: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z",
     external: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5",
@@ -1139,7 +1141,7 @@ export class Boundary extends Component {
 const BOTTOM_SHEETS = matchMedia("(max-width: 699px)");
 
 /** A bottom sheet on phones, a centered dialog on wide screens. */
-export function Sheet({ title, onClose, children, wide = false, actions = null }) {
+export function Sheet({ title, onClose, children, wide = false, actions = null, className = "" }) {
     const ref = useRef(null);
 
     useDragToClose(ref, { dir: "down", onClose, enabled: BOTTOM_SHEETS.matches });
@@ -1165,7 +1167,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null }
         onClick=${(event) => event.target === event.currentTarget && onClose()}
     >
         <section
-            class=${`sheet ${wide ? "wide" : ""}`}
+            class=${`sheet ${wide ? "wide" : ""} ${className}`}
             ref=${ref}
             role="dialog"
             aria-modal="true"
