@@ -30,7 +30,7 @@ import { after, before, test } from "node:test";
 import { ExtensionWebs, POCKET_API } from "../src/server/extension-web.ts";
 import type { ExtensionWeb } from "../src/server/host.ts";
 import { createHandler } from "../src/server/http.ts";
-import { streamTiming } from "../src/server/http/events.ts";
+import { eventTiming } from "../src/server/http/events.ts";
 import { opened } from "../src/server/http/extension-routes.ts";
 
 const dataDir = join(root, "data");
@@ -1001,11 +1001,53 @@ test("a stream far behind is cut off only once it took nothing for long, and one
     stalled.socket.destroy();
 });
 
+test("a polling session lives on from its last answer, so one that went late in a long wait still comes in", async () => {
+    type Poll = { session: string; events: { seq: number; event: string }[] };
+    const poll = async (query: string): Promise<Poll> =>
+        (await call("owner", `/api/poll?${query}`)).data as Poll;
+    const pollExpireMs = eventTiming.pollExpireMs;
+
+    eventTiming.pollExpireMs = 1000;
+
+    try {
+        const first = await poll("tab=late-answer");
+        let ack = first.events.at(-1)!.seq;
+        let asked = 0;
+
+        // A poll that waits, as nothing is there for it, and whose answer goes when an event comes, late in the
+        // session's time (polls answered at once carry what was still on its way from the start).
+        for (let round = 0; round < 10; round++) {
+            asked = Date.now();
+            const late = setTimeout(() => app.notice("info", "late"), 700);
+            const answer = await poll(`tab=late-answer&session=${first.session}&ack=${ack}`);
+
+            clearTimeout(late);
+            assert.equal(answer.session, first.session);
+            ack = answer.events.at(-1)?.seq ?? ack;
+
+            if (Date.now() - asked >= 650) {
+                break;
+            }
+        }
+
+        assert.ok(Date.now() - asked >= 650, "a poll waited");
+        // Past a second from that poll, within one from its answer: the session is still there.
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, asked + 1300 - Date.now())));
+
+        const next = await poll(`tab=late-answer&session=${first.session}&ack=${ack}`);
+
+        assert.equal(next.session, first.session, "the session lived on from its answer");
+        await call("owner", `/api/poll?session=${first.session}&close=1`);
+    } finally {
+        eventTiming.pollExpireMs = pollExpireMs;
+    }
+});
+
 test("a stream far behind that takes nothing is cut off at its ping, with no new events for it", async () => {
     const { port } = server.address() as { port: number };
-    const pingMs = streamTiming.pingMs;
+    const pingMs = eventTiming.pingMs;
 
-    streamTiming.pingMs = 100;
+    eventTiming.pingMs = 100;
 
     try {
         const socket = connect(port, "127.0.0.1");
@@ -1038,7 +1080,7 @@ test("a stream far behind that takes nothing is cut off at its ping, with no new
         assert.equal(cut, true, "the ping cut it off");
         socket.destroy();
     } finally {
-        streamTiming.pingMs = pingMs;
+        eventTiming.pingMs = pingMs;
     }
 });
 

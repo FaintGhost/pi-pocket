@@ -11,13 +11,12 @@ import { conversationId, json } from "./io.ts";
 
 /** How long a poll waits for events before answering empty, and how long an unpolled session lives. */
 const POLL_HOLD_MS = 25_000;
-const POLL_EXPIRE_MS = 60_000;
 /**
  * How far behind a tab may fall. Past `BEHIND_BYTES` (or `BEHIND_EVENTS` waiting), a tab must keep up: one that took
  * nothing (its stream did not drain, or it polled and acknowledged nothing) for `STALLED_MS` is cut off, rather than
  * hold the server's memory without end; it connects again, and gets a full view. This is checked as events come, at
  * each ping of a stream, and at each poll. A polling tab with an answer on its way is taking it, however long that takes
- * on a slow link: one that never polls again ends after `POLL_EXPIRE_MS`. A tab that keeps taking is not cut off for being behind,
+ * on a slow link: one that never polls again ends `pollExpireMs` after its last poll or answer. A tab that keeps taking is not cut off for being behind,
  * so a session's first view, however large, and a slow phone that still reads both come through. Past
  * `MAX_BEHIND_BYTES` any tab is cut off.
  */
@@ -26,8 +25,11 @@ const BEHIND_EVENTS = 5000;
 const STALLED_MS = 30_000;
 const MAX_BEHIND_BYTES = 128 * 1024 * 1024;
 
-/** How often a stream sends a comment, which keeps proxies from closing it, and checks that its tab keeps up. Tests set it. */
-export const streamTiming = { pingMs: 15_000 };
+/**
+ * How often a stream sends a comment, which keeps proxies from closing it, and checks that its tab keeps up; and how long
+ * a polling session lives after its last poll or answer, when no poll comes. Tests set them.
+ */
+export const eventTiming = { pingMs: 15_000, pollExpireMs: 60_000 };
 
 /** One browser tab that receives events by long polling instead of an event stream. */
 interface Poller {
@@ -117,7 +119,7 @@ export function createEventStreams(app: PocketApp) {
         });
         write("retry: 1500\n\n");
         // The ping checks too: a tab far behind with nothing new for it would otherwise hold its backlog until the next event.
-        const ping = setInterval(() => keepsUp() && write(": ping\n\n"), streamTiming.pingMs);
+        const ping = setInterval(() => keepsUp() && write(": ping\n\n"), eventTiming.pingMs);
 
         request.on("close", () => {
             clearInterval(ping);
@@ -142,8 +144,17 @@ export function createEventStreams(app: PocketApp) {
                 session: poller.id,
                 events: poller.queue.map(({ seq, event, data }) => ({ seq, event, data })),
             });
+
             // Until it polls again it takes this: a large answer on a slow link takes long, and only it knows when it is in.
-            poller.out ||= poller.queue.length > 0;
+            if (poller.queue.length > 0) {
+                poller.out = true;
+
+                // Its session lives on from now, not from the poll: an answer that went late in a long wait still has
+                // the whole time to come in.
+                if (pollers.has(poller.id)) {
+                    keepPoller(poller);
+                }
+            }
         }
     };
 
@@ -172,7 +183,7 @@ export function createEventStreams(app: PocketApp) {
         clearTimeout(poller.expiry);
         poller.expiry = setTimeout(
             () => (poller.waiting === undefined ? closePoller(poller) : keepPoller(poller)),
-            POLL_EXPIRE_MS,
+            eventTiming.pollExpireMs,
         );
         poller.expiry.unref();
     };
