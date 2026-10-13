@@ -43,6 +43,8 @@ interface Poller {
     tookAt: number;
     /** An answer went to it since its last poll: it is taking that, which on a slow link takes long. */
     out: boolean;
+    /** The poll that made it, while its first view is built and the tab still waits for it. */
+    attaching: ServerResponse | undefined;
     seq: number;
     waiting: ServerResponse | undefined;
     timer: NodeJS.Timeout | undefined;
@@ -181,8 +183,18 @@ export function createEventStreams(app: PocketApp) {
 
     const keepPoller = (poller: Poller): void => {
         clearTimeout(poller.expiry);
+
+        // A closed one has no time left to keep.
+        if (!pollers.has(poller.id)) {
+            return;
+        }
+
+        // A poll that waits, or the one whose first view is still built, keeps it; with neither, it ends.
         poller.expiry = setTimeout(
-            () => (poller.waiting === undefined ? closePoller(poller) : keepPoller(poller)),
+            () =>
+                poller.waiting === undefined && poller.attaching === undefined
+                    ? closePoller(poller)
+                    : keepPoller(poller),
             eventTiming.pollExpireMs,
         );
         poller.expiry.unref();
@@ -244,6 +256,7 @@ export function createEventStreams(app: PocketApp) {
                 tookAt: Date.now(),
                 // Its first answer is on its way however long its first view takes to build.
                 out: true,
+                attaching: response,
                 seq: 0,
                 waiting: undefined,
                 timer: undefined,
@@ -280,6 +293,12 @@ export function createEventStreams(app: PocketApp) {
             });
             created.client.close = () => closePoller(created);
             pollers.set(created.id, created);
+            // Its time runs while its first view is built, however long that takes, as long as the tab waits for it: a
+            // tab that went is let go when its time is up, even if the build never ends.
+            response.once("close", () => {
+                created.attaching = undefined;
+            });
+            keepPoller(created);
 
             try {
                 await app.attach(created.client);
@@ -288,6 +307,8 @@ export function createEventStreams(app: PocketApp) {
                 closePoller(created);
 
                 throw error;
+            } finally {
+                created.attaching = undefined;
             }
 
             // Closed as it attached (cut off, or its person removed): its next poll starts afresh, with no wait.
@@ -295,7 +316,7 @@ export function createEventStreams(app: PocketApp) {
                 return json(response, 200, { session: created.id, events: [] });
             }
 
-            // Its time starts once its first view is built, however long that took: the poll that asked waits for it.
+            // Its time starts again, now that its first view is built.
             keepPoller(created);
             poller = created;
         }

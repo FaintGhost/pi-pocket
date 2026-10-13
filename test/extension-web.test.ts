@@ -1103,6 +1103,45 @@ test("a polling tab whose first view fails to build leaves nothing behind", asyn
     }
 });
 
+test("a polling tab that goes while its first view is built is let go, though the build never ends", async () => {
+    const { port } = server.address() as { port: number };
+    const attach = app.attach.bind(app);
+    const detach = app.detach.bind(app);
+    const detached: string[] = [];
+    const pollExpireMs = eventTiming.pollExpireMs;
+    let release!: () => void;
+    const never = new Promise<void>((resolve) => (release = resolve));
+
+    eventTiming.pollExpireMs = 300;
+
+    app.attach = async () => {
+        await never;
+    };
+
+    app.detach = (client) => {
+        detached.push(client.id);
+        detach(client);
+    };
+
+    try {
+        const socket = connect(port, "127.0.0.1");
+
+        socket.on("error", () => {});
+        socket.write(
+            `GET /api/poll?tab=gone-early HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${app.config.ownerToken}\r\n\r\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        // The tab goes; its first view is never built.
+        socket.destroy();
+        await until(() => detached.includes("gone-early"), "the tab let go", 3000);
+    } finally {
+        release();
+        app.attach = attach;
+        app.detach = detach;
+        eventTiming.pollExpireMs = pollExpireMs;
+    }
+});
+
 test("a stream far behind that takes nothing is cut off at its ping, with no new events for it", async () => {
     const { port } = server.address() as { port: number };
     const pingMs = eventTiming.pingMs;
