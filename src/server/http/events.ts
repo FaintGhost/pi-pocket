@@ -280,8 +280,9 @@ export function createEventStreams(app: PocketApp) {
             });
             created.client.close = () => closePoller(created);
             pollers.set(created.id, created);
-            keepPoller(created);
             await app.attach(created.client);
+            // Its time starts once its first view is built, however long that took: the poll that asked waits for it.
+            keepPoller(created);
             poller = created;
         }
 

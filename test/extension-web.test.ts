@@ -1043,6 +1043,39 @@ test("a polling session lives on from its last answer, so one that went late in 
     }
 });
 
+test("a polling session's time starts once its first view is built, however long that takes", async () => {
+    type Poll = { session: string; events: { seq: number; event: string }[] };
+    const poll = async (query: string): Promise<Poll> =>
+        (await call("owner", `/api/poll?${query}`)).data as Poll;
+    const pollExpireMs = eventTiming.pollExpireMs;
+    const attach = app.attach.bind(app);
+
+    eventTiming.pollExpireMs = 500;
+
+    // A first view that takes longer to build than a session lives.
+    app.attach = async (client) => {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        await attach(client);
+    };
+
+    try {
+        const first = await poll("tab=slow-start");
+
+        app.attach = attach;
+        assert.equal(first.events[0]?.event, "hello");
+
+        const next = await poll(
+            `tab=slow-start&session=${first.session}&ack=${first.events.at(-1)!.seq}`,
+        );
+
+        assert.equal(next.session, first.session, "the session outlived its slow start");
+        await call("owner", `/api/poll?session=${first.session}&close=1`);
+    } finally {
+        app.attach = attach;
+        eventTiming.pollExpireMs = pollExpireMs;
+    }
+});
+
 test("a stream far behind that takes nothing is cut off at its ping, with no new events for it", async () => {
     const { port } = server.address() as { port: number };
     const pingMs = eventTiming.pingMs;
