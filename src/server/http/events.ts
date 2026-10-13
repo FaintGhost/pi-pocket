@@ -295,7 +295,10 @@ export function createEventStreams(app: PocketApp) {
             pollers.set(created.id, created);
             // Its time runs while its first view is built, however long that takes, as long as the tab waits for it: a
             // tab that went is let go when its time is up, even if the build never ends.
+            let gone = false;
+
             response.once("close", () => {
+                gone = true;
                 created.attaching = undefined;
             });
             keepPoller(created);
@@ -317,6 +320,13 @@ export function createEventStreams(app: PocketApp) {
                 app.detach(created.client);
 
                 return json(response, 200, { session: created.id, events: [] });
+            }
+
+            // The tab went while its first view was built: nothing waits for it now, so it goes at once.
+            if (gone) {
+                closePoller(created);
+
+                return;
             }
 
             // Its time starts again, now that its first view is built.

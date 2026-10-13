@@ -1692,7 +1692,13 @@ test("a huge badge costs a redraw no more than a short one", real, async () => {
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(rail("Meter")), "the meter's rail button");
 
-    const timing = await withMeter<{ short: number; huge: number; shown: string }>(`
+    const timing = await withMeter<{
+        short: number;
+        huge: number;
+        shown: string;
+        padded: number;
+        paddedShown: string;
+    }>(`
         const { store } = await import("/store.js");
         const draws = async () => {
             const started = performance.now();
@@ -1714,9 +1720,15 @@ test("a huge badge costs a redraw no more than a short one", real, async () => {
         const huge = await draws();
         const shown = document.querySelector(${JSON.stringify(`${rail("Meter")} .rail-count`)}).textContent;
 
+        // Spaces before it, very many: trimmed once, when it changes, not at each draw.
+        globalThis.meterRail.update({ badge: " ".repeat(100000000) + "hi" });
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        const padded = await draws();
+        const paddedShown = document.querySelector(${JSON.stringify(`${rail("Meter")} .rail-count`)}).textContent;
+
         globalThis.meterRail.update({ badge: undefined });
 
-        return JSON.stringify({ short, huge, shown });
+        return JSON.stringify({ short, huge, shown, padded, paddedShown });
     `);
 
     assert.equal(timing.shown, `${"x".repeat(23)}…`);
@@ -1724,6 +1736,12 @@ test("a huge badge costs a redraw no more than a short one", real, async () => {
     assert.ok(
         timing.huge < timing.short * 3 + 50,
         `a draw took ${timing.huge} ms with it, ${timing.short} ms without`,
+    );
+    assert.equal(timing.paddedShown, "hi");
+    // Trimming 100 million spaces at each draw took some 48 ms; once, a draw costs what a short badge's does.
+    assert.ok(
+        timing.padded < timing.short * 3 + 20,
+        `a draw took ${timing.padded} ms with the padded badge, ${timing.short} ms without`,
     );
 });
 
@@ -1744,7 +1762,7 @@ test(
                 } catch (error) {
                     globalThis.spinEnded = error.message;
 
-                    // Stopped: its calls throw until the next task, but a call of its routes rejects, as its promise.
+                    // Stopped: its calls throw until the next task, a call of its routes too.
                     try {
                         globalThis.apiAfter = pocket.api("reading").then(
                             () => "answered",
@@ -1769,6 +1787,17 @@ test(
                     for (;;) {
                         await Promise.resolve();
                         pocket.onDispose(() => {});
+                    }
+                } catch (error) {
+                    globalThis.spinEnded = error.message;
+                }
+            })();`,
+            // Only calling its routes, without waiting for them.
+            calling: `(async () => {
+                try {
+                    for (;;) {
+                        await Promise.resolve();
+                        pocket.api("reading").catch(() => {});
                     }
                 } catch (error) {
                     globalThis.spinEnded = error.message;
@@ -1815,7 +1844,7 @@ test(
             if (name === "awaited") {
                 assert.equal(
                     await inPage<string>(`return JSON.stringify(await globalThis.apiAfter)`),
-                    "rejected: meter was stopped in this browser: it redraws without end",
+                    "threw: meter was stopped in this browser: it redraws without end",
                 );
             }
 

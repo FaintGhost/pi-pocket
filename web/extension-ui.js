@@ -767,13 +767,9 @@ function pocketFor(record) {
          * for a path that would lead out of the module's routes.
          */
         api: (path, body, options) => {
-            // Counted at once, so that a loop of calls that holds the page is stopped; but, as a path that leads out,
-            // a stopped module's call rejects rather than throws, as a call's promise is what its caller handles.
-            try {
-                tick(record);
-            } catch (error) {
-                return Promise.reject(error);
-            }
+            // Counted at once, so that a loop of calls that holds the page is stopped; once it is, the call throws, as
+            // the others do, so that a loop that only calls this ends too.
+            tick(record);
 
             return (async () => api(routeOf(record.module, path), body, options))();
         },
@@ -1045,6 +1041,20 @@ function firstCharacters(text, count) {
  * -Infinity show nothing, other numbers as they are; text, trimmed, with "" and "0" as nothing, and long text cut whole
  * characters at a time.
  */
+/** What each button's badge shows, worked out once for each version of the button: a draw that changes none reads it. */
+const shownBadges = new WeakMap();
+
+function badgeFor(spec) {
+    let shown = shownBadges.get(spec);
+
+    if (shown === undefined) {
+        shown = badgeOf(spec.badge);
+        shownBadges.set(spec, shown);
+    }
+
+    return shown;
+}
+
 function badgeOf(badge) {
     if (typeof badge === "number") {
         if (Number.isNaN(badge) || badge === 0 || badge === -Infinity) {
@@ -1101,7 +1111,7 @@ export function ExtensionRailButtons() {
         ${buttons.map(({ record, spec }) => {
             const open =
                 spec.page !== undefined && page?.module === record.module && page.id === spec.page;
-            const badge = badgeOf(spec.badge);
+            const badge = badgeFor(spec);
 
             return html`<button
                 key=${`${record.module}:${spec.id}`}

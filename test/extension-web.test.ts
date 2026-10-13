@@ -1155,6 +1155,40 @@ test("a polling tab that goes while its first view is built is let go, though th
     }
 });
 
+test("a polling tab that goes just before its first view is built is let go as the build ends", async () => {
+    const { port } = server.address() as { port: number };
+    const attach = app.attach.bind(app);
+    const detach = app.detach.bind(app);
+    const detached: string[] = [];
+
+    // A first view that takes a moment; the session's own time is long (a minute).
+    app.attach = async (client) => {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await attach(client);
+    };
+
+    app.detach = (client) => {
+        detached.push(client.id);
+        detach(client);
+    };
+
+    try {
+        const socket = connect(port, "127.0.0.1");
+
+        socket.on("error", () => {});
+        socket.write(
+            `GET /api/poll?tab=gone-at-end HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${app.config.ownerToken}\r\n\r\n`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        socket.destroy();
+        // Let go as the build ends, not a minute later.
+        await until(() => detached.includes("gone-at-end"), "the tab let go", 2000);
+    } finally {
+        app.attach = attach;
+        app.detach = detach;
+    }
+});
+
 test("a stream far behind that takes nothing is cut off at its ping, with no new events for it", async () => {
     const { port } = server.address() as { port: number };
     const pingMs = eventTiming.pingMs;
