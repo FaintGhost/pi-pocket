@@ -38,8 +38,10 @@ const MAX_EVENT = 256 * 1024;
 /** How many events, and how many bytes of them, a module may send each second; more are dropped and logged. */
 const MAX_EVENTS_PER_SECOND = 100;
 const MAX_EVENT_BYTES_PER_SECOND = 1024 * 1024;
-/** How many files a browser module's folder may have for its version to be worked out; more are not looked at. */
+/** How many served files of a browser module's folder count for its version; more are not looked at. */
 const MAX_FILES = 2000;
+/** How many folders of it are looked through for them. */
+const MAX_FOLDERS = 500;
 /** How many of a browser module's folders are watched for edits; deeper or more are seen at the module's next load. */
 const MAX_WATCHED = 64;
 
@@ -165,6 +167,10 @@ export class ExtensionWebs {
     #watching = false;
     #closed = false;
     readonly #timers = new Map<WebPart, NodeJS.Timeout>();
+    /** Versions still loading: the server stopping runs their cleanups too. */
+    readonly #staged = new Set<WebPart>();
+    /** Cleanups that wait, still running (of a version replaced or turned off): the server stopping waits for them. */
+    readonly #settling = new Set<Promise<void>>();
 
     constructor(options: Options = {}) {
         this.#options = options;
@@ -173,6 +179,8 @@ export class ExtensionWebs {
     /** What a module registers while `file` (in `directory`) loads, and the `web` its default export gets. */
     stage(file: string, directory: string, title: string): { part: WebPart; web: ExtensionWeb } {
         const part = new WebPart(file, directory, title);
+
+        this.#staged.add(part);
 
         const open = (what: string) => {
             if (part.sealed) {
@@ -210,7 +218,11 @@ export class ExtensionWebs {
                 try {
                     this.#send(part, event, data, options);
                 } catch (error) {
-                    this.#warn(part, "failed", `web.send failed: ${describe(error)}`);
+                    try {
+                        this.#warn(part, "failed", `web.send failed: ${safeDescribe(error)}`);
+                    } catch {
+                        // Nothing to tell it with: it still must not throw.
+                    }
                 }
             },
             error: (status, message) => {
@@ -277,7 +289,7 @@ export class ExtensionWebs {
         try {
             json = JSON.stringify(data ?? null) as string | undefined;
         } catch (error) {
-            return problem("json", `its data is not JSON: ${describe(error)}`);
+            return problem("json", `its data is not JSON: ${safeDescribe(error)}`);
         }
 
         if (json === undefined) {
@@ -325,6 +337,7 @@ export class ExtensionWebs {
     /** The module installed: what it registered replaces what its previous version had. */
     commit(part: WebPart): void {
         part.sealed = true;
+        this.#staged.delete(part);
 
         // Loaded while the server stopped: it goes at once.
         if (this.#closed) {
@@ -351,6 +364,7 @@ export class ExtensionWebs {
     /** The module failed to load: what it registered goes, and the version before stays. */
     discard(part: WebPart): void {
         part.sealed = true;
+        this.#staged.delete(part);
         void this.#dispose(part);
     }
 
@@ -470,7 +484,7 @@ export class ExtensionWebs {
             const wanted = client.folder ? join(root, ...path) : root;
             const file = realpathSync(client.folder ? join(client.root, ...path) : client.root);
 
-            return realpathSync(client.root) === root && file === wanted && statSync(file).isFile()
+            return isItself(part.directory, client) && file === wanted && statSync(file).isFile()
                 ? { file, type }
                 : undefined;
         } catch {
@@ -512,15 +526,21 @@ export class ExtensionWebs {
         }
     }
 
-    /** The server stops: every module's cleanups run. Settles once they all finished, the ones that wait included. */
+    /**
+     * The server stops: the cleanups of every version run, the ones in force and the ones still loading. Settles once
+     * they all finished, the ones that wait included, and the ones of versions that went before still running.
+     */
     close(): Promise<void> {
         this.#closed = true;
 
-        const running = [...this.#parts.values()].map((part) => this.#dispose(part));
+        const running = [...this.#parts.values(), ...this.#staged].map((part) =>
+            this.#dispose(part),
+        );
 
         this.#parts.clear();
+        this.#staged.clear();
 
-        return Promise.allSettled(running).then(() => {});
+        return Promise.allSettled([...running, ...this.#settling]).then(() => {});
     }
 
     /** Tell the tabs of the people who load either part's browser module. */
@@ -546,6 +566,15 @@ export class ExtensionWebs {
 
                 // Watch first, then look: an edit after the look is seen by the new watches.
                 this.#rewatch(part);
+
+                // Replaced by a link, or gone: nothing of it is served now, and the owner should know why.
+                if (!isItself(part.directory, client)) {
+                    this.#warn(
+                        part,
+                        "client gone",
+                        `its browser module ${client.name} is gone or became a link: tabs cannot load it until it is a file or folder again`,
+                    );
+                }
 
                 const rev = revision(client.root, client.folder);
 
@@ -591,7 +620,7 @@ export class ExtensionWebs {
                 this.#warn(
                     part,
                     `watch ${folder}`,
-                    `its browser module is not reloaded when ${folder} is edited: ${describe(error)}`,
+                    `its browser module is not reloaded when ${folder} is edited: ${safeDescribe(error)}`,
                 );
             }
         }
@@ -618,8 +647,13 @@ export class ExtensionWebs {
             .splice(0)
             .reverse()
             .map((dispose) => runDispose(dispose, part, this.#options.log));
+        const settled = Promise.allSettled(running).then(() => {});
 
-        return Promise.allSettled(running).then(() => {});
+        // Kept until it settles: a stop that comes meanwhile waits for it.
+        this.#settling.add(settled);
+        void settled.then(() => this.#settling.delete(settled));
+
+        return settled;
     }
 }
 
@@ -629,7 +663,8 @@ function runDispose(
     part: WebPart,
     log?: (message: string) => void,
 ): Promise<void> {
-    const failed = (error: unknown) => log?.(`${part.file}: a cleanup failed: ${describe(error)}`);
+    const failed = (error: unknown) =>
+        log?.(`${part.file}: a cleanup failed: ${safeDescribe(error)}`);
 
     try {
         const result = dispose() as unknown;
@@ -780,6 +815,24 @@ function checkClient(part: WebPart, entry: unknown, access: unknown = "owner"): 
     };
 }
 
+/** Whether a browser module's file or folder is still itself, right beside its module: not a link, and there. */
+function isItself(directory: string, client: Client): boolean {
+    try {
+        return realpathSync(client.root) === join(realpathSync(directory), client.name);
+    } catch {
+        return false;
+    }
+}
+
+/** An error in words, from anything thrown: never a throw itself (an object's own `toString` may throw). */
+function safeDescribe(error: unknown): string {
+    try {
+        return describe(error);
+    } catch {
+        return "an error that cannot be shown";
+    }
+}
+
 /** How specific a route is, to sort by: a fixed part sorts before a `:name` part, from the left. */
 function specificity(route: Route): string {
     return route.segments.map((segment) => (segment.startsWith(":") ? "1" : "0")).join("");
@@ -847,7 +900,8 @@ function folders(root: string): string[] {
  */
 function revision(root: string, folder: boolean): string {
     const hash = createHash("sha256");
-    let count = 0;
+    let files = 0;
+    let folders = 0;
 
     const add = (path: string) => {
         try {
@@ -871,17 +925,24 @@ function revision(root: string, folder: boolean): string {
         }
 
         for (const entry of entries) {
-            if (count >= MAX_FILES || entry.name.startsWith(".") || entry.name === "node_modules") {
+            if (entry.name.startsWith(".") || entry.name === "node_modules") {
                 continue;
             }
 
-            count++;
-
             const path = join(directory, entry.name);
 
+            // Only folders and the files it serves count toward the limits: a thousand logs beside them change nothing.
             if (entry.isDirectory()) {
-                walk(path);
-            } else if (entry.isFile() && WEB_FILE_TYPES[extname(entry.name).toLowerCase()]) {
+                if (folders < MAX_FOLDERS) {
+                    folders++;
+                    walk(path);
+                }
+            } else if (
+                entry.isFile() &&
+                WEB_FILE_TYPES[extname(entry.name).toLowerCase()] &&
+                files < MAX_FILES
+            ) {
+                files++;
                 add(path);
             }
         }

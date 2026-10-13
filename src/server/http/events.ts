@@ -12,13 +12,21 @@ import { conversationId, json } from "./io.ts";
 /** How long a poll waits for events before answering empty, and how long an unpolled session lives. */
 const POLL_HOLD_MS = 25_000;
 const POLL_EXPIRE_MS = 60_000;
+/**
+ * How much may wait for one tab, unread: a tab that does not read its stream, or does not acknowledge its polls, is
+ * cut off past it rather than hold the server's memory. It connects again, and gets a full view.
+ */
+const MAX_BACKLOG_BYTES = 8 * 1024 * 1024;
+const MAX_BACKLOG_EVENTS = 5000;
 
 /** One browser tab that receives events by long polling instead of an event stream. */
 interface Poller {
     id: string;
     userId: string;
     client: Client;
-    queue: { seq: number; event: string; data: unknown }[];
+    queue: { seq: number; event: string; data: unknown; size: number }[];
+    /** The queue's events, as JSON, in bytes. */
+    bytes: number;
     seq: number;
     waiting: ServerResponse | undefined;
     timer: NodeJS.Timeout | undefined;
@@ -48,9 +56,18 @@ export function createEventStreams(app: PocketApp) {
         user: User,
     ): Promise<void> => {
         const client = newClient(url, user, (event, data) => {
-            if (!response.writableEnded) {
-                response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+            if (response.writableEnded || response.destroyed) {
+                return;
             }
+
+            // A tab that does not read: cut off, so what waits for it does not grow without end.
+            if (response.writableLength > MAX_BACKLOG_BYTES) {
+                response.destroy();
+
+                return;
+            }
+
+            response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
         });
 
         client.close = () => response.end();
@@ -82,7 +99,10 @@ export function createEventStreams(app: PocketApp) {
         poller.waiting = undefined;
 
         if (response !== undefined && !response.writableEnded) {
-            json(response, 200, { session: poller.id, events: poller.queue });
+            json(response, 200, {
+                session: poller.id,
+                events: poller.queue.map(({ seq, event, data }) => ({ seq, event, data })),
+            });
         }
     };
 
@@ -133,6 +153,7 @@ export function createEventStreams(app: PocketApp) {
                 userId: user.id,
                 client: undefined as unknown as Client,
                 queue: [],
+                bytes: 0,
                 seq: 0,
                 waiting: undefined,
                 timer: undefined,
@@ -140,7 +161,22 @@ export function createEventStreams(app: PocketApp) {
             };
 
             created.client = newClient(url, user, (event, data) => {
-                created.queue.push({ seq: ++created.seq, event, data });
+                const size = JSON.stringify(data ?? null)?.length ?? 0;
+
+                created.queue.push({ seq: ++created.seq, event, data, size });
+                created.bytes += size;
+
+                // A tab that does not acknowledge what it got: its session ends, and its next poll starts afresh.
+                if (
+                    created.bytes > MAX_BACKLOG_BYTES ||
+                    created.queue.length > MAX_BACKLOG_EVENTS
+                ) {
+                    created.queue = [];
+                    created.bytes = 0;
+                    closePoller(created);
+
+                    return;
+                }
 
                 // A short pause lets a burst of events go out in one answer.
                 if (created.waiting !== undefined) {
@@ -157,6 +193,7 @@ export function createEventStreams(app: PocketApp) {
             const ack = Number(url.searchParams.get("ack") ?? 0);
 
             poller.queue = poller.queue.filter((item) => item.seq > ack);
+            poller.bytes = poller.queue.reduce((sum, item) => sum + item.size, 0);
             keepPoller(poller);
         }
 

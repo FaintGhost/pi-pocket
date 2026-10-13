@@ -27,6 +27,11 @@ import { describe } from "./errors.ts";
 import { ExtensionWebs, POCKET_API } from "./extension-web.ts";
 import type { ExtensionModule, PocketHost, WebAccess } from "./host.ts";
 
+/** How long a module may take to load (its import, and an async default export) before its load fails. */
+const LOAD_LIMIT_MS = 30_000;
+/** Loads so far in this process: each import of a module gets an address of its own. */
+let imports = 0;
+
 /** Built-in extension modules, in install order. Other `.ts` files in the directory load after them, by name. */
 const ORDER = [
     "prompt.ts",
@@ -177,6 +182,7 @@ export class ExtensionLoader {
      * started, or after the module was turned off or removed, or after the server began to stop, installs nothing.
      */
     readonly #generations = new Map<string, number>();
+    readonly #loadLimitMs: number;
     #closed = false;
 
     /**
@@ -193,6 +199,8 @@ export class ExtensionLoader {
         options: {
             webs?: ExtensionWebs;
             notify?: (level: "info" | "warning" | "error", message: string) => void;
+            /** How long a load may take; tests make it short. */
+            loadLimitMs?: number;
         } = {},
     ) {
         this.#registry = registry;
@@ -202,6 +210,7 @@ export class ExtensionLoader {
         this.#choice = choice;
         this.#webs = options.webs ?? new ExtensionWebs();
         this.#notify = options.notify ?? ((level, message) => host.notice(level, message));
+        this.#loadLimitMs = options.loadLimitMs ?? LOAD_LIMIT_MS;
     }
 
     /** Every module, built-in ones first in install order. A drop-in with a built-in's name is left out. */
@@ -316,7 +325,15 @@ export class ExtensionLoader {
         this.#generation(file);
 
         for (const extension of this.#installed.get(file) ?? []) {
-            this.#registry.uninstall(extension);
+            try {
+                this.#registry.uninstall(extension);
+            } catch (error) {
+                // A listener that threw: the registry changed all the same. What the module added to the app goes too.
+                this.#notify(
+                    "warning",
+                    `Uninstalling the extension ${extension.name} reported: ${describe(error)}`,
+                );
+            }
         }
 
         this.#webs.remove(file);
@@ -356,9 +373,14 @@ export class ExtensionLoader {
         return next;
     }
 
+    /** Whether a load still counts: no newer load started, the module was not turned off or removed, the server runs. */
+    #isLatest(file: string, generation: number): boolean {
+        return !this.#closed && this.#generations.get(file) === generation;
+    }
+
     /** Throw when a load no longer counts. */
     #stillLatest(file: string, generation: number): void {
-        if (this.#closed || this.#generations.get(file) !== generation) {
+        if (!this.#isLatest(file, generation)) {
             throw new Overtaken(file);
         }
     }
@@ -399,10 +421,29 @@ export class ExtensionLoader {
         }
 
         const generation = this.#generation(file);
+
+        try {
+            return await this.#build(module, generation, cacheBust);
+        } catch (error) {
+            // A load that no longer counts fails quietly too: the newer load, or the module turned off, says what holds.
+            if (!(error instanceof Overtaken) && !this.#isLatest(file, generation)) {
+                throw new Overtaken(file);
+            }
+
+            throw error;
+        }
+    }
+
+    async #build(module: Module, generation: number, cacheBust: boolean): Promise<Extension[]> {
+        const { file } = module;
+        // A load waits for the module (its import, and an async default export), but not forever: one that never settles
+        // would hold up the server's start, and every load after it.
+        const deadline = Date.now() + this.#loadLimitMs;
         const url =
             pathToFileURL(join(module.directory, file)).href +
-            (cacheBust ? `?v=${Date.now()}` : "");
-        const loaded = (await import(url)) as ExtensionModule;
+            // Each load its own address, or a second load in the same millisecond would get the first one's module.
+            (cacheBust ? `?v=${Date.now()}-${++imports}` : "");
+        const loaded = (await this.#within(import(url), deadline)) as ExtensionModule;
 
         // The import can take a while (a module may wait at its top level): the module may be off by now, or edited.
         this.#stillLatest(file, generation);
@@ -427,7 +468,9 @@ export class ExtensionLoader {
         try {
             const returned = loaded.default(this.#host, web) as unknown;
             // An async default export: it may register until it settles.
-            const built = isThenable(returned) ? await returned : returned;
+            const built = isThenable(returned)
+                ? await this.#within(Promise.resolve(returned), deadline)
+                : returned;
 
             this.#stillLatest(file, generation);
 
@@ -446,20 +489,18 @@ export class ExtensionLoader {
                 );
             }
 
+            const names = extensions.map((extension) => extension?.name);
+            const twice = names.find((name, index) => names.indexOf(name) !== index);
+
+            if (twice !== undefined) {
+                throw new Error(`the module returns two extensions named ${String(twice)}`);
+            }
+
             if (module.source === "drop-in") {
                 this.#checkNames(file, extensions);
             }
 
-            const previous = this.#installed.get(file) ?? [];
-
-            this.#installAll(extensions, previous);
-
-            for (const old of previous) {
-                if (!extensions.some((extension) => extension.name === old.name)) {
-                    this.#registry.uninstall(old);
-                }
-            }
-
+            this.#replace(extensions, this.#installed.get(file) ?? []);
             this.#installed.set(file, extensions);
             this.#errors.delete(file);
             this.#webs.commit(part);
@@ -474,36 +515,87 @@ export class ExtensionLoader {
     }
 
     /**
-     * Install a version's extensions, all or none: when one is refused, the ones before it are put back as they were,
-     * so the previous version stays whole.
+     * `promise`, or a failure once `deadline` passed. The load then has failed, whatever the module does later: what it
+     * staged is discarded, and what it would return is never installed.
      */
-    #installAll(extensions: readonly Extension[], previous: readonly Extension[]): void {
-        const done: Extension[] = [];
+    async #within<T>(promise: Promise<T>, deadline: number): Promise<T> {
+        let timer: NodeJS.Timeout | undefined;
+        const late = new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(
+                () => {
+                    reject(
+                        new Error(
+                            `it did not finish loading in ${this.#loadLimitMs / 1000} s: a module must not wait for long while it loads`,
+                        ),
+                    );
+                },
+                Math.max(0, deadline - Date.now()),
+            );
+        });
 
+        try {
+            return await Promise.race([promise, late]);
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    /**
+     * Put a version's extensions in place of the previous version's, all or none: when the registry refuses one, or a
+     * listener of it throws, every name either version has is put back as the previous version had it.
+     */
+    #replace(extensions: readonly Extension[], previous: readonly Extension[]): void {
         try {
             for (const extension of extensions) {
                 this.#registry.install(extension);
-                done.push(extension);
             }
-        } catch (error) {
-            for (const extension of done.reverse()) {
-                const before = previous.find((old) => old.name === extension.name);
 
-                try {
-                    if (before === undefined) {
-                        this.#registry.uninstall(extension);
-                    } else {
-                        this.#registry.install(before);
-                    }
-                } catch (undo) {
-                    this.#notify(
-                        "error",
-                        `Could not put back the extension ${extension.name}: ${describe(undo)}`,
-                    );
+            for (const old of previous) {
+                if (!extensions.some((extension) => extension.name === old.name)) {
+                    this.#registry.uninstall(old);
                 }
             }
+        } catch (error) {
+            this.#restore(extensions, previous);
 
             throw error;
+        }
+    }
+
+    /** Make the registry hold the previous version again, for every name the failed version touched or had before. */
+    #restore(extensions: readonly Extension[], previous: readonly Extension[]): void {
+        const holds = (name: string) => this.#registry.snapshot().extension(name);
+
+        for (const name of new Set(
+            [...extensions, ...previous].map((extension) => extension.name),
+        )) {
+            const before = previous.find((old) => old.name === name);
+
+            const put = () => {
+                const now = holds(name);
+
+                if (before !== undefined && now !== before) {
+                    this.#registry.install(before);
+                } else if (before === undefined && now !== undefined && extensions.includes(now)) {
+                    this.#registry.uninstall(now);
+                }
+            };
+
+            try {
+                put();
+            } catch {
+                // A listener that throws after the registry changed: what counts is what it holds now.
+            }
+
+            const now = holds(name);
+
+            if (
+                before === undefined
+                    ? now !== undefined && extensions.includes(now)
+                    : now !== before
+            ) {
+                this.#notify("error", `Could not put back the extension ${name} as it was`);
+            }
         }
     }
 
@@ -597,12 +689,15 @@ export class ExtensionLoader {
         }
 
         // A moment later, for an edit and a removal alike: an editor that saves by writing a new file and renaming it
-        // over the old one removes the file for an instant, and that is no removal.
-        clearTimeout(this.#timers.get(file));
+        // over the old one removes the file for an instant, and that is no removal. One wait for each file in each
+        // folder: a built-in's edit and a drop-in's of the same name do not share one.
+        const key = `${directory}\0${file}`;
+
+        clearTimeout(this.#timers.get(key));
         this.#timers.set(
-            file,
+            key,
             setTimeout(() => {
-                this.#timers.delete(file);
+                this.#timers.delete(key);
                 this.#settle(file, directory);
             }, 300),
         );
@@ -612,9 +707,21 @@ export class ExtensionLoader {
     #settle(file: string, directory: string): void {
         const module = this.#module(file);
 
-        if (module === undefined && directory === this.#dropIn && this.#installed.has(file)) {
+        // Gone from both folders: what it installed goes, and a load of it still running (its first, say) installs
+        // nothing.
+        if (module === undefined) {
+            const installed = this.#installed.has(file);
+
             this.#uninstall(file);
-            this.#notify("info", `Removed the drop-in extension ${file}.`);
+
+            if (installed) {
+                this.#notify(
+                    "info",
+                    directory === this.#dropIn
+                        ? `Removed the drop-in extension ${file}.`
+                        : `Removed the extension module ${file}.`,
+                );
+            }
 
             return;
         }

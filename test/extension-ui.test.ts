@@ -46,7 +46,10 @@ const METER_JS = `export const pocketApi = 1;
 export default function (pocket) {
 	const { html, useEffect, useState } = pocket;
 
-	function Meter() {
+	function Meter({ close }) {
+		// The tests call the close it was given later, from outside, and see which version drew it.
+		globalThis.meterClose = close;
+		globalThis.meterDrawnBy = pocket;
 		const [reading, setReading] = useState(null);
 		const [error, setError] = useState(null);
 
@@ -133,8 +136,8 @@ const notices = () =>
 const withMeter = <T>(script: string) =>
     inPage<T>(`const pocket = globalThis.meterPocket; const { html } = pocket; ${script}`);
 
-/** A finger's swipe right across what `selector` finds, as a phone sends it. */
-async function swipeRight(selector: string): Promise<void> {
+/** A finger's swipe right across what `selector` finds, as a phone sends it, from `from` pixels in from the left. */
+async function swipeRight(selector: string, from = 80): Promise<void> {
     await inPage<null>(`
         const target = document.querySelector(${JSON.stringify(selector)});
         const box = target.getBoundingClientRect();
@@ -150,17 +153,35 @@ async function swipeRight(selector: string): Promise<void> {
                 }),
             );
 
-        fire("touchstart", 80);
+        fire("touchstart", ${from});
 
-        for (let x = 100; x <= 260; x += 20) {
+        for (let x = ${from} + 20; x <= ${from} + 180; x += 20) {
             fire("touchmove", x);
         }
 
-        fire("touchend", 260);
+        fire("touchend", ${from} + 180);
 
         return "null";
     `);
 }
+
+/** Press Esc as an input method does to end what is being composed, not as a key of its own. */
+const composingEscape = () =>
+    inPage<null>(
+        `(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", keyCode: 229, isComposing: true, bubbles: true, cancelable: true })); return "null";`,
+    );
+
+/** The type of the sheet open now, as the app has it: one closing still shows a moment while it slides away. */
+const sheetType = () =>
+    inPage<string | null>(
+        `return JSON.stringify((await import("/store.js")).store.state.sheet?.type ?? null)`,
+    );
+
+/** How this tab's copy of a module's browser module stands, as the Extensions sheet reads it. */
+const stateOf = (module: string) =>
+    inPage<unknown>(
+        `return JSON.stringify((await import("/extension-ui.js")).browserModuleState(${JSON.stringify(module)}) ?? null)`,
+    );
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -483,28 +504,41 @@ test(
 test("adding or updating what is already there draws nothing again", real, async () => {
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(rail("Meter")), "the meter's rail button");
+    // Redraws come once for all the changes before them: each step waits for its own.
     const revs = await withMeter<number[]>(`
         const { store } = await import("/store.js");
-        const rev = () => store.state.extensionsRev;
         const out = [];
+        const step = async (change) => {
+            change();
+            await new Promise((resolve) => setTimeout(resolve));
+            out.push(store.state.extensionsRev);
+        };
         const run = () => {};
+        let first;
+        let second;
+        let many;
 
-        globalThis.meterRail.update({ badge: 5 });
-        out.push(rev());
-        globalThis.meterRail.update({ badge: 5 });
-        globalThis.meterRail.update({});
-        out.push(rev());
-        const first = pocket.rail({ id: "same", title: "Same", run });
-        out.push(rev());
-        const second = pocket.rail({ id: "same", title: "Same", run });
-        out.push(rev());
+        await step(() => globalThis.meterRail.update({ badge: 5 }));
+        await step(() => {
+            globalThis.meterRail.update({ badge: 5 });
+            globalThis.meterRail.update({});
+        });
+        await step(() => (first = pocket.rail({ id: "same", title: "Same", run })));
+        await step(() => (second = pocket.rail({ id: "same", title: "Same", run })));
         // The newer one changes it; the one it replaced changes nothing.
-        first.update({ badge: 9 });
-        out.push(rev());
-        second.update({ badge: 1 });
-        out.push(rev());
-        second.remove();
-        globalThis.meterRail.update({ badge: undefined });
+        await step(() => first.update({ badge: 9 }));
+        await step(() => second.update({ badge: 1 }));
+        // Many changes at once draw once.
+        await step(() => {
+            many = Array.from({ length: 300 }, (_, index) =>
+                pocket.rail({ id: "at-once" + index, title: "At once " + index, run }),
+            );
+        });
+        await step(() => {
+            many.forEach((each) => each.remove());
+            second.remove();
+            globalThis.meterRail.update({ badge: undefined });
+        });
 
         return JSON.stringify(out);
     `);
@@ -513,6 +547,9 @@ test("adding or updating what is already there draws nothing again", real, async
     assert.equal(revs[3], revs[2], "the same spec added again");
     assert.equal(revs[4], revs[3], "an update through a handle that was replaced");
     assert.equal(revs[5], revs[4]! + 1, "an update that changes something");
+    assert.equal(revs[6], revs[5]! + 1, "300 added at once draw once");
+    assert.equal(revs[7], revs[6]! + 1, "and go at once");
+    assert.equal(await has(rail("At once 0")), false);
 
     // A page that updates its rail button each time it draws, as an effect without deps would, settles.
     await withMeter<null>(`
@@ -593,6 +630,144 @@ test(
 );
 
 test(
+    "a page whose component failed draws again once its component is replaced, and only then",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            globalThis.healPage = pocket.page({
+                id: "heal",
+                title: "Heal",
+                component: () => {
+                    throw new Error("sick");
+                },
+            });
+            pocket.openPage("heal");
+
+            return "null";
+        `);
+        await until(
+            async () => (await text(".ext-page .error-box")) === "Heal failed: sick",
+            "sick",
+        );
+        // Drawn again for another reason, it stays as it was.
+        await inPage<null>(`globalThis.meterRail.update({ badge: 7 }); return "null"`);
+        await until(async () => (await text(`${rail("Meter")} .rail-count`)) === "7", "the badge");
+        assert.equal(await text(".ext-page .error-box"), "Heal failed: sick");
+
+        // Added again with a component that works, it shows.
+        await withMeter<null>(`
+            pocket.page({ id: "heal", title: "Heal", component: () => html\`<p class="healed">Well</p>\` });
+
+            return "null";
+        `);
+        await until(() => has(".ext-page .healed"), "the page added again");
+
+        // Or updated with one.
+        await withMeter<null>(`
+            globalThis.healPage = pocket.page({
+                id: "heal",
+                title: "Heal",
+                component: () => {
+                    throw new Error("sick again");
+                },
+            });
+
+            return "null";
+        `);
+        await until(
+            async () => (await text(".ext-page .error-box")) === "Heal failed: sick again",
+            "sick again",
+        );
+        await inPage<null>(
+            `globalThis.healPage.update({ component: () => globalThis.meterPocket.html\`<p class="healed">Well again</p>\` }); return "null"`,
+        );
+        await until(async () => (await text(".ext-page .healed")) === "Well again", "updated");
+        await withMeter<null>(
+            `pocket.closePage(); globalThis.meterRail.update({ badge: undefined }); return "null";`,
+        );
+    },
+);
+
+test(
+    "nothing at all thrown, by a class or by a component inside that draws again alone, shows in the error box",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            const { Component } = await import("/vendor/preact.mjs");
+
+            class Classy extends Component {
+                render() {
+                    throw null;
+                }
+            }
+
+            pocket.page({ id: "classy", title: "Classy", component: Classy });
+            pocket.openPage("classy");
+
+            return "null";
+        `);
+        await until(
+            async () => (await text(".ext-page .error-box")) === "Classy failed: it gave no reason",
+            "the class's error box",
+        );
+
+        await withMeter<null>(`
+            function Inner() {
+                const [broken, setBroken] = pocket.useState(false);
+
+                if (broken) {
+                    throw undefined;
+                }
+
+                return html\`<button class="button break-inner" onClick=\${() => setBroken(true)}>
+                    Break
+                </button>\`;
+            }
+
+            pocket.page({ id: "nested", title: "Nested", component: () => html\`<div><\${Inner} /></div>\` });
+            pocket.openPage("nested");
+
+            return "null";
+        `);
+        await until(() => has(".ext-page .break-inner"), "the page with a component inside");
+        await settled();
+        await page.click({ selector: ".ext-page .break-inner" });
+        await until(
+            async () => (await text(".ext-page .error-box")) === "Nested failed: it gave no reason",
+            "the inner component's error box, at once",
+            3000,
+        );
+        assert.equal(await has(".sidebar .rail"), true, "the app goes on");
+
+        // A component is drawn as it is: what Preact reads from it, such as its contextType, holds.
+        await withMeter<null>(`
+            const { createContext } = await import("/vendor/preact.mjs");
+            const Said = createContext("from its context");
+
+            function Context(props, context) {
+                return html\`<p class="context">\${context}</p>\`;
+            }
+
+            Context.contextType = Said;
+            pocket.page({ id: "context", title: "Context", component: Context });
+            pocket.openPage("context");
+
+            return "null";
+        `);
+        await until(
+            async () => (await text(".ext-page .context")) === "from its context",
+            "its context",
+        );
+        await withMeter<null>(`pocket.closePage(); return "null";`);
+        await until(async () => !(await has(".ext-page")), "the page closes");
+    },
+);
+
+test(
     "Esc: not while composing, and a page can keep it, while a layer over it still closes",
     real,
     async () => {
@@ -638,6 +813,42 @@ test(
     },
 );
 
+test("a sheet stays open on the Esc that ends composing, and closes on Esc", real, async () => {
+    await page.navigate(`${base}/s/${session}`);
+    await until(() => has(rail("Meter")), "the meter's rail button");
+    await launch("about the meter, here");
+    await until(() => has(".sheet .about"), "the meter's sheet");
+    await settled();
+    await composingEscape();
+    await sleep(200);
+    assert.equal(await sheetType(), "ext", "an input method's Esc leaves it open");
+    await page.press("Escape");
+    await until(async () => !(await has(".sheet")), "Esc closes it");
+});
+
+test("a rail button's badge hides at 0, empty, or none, as the app's counts do", real, async () => {
+    await page.navigate(`${base}/s/${session}`);
+    await until(() => has(rail("Meter")), "the meter's rail button");
+
+    const shown = async (badge: string) => {
+        await inPage<null>(`globalThis.meterRail.update({ badge: ${badge} }); return "null"`);
+        await sleep(100);
+
+        return {
+            count: await text(`${rail("Meter")} .rail-count`),
+            label: await inPage<string>(
+                `return JSON.stringify(document.querySelector(${JSON.stringify(rail("Meter"))}).getAttribute("aria-label"))`,
+            ),
+        };
+    };
+
+    assert.deepEqual(await shown("2"), { count: "2", label: "Meter, 2" });
+
+    for (const badge of ["0", `""`, `"  "`, "null", "false", "undefined"]) {
+        assert.deepEqual(await shown(badge), { count: "", label: "Meter" }, `badge ${badge}`);
+    }
+});
+
 test("a sheet that opens a page closes first, so back closes the page", real, async () => {
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(rail("Meter")), "the meter's rail button");
@@ -671,6 +882,62 @@ test("a sheet that opens a page closes first, so back closes the page", real, as
     await sleep(300);
     assert.equal(await has(".sheet"), false, "and no sheet comes back");
 });
+
+test(
+    "the close a page or sheet is given closes that one only: not a sheet over it, nor another page",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            pocket.sheet({
+                id: "keeper",
+                title: "Keeper",
+                component: ({ close }) => {
+                    globalThis.keptSheetClose = close;
+
+                    return html\`<p class="keeper">Keeper</p>\`;
+                },
+            });
+            pocket.page({
+                id: "other",
+                title: "Other",
+                component: ({ close }) => {
+                    globalThis.otherClose = close;
+
+                    return html\`<p class="other">Other</p>\`;
+                },
+            });
+            pocket.openSheet("keeper");
+
+            return "null";
+        `);
+        await until(() => has(".sheet .keeper"), "the sheet that keeps its close");
+        await launch("appearance");
+        await until(
+            async () => (await text(".sheet h2")) === "Appearance",
+            "the app's sheet in its place",
+        );
+        await inPage<null>(`globalThis.keptSheetClose(); return "null"`);
+        await sleep(200);
+        assert.equal(await sheetType(), "appearance", "the kept close left the app's sheet");
+        await settled();
+        await page.press("Escape");
+        await until(async () => !(await has(".sheet")), "Esc closes it");
+
+        await settled();
+        await page.click({ selector: rail("Meter") });
+        await until(() => has(".ext-page .meter"), "the meter's page");
+        await inPage<null>(`globalThis.firstClose = globalThis.meterClose; return "null"`);
+        await withMeter<null>(`pocket.openPage("other"); return "null";`);
+        await until(() => has(".ext-page .other"), "another page in its place");
+        await inPage<null>(`globalThis.firstClose(); return "null"`);
+        await sleep(200);
+        assert.equal(await has(".ext-page .other"), true, "the first page's close left it open");
+        await inPage<null>(`globalThis.otherClose(); return "null"`);
+        await until(async () => !(await has(".ext-page")), "its own close closes it");
+    },
+);
 
 test("a browser module that fails says so, and the rest of the app goes on", real, async () => {
     await app.setExtensionEnabled(owner(app), "broken.ts", true);
@@ -833,6 +1100,70 @@ test(
     },
 );
 
+test(
+    "a page swipes back only at a phone's width, and the edge's swipe back keeps out of what keeps its swipes",
+    real,
+    async () => {
+        try {
+            // A tablet, touch and narrow, wider than a phone: the page keeps its sideways swipes, as the board does.
+            await page.setViewport(VIEWPORTS.tablet);
+            await page.navigate(`${base}/s/${session}`);
+            await until(() => has(".composer"), "the conversation");
+            await withMeter<null>(`pocket.openPage("meter"); return "null";`);
+            await until(() => has(".ext-page .meter"), "the page");
+            await settled();
+            await swipeRight(".ext-page .meter");
+            await sleep(400);
+            assert.equal(await has(".ext-page .meter"), true, "no swipe back on a tablet");
+            await withMeter<null>(`pocket.closePage(); return "null";`);
+
+            // An iPhone's home screen app: a swipe in from the left edge goes back.
+            await page.setViewport(VIEWPORTS.mobile);
+            await page.navigate(`${base}/`);
+            await until(() => has(`.home-list .rail-ext[title="Meter"]`), "the phone's rail");
+            await inPage<null>(`
+                Object.defineProperty(navigator, "standalone", { value: true, configurable: true });
+                (await import("/gestures.js")).startEdgeBack();
+
+                return "null";
+            `);
+            await withMeter<null>(`
+                pocket.page({
+                    id: "zones",
+                    title: "Zones",
+                    component: () => html\`<div class="no-swipe-zone" data-no-swipe>A map</div>
+                        <p class="swipe-zone">Words</p>\`,
+                });
+                pocket.page({
+                    id: "still",
+                    title: "Still",
+                    swipe: false,
+                    component: () => html\`<p class="still-zone">A canvas</p>\`,
+                });
+                pocket.openPage("still");
+
+                return "null";
+            `);
+            await until(() => has(".ext-page .still-zone"), "the page that keeps its swipes");
+            await settled();
+            await swipeRight(".ext-page .still-zone", 5);
+            await sleep(400);
+            assert.equal(await has(".ext-page .still-zone"), true, "not from the edge either");
+
+            await withMeter<null>(`pocket.openPage("zones"); return "null";`);
+            await until(() => has(".ext-page .swipe-zone"), "the page with a marked part");
+            await settled();
+            await swipeRight(".ext-page .no-swipe-zone", 5);
+            await sleep(400);
+            assert.equal(await has(".ext-page .swipe-zone"), true, "the marked part keeps it");
+            await swipeRight(".ext-page .swipe-zone", 5);
+            await until(async () => !(await has(".ext-page")), "the rest goes back from the edge");
+        } finally {
+            await page.setViewport(DESKTOP);
+        }
+    },
+);
+
 test("in the folded sidebar, many rail buttons leave the sessions their room", real, async () => {
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(rail("Meter")), "the meter's rail button");
@@ -888,21 +1219,80 @@ test("in the folded sidebar, many rail buttons leave the sessions their room", r
 });
 
 test(
+    "beside the session list, many rail buttons keep four buttons' room and scroll; a short window scrolls the rail",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            globalThis.manyButtons = Array.from({ length: 16 }, (_, index) =>
+                pocket.rail({ id: "many" + index, title: "Many " + index, run() {} }),
+            );
+
+            return "null";
+        `);
+        await until(() => has(rail("Many 15")), "the many buttons");
+
+        try {
+            const measure = () =>
+                inPage<{ group: number; scrolls: boolean; me: boolean }>(`
+                    const group = document.querySelector(".sidebar .rail-exts");
+                    const nav = document.querySelector(".sidebar .rail");
+                    const me = document.querySelector(".sidebar .rail-me");
+
+                    me.scrollIntoView({ block: "nearest" });
+                    const box = me.getBoundingClientRect();
+                    const rail = nav.getBoundingClientRect();
+
+                    return JSON.stringify({
+                        group: Math.round(group.getBoundingClientRect().height),
+                        scrolls: group.scrollHeight > group.clientHeight,
+                        me: box.top >= rail.top - 1 && box.bottom <= rail.bottom + 1,
+                    });
+                `);
+
+            assert.deepEqual(await measure(), { group: 188, scrolls: true, me: true });
+            await page.setViewport({ ...DESKTOP, height: 520 });
+            await sleep(300);
+            assert.deepEqual(await measure(), { group: 188, scrolls: true, me: true });
+        } finally {
+            await page.setViewport(DESKTOP);
+            await withMeter<null>(`
+                for (const each of globalThis.manyButtons ?? []) {
+                    each.remove();
+                }
+
+                return "null";
+            `);
+        }
+    },
+);
+
+test(
     "an edited module keeps its place on the rail, and its old version closes nothing of the new one",
     real,
     async () => {
         await page.navigate(`${base}/s/${session}`);
         await until(() => has(rail("Meter")), "the meter's rail button");
-        await inPage<null>(`globalThis.oldMeterPocket = globalThis.meterPocket; return "null"`);
+        await settled();
+        await page.click({ selector: rail("Meter") });
+        await until(() => has(".ext-page .meter"), "the old version's page");
+        await inPage<null>(
+            `globalThis.oldMeterPocket = globalThis.meterPocket; globalThis.oldMeterClose = globalThis.meterClose; return "null"`,
+        );
         writeFileSync(join(dropIns, "meter.js"), `${METER_JS}\n// Edited.\n`);
         await app.loader.reload("meter.ts");
         await until(
             () =>
                 inPage<boolean>(
-                    `return JSON.stringify(globalThis.meterPocket !== globalThis.oldMeterPocket && document.querySelector(${JSON.stringify(rail("Meter"))}) !== null)`,
+                    `return JSON.stringify(globalThis.meterPocket !== globalThis.oldMeterPocket && globalThis.meterDrawnBy === globalThis.meterPocket && document.querySelector(${JSON.stringify(rail("Meter"))}) !== null && document.querySelector(".ext-page .meter") !== null)`,
                 ),
-            "the new version",
+            "the new version, its page in the old one's place",
         );
+        // The close the old version's page was given closes nothing of the new one's.
+        await inPage<null>(`globalThis.oldMeterClose(); return "null"`);
+        await sleep(200);
+        assert.equal(await has(".ext-page .meter"), true, "the old page's close left it open");
         assert.deepEqual(
             await inPage<string[]>(
                 `return JSON.stringify([...document.querySelectorAll(".sidebar .rail-button")].map((each) => each.getAttribute("aria-label")).filter((label) => ["Subagents", "Meter", "Shared", "People"].includes(label)))`,
@@ -910,9 +1300,6 @@ test(
             ["Subagents", "Meter", "Shared", "People"],
         );
 
-        await settled();
-        await page.click({ selector: rail("Meter") });
-        await until(() => has(".ext-page .meter"), "the new version's page");
         await inPage<null>(
             `globalThis.oldMeterPocket.closePage(); globalThis.oldMeterPocket.openPage("throws"); return "null"`,
         );
@@ -923,7 +1310,7 @@ test(
         await until(() => has(".sheet .about"), "the new version's sheet");
         await inPage<null>(`globalThis.oldMeterPocket.closeSheet(); return "null"`);
         await sleep(200);
-        assert.equal(await has(".sheet .about"), true, "the old version left it open too");
+        assert.equal(await sheetType(), "ext", "the old version left it open too");
         await settled();
         await page.press("Escape");
         await until(async () => !(await has(".sheet")), "Esc closes the sheet");
@@ -934,10 +1321,158 @@ test(
 );
 
 test(
+    "a component that changes what it added each time it draws is stopped, and the tab goes on",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            let count = 0;
+
+            pocket.page({
+                id: "loop",
+                title: "Loop",
+                component: () => {
+                    globalThis.meterRail.update({ badge: ++count });
+
+                    return html\`<p class="loop">\${count}</p>\`;
+                },
+            });
+            pocket.openPage("loop");
+
+            return "null";
+        `);
+        await until(
+            async () =>
+                (await text(".ext-page .error-box")) ===
+                "meter was stopped in this browser: it redraws without end",
+            "the page says why",
+        );
+        assert.equal(await has(rail("Meter")), false, "what it added goes");
+        assert.ok(
+            (await notices()).includes("meter was stopped in this browser: it redraws without end"),
+        );
+        assert.deepEqual(await stateOf("meter"), {
+            status: "failed",
+            error: "it redraws without end",
+        });
+        // The tab answers: Esc closes the page (its notice covers the page's ×).
+        await settled();
+        await page.press("Escape");
+        await until(async () => !(await has(".ext-page")), "the page closes");
+    },
+);
+
+test(
+    "a loop that draws slowly is stopped too, and so are tasks that redraw too often",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        // Each draw takes 15 ms, fewer than the redraws a second allows: it still never lets the page answer.
+        await withMeter<null>(`
+            let count = 0;
+
+            pocket.page({
+                id: "slow",
+                title: "Slow",
+                component: () => {
+                    const until = performance.now() + 15;
+
+                    while (performance.now() < until) {
+                        // Drawing slowly.
+                    }
+
+                    globalThis.meterRail.update({ badge: ++count });
+
+                    return html\`<p class="slow">\${count}</p>\`;
+                },
+            });
+            pocket.openPage("slow");
+
+            return "null";
+        `);
+        await until(
+            async () => /redraws without end/.test(await text(".ext-page .error-box")),
+            "the slow loop stopped",
+            20_000,
+        );
+
+        // Its own tasks, one after another, letting the page answer between them, but far more than 100 a second.
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter, loaded again");
+        await withMeter<null>(`
+            let count = 0;
+            let stopped = false;
+            const tasks = new MessageChannel();
+
+            tasks.port1.onmessage = () => {
+                globalThis.meterRail.update({ badge: ++count });
+
+                if (!stopped) {
+                    tasks.port2.postMessage(null);
+                }
+            };
+            pocket.onDispose(() => (stopped = true));
+            tasks.port2.postMessage(null);
+
+            return "null";
+        `);
+        await until(async () => !(await has(rail("Meter"))), "the busy module stopped");
+        assert.deepEqual(await stateOf("meter"), {
+            status: "failed",
+            error: "it redraws without end",
+        });
+    },
+);
+
+test("a module's notices come a few at a time, and the rest are dropped", real, async () => {
+    await page.navigate(`${base}/s/${session}`);
+    await until(() => has(rail("Meter")), "the meter's rail button");
+    // A component that says something each time it draws, which a notice makes it do again.
+    await withMeter<null>(`
+        const { store } = await import("/store.js");
+        let count = 0;
+
+        globalThis.floodSeen = new Set();
+        store.subscribe((state) => {
+            for (const notice of state.notices) {
+                if (notice.message.startsWith("flood ")) {
+                    globalThis.floodSeen.add(notice.id);
+                }
+            }
+        });
+        pocket.page({
+            id: "flood",
+            title: "Flood",
+            component: () => {
+                pocket.notify("info", "flood " + ++count);
+
+                return html\`<p class="flood">\${count}</p>\`;
+            },
+        });
+        pocket.openPage("flood");
+
+        return "null";
+    `);
+    await until(() => has(".ext-page .flood"), "the page");
+    await sleep(1000);
+    assert.equal(await inPage<number>(`return JSON.stringify(globalThis.floodSeen.size)`), 5);
+    assert.equal(await has(rail("Meter")), true, "notices alone do not stop it");
+    await withMeter<null>(`pocket.closePage(); return "null";`);
+    await until(async () => !(await has(".ext-page")), "the page closes");
+});
+
+test(
     "safe mode: ?noext=1 loads no browser modules in the tab until it is turned off",
     real,
     async () => {
         try {
+            // Words that mean no leave it off, and out of the address too.
+            await page.navigate(`${base}/s/${session}?noext=false`);
+            await until(() => has(rail("Meter")), "the meter's rail button");
+            assert.equal(await inPage<string>(`return JSON.stringify(location.search)`), "");
+
             await page.navigate(`${base}/s/${session}?noext=1`);
             await until(() => has(".composer"), "the conversation");
             await until(
@@ -954,9 +1489,21 @@ test(
                 "the address no longer has it",
             );
 
-            // A reload in the same tab keeps it.
+            // A reload in the same tab keeps it, and "off" turns it off.
             await page.navigate(`${base}/s/${session}`);
             await until(() => has(".composer"), "the conversation again");
+            await sleep(500);
+            assert.equal(await has(".rail-ext"), false);
+            await page.navigate(`${base}/s/${session}?noext=Off`);
+            await until(() => has(rail("Meter")), "the meter's rail button, safe mode off");
+            assert.equal(
+                await inPage<string | null>(
+                    `return JSON.stringify(sessionStorage.getItem("pocket.noext"))`,
+                ),
+                null,
+            );
+            await page.navigate(`${base}/s/${session}?noext=1`);
+            await until(() => has(".composer"), "the conversation, safe again");
             await sleep(500);
             assert.equal(await has(".rail-ext"), false);
 

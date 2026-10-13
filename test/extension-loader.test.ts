@@ -25,7 +25,7 @@ shared.cleaned = {};
 let folders = 0;
 
 /** A loader on fresh folders, with every drop-in on unless `off` says otherwise. */
-function setUp(off = new Set<string>()) {
+function setUp(off = new Set<string>(), loadLimitMs?: number) {
     const directory = join(root, `loader-${++folders}`);
     const builtIn = join(directory, "built-in");
     const dropIn = join(directory, "drop-ins");
@@ -48,6 +48,7 @@ function setUp(off = new Set<string>()) {
         {
             webs,
             notify: (level, message) => notices.push({ to: "owner", level, message }),
+            ...(loadLimitMs === undefined ? {} : { loadLimitMs }),
         },
     );
     const installed = () =>
@@ -250,4 +251,145 @@ test("a module file removed for a moment, as some editors save, is not taken awa
     } finally {
         await loader.close();
     }
+});
+
+test("two loads in the same millisecond each import the file as it is then", async () => {
+    const { dropIn, loader, webs } = setUp();
+    const realNow = Date.now;
+
+    // Every load at the very same time: the address of each import must still be its own.
+    Date.now = () => 1_800_000_000_000;
+
+    try {
+        writeFileSync(join(dropIn, "quick.ts"), gated("quick", 1));
+        await loader.reload("quick.ts");
+        writeFileSync(join(dropIn, "quick.ts"), gated("quick", 2));
+        await loader.reload("quick.ts");
+    } finally {
+        Date.now = realNow;
+    }
+
+    assert.deepEqual(answer(webs, "quick"), { v: 2 });
+});
+
+test("a load that fails after a newer one installed, or after the module was turned off, records no error", async () => {
+    const { dropIn, loader, webs, off } = setUp();
+    const sour = (version: number, gateName: string) => `/** Sour, version ${version}. */
+export default async (_host, web) => {
+	web.route("GET", "v", () => ({ v: ${version} }));
+	await globalThis.gates[${JSON.stringify(gateName)}];
+	throw new Error("version ${version} went sour");
+};
+`;
+
+    writeFileSync(join(dropIn, "late.ts"), sour(1, "late-1"));
+    const open = gate("late-1");
+    const first = loader.reload("late.ts");
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    writeFileSync(join(dropIn, "late.ts"), gated("late", 2));
+    await loader.reload("late.ts");
+    open();
+    // It fails, but it no longer counts: no error for the version that works, and the caller hears none either.
+    await first;
+    assert.deepEqual(answer(webs, "late"), { v: 2 });
+    assert.equal(loader.list().find((each) => each.file === "late.ts")?.error, undefined);
+
+    // Turned off while a load that will fail runs: off, with no error.
+    writeFileSync(join(dropIn, "late.ts"), sour(3, "late-3"));
+    const close = gate("late-3");
+    const third = loader.reload("late.ts");
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    off.add("late.ts");
+    await loader.apply("late.ts");
+    close();
+    await third;
+    assert.equal(loader.list().find((each) => each.file === "late.ts")?.error, undefined);
+    assert.equal(answer(webs, "late"), undefined);
+});
+
+test("a module whose file is removed during its first load installs nothing", async () => {
+    const { dropIn, loader, webs, installed } = setUp();
+
+    loader.watch();
+
+    try {
+        writeFileSync(join(dropIn, "brief.ts"), gated("brief", 1, "brief"));
+        const open = gate("brief");
+        const loading = loader.apply("brief.ts");
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        rmSync(join(dropIn, "brief.ts"));
+        // Gone for longer than an editor's save.
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        open();
+        await loading;
+        assert.equal(answer(webs, "brief"), undefined);
+        assert.deepEqual(installed(), []);
+    } finally {
+        await loader.close();
+    }
+});
+
+test("a load that never finishes fails after the limit, and installs nothing if it finishes later", async () => {
+    const { dropIn, loader, webs } = setUp(new Set(), 200);
+
+    writeFileSync(
+        join(dropIn, "stuck.ts"),
+        `/** Stuck: waits for ever while it sets up. */
+export default async (_host, web) => {
+	web.route("GET", "v", () => ({ v: "stuck" }));
+	await globalThis.gates.stuck;
+};
+`,
+    );
+    const open = gate("stuck");
+
+    await assert.rejects(loader.reload("stuck.ts"), /did not finish loading in 0\.2 s/);
+    open();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(answer(webs, "stuck"), undefined);
+    assert.match(
+        loader.list().find((each) => each.file === "stuck.ts")?.error ?? "",
+        /did not finish/,
+    );
+});
+
+test("a version whose old extensions cannot all be removed leaves the version before whole", async () => {
+    const { dropIn, loader, registry, webs, installed } = setUp();
+    const module = (version: number, names: string[]) => `/** Drops, version ${version}. */
+export default (_host, web) => {
+	web.route("GET", "v", () => ({ v: ${version} }));
+	return ${JSON.stringify(names.map((name) => ({ name, v: version })))};
+};
+`;
+
+    writeFileSync(join(dropIn, "drops.ts"), module(1, ["t-drops-a", "t-drops-b"]));
+    await loader.reload("drops.ts");
+
+    // A listener of the registry that throws once the second extension is gone: after the registry changed.
+    let armed = true;
+    const stop = registry.subscribe(() => {
+        if (armed && registry.snapshot().extension("t-drops-b") === undefined) {
+            armed = false;
+
+            throw new Error("a listener failed");
+        }
+    });
+
+    try {
+        writeFileSync(join(dropIn, "drops.ts"), module(2, ["t-drops-a"]));
+        await assert.rejects(loader.reload("drops.ts"), /a listener failed/);
+    } finally {
+        stop();
+    }
+
+    assert.deepEqual(installed(), ["t-drops-a@1", "t-drops-b@1"]);
+    assert.deepEqual(answer(webs, "drops"), { v: 1 });
+
+    // And a version that returns two extensions of one name is refused before anything installs.
+    writeFileSync(join(dropIn, "drops.ts"), module(3, ["t-drops-a", "t-drops-a"]));
+    await assert.rejects(loader.reload("drops.ts"), /two extensions named t-drops-a/);
+    assert.deepEqual(installed(), ["t-drops-a@1", "t-drops-b@1"]);
 });

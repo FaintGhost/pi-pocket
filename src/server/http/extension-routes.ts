@@ -2,13 +2,16 @@
  * What extension modules add to the app over HTTP: `/api/x/:module/…`, the routes a module registered (after the API's
  * sign-in, and with the `X-Pocket` header on every method), and `/x/:module/:rev/…`, the files of its browser module.
  */
-import { readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PocketApp } from "../app.ts";
 import type { User } from "../config.ts";
 import { describe, HttpError } from "../errors.ts";
 import { exposedError } from "../extension-web.ts";
 import { type ApiRequest, json, readJson, send } from "./io.ts";
+
+/** The largest file a browser module serves: each request reads the file whole, and anyone it is for may ask often. */
+const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
 /** Opened on its own, an SVG could run script with the app's origin: give it an opaque one. */
 const SVG_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'";
@@ -157,11 +160,35 @@ export function extensionFile(
     }
 
     let body: Buffer;
+    let fd: number;
 
+    // Opened as it is checked: a regular file, not a link, and never waiting (a pipe swapped in after the check would
+    // otherwise hold the whole server).
     try {
-        body = readFileSync(found.file);
+        fd = openSync(found.file, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
     } catch {
         throw new HttpError(404, "Not found");
+    }
+
+    try {
+        const stats = fstatSync(fd);
+
+        if (!stats.isFile()) {
+            throw new HttpError(404, "Not found");
+        }
+
+        if (stats.size > MAX_FILE_BYTES) {
+            throw new HttpError(
+                413,
+                `A browser module's file is at most ${MAX_FILE_BYTES / 1024 / 1024} MB`,
+            );
+        }
+
+        body = readFileSync(fd);
+    } catch (error) {
+        throw error instanceof HttpError ? error : new HttpError(404, "Not found");
+    } finally {
+        closeSync(fd);
     }
 
     // The address holds the version, but a restart starts the versions again: always ask.

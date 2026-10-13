@@ -249,14 +249,20 @@ export interface ExtensionWeb {
     send(event: string, data?: unknown, options?: { to?: string }): void;
     /** An error for a route to throw: whoever asked gets `status` (400 to 599) and `message` as they are. */
     error(status: number, message: string): Error;
-    /** Run `dispose` when this version of the module goes: replaced by an edit, turned off, or the server stopping. */
-    onDispose(dispose: () => void): void;
+    /**
+     * Run `dispose` when this version of the module goes: replaced by an edit, turned off, or the server stopping. It
+     * may return a promise: a stopping server waits for it, up to 3 s.
+     */
+    onDispose(dispose: () => unknown): void;
 }
 
 /** The shape of every module in `src/server/extensions/`: a default export building one or more extensions. */
 export type ExtensionModule = {
-    /** Builds the module's extensions; a module that only adds to the app returns nothing. */
-    default: (host: PocketHost, web: ExtensionWeb) => Extension | readonly Extension[] | void;
+    /** Builds the module's extensions; a module that only adds to the app returns nothing. It may be async. */
+    default: (
+        host: PocketHost,
+        web: ExtensionWeb,
+    ) => Extension | readonly Extension[] | void | Promise<Extension | readonly Extension[] | void>;
     /** The version of the extension API the module needs, when it says: a newer one than the app's is not loaded. */
     pocketApi?: unknown;
 };

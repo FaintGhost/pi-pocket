@@ -1144,8 +1144,10 @@ export function Sheet({ title, onClose, children, wide = false, actions = null }
 
     useDragToClose(ref, { dir: "down", onClose, enabled: BOTTOM_SHEETS.matches });
 
+    // Not the Esc that ends an input method's composing, which belongs to the field.
     useEffect(() => {
-        const onKey = (event) => event.key === "Escape" && onClose();
+        const onKey = (event) =>
+            event.key === "Escape" && !event.isComposing && event.keyCode !== 229 && onClose();
 
         addEventListener("keydown", onKey);
 

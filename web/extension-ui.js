@@ -3,7 +3,7 @@
 // rail buttons, menu rows, launcher actions, pages in the conversation's place, and sheets, calls its own routes, and
 // hears its module's events. What it added goes when it reloads or is turned off; one that fails says why, and the app
 // goes on without it. A tab opened with `?noext=1` loads none of them (safe mode), for as long as the tab stays open.
-import { Component, Fragment, h } from "preact";
+import { Component, Fragment, h, options } from "preact";
 import {
     useCallback,
     useEffect,
@@ -39,7 +39,120 @@ const modules = new Map();
 /** The modules' names in the order the server lists them: what they add shows in that order. */
 let order = [];
 
-const redraw = () => store.set((state) => ({ extensionsRev: state.extensionsRev + 1 }));
+const liveRecord = (record) =>
+    record !== undefined && !record.gone && !record.dead && modules.get(record.module) === record;
+
+// ─── Drawing again, within bounds ────────────────────────────────────────────
+
+/**
+ * How often a module may make the app draw again: what it adds or changes, and the pages and sheets it opens and closes.
+ * A component that does so as it draws, with a value that changes each time, would draw for ever and hold the tab: past
+ * either bound, the module stops, as one that failed to load does.
+ */
+const REDRAWS_PER_SECOND = 100;
+const REDRAWS_PER_TURN = 100;
+/** And how many notices it may show: past these, the rest are dropped, with a word in the console. */
+const NOTICES = 5;
+const NOTICES_MS = 5000;
+
+/**
+ * The browser's turns, counted: one ends when a posted message gets through, which it never does while a loop holds the
+ * tab. A message rather than a timer: a hidden tab's timers wait up to a minute, and the turns would seem to last that
+ * long.
+ */
+let turn = 0;
+let turnEnding = false;
+const turns = new MessageChannel();
+
+turns.port1.onmessage = () => {
+    turnEnding = false;
+    turn++;
+};
+
+function endOfTurn() {
+    if (!turnEnding) {
+        turnEnding = true;
+        turns.port2.postMessage(null);
+    }
+}
+
+/** Count one more redraw a module caused; false, once it stopped the module for going past its bounds. */
+function charge(record) {
+    const now = performance.now();
+    const spent = record.spent;
+
+    if (now - spent.since >= 1000) {
+        spent.since = now;
+        spent.second = 0;
+    }
+
+    if (spent.turn !== turn) {
+        spent.turn = turn;
+        spent.inTurn = 0;
+    }
+
+    spent.second++;
+    spent.inTurn++;
+    endOfTurn();
+
+    if (spent.second > REDRAWS_PER_SECOND || spent.inTurn > REDRAWS_PER_TURN) {
+        fail(record, new Error("it redraws without end"), "was stopped");
+
+        return false;
+    }
+
+    return true;
+}
+
+/** The modules whose changes wait for the next redraw, which comes once for all of them; null when none is due. */
+let due = null;
+
+/** Draw what extensions add again, soon: every change until then goes in the same redraw, charged to `record`. */
+function redraw(record) {
+    if (due === null) {
+        due = new Set();
+        queueMicrotask(flush);
+    }
+
+    if (record !== undefined) {
+        due.add(record);
+    }
+}
+
+function flush() {
+    const records = due;
+
+    due = null;
+
+    for (const record of records) {
+        if (liveRecord(record)) {
+            charge(record);
+        }
+    }
+
+    store.set((state) => ({ extensionsRev: state.extensionsRev + 1 }));
+}
+
+/** A notice from a module, as many as its bound lets through. */
+function noticeFrom(record, level, message, action) {
+    const now = performance.now();
+    const recent = record.notices.filter((at) => now - at < NOTICES_MS);
+
+    if (recent.length >= NOTICES) {
+        if (!record.noticesDropped) {
+            record.noticesDropped = true;
+            console.warn(`${record.title}: too many notices; dropping the rest for a few seconds`);
+        }
+
+        record.notices = recent;
+
+        return;
+    }
+
+    record.notices = [...recent, now];
+    record.noticesDropped = false;
+    notify(level, message, action);
+}
 
 /** What was thrown, as text for a notice or an error box: an Error's message, a string, or a word that it gave none. */
 function reason(error) {
@@ -74,27 +187,31 @@ function cleanUp(record, dispose) {
 /** Where a tab keeps that it is in safe mode: in its session storage, so reloads and reconnects keep it. */
 const SAFE_KEY = "pocket.noext";
 
+/** What `?noext=` turns safe mode off with; any other value (`1`, or none) turns it on. */
+const SAFE_OFF = new Set(["0", "false", "off", "no"]);
+
 /**
  * Read `?noext=1` (safe mode on) or `?noext=0` (off) from the address, keep it for the tab, and take it out of the
  * address, so a link copied from here does not pass it on.
  */
 function startSafeMode() {
     const query = new URLSearchParams(location.search);
+    const asked = query.has("noext")
+        ? !SAFE_OFF.has(query.get("noext").trim().toLowerCase())
+        : null;
     let on = false;
 
     try {
-        if (query.has("noext")) {
-            if (query.get("noext") === "0") {
-                sessionStorage.removeItem(SAFE_KEY);
-            } else {
-                sessionStorage.setItem(SAFE_KEY, "1");
-            }
+        if (asked === true) {
+            sessionStorage.setItem(SAFE_KEY, "1");
+        } else if (asked === false) {
+            sessionStorage.removeItem(SAFE_KEY);
         }
 
         on = sessionStorage.getItem(SAFE_KEY) === "1";
     } catch {
         // No session storage: safe mode holds for this page only.
-        on = query.has("noext") && query.get("noext") !== "0";
+        on = asked === true;
     }
 
     if (query.has("noext")) {
@@ -222,8 +339,14 @@ async function load(entry) {
         listeners: new Set(),
         // Replaced or turned off.
         gone: false,
-        // Failed: what it set up went, and what it tries later (a timer) does nothing.
+        // Failed, or stopped: what it set up went, and what it tries later (a timer) does nothing.
         dead: false,
+        // How it failed, for its page and sheets: "failed to load", or "was stopped".
+        how: null,
+        // The redraws it caused lately, and the times of its notices (`charge`, `noticeFrom`).
+        spent: { since: 0, second: 0, turn: -1, inTurn: 0 },
+        notices: [],
+        noticesDropped: false,
     };
 
     record.pocket = pocketFor(record);
@@ -255,8 +378,8 @@ async function load(entry) {
             record.disposers.push(dispose);
         }
 
-        // Replaced or turned off while it started: what it set up goes.
-        if (record.gone) {
+        // Replaced or turned off while it started, or stopped already: what it set up goes.
+        if (record.gone || record.dead) {
             teardown(record);
 
             return;
@@ -264,18 +387,28 @@ async function load(entry) {
 
         record.status = "ready";
     } catch (error) {
-        if (record.gone) {
-            return;
+        if (!record.gone && !record.dead) {
+            fail(record, error, "failed to load");
         }
 
-        record.dead = true;
-        teardown(record);
-        record.status = "failed";
-        record.error = reason(error);
-        console.error(`${entry.title}'s browser module failed to load`, error);
-        notify("error", `${entry.title} failed to load in this browser: ${record.error}`);
+        return;
     }
 
+    redraw();
+}
+
+/**
+ * A module failed, while it loaded or later (`how`): what it added goes, its cleanups run, what it tries next does
+ * nothing, and a notice, its page or sheet, and the Extensions sheet say why.
+ */
+function fail(record, error, how) {
+    record.dead = true;
+    teardown(record);
+    record.status = "failed";
+    record.error = reason(error);
+    record.how = how;
+    console.error(`${record.title}'s browser module ${how}`, error);
+    notify("error", `${record.title} ${how} in this browser: ${record.error}`);
     redraw();
 }
 
@@ -360,6 +493,7 @@ function check(kind, spec) {
     if (
         spec.badge !== undefined &&
         spec.badge !== null &&
+        spec.badge !== false &&
         typeof spec.badge !== "string" &&
         typeof spec.badge !== "number"
     ) {
@@ -447,7 +581,9 @@ function routeOf(module, path) {
 }
 
 function pocketFor(record) {
-    const live = () => !record.gone && !record.dead && modules.get(record.module) === record;
+    const live = () => liveRecord(record);
+    // What changes what shows at once (a page or sheet opened or closed) counts toward its bounds as a redraw does.
+    const change = () => live() && charge(record);
 
     /** Add something, or replace what has its id; what comes back changes or removes it. */
     const add = (kind, spec) => {
@@ -460,7 +596,7 @@ function pocketFor(record) {
 
             // The same again (a component that adds as it draws) draws nothing again.
             if (!sameSpec(before, current)) {
-                redraw();
+                redraw(record);
             }
         }
 
@@ -484,12 +620,12 @@ function pocketFor(record) {
                 check(kind, next);
                 current = next;
                 record.adds[kind].set(current.id, current);
-                redraw();
+                redraw(record);
             },
             remove() {
                 if (live() && record.adds[kind].get(current.id) === current) {
                     record.adds[kind].delete(current.id);
-                    redraw();
+                    redraw(record);
                 }
             },
         });
@@ -547,8 +683,9 @@ function pocketFor(record) {
 
             return () => record.listeners.delete(listener);
         },
-        /** A short notice, as the app's own: `info`, `warning`, or `error`. */
-        notify: (level, message) => notify(LEVELS.has(level) ? level : "info", String(message)),
+        /** A short notice, as the app's own: `info`, `warning`, or `error`. A few at a time (`NOTICES`). */
+        notify: (level, message) =>
+            noticeFrom(record, LEVELS.has(level) ? level : "info", String(message)),
         rail: (spec) => add("rail", spec),
         menu: (spec) => add("menu", spec),
         launcher: (spec) => add("launcher", spec),
@@ -561,12 +698,12 @@ function pocketFor(record) {
                 throw new Error("pocket.openPage: give it the id of one of its pages");
             }
 
-            if (live()) {
+            if (change()) {
                 openPage(record.module, id);
             }
         },
         closePage() {
-            if (live() && store.state.page?.module === record.module) {
+            if (live() && store.state.page?.module === record.module && change()) {
                 closePage();
             }
         },
@@ -579,14 +716,14 @@ function pocketFor(record) {
                 throw new Error("pocket.openSheet: its props are an object");
             }
 
-            if (live()) {
+            if (change()) {
                 openExtensionSheet(record.module, id, props);
             }
         },
         closeSheet() {
             const sheet = store.state.sheet;
 
-            if (live() && sheet?.type === "ext" && sheet.module === record.module) {
+            if (live() && sheet?.type === "ext" && sheet.module === record.module && change()) {
                 closeSheet();
             }
         },
@@ -626,7 +763,8 @@ function pocketFor(record) {
             link.addEventListener("error", () => {
                 if (live() && link.isConnected) {
                     console.warn(`${record.title}: ${href.href} did not load`);
-                    notify(
+                    noticeFrom(
+                        record,
                         "warning",
                         `${record.title}: its stylesheet ${String(path)} did not load`,
                     );
@@ -675,6 +813,36 @@ export function openPage(module, id) {
 
 export const closePage = () => store.set({ page: null });
 
+/**
+ * The `close` a page's component gets: it closes that page, of that version of its module, while it shows, and nothing
+ * else (another page, the next version's) when called later.
+ */
+function pageCloser(record, id) {
+    return () => {
+        const { page } = store.state;
+
+        if (liveRecord(record) && page?.module === record.module && page.id === id) {
+            closePage();
+        }
+    };
+}
+
+/** The `close` a sheet's component gets: it closes that sheet of that version while it shows, and no other sheet. */
+function sheetCloser(record, id) {
+    return () => {
+        const { sheet } = store.state;
+
+        if (
+            liveRecord(record) &&
+            sheet?.type === "ext" &&
+            sheet.module === record.module &&
+            sheet.sheetId === id
+        ) {
+            closeSheet();
+        }
+    };
+}
+
 function openExtensionSheet(module, id, props = {}) {
     openSheet({ type: "ext", module, sheetId: id, id: `${module}:${id}`, props });
 }
@@ -686,7 +854,7 @@ function openExtensionSheet(module, id, props = {}) {
 function activate(record, spec) {
     const failed = (error) => {
         console.error(`${record.title}: ${spec.id} failed`, error);
-        notify("error", `${record.title}: ${reason(error)}`);
+        noticeFrom(record, "error", `${record.title}: ${reason(error)}`);
     };
 
     try {
@@ -717,6 +885,12 @@ function added(kind) {
 
 /** An extension's icon: its own path, one of the app's by name, or a square of four when it gave none it knows. */
 const pathOf = (spec) => spec.iconPath ?? (iconPath(spec.icon ?? "") || iconPath("grid"));
+
+/** A rail button's badge as it shows: none for nothing, 0, or empty text, as the app's own counts hide at 0. */
+const badgeOf = (badge) =>
+    badge === undefined || badge === null || badge === false || badge === 0
+        ? ""
+        : String(badge).trim();
 
 /**
  * How this tab's copy of a module's browser module stands, for the Extensions sheet: `loading`, `ready`, `failed` (with
@@ -750,7 +924,7 @@ export function ExtensionRailButtons() {
         ${buttons.map(({ record, spec }) => {
             const open =
                 spec.page !== undefined && page?.module === record.module && page.id === spec.page;
-            const badge = spec.badge === undefined || spec.badge === null ? "" : String(spec.badge);
+            const badge = badgeOf(spec.badge);
 
             return html`<button
                 key=${`${record.module}:${spec.id}`}
@@ -813,38 +987,64 @@ class Guard extends Component {
     }
 }
 
-/** Each extension component, as drawn: the same function each time, so Preact keeps its state from draw to draw. */
-const drawables = new WeakMap();
+// Preact reads `.then` of whatever a component throws while it draws, to tell a pause from a failure, so a thrown `null`
+// or `undefined` breaks Preact itself, past every boundary (and, from a component that drew again alone, out of its
+// queue). So every component under a Guard, an extension's own and the ones inside it, gets a render that turns those
+// into an Error first. Preact's render hook, and a vnode's component and parent, go by these short names in its build,
+// as preact/hooks uses them; the app's own components are left as they are. Should the names change, this does nothing,
+// and `Drawn` still keeps such a failure under the Guard, with Preact's own words.
+const RENDER_HOOK = "__r";
+const COMPONENT = "__c";
+const PARENT = "__";
+/** Each component checked once: whether it draws under a Guard. */
+const checked = new WeakSet();
+const beforeRender = options[RENDER_HOOK];
 
-/**
- * An extension's component, such that what it throws while drawing reaches its Guard: Preact itself trips over a thrown
- * `null` or `undefined`, and the error it then makes would pass the Guard by. A class is drawn as it is.
- */
-function drawable(component) {
-    if (typeof component.prototype?.render === "function") {
-        return component;
+options[RENDER_HOOK] = (vnode) => {
+    if (typeof beforeRender === "function") {
+        beforeRender(vnode);
     }
 
-    let drawn = drawables.get(component);
+    const component = vnode?.[COMPONENT];
 
-    if (drawn === undefined) {
-        drawn = function (props, context) {
-            try {
-                return component.call(this, props, context);
-            } catch (error) {
-                throw error ?? new Error("it gave no reason");
-            }
-        };
-
-        drawables.set(component, drawn);
+    if (!component || checked.has(component)) {
+        return;
     }
 
-    return drawn;
+    checked.add(component);
+
+    for (let above = vnode[PARENT]; above; above = above[PARENT]) {
+        if (above.type === Guard) {
+            const render = component.render;
+
+            component.render = function (...args) {
+                try {
+                    return render.apply(this, args);
+                } catch (error) {
+                    throw error ?? new Error("it gave no reason");
+                }
+            };
+
+            return;
+        }
+    }
+};
+
+/** Between the Guard and an extension's component: what goes wrong in it, however Preact takes it, stays under the Guard. */
+function Drawn({ component, props }) {
+    return h(component, props);
 }
 
-/** Between the Guard and an extension's component, so that whatever goes wrong in it is caught below the Guard. */
-function Drawn({ component, props }) {
-    return h(drawable(component), props);
+/** Each extension component's number, for its Guard's key: a new component starts with a new Guard. */
+const componentIds = new WeakMap();
+let nextComponentId = 1;
+
+function componentId(component) {
+    if (!componentIds.has(component)) {
+        componentIds.set(component, nextComponentId++);
+    }
+
+    return componentIds.get(component);
 }
 
 /** What a page or sheet shows: its component once its module is ready, else why not. */
@@ -855,7 +1055,7 @@ function Body({ record, spec, title, props, close }) {
 
     if (record.status === "failed") {
         return html`<div class="error-box">
-            ${record.title} failed to load in this browser: ${record.error}
+            ${record.title} ${record.how ?? "failed to load"} in this browser: ${record.error}
         </div>`;
     }
 
@@ -865,7 +1065,8 @@ function Body({ record, spec, title, props, close }) {
             : html`<${Loader} label=${`Loading ${title}`} />`;
     }
 
-    return html`<${Guard} key=${record.url} name=${title}>
+    // A Guard that caught a failure stays with it until its component changes (the page added again, or updated).
+    return html`<${Guard} key=${`${record.url}#${componentId(spec.component)}`} name=${title}>
         <${Drawn}
             component=${spec.component}
             props=${{ ...props, pocket: record.pocket, close }}
@@ -881,6 +1082,7 @@ export function ExtensionPage() {
     const title = spec?.title ?? record?.title ?? "Extension";
     // A page that keeps Esc for itself (`escape: false`): read as the key comes, as it may change.
     const keepsEscape = useRef(false);
+    const close = useMemo(() => pageCloser(record, target?.id), [record, target?.id]);
 
     keepsEscape.current = spec?.escape === false;
     useBack(true, closePage);
@@ -938,7 +1140,7 @@ export function ExtensionPage() {
             </button>
         </header>
         <div class="ext-page-body">
-            <${Body} record=${record} spec=${spec} title=${title} props=${{}} close=${closePage} />
+            <${Body} record=${record} spec=${spec} title=${title} props=${{}} close=${close} />
         </div>
     </section>`;
 }
@@ -948,6 +1150,7 @@ export function ExtensionSheet({ sheet }) {
     const record = modules.get(sheet.module);
     const spec = record?.adds.sheet.get(sheet.sheetId);
     const title = spec?.title ?? record?.title ?? "Extension";
+    const close = useMemo(() => sheetCloser(record, sheet.sheetId), [record, sheet.sheetId]);
 
     return html`<${Sheet} title=${title} onClose=${closeSheet} wide=${spec?.wide === true}>
         <${Body}
@@ -955,7 +1158,7 @@ export function ExtensionSheet({ sheet }) {
             spec=${spec}
             title=${title}
             props=${sheet.props ?? {}}
-            close=${closeSheet}
+            close=${close}
         />
     <//>`;
 }

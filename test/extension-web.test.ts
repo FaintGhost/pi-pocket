@@ -12,8 +12,9 @@ import {
 } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
+import { connect } from "node:net";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { ExtensionWebs, POCKET_API } from "../src/server/extension-web.ts";
@@ -58,6 +59,8 @@ before(async () => {
     writeFileSync(join(dropIns, "panel-web", "index.js"), "export const marker = 'panel index';\n");
     writeFileSync(join(dropIns, "panel-web", "part.js"), "export const part = 1;\n");
     writeFileSync(join(dropIns, "panel-web", "look.css"), ".panel { color: red; }\n");
+    // Too large to serve: each request would read it whole.
+    writeFileSync(join(dropIns, "panel-web", "huge.json"), Buffer.alloc(9 * 1024 * 1024, 32));
     writeFileSync(join(dropIns, "panel-web", "notes.ts"), "export const secret = 'server code';\n");
     writeFileSync(join(dropIns, "panel-web", ".hidden.js"), "export {};\n");
     writeFileSync(join(dropIns, "panel-web", "node_modules", "dep.js"), "export {};\n");
@@ -311,6 +314,8 @@ test("a browser module loads for the people it is for, and its folder serves onl
     ]) {
         assert.equal((await call("owner", `${folder}${path}`)).status, 404, path);
     }
+
+    assert.equal((await call("owner", `${folder}huge.json`)).status, 413);
 
     // Nobody signed in, and someone it is not for, learn nothing.
     assert.equal((await call(null, panelUrl)).status, 401);
@@ -658,4 +663,157 @@ test("the server's web and the app's pocket are the same version of the extensio
     const app = readFileSync(new URL("../web/extension-ui.js", import.meta.url), "utf8");
 
     assert.equal(Number(/export const POCKET_API = (\d+);/.exec(app)?.[1]), POCKET_API);
+});
+
+test("a tab that does not acknowledge its polls is cut off before what waits for it grows without end", async () => {
+    type Poll = { session: string; events: { seq: number; event: string }[] };
+    const poll = async (query: string): Promise<Poll> =>
+        (await call("owner", `/api/poll?${query}`)).data as Poll;
+    const first = await poll("tab=unread");
+
+    assert.equal(first.events[0]?.event, "hello");
+
+    // About 9 MB of notices that this tab never acknowledges.
+    for (let each = 0; each < 9; each++) {
+        app.notice("info", "x".repeat(1024 * 1024));
+    }
+
+    // Its session ended: the next poll starts a new one, with a full view.
+    const next = await poll(`tab=unread&session=${first.session}&ack=0`);
+
+    assert.notEqual(next.session, first.session);
+    assert.equal(next.events[0]?.event, "hello");
+    await call("owner", `/api/poll?session=${next.session}&close=1`);
+});
+
+test("web.send's own failure cannot throw, and the server waits for cleanups still running or of loads not done", async () => {
+    const webs = new ExtensionWebs();
+    const sending = webs.stage("throws.ts", dropIns, "throws");
+
+    webs.commit(sending.part);
+    assert.doesNotThrow(() =>
+        sending.web.send("tick", null, {
+            get to(): string {
+                throw { toString: 0 };
+            },
+        }),
+    );
+
+    const slow = (done: { at: number }) => () =>
+        new Promise<void>((resolve) =>
+            setTimeout(() => {
+                done.at = Date.now();
+                resolve();
+            }, 60),
+        );
+    // One turned off whose cleanup still runs, and one still loading when the server stops.
+    const removed = { at: 0 };
+    const loading = { at: 0 };
+    const gone = webs.stage("gone.ts", dropIns, "gone");
+
+    gone.web.onDispose(slow(removed));
+    webs.commit(gone.part);
+    webs.remove("gone.ts");
+
+    const staged = webs.stage("staged.ts", dropIns, "staged");
+
+    staged.web.onDispose(slow(loading));
+    await webs.close();
+    assert.ok(removed.at > 0, "close waited for the cleanup of the module turned off");
+    assert.ok(loading.at > 0, "close ran and waited for the cleanup of the version still loading");
+});
+
+test("a thousand files a browser module does not serve leave its own edits seen; a client that becomes a link is told", async () => {
+    const folder = join(root, "crowded");
+    const log: string[] = [];
+
+    mkdirSync(join(folder, "crowded-web"), { recursive: true });
+    writeFileSync(join(folder, "crowded-web", "index.js"), "export default () => {};\n");
+
+    // Logs that sort before index.js: they must not use up the files looked at.
+    for (let each = 0; each < 2100; each++) {
+        writeFileSync(join(folder, "crowded-web", `a${String(each).padStart(4, "0")}.log`), "x");
+    }
+
+    const webs = new ExtensionWebs({ log: (line) => log.push(line) });
+    const { part, web } = webs.stage("crowded.ts", folder, "crowded");
+
+    web.client("crowded-web");
+    webs.commit(part);
+
+    const url = () => webs.clients(OWNER)[0]!.url;
+    const first = url();
+
+    writeFileSync(
+        join(folder, "crowded-web", "index.js"),
+        "export default () => { /* edited */ };\n",
+    );
+    webs.touched(folder, "crowded-web");
+    await until(() => url() !== first, "the edit gives a new version");
+
+    // The folder swapped for a link to a copy: it is served no more, and the log says why.
+    mkdirSync(join(root, "crowded-copy"));
+    writeFileSync(join(root, "crowded-copy", "index.js"), "export default () => {};\n");
+    rmSync(join(folder, "crowded-web"), { recursive: true });
+    symlinkSync(join(root, "crowded-copy"), join(folder, "crowded-web"));
+    webs.touched(folder, "crowded-web");
+    await until(() => log.some((line) => /gone or became a link/.test(line)), "the owner is told");
+    assert.equal(webs.file("crowded", ["index.js"], OWNER), undefined);
+    await webs.close();
+});
+
+test("the server stops in time when a module's cleanup never ends, and still closes the rest", async () => {
+    const dataDir = join(root, "stopping");
+    const folder = join(dataDir, "extensions");
+
+    mkdirSync(folder, { recursive: true });
+    writeFileSync(
+        join(folder, "forever.ts"),
+        `/** Forever: a cleanup that never ends. */
+export default (_host, web) => {
+	web.onDispose(() => new Promise(() => {}));
+};
+`,
+    );
+
+    const other = await openApp(scriptedModel(), dataDir);
+
+    await other.setExtensionEnabled(owner(other), "forever.ts", true);
+    const started = Date.now();
+
+    await other.close();
+
+    const took = Date.now() - started;
+
+    assert.ok(took >= 2900 && took < 8000, `stopped after ${took} ms`);
+    assert.equal(existsSync(join(dataDir, "harness.lock")), false, "the rest closed too");
+});
+
+test("a tab that does not read its event stream is cut off before what waits for it grows without end", async () => {
+    const { port } = server.address() as { port: number };
+    const socket = connect(port, "127.0.0.1");
+    const closed = new Promise<void>((resolve) => socket.on("close", () => resolve()));
+
+    socket.on("error", () => {});
+    socket.write(
+        `GET /api/events?tab=stalled HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${app.config.ownerToken}\r\n\r\n`,
+    );
+    await new Promise((resolve) => socket.once("data", resolve));
+    // From here on it reads nothing.
+    socket.pause();
+
+    let cut = false;
+
+    void closed.then(() => (cut = true));
+
+    for (let each = 0; each < 30; each++) {
+        app.notice("info", "x".repeat(1024 * 1024));
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+
+    // Reading again, it gets what was sent before the cut, and then the end: a stream not cut off would stay open.
+    socket.resume();
+    await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, 5000))]);
+    assert.equal(cut, true, "the stream was cut off");
+    socket.destroy();
 });

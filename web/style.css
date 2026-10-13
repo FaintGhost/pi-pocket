@@ -9568,12 +9568,13 @@ textarea.notes {
 }
 
 /*
- * Extensions' rail buttons, together: when they are many they scroll rather than push the app's own buttons away. In the
- * folded rail they take four buttons' height at most (less on a short window), so the sessions' tiles keep their room.
+ * Extensions' rail buttons, together: four buttons' height at most, past which they scroll rather than push the app's
+ * own buttons away. Beside the session list it keeps that height, and a short window scrolls the whole rail, as it does
+ * the app's own buttons; in the folded rail it gives way first (to one button), so the sessions' tiles keep their room.
  */
 .rail-exts {
-    flex: 0 1 auto;
-    min-height: 44px;
+    flex: none;
+    max-height: calc(4 * 44px + 3 * 4px);
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -9586,6 +9587,8 @@ textarea.notes {
 }
 
 .rail:has(.rail-items) .rail-exts {
+    flex: 0 1 auto;
+    min-height: 44px;
     max-height: max(44px, min(4 * 44px + 3 * 4px, 22vh));
 }
 

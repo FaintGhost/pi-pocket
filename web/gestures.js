@@ -266,7 +266,8 @@ const edgeBackWanted = () => navigator.standalone === true;
 
 /**
  * Swipe in from the left edge to go back, where nothing else does it. Passive, as the conversation's swipes are: the
- * page has nothing to scroll sideways there, and scrolling never waits on it.
+ * page has nothing to scroll sideways there, and scrolling never waits on it. Not from what is marked `data-no-swipe`
+ * (an extension's page that keeps its swipes, or a part of one), as the other swipes.
  */
 export function startEdgeBack() {
     if (!edgeBackWanted()) {
@@ -287,7 +288,10 @@ export function startEdgeBack() {
             }
 
             start =
-                event.touches.length === 1 && touch.clientX <= EDGE && canGoBack()
+                event.touches.length === 1 &&
+                touch.clientX <= EDGE &&
+                canGoBack() &&
+                !event.target.closest?.("[data-no-swipe]")
                     ? { x: touch.clientX, y: touch.clientY, id: touch.identifier }
                     : null;
             dragging = false;
@@ -352,6 +356,8 @@ export function startEdgeBack() {
 
 /** Where the conversation's swipes work: below the sidebar's width, where the top bar is a stretch for a thumb. */
 const NARROW = matchMedia("(max-width: 959px)");
+/** Where the subagents board, and an extension's page, are a phone's screen of their own (`subagents-board.js`). */
+const PHONE = matchMedia("(max-width: 699px)");
 /** Swipes start this far from the screen's sides, which belong to the system's back gesture (and `startEdgeBack`). */
 const SIDES = 24;
 /** How far up from the message box a swipe goes before it opens what it opens. */
@@ -379,10 +385,10 @@ function scrollsSideways(target, root) {
  * right goes back, left opens a place (the Files tile), each with a mark that follows the finger and lights when
  * letting go would act; the conversation leans a little the same way. In the Files tile, right goes back too. Up from
  * the message box (not its text, nor the queue and bars above it) opens the places; on the subagents board, right goes
- * back, and on an extension's page too (`"board"` as well). `swipes(where)` says, when a touch starts on
- * `"conversation"`, `"files"`, or `"board"`, what each does now:
- * `{ right, left }` as `{ path, label, run }`, and `up` as a function, or none. No swipe starts in a field, nor in
- * anything marked `data-no-swipe` (what an extension's page keeps its sideways swipes for, or the whole page).
+ * back, and on an extension's page too (`"board"` as well), both at a phone's width only. `swipes(where)` says, when a
+ * touch starts on `"conversation"`, `"files"`, or `"board"`, what each does now: `{ right, left }` as
+ * `{ path, label, run }`, and `up` as a function, or none. No swipe starts in a field, nor in anything marked
+ * `data-no-swipe` (what an extension's page keeps its sideways swipes for, or the whole page).
  */
 export function startSwipes(swipes) {
     let swipe = null;
@@ -433,6 +439,12 @@ export function startSwipes(swipes) {
             const root = target.closest?.(
                 ".pane > .scroller, .files-tile:not(.leaving), .board.phone, .ext-page",
             );
+
+            // An extension's page swipes back only at a phone's width, where it fills the screen, as the board does.
+            if (root?.classList.contains("ext-page") && !PHONE.matches) {
+                return;
+            }
+
             const acts = swipes(
                 root?.classList.contains("files-tile")
                     ? "files"

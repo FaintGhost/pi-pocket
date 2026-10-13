@@ -2491,7 +2491,8 @@ export class PocketApp {
             try {
                 await this.loader.reload(SUBAGENTS_FILE);
             } catch (error) {
-                this.notice("error", `Subagents failed to reload: ${describe(error)}`);
+                // A module's error can name the server's folders: the owner's to read.
+                this.ownerNotice("error", `Subagents failed to reload: ${describe(error)}`);
             }
         }
 
@@ -2560,10 +2561,17 @@ export class PocketApp {
             }
 
             this.providers.close();
+
+            // A timer that holds the process: with nothing else to do, Node would end it here, before the rest closed.
+            let limit: NodeJS.Timeout | undefined;
+
             await Promise.race([
                 cleaned,
-                new Promise<void>((resolve) => setTimeout(resolve, CLEANUP_LIMIT_MS).unref()),
+                new Promise<void>((resolve) => {
+                    limit = setTimeout(resolve, CLEANUP_LIMIT_MS);
+                }),
             ]);
+            clearTimeout(limit);
 
             try {
                 // Close writes no outcome: running work resumes when the next process opens the storage.
