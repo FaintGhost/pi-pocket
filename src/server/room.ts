@@ -199,7 +199,8 @@ function queuedText(content: unknown): string {
         ?.text as string | undefined;
     const images = parts.filter((part) => part?.type === "image").length;
 
-    if (text !== undefined || images === 0) {
+    // A blank text says nothing: a message of it and images says how many.
+    if (text?.trim() || images === 0) {
         return text ?? "";
     }
 

@@ -1038,7 +1038,7 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
             },
             BACKGROUND_CONTEXT,
         );
-        // A message that mentions a file (its text follows as a part of its own), and one of pictures alone.
+        // A message that mentions a file (its text follows as a part of its own), and one of pictures with a blank text.
         await conversation.submit(
             {
                 type: "input",
@@ -1055,6 +1055,7 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
             {
                 type: "input",
                 content: [
+                    { type: "text", text: " " },
                     { type: "image", mimeType: "image/png", data: "AAAA" },
                     { type: "image", mimeType: "image/png", data: "BBBB" },
                 ],
