@@ -220,7 +220,14 @@ before(async () => {
     mkdirSync(join(dropIns, "shared"));
     writeFileSync(
         join(dropIns, "shared", "index.js"),
-        `export default (pocket) => { pocket.style("look.css"); pocket.rail({ id: "hi", title: "Shared", run: () => pocket.notify("info", "hi from shared") }); };\n`,
+        `export default (pocket) => {
+	pocket.style("look.css");
+	const rail = pocket.rail({ id: "hi", title: "Shared", run: () => pocket.notify("info", "hi from shared") });
+	// The tests reach this module too, as a second one beside the meter.
+	globalThis.sharedPocket = pocket;
+	globalThis.sharedRail = rail;
+};
+`,
     );
     writeFileSync(
         join(dropIns, "shared", "look.css"),
@@ -1711,6 +1718,11 @@ test(
             microtask: `pocket.useLayoutEffect(() => {
                 queueMicrotask(() => globalThis.meterRail.update({ badge: (++count % 50) + 1 }));
             });`,
+            // The same, with an effect beside it that is still waiting when the page draws again.
+            beside: `pocket.useEffect(() => {});
+            pocket.useLayoutEffect(() => {
+                queueMicrotask(() => globalThis.meterRail.update({ badge: (++count % 50) + 1 }));
+            });`,
             // An effect, as the docs show them, that changes it each time.
             effect: `pocket.useEffect(() => {
                 globalThis.meterRail.update({ badge: ++count });
@@ -1793,6 +1805,314 @@ test(
 );
 
 test(
+    "an effect's cleanup that changes things each time it runs is stopped too, at once or after an await",
+    real,
+    async () => {
+        const cleanups = {
+            plain: `() => globalThis.meterRail.update({ badge: (++count % 50) + 1 })`,
+            awaited: `() => {
+                (async () => {
+                    await null;
+                    globalThis.meterRail.update({ badge: (++count % 50) + 1 });
+                })();
+            }`,
+        };
+
+        for (const [name, cleanup] of Object.entries(cleanups)) {
+            await page.navigate(`${base}/s/${session}`);
+            await until(() => has(rail("Meter")), "the meter's rail button");
+            await withMeter<null>(`
+                let count = 0;
+
+                pocket.page({
+                    id: "cleaning",
+                    title: "Cleaning",
+                    component: () => {
+                        pocket.useEffect(() => ${cleanup});
+
+                        return html\`<p class="cleaning">Cleaning</p>\`;
+                    },
+                });
+                pocket.openPage("cleaning");
+
+                return "null";
+            `);
+            await until(() => has(".ext-page .cleaning"), "the page");
+            await sleep(300);
+            await timeTheStop();
+            // One change starts it: each redraw runs the cleanup, which changes it again.
+            await withMeter<null>(`globalThis.meterRail.update({ badge: 99 }); return "null";`);
+            await until(
+                async () => /redraws without end/.test(await text(".ext-page .error-box")),
+                `the ${name} cleanup's loop stopped`,
+            );
+
+            const took = await inPage<number | null>(`return JSON.stringify(globalThis.meterTook)`);
+
+            assert.ok(typeof took === "number" && took < 2000, `${name}: stopped after ${took} ms`);
+        }
+    },
+);
+
+test(
+    "two modules that change each other in turn are stopped; one that only redraws as another changes goes on",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(
+            async () => (await has(rail("Meter"))) && (await has(rail("Shared"))),
+            "both rail buttons",
+        );
+        // The meter's page answers each change of the shared module's value with one of its own, on the shared
+        // module's rail button; the shared module's sheet answers the meter's value on the meter's.
+        await withMeter<null>(`
+            globalThis.feedA = 0;
+            globalThis.feedB = 0;
+            pocket.page({
+                id: "feeding",
+                title: "Feeding",
+                component: () => {
+                    const b = globalThis.feedB;
+
+                    pocket.useLayoutEffect(() => {
+                        globalThis.feedA = b + 1;
+                        globalThis.sharedRail.update({ badge: (globalThis.feedA % 50) + 1 });
+                    }, [b]);
+
+                    return html\`<p class="feeding">\${b}</p>\`;
+                },
+            });
+            globalThis.sharedPocket.sheet({
+                id: "fed",
+                title: "Fed",
+                component: () => {
+                    const a = globalThis.feedA;
+
+                    globalThis.sharedPocket.useLayoutEffect(() => {
+                        globalThis.feedB = a + 1;
+                        globalThis.meterRail.update({ badge: (globalThis.feedB % 50) + 1 });
+                    }, [a]);
+
+                    return html\`<p class="fed">\${a}</p>\`;
+                },
+            });
+            pocket.openPage("feeding");
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            globalThis.sharedPocket.openSheet("fed");
+
+            return "null";
+        `);
+        await until(
+            async () =>
+                [await stateOf("meter"), await stateOf("shared")].some(
+                    (state) =>
+                        (state as { status: string; error: string }).status === "failed" &&
+                        (state as { status: string; error: string }).error ===
+                            "it redraws without end",
+                ),
+            "one of them stopped",
+        );
+
+        // The shared module's timer changes its button 20 times a second; the meter's page redraws each time, and
+        // shows the shared count on the meter's button, as it draws and in an effect that follows it.
+        await page.navigate(`${base}/s/${session}`);
+        await until(
+            async () => (await has(rail("Meter"))) && (await has(rail("Shared"))),
+            "both rail buttons again",
+        );
+        await withMeter<null>(`
+            globalThis.sharedCount = 0;
+            pocket.page({
+                id: "watching",
+                title: "Watching",
+                component: () => {
+                    const count = globalThis.sharedCount;
+
+                    globalThis.meterRail.update({ badge: (count % 50) + 1 });
+                    pocket.useLayoutEffect(() => {
+                        globalThis.meterRail.update({ title: "Meter " + (count % 2) });
+                    }, [count]);
+
+                    return html\`<p class="watching">\${count}</p>\`;
+                },
+            });
+            pocket.openPage("watching");
+
+            const timer = setInterval(
+                () => globalThis.sharedRail.update({ badge: (++globalThis.sharedCount % 50) + 1 }),
+                50,
+            );
+
+            await new Promise((resolve) => setTimeout(resolve, 2500));
+            clearInterval(timer);
+            pocket.closePage();
+
+            return "null";
+        `);
+        assert.deepEqual(await stateOf("meter"), { status: "ready", error: null });
+        assert.deepEqual(await stateOf("shared"), { status: "ready", error: null });
+    },
+);
+
+test(
+    "a page whose state changes at frame rate, shown on its rail button by an effect, is never stopped",
+    real,
+    async () => {
+        const effects = {
+            // As the docs show: the effect runs when the value changes.
+            plain: `pocket.useEffect(() => {
+                globalThis.meterRail.update({ badge: (value % 50) + 1 });
+            }, [value]);`,
+            // The same, after an await.
+            awaited: `pocket.useEffect(() => {
+                (async () => {
+                    await null;
+                    globalThis.meterRail.update({ badge: (value % 50) + 1 });
+                })();
+            }, [value]);`,
+            // The same with Preact's own useEffect, which the app cannot trace (but does not count against it).
+            own: `hooks.useEffect(() => {
+                globalThis.meterRail.update({ badge: (value % 50) + 1 });
+            }, [value]);`,
+            ownAwaited: `hooks.useEffect(() => {
+                (async () => {
+                    await null;
+                    globalThis.meterRail.update({ badge: (value % 50) + 1 });
+                })();
+            }, [value]);`,
+        };
+        const drivers = {
+            // A timer every 16 ms, and each animation frame.
+            timer: `const timer = setInterval(() => set?.((value) => value + 1), 16);
+                const stop = () => clearInterval(timer);`,
+            frame: `let going = true;
+                const step = () => {
+                    set?.((value) => value + 1);
+
+                    if (going) {
+                        requestAnimationFrame(step);
+                    }
+                };
+                const stop = () => (going = false);
+
+                requestAnimationFrame(step);`,
+        };
+
+        for (const [name, effect] of Object.entries(effects)) {
+            for (const [driven, driver] of Object.entries(drivers)) {
+                await page.navigate(`${base}/s/${session}`);
+                await until(
+                    async () => (await has(rail("Meter"))) && (await has(rail("Shared"))),
+                    "both rail buttons",
+                );
+                // The shared module changes its own button as often meanwhile, so the app redraws for it too.
+                await withMeter<null>(`
+                    const hooks = await import("/vendor/preact-hooks.mjs");
+                    let set = null;
+                    let count = 0;
+
+                    pocket.page({
+                        id: "framed",
+                        title: "Framed",
+                        component: () => {
+                            const [value, setValue] = pocket.useState(0);
+
+                            set = setValue;
+                            ${effect}
+
+                            return html\`<p class="framed">\${value}</p>\`;
+                        },
+                    });
+                    pocket.openPage("framed");
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+
+                    const shared = setInterval(
+                        () => globalThis.sharedRail.update({ badge: (++count % 50) + 1 }),
+                        16,
+                    );
+                    ${driver}
+
+                    await new Promise((resolve) => setTimeout(resolve, 2500));
+                    stop();
+                    clearInterval(shared);
+                    pocket.closePage();
+
+                    return "null";
+                `);
+                assert.deepEqual(
+                    await stateOf("meter"),
+                    { status: "ready", error: null },
+                    `${name}, by a ${driven}`,
+                );
+                assert.deepEqual(await stateOf("shared"), { status: "ready", error: null });
+            }
+        }
+    },
+);
+
+test("a module that changes things whenever the app's store changes is stopped", real, async () => {
+    await page.navigate(`${base}/s/${session}`);
+    await until(() => has(rail("Meter")), "the meter's rail button");
+    await timeTheStop();
+    await withMeter<null>(`
+        const { store } = await import("/store.js");
+        let count = 0;
+
+        pocket.onDispose(store.subscribe(() => globalThis.meterRail.update({ badge: (++count % 50) + 1 })));
+        globalThis.meterRail.update({ badge: 99 });
+
+        return "null";
+    `);
+    await until(
+        async () => (await stateOf("meter")) !== null && !(await has(rail("Meter"))),
+        "the meter stopped",
+    );
+
+    const took = await inPage<number | null>(`return JSON.stringify(globalThis.meterTook)`);
+
+    assert.ok(typeof took === "number" && took < 2000, `stopped after ${took} ms`);
+    assert.deepEqual(await stateOf("meter"), { status: "failed", error: "it redraws without end" });
+});
+
+test("a huge badge costs a redraw no more than a short one", real, async () => {
+    await page.navigate(`${base}/s/${session}`);
+    await until(() => has(rail("Meter")), "the meter's rail button");
+
+    const timing = await withMeter<{ short: number; huge: number; shown: string }>(`
+        const { store } = await import("/store.js");
+        const draws = async () => {
+            const started = performance.now();
+
+            for (let count = 0; count < 10; count++) {
+                store.set({});
+                await new Promise((resolve) => setTimeout(resolve));
+            }
+
+            return (performance.now() - started) / 10;
+        };
+
+        globalThis.meterRail.update({ badge: "short" });
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const short = await draws();
+
+        globalThis.meterRail.update({ badge: "x".repeat(1000000) });
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const huge = await draws();
+        const shown = document.querySelector(${JSON.stringify(`${rail("Meter")} .rail-count`)}).textContent;
+
+        globalThis.meterRail.update({ badge: undefined });
+
+        return JSON.stringify({ short, huge, shown });
+    `);
+
+    assert.equal(timing.shown, `${"x".repeat(23)}…`);
+    assert.ok(
+        timing.huge < timing.short + 20,
+        `a draw took ${timing.huge} ms with it, ${timing.short} ms without`,
+    );
+});
+
+test(
     "an endless loop of microtasks that calls pocket is stopped in about a second, and its calls throw so it ends",
     real,
     async () => {
@@ -1818,6 +2138,29 @@ test(
             };
 
             spin().catch((error) => (globalThis.spinEnded = error.message));`,
+            // Cleanups registered for ever: nothing drawn, still a loop, and a list of cleanups that grows.
+            disposing: `(async () => {
+                try {
+                    for (;;) {
+                        await Promise.resolve();
+                        pocket.onDispose(() => {});
+                    }
+                } catch (error) {
+                    globalThis.spinEnded = error.message;
+                }
+            })();`,
+            // Only reading.
+            reading: `(async () => {
+                try {
+                    for (;;) {
+                        await Promise.resolve();
+                        pocket.me();
+                        pocket.conversationId();
+                    }
+                } catch (error) {
+                    globalThis.spinEnded = error.message;
+                }
+            })();`,
         };
 
         for (const [name, spin] of Object.entries(spins)) {
