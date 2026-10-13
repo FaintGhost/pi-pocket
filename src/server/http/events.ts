@@ -59,6 +59,8 @@ function newClient(url: URL, user: User, send: Client["send"]): Client {
         connection: randomUUID(),
         user,
         conversationId: raw === null || raw === "" ? undefined : conversationId(raw),
+        // What the tab's code understands of updates: none named is older code.
+        protocol: Number(url.searchParams.get("p")) || 1,
         sentEntries: new Set(),
         orderKey: "",
         send,

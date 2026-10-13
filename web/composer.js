@@ -109,22 +109,11 @@ function savePastes(id, pastes) {
 /** The message with each paste's placeholder replaced by what was pasted. */
 const expandPastes = (text, pastes) => text.replace(PASTED, (whole, n) => pastes[n] ?? whole);
 
-/** The subagents whose answers a queued message of reports carries (`extensions/subagents.ts`); null for any other. */
-function reportNames(text) {
-    // Only a message that starts with a report is one: a person's own may begin "[subagent " too.
-    if (!/^\[subagent \S+ (?:answered|failed)/.test(text ?? "")) {
-        return null;
-    }
-
-    return [
-        ...new Set(
-            [...text.matchAll(/\[subagent (\S+) (?:answered|failed)/g)].map((match) => match[1]),
-        ),
-    ];
-}
-
-/** The subagents a waiting message carries reports from; null for a person's message, which has who sent it. */
-const queuedReports = (item) => (item.by === undefined ? reportNames(item.text) : null);
+/**
+ * The subagents a waiting message carries reports from (`extensions/subagents.ts`), as the server reads them from its
+ * whole text: the queue gets only the start. Null for any other message, such as a person's, which has who sent it.
+ */
+const queuedReports = (item) => item.reports ?? null;
 
 /** What kind of message waits for Pi: a steer, one queued for after its answer, a note, or subagents' reports. */
 function queuedMode(item) {

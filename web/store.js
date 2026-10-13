@@ -411,13 +411,13 @@ function mergeView(current, data) {
         entries,
         order,
         live: data.live,
-        inbox: data.inbox,
         agent: data.agent,
         stats: data.stats,
         clients: data.clients,
         viewers: data.viewers,
         approvals: data.approvals,
         // The server sends these again only when they change: a missing one keeps its last value.
+        inbox: data.inbox ?? base.inbox,
         artifacts: data.artifacts ?? base.artifacts,
         subagents: data.subagents ?? base.subagents,
         authors: data.authors ?? base.authors,
@@ -529,6 +529,12 @@ const handlers = {
     },
 };
 
+/**
+ * What this code understands of the server's updates, sent with each connection. 2: it keeps the queue when an update
+ * leaves it out. The server sends a tab whose code names none (older code, as a tab asleep through an update keeps)
+ * the queue with each update.
+ */
+const PROTOCOL = 2;
 const TRANSPORT_KEY = "pocket.transport";
 const local = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\])$/.test(location.hostname);
 /** After an event stream stalls on this address, poll for a day, then try the stream again: one slow start is not forever. */
@@ -556,7 +562,7 @@ export function connect() {
     source?.close();
     store.set({ connection: "connecting" });
     const id = store.state.conversationId;
-    const query = `tab=${encodeURIComponent(TAB)}${id === null ? "" : `&c=${id}`}`;
+    const query = `tab=${encodeURIComponent(TAB)}&p=${PROTOCOL}${id === null ? "" : `&c=${id}`}`;
 
     source = pollHere() && !local ? pollEvents(query) : streamEvents(query);
 }
