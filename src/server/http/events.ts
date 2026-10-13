@@ -280,7 +280,21 @@ export function createEventStreams(app: PocketApp) {
             });
             created.client.close = () => closePoller(created);
             pollers.set(created.id, created);
-            await app.attach(created.client);
+
+            try {
+                await app.attach(created.client);
+            } catch (error) {
+                // A first view that failed to build leaves nothing behind.
+                closePoller(created);
+
+                throw error;
+            }
+
+            // Closed as it attached (cut off, or its person removed): its next poll starts afresh, with no wait.
+            if (!pollers.has(created.id)) {
+                return json(response, 200, { session: created.id, events: [] });
+            }
+
             // Its time starts once its first view is built, however long that took: the poll that asked waits for it.
             keepPoller(created);
             poller = created;

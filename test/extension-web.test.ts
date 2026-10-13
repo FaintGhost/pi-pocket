@@ -1076,6 +1076,33 @@ test("a polling session's time starts once its first view is built, however long
     }
 });
 
+test("a polling tab whose first view fails to build leaves nothing behind", async () => {
+    const attach = app.attach.bind(app);
+    const detach = app.detach.bind(app);
+    const detached: string[] = [];
+
+    app.attach = async (client) => {
+        await attach(client);
+
+        throw new Error("the view failed");
+    };
+
+    app.detach = (client) => {
+        detached.push(client.id);
+        detach(client);
+    };
+
+    try {
+        const answer = await call("owner", "/api/poll?tab=broken-start");
+
+        assert.equal(answer.status, 500);
+        assert.deepEqual(detached, ["broken-start"], "its tab was let go at once");
+    } finally {
+        app.attach = attach;
+        app.detach = detach;
+    }
+});
+
 test("a stream far behind that takes nothing is cut off at its ping, with no new events for it", async () => {
     const { port } = server.address() as { port: number };
     const pingMs = eventTiming.pingMs;
