@@ -311,8 +311,11 @@ export function createEventStreams(app: PocketApp) {
                 created.attaching = undefined;
             }
 
-            // Closed as it attached (cut off, or its person removed): its next poll starts afresh, with no wait.
+            // Closed as it attached (cut off, or its person removed): its next poll starts afresh, with no wait. Its tab may
+            // have come in after the close let it go: let it go again.
             if (!pollers.has(created.id)) {
+                app.detach(created.client);
+
                 return json(response, 200, { session: created.id, events: [] });
             }
 

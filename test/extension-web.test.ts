@@ -1007,7 +1007,7 @@ test("a polling session lives on from its last answer, so one that went late in 
         (await call("owner", `/api/poll?${query}`)).data as Poll;
     const pollExpireMs = eventTiming.pollExpireMs;
 
-    eventTiming.pollExpireMs = 1000;
+    eventTiming.pollExpireMs = 2000;
 
     try {
         const first = await poll("tab=late-answer");
@@ -1018,21 +1018,21 @@ test("a polling session lives on from its last answer, so one that went late in 
         // session's time (polls answered at once carry what was still on its way from the start).
         for (let round = 0; round < 10; round++) {
             asked = Date.now();
-            const late = setTimeout(() => app.notice("info", "late"), 700);
+            const late = setTimeout(() => app.notice("info", "late"), 1400);
             const answer = await poll(`tab=late-answer&session=${first.session}&ack=${ack}`);
 
             clearTimeout(late);
             assert.equal(answer.session, first.session);
             ack = answer.events.at(-1)?.seq ?? ack;
 
-            if (Date.now() - asked >= 650) {
+            if (Date.now() - asked >= 1350) {
                 break;
             }
         }
 
-        assert.ok(Date.now() - asked >= 650, "a poll waited");
-        // Past a second from that poll, within one from its answer: the session is still there.
-        await new Promise((resolve) => setTimeout(resolve, Math.max(0, asked + 1300 - Date.now())));
+        assert.ok(Date.now() - asked >= 1350, "a poll waited");
+        // Past its time from that poll, well within it from its answer: the session is still there.
+        await new Promise((resolve) => setTimeout(resolve, Math.max(0, asked + 2300 - Date.now())));
 
         const next = await poll(`tab=late-answer&session=${first.session}&ack=${ack}`);
 
@@ -1103,7 +1103,7 @@ test("a polling tab whose first view fails to build leaves nothing behind", asyn
     }
 });
 
-test("a polling tab that goes while its first view is built is let go, though the build never ends", async () => {
+test("a polling tab that goes while its first view is built is let go, though the build ends long after", async () => {
     const { port } = server.address() as { port: number };
     const attach = app.attach.bind(app);
     const detach = app.detach.bind(app);
@@ -1114,8 +1114,13 @@ test("a polling tab that goes while its first view is built is let go, though th
 
     eventTiming.pollExpireMs = 300;
 
-    app.attach = async () => {
+    // The build ends only when the test says, and then the tab comes in, after its poller was let go.
+    let built = false;
+
+    app.attach = async (client) => {
         await never;
+        await attach(client);
+        built = true;
     };
 
     app.detach = (client) => {
@@ -1131,9 +1136,17 @@ test("a polling tab that goes while its first view is built is let go, though th
             `GET /api/poll?tab=gone-early HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${app.config.ownerToken}\r\n\r\n`,
         );
         await new Promise((resolve) => setTimeout(resolve, 100));
-        // The tab goes; its first view is never built.
+        // The tab goes; its first view is not built yet.
         socket.destroy();
         await until(() => detached.includes("gone-early"), "the tab let go", 3000);
+        // The build ends: the tab that comes in now is let go too.
+        release();
+        await until(() => built, "the build to end");
+        await until(
+            () => [...app.clients].every((client) => client.id !== "gone-early"),
+            "the late tab let go",
+            3000,
+        );
     } finally {
         release();
         app.attach = attach;
