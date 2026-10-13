@@ -125,6 +125,11 @@ export interface Client {
     /** The JSON of each slow-changing view field this client last got, so updates repeat only those that changed. */
     sentFields?: Map<string, string>;
     /**
+     * What the tab's code understands of updates (`PROTOCOL` in `web/store.js`): 2 keeps the queue an update leaves out.
+     * Older code names none, and gets the queue with each update.
+     */
+    readonly protocol?: number;
+    /**
      * This connection, apart from others of the same tab id: a duplicated browser tab keeps the id, and a reconnect
      * briefly overlaps the old connection. Sent in `hello`; peek lists name it.
      */
@@ -176,7 +181,10 @@ export function reportingOf(
     );
 }
 
-/** What a waiting message says: its text, without the images it carries. */
+/**
+ * What a waiting message says: its own text, which comes first, not the files it mentions (text parts after it) or the
+ * images it carries. A message of images alone says how many.
+ */
 function queuedText(content: unknown): string {
     if (typeof content === "string") {
         return content;
@@ -186,11 +194,16 @@ function queuedText(content: unknown): string {
         return "";
     }
 
-    return content
-        .flatMap((part: { type?: unknown; text?: unknown } | null) =>
-            part?.type === "text" && typeof part.text === "string" ? [part.text] : [],
-        )
-        .join(" ");
+    const parts = content as ({ type?: unknown; text?: unknown } | null)[];
+    const text = parts.find((part) => part?.type === "text" && typeof part.text === "string")
+        ?.text as string | undefined;
+    const images = parts.filter((part) => part?.type === "image").length;
+
+    if (text !== undefined || images === 0) {
+        return text ?? "";
+    }
+
+    return images === 1 ? "1 image" : `${images} images`;
 }
 
 /** The start of `text`, at most `QUEUED_TEXT` characters, ending with "…" when it is cut, and never inside a character. */
@@ -521,9 +534,10 @@ export class Room {
         const live = view.docs["pi.live"] as LiveState | undefined;
         // These grow with the session (authors has one item per message) but rarely change: streaming sends an update
         // every 90 ms, which would repeat them all each time. Send each only when it differs from what this client has.
+        const queue = this.#inbox(inbox.items);
         const fields: Record<string, unknown> = {
             // A turn's updates would repeat it every 90 ms, and a waiting paste or batch of reports can be large.
-            inbox: this.#inbox(inbox.items),
+            inbox: queue,
             artifacts: Object.entries(this.artifacts).map(([id, meta]) => ({
                 id,
                 title: meta.title,
@@ -602,6 +616,11 @@ export class Room {
             } else {
                 sentFields.set(key, json);
             }
+        }
+
+        // Older browser code drops a queue that an update leaves out: it gets the queue with each update, as before.
+        if ((client.protocol ?? 1) < 2) {
+            fields.inbox = queue;
         }
 
         client.send("view", {

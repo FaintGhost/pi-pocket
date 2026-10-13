@@ -992,6 +992,8 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
     const id = await newSession();
     const tab = fakeTab(id, owner());
     const late = fakeTab(id, owner());
+    // A tab with older code, which drops a queue an update leaves out.
+    const older = fakeTab(id, owner(), true);
 
     type Row = { text?: string; by?: string; reports?: string[] };
     const queue = (of = tab) => (of.field("inbox") ?? []) as Row[];
@@ -1000,6 +1002,7 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
         (tab.last("view")?.live as { generation?: unknown } | undefined)?.generation !== undefined;
 
     await app.attach(tab.client);
+    await app.attach(older.client);
 
     try {
         const conversation = (await app.harness.conversation(id, BACKGROUND_CONTEXT))!;
@@ -1035,11 +1038,37 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
             },
             BACKGROUND_CONTEXT,
         );
+        // A message that mentions a file (its text follows as a part of its own), and one of pictures alone.
+        await conversation.submit(
+            {
+                type: "input",
+                content: [
+                    { type: "text", text: "see @notes.md" },
+                    { type: "text", text: '<file path="notes.md">the whole file</file>' },
+                ],
+                whenBusy: "followUp",
+                requestId: "queue-mention",
+            },
+            BACKGROUND_CONTEXT,
+        );
+        await conversation.submit(
+            {
+                type: "input",
+                content: [
+                    { type: "image", mimeType: "image/png", data: "AAAA" },
+                    { type: "image", mimeType: "image/png", data: "BBBB" },
+                ],
+                whenBusy: "followUp",
+                requestId: "queue-pictures",
+            },
+            BACKGROUND_CONTEXT,
+        );
         await until(
-            () => queue().length === 3 && queue()[0]!.by === owner().id,
-            "all three to wait, the paste with who sent it",
+            () => queue().length === 5 && queue()[0]!.by === owner().id,
+            "all five to wait, the paste with who sent it",
         );
         const from = views().length;
+        const olderFrom = older.events.length;
 
         // The answer streams on, updating the view every 90 ms.
         await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -1053,7 +1082,17 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
             "no update repeated the queue",
         );
 
-        const [paste, reports, picture] = queue();
+        const olderViews = older.events
+            .slice(olderFrom)
+            .flatMap((each) => (each.event === "view" ? [each.data] : []));
+
+        assert.ok(olderViews.length >= 5, `${olderViews.length} updates to the older tab`);
+        assert.ok(
+            olderViews.every((view) => (view.inbox as Row[] | undefined)?.length === 5),
+            "older code gets the queue with each update",
+        );
+
+        const [paste, reports, picture, mention, pictures] = queue();
 
         assert.match(paste!.text!, /paste: x+…$/);
         assert.equal(paste!.text!.length, 501);
@@ -1062,6 +1101,8 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
         assert.equal(reports!.by, undefined);
         assert.ok(reports!.text!.length <= 501);
         assert.equal(picture!.text, "look at this", "its text, not the picture");
+        assert.equal(mention!.text, "see @notes.md", "its own text, not the file it mentions");
+        assert.equal(pictures!.text, "2 images");
         assert.ok(JSON.stringify(queue()).length < 2000);
 
         // A tab that comes now gets the queue with its first view.
@@ -1074,6 +1115,63 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
     } finally {
         app.detach(tab.client);
         app.detach(late.client);
+        app.detach(older.client);
+    }
+});
+
+test("a tab's code names what it understands: older code, which names none, gets the queue with each update", async () => {
+    const { createServer } = await import("node:http");
+    const { createHandler } = await import("../src/server/http.ts");
+    const server = createServer(
+        createHandler({ app, listen: { host: "127.0.0.1", port: 0 }, restart: () => {} }),
+    );
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+
+    type Poll = {
+        session: string;
+        events: { seq: number; event: string; data: Record<string, unknown> }[];
+    };
+    const poll = async (query: string): Promise<Poll> =>
+        (
+            await fetch(`http://127.0.0.1:${port}/api/poll?${query}`, {
+                headers: { authorization: `Bearer ${app.config.ownerToken}` },
+            })
+        ).json() as Promise<Poll>;
+
+    try {
+        const id = await newSession();
+
+        /** The update after the first view, for a tab that sends `extra`, once nothing in the session changed. */
+        const update = async (tab: string, extra: string) => {
+            const first = await poll(`tab=${tab}&c=${id}${extra}`);
+            let ack = first.events.at(-1)!.seq;
+
+            (await app.openRoom(id))!.schedule();
+
+            for (let round = 0; round < 20; round++) {
+                const next = await poll(
+                    `tab=${tab}&c=${id}${extra}&session=${first.session}&ack=${ack}`,
+                );
+                const view = next.events.find((each) => each.event === "view");
+
+                ack = next.events.at(-1)?.seq ?? ack;
+
+                if (view !== undefined) {
+                    await poll(`session=${first.session}&close=1`);
+
+                    return view.data;
+                }
+            }
+
+            throw new Error("no update came");
+        };
+
+        assert.equal("inbox" in (await update("current", "&p=2")), false, "current code: left out");
+        assert.deepEqual((await update("older", "")).inbox, [], "older code: sent");
+    } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
     }
 });
 

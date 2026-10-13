@@ -587,6 +587,8 @@ test("a notice about PiP reaches the tabs with its panel open, and no others", a
     await app.attach(plain.client);
     await app.setPip(owner(app), panel.client.connection, true);
     await until(() => panel.last("pipview") !== undefined, "PiP's view");
+    // The panel's view goes to the same code as its tab's: what the tab understands, the panel does.
+    assert.equal(panel.client.pip?.protocol, 2);
     app.notice("warning", "Pi stopped: PiP reached its limit.", id);
     assert.deepEqual(panel.last("notice"), {
         level: "warning",

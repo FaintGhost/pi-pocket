@@ -1093,6 +1093,8 @@ export class PocketApp {
             get visible() {
                 return tab.visible;
             },
+            // The same code shows it: what the tab understands, the panel does.
+            ...(tab.protocol === undefined ? {} : { protocol: tab.protocol }),
             sentEntries: new Set<number>(),
             orderKey: "",
             // Only the view: the panel has no chat, notes, or browser of its own.
