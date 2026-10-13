@@ -4476,39 +4476,84 @@ button.chip:hover {
     color: var(--accent);
 }
 
-.dir-list {
-    display: flex;
-    flex-direction: column;
-    max-height: 42vh;
-    overflow-y: auto;
+/*
+ * The folder picker, laid out as a desktop's file dialog: the path and New folder on top, places beside the folders,
+ * and the folder Open takes with Cancel and Open at the bottom. A fixed height: only the places and the folders scroll.
+ */
+.sheet.folder-sheet {
+    height: min(86dvh, 600px);
 }
 
-/* Above the folders: Show hidden, and New folder. */
-.dir-tools {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+.folder-sheet .sheet-body {
+    flex: 1;
+    min-height: 0;
     gap: 0.5rem;
-    margin-bottom: 0.35rem;
+    padding-bottom: 0.75rem;
 }
 
-.dir-tools .check {
-    margin-bottom: 0;
-}
-
-/* A new folder's name, in the list where it will show. */
-.new-folder {
+.fp-bar {
+    flex: none;
     display: flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0.4rem 0.35rem 0.7rem;
-    margin-bottom: 0.25rem;
-    border: 1px solid var(--accent-line);
-    background: var(--accent-soft);
+    gap: 0.25rem;
+    margin-left: -0.4rem;
+}
+
+.fp-bar > .icon-button:disabled {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+.fp-new {
+    flex: none;
+    gap: 0.3rem;
+}
+
+.fp-crumbs {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+
+.fp-crumbs::-webkit-scrollbar {
+    display: none;
+}
+
+.fp-crumb {
+    flex: none;
+    padding: 0.3rem 0.35rem;
+    border-radius: var(--radius);
+    color: var(--muted);
+}
+
+.fp-crumb:hover {
+    background: var(--hover);
     color: var(--accent);
 }
 
-.new-folder input {
+.fp-crumb.here {
+    color: var(--text);
+    font-weight: 700;
+}
+
+.fp-sep {
+    flex: none;
+    color: var(--line-strong);
+}
+
+/* A path or a new folder's name being typed. */
+.fp-line {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.fp-line input {
     flex: 1;
     min-width: 0;
     height: 34px;
@@ -4516,25 +4561,249 @@ button.chip:hover {
     font-size: 0.85rem;
 }
 
-.new-folder .icon-button {
+.fp-line .icon-button {
     width: 32px;
     height: 32px;
     color: var(--muted);
 }
 
-/* A typed path that is not there yet, with Create it. */
+.fp-path-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.fp-naming {
+    padding: 0.35rem 0.4rem 0.35rem 0.6rem;
+    border-bottom: 1px solid var(--line);
+    background: var(--accent-soft);
+}
+
+/* A typed path that is not there, with Create it. */
 .folder-missing {
+    flex: none;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 0.4rem 0.6rem;
-    padding: 0.45rem 0.6rem;
+    gap: 0.3rem 0.6rem;
+    padding: 0.3rem 0.3rem 0.3rem 0.6rem;
     border: 1px solid var(--warn-line);
     background: var(--warn-soft);
     font-size: 0.82rem;
     color: var(--body);
     overflow-wrap: anywhere;
+}
+
+.fp-missing-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.fp-missing-actions .icon-button {
+    width: 32px;
+    height: 32px;
+}
+
+/* Places beside the folders, as in a file dialog's sidebar. */
+.fp-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+
+.fp-places {
+    flex: none;
+    width: clamp(7rem, 28%, 11rem);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 0.3rem;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+}
+
+.fp-place {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+    min-height: 2rem;
+    padding: 0.25rem 0.45rem;
+    border-radius: var(--radius);
+    text-align: left;
+    font-size: 0.82rem;
+    color: var(--body);
+}
+
+.fp-place span {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fp-place .icon {
+    flex: none;
+    color: var(--muted);
+}
+
+.fp-place:hover {
+    background: var(--hover);
+}
+
+.fp-place.on {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.fp-place.on .icon {
+    color: var(--accent);
+}
+
+.fp-places-title {
+    margin: 0.6rem 0.45rem 0.2rem;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+}
+
+.fp-pi {
+    margin: auto 0.45rem 0.2rem;
+    padding-top: 0.6rem;
+    text-align: left;
+    font-size: 0.78rem;
+}
+
+.fp-list {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--card);
+}
+
+.fp-list:focus-visible {
+    outline: none;
+}
+
+.fp-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    width: 100%;
+    min-height: 2.2rem;
+    padding: 0.25rem 0.7rem;
+    text-align: left;
+    color: var(--body);
+    user-select: none;
+}
+
+.fp-row:hover {
+    background: var(--hover);
+}
+
+/* The selected folder: what Open takes. */
+.fp-row.on {
+    background: var(--accent-soft);
+    color: var(--text);
+    box-shadow: inset 2px 0 var(--accent);
+}
+
+.fp-row .icon {
+    flex: none;
+    color: var(--accent);
+}
+
+.fp-row .fp-chev {
+    margin-left: auto;
+    color: var(--muted);
+}
+
+.fp-name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fp-note {
+    margin: 0;
+    padding: 0.8rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
+/* The bottom: the folder Open takes, the options, then Cancel and Open, as a file dialog's. */
+.fp-foot {
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.9rem;
+}
+
+.fp-target {
+    flex: 1 0 100%;
+    min-width: 0;
+    display: flex;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.fp-target .mono {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text);
+}
+
+.fp-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.2rem 0.9rem;
+}
+
+.fp-options .check {
+    margin-bottom: 0;
+}
+
+.fp-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: auto;
+}
+
+.fp-buttons .button {
+    min-width: 6.5rem;
+    justify-content: center;
+}
+
+/* Phones: the buttons share the width, under the options. */
+@media (max-width: 699px) {
+    .fp-new {
+        padding-inline: 0.6rem;
+    }
+    .fp-buttons {
+        flex: 1 0 100%;
+    }
+    .fp-buttons .button {
+        flex: 1;
+    }
+    .fp-places {
+        width: 8.5rem;
+    }
+    .fp-row,
+    .fp-place {
+        min-height: 2.6rem;
+    }
 }
 
 .check {
@@ -8814,7 +9083,7 @@ textarea.notes {
      * the board in its selector.) */
     .sessions .search input,
     .board .board-search input,
-    .new-folder input,
+    .fp-line input,
     .launcher-input input {
         font-size: 16px;
     }
