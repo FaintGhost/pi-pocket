@@ -185,6 +185,24 @@ const stateOf = (module: string) =>
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Time, in the page, from now until the meter stops, kept as `globalThis.meterTook`. */
+const timeTheStop = () =>
+    inPage<null>(`
+        const { store } = await import("/store.js");
+        const { browserModuleState } = await import("/extension-ui.js");
+        const started = performance.now();
+        const stop = store.subscribe(() => {
+            if (browserModuleState("meter")?.status === "failed") {
+                globalThis.meterTook = performance.now() - started;
+                stop();
+            }
+        });
+
+        globalThis.meterTook = null;
+
+        return "null";
+    `);
+
 before(async () => {
     if (chromium === undefined) {
         return;
@@ -857,6 +875,8 @@ test(
 
         assert.deepEqual(await shown("2"), { count: "2", label: "Meter, 2" });
         assert.deepEqual(await shown("150"), { count: "99+", label: "Meter, 99+" });
+        assert.deepEqual(await shown("Infinity"), { count: "99+", label: "Meter, 99+" });
+        assert.deepEqual(await shown("-3"), { count: "-3", label: "Meter, -3" });
         assert.deepEqual(await shown(`" new "`), { count: "new", label: "Meter, new" });
 
         for (const badge of [
@@ -865,7 +885,6 @@ test(
             `""`,
             `"  "`,
             "NaN",
-            "Infinity",
             "-Infinity",
             "null",
             "false",
@@ -878,6 +897,14 @@ test(
         const long = await shown(`"${"x".repeat(40)}"`);
 
         assert.equal(long.count, `${"x".repeat(23)}…`);
+        // Cut whole characters at a time: an emoji, or one joined of several, is never split.
+        assert.deepEqual(await shown(`"${"x".repeat(22)}😀😀😀"`), {
+            count: `${"x".repeat(22)}😀…`,
+            label: `Meter, ${"x".repeat(22)}😀…`,
+        });
+        assert.equal((await shown(`"${"x".repeat(22)}👨‍👩‍👧👨‍👩‍👧"`)).count, `${"x".repeat(22)}👨‍👩‍👧👨‍👩‍👧`);
+        assert.equal((await shown(`"${"x".repeat(22)}👨‍👩‍👧👨‍👩‍👧y"`)).count, `${"x".repeat(22)}👨‍👩‍👧…`);
+        await shown(`"${"x".repeat(40)}"`);
         assert.ok(
             await inPage<boolean>(`
             const button = document.querySelector(${JSON.stringify(rail("Meter"))}).getBoundingClientRect();
@@ -1433,7 +1460,7 @@ test(
 );
 
 test(
-    "a loop that draws slowly is stopped too, and so are tasks that redraw too often",
+    "a loop that draws slowly is stopped too; tasks that change things very often draw once a frame, and go on",
     real,
     async () => {
         await page.navigate(`${base}/s/${session}`);
@@ -1467,10 +1494,12 @@ test(
             20_000,
         );
 
-        // Its own tasks, one after another, letting the page answer between them, but far more than 300 a second.
+        // Its own tasks, one after another, letting the page answer between them, thousands a second: not a loop of
+        // its drawing, and it costs the app a redraw a frame.
         await page.navigate(`${base}/s/${session}`);
         await until(() => has(rail("Meter")), "the meter, loaded again");
-        await withMeter<null>(`
+        const redraws = await withMeter<{ redraws: number; changes: number }>(`
+            const { store } = await import("/store.js");
             let count = 0;
             let stopped = false;
             const tasks = new MessageChannel();
@@ -1482,16 +1511,20 @@ test(
                     tasks.port2.postMessage(null);
                 }
             };
-            pocket.onDispose(() => (stopped = true));
             tasks.port2.postMessage(null);
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            const before = store.state.extensionsRev;
+            const from = count;
 
-            return "null";
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            stopped = true;
+
+            return JSON.stringify({ redraws: store.state.extensionsRev - before, changes: count - from });
         `);
-        await until(async () => !(await has(rail("Meter"))), "the busy module stopped");
-        assert.deepEqual(await stateOf("meter"), {
-            status: "failed",
-            error: "it redraws without end",
-        });
+
+        assert.ok(redraws.changes > 1000, `${redraws.changes} changes in a second`);
+        assert.ok(redraws.redraws <= 75, `${redraws.redraws} redraws in a second`);
+        assert.deepEqual(await stateOf("meter"), { status: "ready", error: null });
     },
 );
 
@@ -1602,23 +1635,348 @@ test(
     },
 );
 
-/** Time, in the page, from now until the meter stops, kept as `globalThis.meterTook`. */
-const timeTheStop = () =>
-    inPage<null>(`
-        const { store } = await import("/store.js");
-        const { browserModuleState } = await import("/extension-ui.js");
-        const started = performance.now();
-        const stop = store.subscribe(() => {
-            if (browserModuleState("meter")?.status === "failed") {
-                globalThis.meterTook = performance.now() - started;
-                stop();
+test(
+    "busy effects that are not loops are never stopped: an animation one starts, changes as state changes",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            const rail = globalThis.meterRail;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            let count = 0;
+            let setValue = null;
+
+            // An effect that starts an animation once; one that shows a value as it changes, 20 times a second; and
+            // one that runs each time the page draws, which puts the same value back.
+            pocket.page({
+                id: "animated",
+                title: "Animated",
+                component: () => {
+                    const [value, set] = pocket.useState(0);
+
+                    setValue = set;
+                    pocket.useEffect(() => {
+                        let frame = requestAnimationFrame(function step() {
+                            rail.update({ badge: ++count });
+                            frame = requestAnimationFrame(step);
+                        });
+
+                        return () => cancelAnimationFrame(frame);
+                    }, []);
+                    pocket.useEffect(() => globalThis.meterPocket.rail({ id: "value", title: "Value", badge: value, run() {} }), [value]);
+                    pocket.useEffect(() => rail.update({ title: "Meter " + (value % 2) }));
+
+                    return html\`<p class="animated">\${value}</p>\`;
+                },
+            });
+            pocket.openPage("animated");
+
+            const timer = setInterval(() => setValue?.((value) => value + 1), 50);
+
+            await sleep(2000);
+            clearInterval(timer);
+            pocket.closePage();
+            rail.update({ title: "Meter", badge: undefined });
+
+            // 30 buttons, each changed by a timer of its own, 20 times a second.
+            const many = Array.from({ length: 30 }, (_, index) =>
+                pocket.rail({ id: "own" + index, title: "Own " + index, run() {} }),
+            );
+            const timers = many.map((each) => setInterval(() => each.update({ badge: ++count }), 50));
+
+            await sleep(1500);
+            timers.forEach(clearInterval);
+            many.forEach((each) => each.remove());
+
+            return "null";
+        `);
+        assert.deepEqual(await stateOf("meter"), { status: "ready", error: null });
+    },
+);
+
+test(
+    "loops through effects and microtasks are stopped; one through a timer of its own draws once a frame",
+    real,
+    async () => {
+        const loops = {
+            // An effect that changes the rail button after an await, each time the page draws, which draws it again.
+            awaited: `pocket.useEffect(() => {
+                (async () => {
+                    await null;
+                    globalThis.meterRail.update({ badge: (++count % 50) + 1 });
+                })();
+            });`,
+            // A layout effect that changes it in a microtask.
+            microtask: `pocket.useLayoutEffect(() => {
+                queueMicrotask(() => globalThis.meterRail.update({ badge: (++count % 50) + 1 }));
+            });`,
+            // An effect, as the docs show them, that changes it each time.
+            effect: `pocket.useEffect(() => {
+                globalThis.meterRail.update({ badge: ++count });
+            });`,
+            // An effect that opens its own page again, each time.
+            opener: `pocket.useEffect(() => {
+                pocket.openPage("looping");
+            });`,
+        };
+
+        for (const [name, effect] of Object.entries(loops)) {
+            await page.navigate(`${base}/s/${session}`);
+            await until(() => has(rail("Meter")), "the meter's rail button");
+            await timeTheStop();
+            await withMeter<null>(`
+                let count = 0;
+
+                pocket.page({
+                    id: "looping",
+                    title: "Looping",
+                    component: () => {
+                        const until = performance.now() + 5;
+
+                        while (performance.now() < until) {
+                            // Drawing slowly.
+                        }
+
+                        ${effect}
+
+                        return html\`<p class="looping">\${count}</p>\`;
+                    },
+                });
+                pocket.openPage("looping");
+
+                return "null";
+            `);
+            await until(
+                async () => /redraws without end/.test(await text(".ext-page .error-box")),
+                `the ${name} loop stopped`,
+            );
+
+            const took = await inPage<number | null>(`return JSON.stringify(globalThis.meterTook)`);
+
+            assert.ok(typeof took === "number" && took < 2000, `${name}: stopped after ${took} ms`);
+        }
+
+        // Through a timer of its own: it cannot be told from an animation, and goes on, at most a redraw a frame.
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        const redraws = await withMeter<number>(`
+            const { store } = await import("/store.js");
+            let count = 0;
+
+            pocket.page({
+                id: "timed",
+                title: "Timed",
+                component: () => {
+                    pocket.useEffect(() => {
+                        setTimeout(() => globalThis.meterRail.update({ badge: (++count % 50) + 1 }), 0);
+                    });
+
+                    return html\`<p class="timed">\${count}</p>\`;
+                },
+            });
+            pocket.openPage("timed");
+            await new Promise((resolve) => setTimeout(resolve, 300));
+            const before = store.state.extensionsRev;
+
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            const redraws = store.state.extensionsRev - before;
+
+            pocket.closePage();
+
+            return JSON.stringify(redraws);
+        `);
+
+        assert.ok(redraws <= 75, `${redraws} redraws in a second`);
+        assert.deepEqual(await stateOf("meter"), { status: "ready", error: null });
+    },
+);
+
+test(
+    "an endless loop of microtasks that calls pocket is stopped in about a second, and its calls throw so it ends",
+    real,
+    async () => {
+        const spins = {
+            // Each turn of the loop after an await.
+            awaited: `(async () => {
+                let count = 0;
+
+                try {
+                    for (;;) {
+                        await Promise.resolve();
+                        globalThis.meterRail.update({ badge: (++count % 50) + 1 });
+                    }
+                } catch (error) {
+                    globalThis.spinEnded = error.message;
+                }
+            })();`,
+            // A chain of promises, calling with the same value each time: nothing to draw, still a loop.
+            chained: `const spin = () => {
+                globalThis.meterRail.update({ badge: 1 });
+
+                return Promise.resolve().then(spin);
+            };
+
+            spin().catch((error) => (globalThis.spinEnded = error.message));`,
+        };
+
+        for (const [name, spin] of Object.entries(spins)) {
+            await page.navigate(`${base}/s/${session}`);
+            await until(() => has(rail("Meter")), "the meter's rail button");
+            await timeTheStop();
+            // The page answers again only once the loop ends.
+            await withMeter<null>(`
+                globalThis.spinEnded = null;
+                ${spin}
+
+                return "null";
+            `);
+            await until(
+                () => inPage<boolean>(`return JSON.stringify(globalThis.spinEnded !== null)`),
+                `the ${name} loop ended`,
+            );
+            assert.equal(
+                await inPage<string>(`return JSON.stringify(globalThis.spinEnded)`),
+                "meter was stopped in this browser: it redraws without end",
+            );
+            assert.deepEqual(await stateOf("meter"), {
+                status: "failed",
+                error: "it redraws without end",
+            });
+
+            const took = await inPage<number | null>(`return JSON.stringify(globalThis.meterTook)`);
+
+            assert.ok(typeof took === "number" && took < 2000, `${name}: stopped after ${took} ms`);
+        }
+
+        // A storm that ends of itself, however many calls, goes on.
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            for (let count = 0; count < 20000; count++) {
+                await Promise.resolve();
+                globalThis.meterRail.update({ badge: (count % 50) + 1 });
             }
+
+            globalThis.meterRail.update({ badge: undefined });
+
+            return "null";
+        `);
+        assert.deepEqual(await stateOf("meter"), { status: "ready", error: null });
+    },
+);
+
+test(
+    "what an old version's actions say when they fail late does not use up the new version's notices",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            const { store } = await import("/store.js");
+
+            globalThis.lateSeen = [];
+            store.subscribe((state) => {
+                for (const notice of state.notices) {
+                    if (!globalThis.lateSeen.includes(notice.message)) {
+                        globalThis.lateSeen.push(notice.message);
+                    }
+                }
+            });
+            globalThis.pending = [];
+            pocket.rail({
+                id: "pending",
+                title: "Pending",
+                run: () => new Promise((resolve, reject) => globalThis.pending.push(reject)),
+            });
+            await new Promise((resolve) => setTimeout(resolve, 200));
+
+            for (let count = 0; count < 5; count++) {
+                document.querySelector(${JSON.stringify(rail("Pending"))}).click();
+            }
+
+            globalThis.oldMeterPocket = pocket;
+
+            return "null";
+        `);
+        assert.equal(await inPage<number>(`return JSON.stringify(globalThis.pending.length)`), 5);
+        writeFileSync(join(dropIns, "meter.js"), `${METER_JS}\n// Edited again.\n`);
+        await app.loader.reload("meter.ts");
+        await until(
+            () =>
+                inPage<boolean>(
+                    `return JSON.stringify(globalThis.meterPocket !== globalThis.oldMeterPocket)`,
+                ),
+            "the new version",
+        );
+        await inPage<null>(`
+            for (const reject of globalThis.pending) {
+                reject(new Error("too late"));
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            globalThis.meterPocket.notify("info", "the new version says");
+
+            return "null";
+        `);
+        await sleep(300);
+        const seen = await inPage<string[]>(`return JSON.stringify(globalThis.lateSeen)`);
+
+        assert.equal(
+            seen.some((each) => each.includes("too late")),
+            false,
+        );
+        assert.ok(seen.includes("the new version says"), JSON.stringify(seen));
+    },
+);
+
+test(
+    "drawing again checks a few of each extension component's own methods, no more",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        const calls = await withMeter<number>(`
+        const { store } = await import("/store.js");
+
+        function Leaf({ n }) {
+            return html\`<i>\${n}</i>\`;
+        }
+
+        pocket.page({
+            id: "leaves",
+            title: "Leaves",
+            component: () => html\`<div class="leaves">
+                \${Array.from({ length: 1000 }, (_, n) => html\`<\${Leaf} n=\${n} />\`)}
+            </div>\`,
         });
+        pocket.openPage("leaves");
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-        globalThis.meterTook = null;
+        const describe = Object.getOwnPropertyDescriptor;
+        let calls = 0;
 
-        return "null";
+        Object.getOwnPropertyDescriptor = function (...args) {
+            calls++;
+
+            return describe.apply(this, args);
+        };
+
+        try {
+            store.set({});
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        } finally {
+            Object.getOwnPropertyDescriptor = describe;
+        }
+
+        pocket.closePage();
+
+        return JSON.stringify(calls);
     `);
+
+        assert.ok(calls > 1000 && calls < 8500, `${calls} lookups for 1001 components`);
+    },
+);
 
 test(
     "a loop whose draws take 100 ms is stopped in about a second, and so is one that opens a sheet as it draws",
@@ -1655,9 +2013,9 @@ test(
             20_000,
         );
 
-        const slow = await inPage<number>(`return JSON.stringify(globalThis.meterTook)`);
+        const slow = await inPage<number | null>(`return JSON.stringify(globalThis.meterTook)`);
 
-        assert.ok(slow < 1600, `stopped after ${Math.round(slow)} ms`);
+        assert.ok(typeof slow === "number" && slow < 1600, `stopped after ${slow} ms`);
 
         // Opening its sheet again as the sheet draws, slowly, holds the page, with no task between: stopped too.
         await page.navigate(`${base}/s/${session}`);
@@ -1689,9 +2047,9 @@ test(
             20_000,
         );
 
-        const held = await inPage<number>(`return JSON.stringify(globalThis.meterTook)`);
+        const held = await inPage<number | null>(`return JSON.stringify(globalThis.meterTook)`);
 
-        assert.ok(held < 1600, `stopped after ${Math.round(held)} ms`);
+        assert.ok(typeof held === "number" && held < 1600, `stopped after ${held} ms`);
     },
 );
 
@@ -1811,7 +2169,36 @@ test(
                 return html\`<p class="early">\${drawn}</p>\`;
             }
 
-            const pages = { WillUpdate, ShouldUpdate, Snapshot, Derived, Swapped, SwappedUpdate, Early };
+            class DerivedLater extends Component {
+                static getDerivedStateFromProps() {
+                    return null;
+                }
+
+                componentDidMount() {
+                    this.constructor.getDerivedStateFromProps = (props, state) => {
+                        if (state.broken) {
+                            throw null;
+                        }
+
+                        return null;
+                    };
+                }
+
+                render() {
+                    return breaker(this);
+                }
+            }
+
+            const pages = {
+                WillUpdate,
+                ShouldUpdate,
+                Snapshot,
+                Derived,
+                DerivedLater,
+                Swapped,
+                SwappedUpdate,
+                Early,
+            };
 
             for (const [id, component] of Object.entries(pages)) {
                 pocket.page({ id, title: id, component });
@@ -1826,6 +2213,7 @@ test(
             "ShouldUpdate",
             "Snapshot",
             "Derived",
+            "DerivedLater",
             "Swapped",
             "SwappedUpdate",
             "Early",
@@ -2009,6 +2397,52 @@ test(
         } finally {
             await inPage<null>(`sessionStorage.removeItem("pocket.noext"); return "null"`);
         }
+    },
+);
+
+test(
+    "a module turned off and on again counts its notices afresh: the tab forgets those of one no longer there",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            const { store } = await import("/store.js");
+
+            globalThis.againSeen = [];
+            store.subscribe((state) => {
+                for (const notice of state.notices) {
+                    if (!globalThis.againSeen.includes(notice.message)) {
+                        globalThis.againSeen.push(notice.message);
+                    }
+                }
+            });
+
+            for (let count = 1; count <= 5; count++) {
+                pocket.notify("info", "meter counts " + count);
+            }
+
+            globalThis.oldMeterPocket = pocket;
+
+            return "null";
+        `);
+        await app.setExtensionEnabled(owner(app), "meter.ts", false);
+        await until(async () => !(await has(rail("Meter"))), "the meter gone");
+        await app.setExtensionEnabled(owner(app), "meter.ts", true);
+        await until(
+            () =>
+                inPage<boolean>(
+                    `return JSON.stringify(globalThis.meterPocket !== globalThis.oldMeterPocket && document.querySelector(${JSON.stringify(rail("Meter"))}) !== null)`,
+                ),
+            "the meter back",
+        );
+        await withMeter<null>(`pocket.notify("info", "meter counts again"); return "null";`);
+        await sleep(300);
+        assert.ok(
+            (await inPage<string[]>(`return JSON.stringify(globalThis.againSeen)`)).includes(
+                "meter counts again",
+            ),
+        );
     },
 );
 
