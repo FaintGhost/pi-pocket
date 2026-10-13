@@ -46,36 +46,24 @@ const liveRecord = (record) =>
 
 /**
  * How often a module may make the app draw again. What it adds, changes, or removes draws at the next frame, once for
- * every change since, so changes alone cost the app no more than a redraw a frame, at any refresh rate. What can go on
- * without end is a loop: a change made because the app drew the module's previous one (or a change of another module
- * that its change led to), as a component draws, as the store's listeners hear of it, in an effect or a cleanup of
- * `pocket.useEffect` or `pocket.useLayoutEffect` that drawing asked for, or a few microtasks after any of these. An
- * effect asked for by a drawing no change of a module caused (its own state changed, from a timer or a frame) is not
- * one, wherever Preact runs it. Pages and sheets a module opens and closes show at once, so they have bounds of their
- * own. Past these, the module stops, as one that failed to load does:
+ * every change since: whatever it does, its changes cost the app no more than a redraw a frame, as an animation does.
+ * What could hold the page is a loop that never lets a task through; and pages and sheets, which show at once. Past
+ * these bounds, the module stops, as one that failed to load does:
  *
- * - A loop: 20 changes in a row each made because the app drew the one before, or 5 or more over more than a second,
- *   however slowly it draws.
- * - Pages and sheets opened or closed: more than 300 within any second; or, with no task between them (they hold the
- *   page), more than 1000, or 5 or more over more than a second.
  * - Calls to `pocket`'s methods (all but `h`, `html`, the hooks, and the components) with no task between them (a loop
  *   of microtasks, which holds the page): more than 1000, over more than a second. Its calls then throw until the next
  *   task, so that such a loop ends.
- *
- * A loop that goes through a timer or a frame of its own (an effect that starts a timer, each time it runs) cannot be
- * told from an animation: it goes on, at a redraw a frame.
+ * - Pages and sheets opened or closed: more than 300 within any second; or, with no task between them, more than 1000,
+ *   or 5 or more over more than a second.
  */
-const LOOP_COUNT = 20;
-const SLOW_MIN = 5;
-const SLOW_MS = 1000;
-const OPENS_PER_SECOND = 300;
-const HELD_COUNT = 1000;
 const HELD_CALLS = 1000;
+const HELD_MS = 1000;
+const OPENS_PER_SECOND = 300;
+const HELD_OPENS = 1000;
+const SLOW_OPENS = 5;
 /** And how many notices a module may show, across its versions: past these, the rest are dropped. */
 const NOTICES = 5;
 const NOTICES_MS = 5000;
-/** How many microtasks on a mark of what is drawn lasts: a change queued from a component or effect still counts. */
-const MARK_HOPS = 5;
 /** When a hidden tab draws no frames: its redraws wait this long at most (and longer, as such tabs' timers do). */
 const FRAME_FALLBACK_MS = 100;
 
@@ -100,8 +88,8 @@ function nextTurn() {
 }
 
 /**
- * What a module spent lately: when it last opened or closed pages and sheets (for the second), how many in this task and
- * since when, and how many of its changes in a row the app's drawing of the one before made.
+ * What a module spent lately: its calls in this task and since when (`tick`), and the pages and sheets it opened or
+ * closed, within the last second and in this task (`chargeOpen`).
  */
 const spending = () => ({
     calls: 0,
@@ -112,11 +100,6 @@ const spending = () => ({
     turn: -1,
     inTurn: 0,
     turnSince: 0,
-    loops: 0,
-    loopsSince: 0,
-    lastCharge: 0,
-    selfMade: false,
-    lineage: new Set(),
 });
 
 /**
@@ -143,7 +126,7 @@ function tick(record) {
 
     spent.calls++;
 
-    if (spent.calls > HELD_CALLS && now - spent.callsSince > SLOW_MS) {
+    if (spent.calls > HELD_CALLS && now - spent.callsSince > HELD_MS) {
         spent.held = turn;
 
         if (liveRecord(record)) {
@@ -154,53 +137,31 @@ function tick(record) {
     }
 }
 
-/**
- * Count a change a module made: `opened`, a page or sheet opened or closed; `selfMade`, made because the app drew its
- * previous change. False, once that stopped the module for going past its bounds.
- */
-function charge(record, { opened = false, selfMade = false } = {}) {
+/** Count a page or sheet a module opened or closed; false, once that stopped the module for going past its bounds. */
+function chargeOpen(record) {
     const now = performance.now();
     const spent = record.spent;
 
-    if (selfMade) {
-        if (spent.loops === 0) {
-            spent.loopsSince = spent.lastCharge;
-        }
+    spent.opens.push(now);
 
-        spent.loops++;
-    } else {
-        spent.loops = 0;
+    while (now - spent.opens[0] >= 1000) {
+        spent.opens.shift();
     }
 
-    spent.lastCharge = now;
-
-    let held = false;
-
-    if (opened) {
-        spent.opens.push(now);
-
-        while (now - spent.opens[0] >= 1000) {
-            spent.opens.shift();
-        }
-
-        if (spent.turn !== turn) {
-            spent.turn = turn;
-            spent.inTurn = 0;
-            spent.turnSince = now;
-        }
-
-        spent.inTurn++;
-        nextTurn();
-        held =
-            spent.opens.length > OPENS_PER_SECOND ||
-            spent.inTurn > HELD_COUNT ||
-            (spent.inTurn >= SLOW_MIN && now - spent.turnSince > SLOW_MS);
+    if (spent.turn !== turn) {
+        spent.turn = turn;
+        spent.inTurn = 0;
+        spent.turnSince = now;
     }
 
-    const looping =
-        spent.loops >= LOOP_COUNT || (spent.loops >= SLOW_MIN && now - spent.loopsSince > SLOW_MS);
+    spent.inTurn++;
+    nextTurn();
 
-    if (held || looping) {
+    if (
+        spent.opens.length > OPENS_PER_SECOND ||
+        spent.inTurn > HELD_OPENS ||
+        (spent.inTurn >= SLOW_OPENS && now - spent.turnSince > HELD_MS)
+    ) {
         fail(record, new Error("it redraws without end"), "was stopped");
 
         return false;
@@ -209,171 +170,34 @@ function charge(record, { opened = false, selfMade = false } = {}) {
     return true;
 }
 
-/**
- * The modules whose change the app draws now, or whose components' effects (and their cleanups) of that drawing run:
- * what they change meanwhile, or a few microtasks after, that drawing made. Each change carries the mark it was made
- * under (its lineage), and the drawing of it marks those modules too, so that two modules that change each other in
- * turn are each found in the mark of the change it made. A mark lasts `MARK_HOPS` microtasks, and the newest one
- * counts; a change made under none (an event, a timer, a frame) starts afresh.
- */
-let causing = null;
-let marks = 0;
+/** Whether a redraw is due at the next frame, for every change made until then. */
+let due = false;
 
-function mark(records) {
-    if (records === null || records.size === 0) {
+/** Draw what extensions add again at the next frame: every change until then goes in the same redraw. */
+function redraw() {
+    if (due) {
         return;
     }
 
-    causing = new Set([...(causing ?? []), ...records]);
+    due = true;
 
-    const mine = ++marks;
-    const hop = (left) =>
-        queueMicrotask(() => {
-            if (mine !== marks) {
-                return;
-            }
-
-            if (left > 0) {
-                hop(left - 1);
-            } else {
-                causing = null;
-                aside.clear();
-            }
-        });
-
-    hop(MARK_HOPS);
-}
-
-/**
- * The modules whose effects of an earlier drawing, one their own changes did not cause (a timer's, a frame's), ran
- * within the mark now, as Preact runs an effect still waiting when its component draws again: what they change within
- * this mark (after an await in that effect) is that effect's doing, not this drawing's. Cleared with the mark.
- */
-const aside = new Set();
-
-/** Whether a module's change now is made by the app's drawing of its previous one. */
-const selfMade = (record) => causing?.has(record) === true && !aside.has(record);
-
-/** The mark that `options[RENDER_HOOK]` hides while Preact runs a component's effects still waiting: see there. */
-let hidden = null;
-/** The effects of `pocket.useEffect` and `pocket.useLayoutEffect`, which run with their own cause. */
-const causedEffects = new WeakSet();
-
-/**
- * Run a module's effect, or its cleanup, with the cause it was asked for with (the drawing that asked for it, or none):
- * not with whatever the app draws as it runs, and so are the microtasks it queues.
- */
-function runCaused(record, cause, run) {
-    const before = causing;
-    const around = causing ?? hidden;
-
-    causing = cause;
-
-    try {
-        return run();
-    } finally {
-        causing = before;
-
-        if (cause !== null) {
-            mark(cause);
-        } else if (around !== null) {
-            aside.add(record);
-        }
-    }
-}
-
-/**
- * A module's effect, which runs with the cause it was asked for with: the drawing that asked for it was drawing the
- * module's change, or nothing that is any module's (its own state changed, from a timer or a frame). So is the cleanup it
- * returns, which Preact runs before the effect's next run.
- */
-function causedEffect(record, effect) {
-    const cause = causing === null ? null : new Set(causing);
-
-    if (typeof effect !== "function") {
-        return effect;
-    }
-
-    const caused = function (...args) {
-        return runCaused(record, cause, () => {
-            const cleanup = effect.apply(this, args);
-
-            if (typeof cleanup !== "function") {
-                return cleanup;
-            }
-
-            return function (...more) {
-                return runCaused(record, cause, () => cleanup.apply(this, more));
-            };
-        });
-    };
-
-    causedEffects.add(caused);
-
-    return caused;
-}
-
-/** The modules whose changes wait for the next redraw, which comes once for all of them; null when none is due. */
-let due = null;
-
-/** Draw what extensions add again at the next frame: every change until then goes in the same redraw. */
-function redraw(record) {
-    if (due === null) {
-        due = new Set();
-        // A hidden tab draws no frames: a timer then, whichever comes first.
-        const frame = requestAnimationFrame(() => {
-            clearTimeout(timer);
-            flush();
-        });
-        const timer = setTimeout(() => {
-            cancelAnimationFrame(frame);
-            flush();
-        }, FRAME_FALLBACK_MS);
-    }
-
-    if (record !== undefined) {
-        due.add(record);
-
-        if (causing !== null && !aside.has(record)) {
-            for (const each of causing) {
-                record.spent.lineage.add(each);
-            }
-
-            if (causing.has(record)) {
-                record.spent.selfMade = true;
-            }
-        }
-    }
+    // A hidden tab draws no frames: a timer then, whichever comes first.
+    const frame = requestAnimationFrame(() => {
+        clearTimeout(timer);
+        flush();
+    });
+    const timer = setTimeout(() => {
+        cancelAnimationFrame(frame);
+        flush();
+    }, FRAME_FALLBACK_MS);
 }
 
 function flush() {
-    if (due === null) {
+    if (!due) {
         return;
     }
 
-    const records = [...due].filter(liveRecord);
-
-    due = null;
-
-    const drawn = new Set();
-
-    for (const record of records) {
-        const made = record.spent.selfMade;
-
-        record.spent.selfMade = false;
-        charge(record, { selfMade: made });
-        drawn.add(record);
-
-        for (const each of record.spent.lineage) {
-            drawn.add(each);
-        }
-
-        record.spent.lineage.clear();
-    }
-
-    // Marked first: the store's listeners hear the change at once, and the app draws in a microtask it queues, which
-    // the mark outlasts by a few.
-    mark(new Set([...drawn].filter(liveRecord)));
+    due = false;
     store.set((state) => ({ extensionsRev: state.extensionsRev + 1 }));
 }
 
@@ -606,7 +430,7 @@ async function load(entry) {
         dead: false,
         // How it failed, for its page and sheets: "failed to load", or "was stopped".
         how: null,
-        // The redraws it caused lately (`charge`).
+        // Its calls in this task, and the pages and sheets it opened and closed lately (`tick`, `chargeOpen`).
         spent: spending(),
     };
 
@@ -844,18 +668,8 @@ function routeOf(module, path) {
 function pocketFor(record) {
     const live = () => liveRecord(record);
 
-    // A page or sheet opened or closed shows at once: it counts toward its bounds, and what draws next is its doing.
-    const change = () => {
-        const lineage = [...(causing ?? [])];
-
-        if (!live() || !charge(record, { opened: true, selfMade: selfMade(record) })) {
-            return false;
-        }
-
-        mark(new Set([record, ...lineage]));
-
-        return true;
-    };
+    // A page or sheet opened or closed shows at once: it counts toward bounds of its own.
+    const change = () => live() && chargeOpen(record);
 
     /** Add something, or replace what has its id; what comes back changes or removes it. */
     const add = (kind, spec) => {
@@ -870,7 +684,7 @@ function pocketFor(record) {
 
             // The same again (a component that adds as it draws) draws nothing again.
             if (!sameSpec(before, current)) {
-                redraw(record);
+                redraw();
             }
         }
 
@@ -896,14 +710,14 @@ function pocketFor(record) {
                 check(kind, next);
                 current = next;
                 record.adds[kind].set(current.id, current);
-                redraw(record);
+                redraw();
             },
             remove() {
                 tick(record);
 
                 if (live() && record.adds[kind].get(current.id) === current) {
                     record.adds[kind].delete(current.id);
-                    redraw(record);
+                    redraw();
                 }
             },
         });
@@ -921,9 +735,8 @@ function pocketFor(record) {
         html,
         Fragment,
         useState,
-        // Effects that know which drawing asked for them, so a change they make because of it counts as a loop's.
-        useEffect: (effect, deps) => useEffect(causedEffect(record, effect), deps),
-        useLayoutEffect: (effect, deps) => useLayoutEffect(causedEffect(record, effect), deps),
+        useEffect,
+        useLayoutEffect,
         useRef,
         useMemo,
         useCallback,
@@ -954,8 +767,13 @@ function pocketFor(record) {
          * for a path that would lead out of the module's routes.
          */
         api: (path, body, options) => {
-            // Counted at once, so a loop of calls that holds the page ends; a path that leads out rejects.
-            tick(record);
+            // Counted at once, so that a loop of calls that holds the page is stopped; but, as a path that leads out,
+            // a stopped module's call rejects rather than throws, as a call's promise is what its caller handles.
+            try {
+                tick(record);
+            } catch (error) {
+                return Promise.reject(error);
+            }
 
             return (async () => api(routeOf(record.module, path), body, options))();
         },
@@ -1236,13 +1054,9 @@ function badgeOf(badge) {
         return badge > 99 ? "99+" : String(badge);
     }
 
-    // Long text: its start only, so a huge badge costs no more to draw than a short one.
-    const text =
-        typeof badge !== "string"
-            ? ""
-            : badge.length > BADGE_HEAD
-              ? badge.slice(0, BADGE_HEAD).trimStart()
-              : badge.trim();
+    // Trimmed first, so spaces before it never hide or cut it; only then is its start looked at, which bounds the cost
+    // of a huge one without changing what shows of one that fits.
+    const text = typeof badge === "string" ? badge.trim() : "";
 
     if (text === "" || text === "0") {
         return "";
@@ -1250,7 +1064,7 @@ function badgeOf(badge) {
 
     const characters = firstCharacters(text, BADGE_TEXT + 1);
 
-    return characters.length > BADGE_TEXT || badge.length > BADGE_HEAD
+    return characters.length > BADGE_TEXT || text.length > BADGE_HEAD
         ? `${characters.slice(0, BADGE_TEXT - 1).join("")}…`
         : text;
 }
@@ -1374,10 +1188,6 @@ const DIFF_HOOK = "__b";
 const RENDER_HOOK = "__r";
 const COMPONENT = "__c";
 const PARENT = "__";
-// A component's hooks, the effects among them still waiting to run, and an effect's function, as preact/hooks names them.
-const HOOKS = "__H";
-const WAITING = "__h";
-const EFFECT = "__";
 const NO_REASON = "it gave no reason";
 /** What Preact calls of a component while it draws, besides its class's getDerivedStateFromProps. */
 const DRAWING = [
@@ -1460,7 +1270,7 @@ function wrapMethods(target, names, inherited = true) {
 const isClass = (type) =>
     typeof type === "function" && typeof type.prototype?.render === "function";
 
-/** The module whose Guard a vnode draws under (not counting a Guard itself), or false. */
+/** Whether a vnode draws under a Guard (not counting a Guard itself). */
 function underGuard(vnode) {
     if (guards === 0) {
         return false;
@@ -1468,14 +1278,14 @@ function underGuard(vnode) {
 
     for (let above = vnode?.[PARENT]; above; above = above[PARENT]) {
         if (above.type === Guard) {
-            return above.props?.module ?? true;
+            return true;
         }
     }
 
     return false;
 }
 
-/** The module whose Guard a component instance draws under, worked out once; false for none. */
+/** Whether a component instance draws under a Guard, worked out once. */
 function guarded(component, vnode) {
     if (typeof component !== "object" || component === null) {
         return false;
@@ -1527,7 +1337,7 @@ options[DIFF_HOOK] = (vnode) => {
 
     const component = vnode?.[COMPONENT];
 
-    if (component && guardedComponents.get(component)) {
+    if (component && guardedComponents.get(component) === true) {
         wrapMethods(component, DRAWING, false);
         checkedNow = component;
     }
@@ -1536,9 +1346,8 @@ options[DIFF_HOOK] = (vnode) => {
 // Right before a component draws: its methods, and the effects hooks run first when it draws again before they ran.
 options[RENDER_HOOK] = (vnode) => {
     const component = vnode?.[COMPONENT];
-    const module = guarded(component, vnode);
 
-    if (!module) {
+    if (!guarded(component, vnode)) {
         if (typeof beforeRender === "function") {
             beforeRender(vnode);
         }
@@ -1558,35 +1367,10 @@ options[RENDER_HOOK] = (vnode) => {
     }
 
     if (typeof beforeRender === "function") {
-        // Preact runs here the component's effects still waiting, of an earlier drawing: not under this one's mark,
-        // which comes back after them, with what they marked.
-        const drawing = causing;
-        const waiting = component[HOOKS]?.[WAITING];
-
-        // An effect of Preact's own hooks among them runs with no cause of ours: what it queues within this mark is
-        // its doing, as for an effect of `pocket`'s that no change caused.
-        if (
-            drawing !== null &&
-            Array.isArray(waiting) &&
-            waiting.some((state) => !causedEffects.has(state?.[EFFECT])) &&
-            modules.has(module)
-        ) {
-            aside.add(modules.get(module));
-        }
-
-        hidden = drawing;
-        causing = null;
-
         try {
             beforeRender(vnode);
         } catch (error) {
             throw error ?? new Error(NO_REASON);
-        } finally {
-            hidden = null;
-
-            if (drawing !== null) {
-                causing = new Set([...drawing, ...(causing ?? [])]);
-            }
         }
     }
 };
@@ -1627,11 +1411,7 @@ function Body({ record, spec, title, props, close }) {
     }
 
     // A Guard that caught a failure stays with it until its component changes (the page added again, or updated).
-    return html`<${Guard}
-        key=${`${record.url}#${componentId(spec.component)}`}
-        name=${title}
-        module=${record.module}
-    >
+    return html`<${Guard} key=${`${record.url}#${componentId(spec.component)}`} name=${title}>
         <${Drawn}
             component=${spec.component}
             props=${{ ...props, pocket: record.pocket, close }}
