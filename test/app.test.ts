@@ -992,6 +992,7 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
     const id = await newSession();
     const tab = fakeTab(id, owner());
     const late = fakeTab(id, owner());
+
     type Row = { text?: string; by?: string; reports?: string[] };
     const queue = (of = tab) => (of.field("inbox") ?? []) as Row[];
     const views = () => tab.events.flatMap((each) => (each.event === "view" ? [each.data] : []));
