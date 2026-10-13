@@ -14,6 +14,7 @@ import { clampThinkingLevel, type ModelThinkingLevel } from "@earendil-works/pi-
 import {
     getAgentDir,
     ModelRuntime,
+    resolveModelScopeWithDiagnostics,
     SettingsManager,
     type Skill,
 } from "@earendil-works/pi-coding-agent";
@@ -1506,6 +1507,17 @@ export class PocketApp {
         }
     }
 
+    /** All signed-in models, with Pi's enabledModels scope marked for the picker. */
+    async modelList() {
+        const patterns = this.settings.getEnabledModels();
+        const { scopedModels } =
+            patterns && patterns.length > 0
+                ? await resolveModelScopeWithDiagnostics(patterns, this.models)
+                : { scopedModels: [] };
+
+        return modelList(this.models, this.signInNeeded, scopedModels);
+    }
+
     async hello(user: User) {
         return {
             user: {
@@ -1515,7 +1527,7 @@ export class PocketApp {
                 ...(user.sessions === undefined ? {} : { sessions: user.sessions.map(Number) }),
             },
             users: this.people(user),
-            models: modelList(this.models, this.signInNeeded),
+            models: await this.modelList(),
             guard: await this.guardStatus(),
             server: {
                 supervised: this.supervised,
