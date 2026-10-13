@@ -13,19 +13,24 @@ import { ExtensionLoader } from "../src/server/reload.ts";
 
 after(cleanUp);
 
-/** What the test modules reach on `globalThis`: gates to hold their import, and counts of their cleanups. */
+/** What the test modules reach on `globalThis`: gates to hold their import, counts of their cleanups, and who ran. */
 const shared = globalThis as unknown as {
     gates?: Record<string, Promise<void>>;
     cleaned?: Record<string, number>;
+    ran?: string[];
 };
 
 shared.gates = {};
 shared.cleaned = {};
+shared.ran = [];
 
 let folders = 0;
 
-/** A loader on fresh folders, with every drop-in on unless `off` says otherwise. */
-function setUp(off = new Set<string>(), loadLimitMs?: number) {
+/**
+ * A loader on fresh folders, with every drop-in on unless `off` says otherwise. `unchosen` modules have no choice made:
+ * a built-in one is on, and a drop-in one off.
+ */
+function setUp(off = new Set<string>(), loadLimitMs?: number, unchosen = new Set<string>()) {
     const directory = join(root, `loader-${++folders}`);
     const builtIn = join(directory, "built-in");
     const dropIn = join(directory, "drop-ins");
@@ -44,7 +49,7 @@ function setUp(off = new Set<string>(), loadLimitMs?: number) {
         registry,
         host,
         { builtIn, dropIn },
-        (file) => !off.has(file),
+        (file) => (unchosen.has(file) ? undefined : !off.has(file)),
         {
             webs,
             notify: (level, message) => notices.push({ to: "owner", level, message }),
@@ -496,4 +501,55 @@ test("a built-in removed while it loads installs nothing, though a drop-in has i
     } finally {
         await loader.close();
     }
+});
+
+/** A module that notes it ran, at its top level, and then adds one extension. */
+const noting = (name: string) => `/** ${name}: notes that it ran. */
+globalThis.ran.push(${JSON.stringify(name)});
+export default () => ({ name: "t-${name}", v: 1 });
+`;
+
+test("a drop-in that is off never runs, though the built-in of its name goes while the server starts", async () => {
+    const { dropIn, loader, installed } = setUp(new Set(), undefined, new Set(["twin.ts"]));
+    const builtIn = join(dropIn, "..", "built-in");
+
+    // The built-in loads first and holds the start; the drop-in of the other's name is off, as no choice was made.
+    writeFileSync(join(builtIn, "a-hold.ts"), gated("hold", 1, "hold"));
+    writeFileSync(join(builtIn, "twin.ts"), gated("twin", 1));
+    writeFileSync(join(dropIn, "twin.ts"), noting("twin-drop-in"));
+    assert.equal(loader.enabled("twin.ts"), true, "the built-in is on");
+
+    const open = gate("hold");
+    const starting = loader.loadAll();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    rmSync(join(builtIn, "twin.ts"));
+    assert.equal(loader.enabled("twin.ts"), false, "the drop-in now has the name, and is off");
+    open();
+    await starting;
+    assert.deepEqual(shared.ran, [], "the drop-in that is off did not run");
+    assert.deepEqual(installed(), ["t-hold@1"]);
+    await loader.close();
+});
+
+test("a stop while the server starts loads nothing more: the modules after stay unloaded", async () => {
+    const { dropIn, loader, installed } = setUp(new Set(), 3000);
+
+    shared.ran = [];
+    writeFileSync(join(dropIn, "a-hang.ts"), gated("hang", 1, "hang"));
+    writeFileSync(join(dropIn, "b-after.ts"), noting("b-after"));
+    writeFileSync(join(dropIn, "c-after.ts"), noting("c-after"));
+    gate("hang");
+
+    const starting = loader.loadAll();
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const stopping = Date.now();
+
+    await loader.close();
+    await starting;
+    assert.ok(Date.now() - stopping < 500, "the start ended with the stop");
+    assert.deepEqual(shared.ran, [], "nothing after it ran");
+    assert.deepEqual(installed(), []);
 });

@@ -14,15 +14,20 @@ const POLL_HOLD_MS = 25_000;
 const POLL_EXPIRE_MS = 60_000;
 /**
  * How far behind a tab may fall. Past `BEHIND_BYTES` (or `BEHIND_EVENTS` waiting), a tab must keep up: one that took
- * nothing (its stream did not drain, or it acknowledged no poll) for `STALLED_MS` is cut off, rather than hold the
- * server's memory without end; it connects again, and gets a full view. A tab that keeps taking is not cut off for being
- * behind, so a session's first view, however large, and a slow phone that still reads both come through. Past
+ * nothing (its stream did not drain, or it polled and acknowledged nothing) for `STALLED_MS` is cut off, rather than
+ * hold the server's memory without end; it connects again, and gets a full view. This is checked as events come, at
+ * each ping of a stream, and at each poll. A polling tab with an answer on its way is taking it, however long that takes
+ * on a slow link: one that never polls again ends after `POLL_EXPIRE_MS`. A tab that keeps taking is not cut off for being behind,
+ * so a session's first view, however large, and a slow phone that still reads both come through. Past
  * `MAX_BEHIND_BYTES` any tab is cut off.
  */
 const BEHIND_BYTES = 8 * 1024 * 1024;
 const BEHIND_EVENTS = 5000;
 const STALLED_MS = 30_000;
 const MAX_BEHIND_BYTES = 128 * 1024 * 1024;
+
+/** How often a stream sends a comment, which keeps proxies from closing it, and checks that its tab keeps up. Tests set it. */
+export const streamTiming = { pingMs: 15_000 };
 
 /** One browser tab that receives events by long polling instead of an event stream. */
 interface Poller {
@@ -34,6 +39,8 @@ interface Poller {
     bytes: number;
     /** When the tab last took something: its poll acknowledged events, or nothing waited for it. */
     tookAt: number;
+    /** An answer went to it since its last poll: it is taking that, which on a slow link takes long. */
+    out: boolean;
     seq: number;
     waiting: ServerResponse | undefined;
     timer: NodeJS.Timeout | undefined;
@@ -72,9 +79,10 @@ export function createEventStreams(app: PocketApp) {
             response.write(text);
         };
 
-        const client = newClient(url, user, (event, data) => {
+        /** Whether the stream may take more: false, and cut off, when it took nothing for long while far behind, or is too far behind. */
+        const keepsUp = (): boolean => {
             if (response.writableEnded || response.destroyed) {
-                return;
+                return false;
             }
 
             const behind = response.writableLength;
@@ -85,14 +93,19 @@ export function createEventStreams(app: PocketApp) {
                 tookAt = now;
             }
 
-            // A tab that takes nothing for long while far behind, or one too far behind: cut off.
             if (behind > MAX_BEHIND_BYTES || now - tookAt > STALLED_MS) {
                 response.destroy();
 
-                return;
+                return false;
             }
 
-            write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+            return true;
+        };
+
+        const client = newClient(url, user, (event, data) => {
+            if (keepsUp()) {
+                write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+            }
         });
 
         client.close = () => response.end();
@@ -103,7 +116,8 @@ export function createEventStreams(app: PocketApp) {
             "x-accel-buffering": "no",
         });
         write("retry: 1500\n\n");
-        const ping = setInterval(() => write(": ping\n\n"), 15_000);
+        // The ping checks too: a tab far behind with nothing new for it would otherwise hold its backlog until the next event.
+        const ping = setInterval(() => keepsUp() && write(": ping\n\n"), streamTiming.pingMs);
 
         request.on("close", () => {
             clearInterval(ping);
@@ -128,7 +142,19 @@ export function createEventStreams(app: PocketApp) {
                 session: poller.id,
                 events: poller.queue.map(({ seq, event, data }) => ({ seq, event, data })),
             });
+            // Until it polls again it takes this: a large answer on a slow link takes long, and only it knows when it is in.
+            poller.out ||= poller.queue.length > 0;
         }
+    };
+
+    /** Whether a poller took nothing for long while far behind, or is too far behind: then its session ends. */
+    const stalled = (poller: Poller): boolean => {
+        const behind = poller.bytes > BEHIND_BYTES || poller.queue.length > BEHIND_EVENTS;
+
+        return (
+            poller.bytes > MAX_BEHIND_BYTES ||
+            (behind && !poller.out && Date.now() - poller.tookAt > STALLED_MS)
+        );
     };
 
     const closePoller = (poller: Poller): void => {
@@ -171,6 +197,31 @@ export function createEventStreams(app: PocketApp) {
             return json(response, 200, { ok: true });
         }
 
+        if (poller !== undefined) {
+            const ack = Number(url.searchParams.get("ack") ?? 0);
+            const before = poller.queue.length;
+
+            poller.out = false;
+
+            poller.queue = poller.queue.filter((item) => item.seq > ack);
+            poller.bytes = poller.queue.reduce((sum, item) => sum + item.size, 0);
+
+            // It took something, or nothing waits for it: it keeps up.
+            if (poller.queue.length < before || poller.queue.length === 0) {
+                poller.tookAt = Date.now();
+            }
+
+            // Still far behind, and it took nothing for long: start afresh, with a full view.
+            if (stalled(poller)) {
+                poller.queue = [];
+                poller.bytes = 0;
+                closePoller(poller);
+                poller = undefined;
+            } else {
+                keepPoller(poller);
+            }
+        }
+
         if (poller === undefined) {
             // A new tab, or one whose session ended (the server restarted): attach afresh, which sends hello and a full view.
             const created: Poller = {
@@ -180,6 +231,8 @@ export function createEventStreams(app: PocketApp) {
                 queue: [],
                 bytes: 0,
                 tookAt: Date.now(),
+                // Its first answer is on its way however long its first view takes to build.
+                out: true,
                 seq: 0,
                 waiting: undefined,
                 timer: undefined,
@@ -198,14 +251,9 @@ export function createEventStreams(app: PocketApp) {
                 created.queue.push({ seq: ++created.seq, event, data, size });
                 created.bytes += size;
 
-                const behind = created.bytes > BEHIND_BYTES || created.queue.length > BEHIND_EVENTS;
-
-                // A tab far behind that acknowledged nothing for long, or one too far behind: its session ends, and its
-                // next poll starts afresh, with a full view.
-                if (
-                    created.bytes > MAX_BEHIND_BYTES ||
-                    (behind && Date.now() - created.tookAt > STALLED_MS)
-                ) {
+                // A tab far behind that took nothing for long, or one too far behind: its session ends, and its next
+                // poll starts afresh, with a full view.
+                if (stalled(created)) {
                     created.queue = [];
                     created.bytes = 0;
                     closePoller(created);
@@ -224,20 +272,6 @@ export function createEventStreams(app: PocketApp) {
             keepPoller(created);
             await app.attach(created.client);
             poller = created;
-        } else {
-            const ack = Number(url.searchParams.get("ack") ?? 0);
-
-            const before = poller.queue.length;
-
-            poller.queue = poller.queue.filter((item) => item.seq > ack);
-            poller.bytes = poller.queue.reduce((sum, item) => sum + item.size, 0);
-
-            // It took something, or nothing waits for it: it keeps up.
-            if (poller.queue.length < before || poller.queue.length === 0) {
-                poller.tookAt = Date.now();
-            }
-
-            keepPoller(poller);
         }
 
         const current = poller;

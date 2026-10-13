@@ -449,7 +449,7 @@ export class ExtensionWebs {
         module: string,
         path: readonly string[],
         user: Pick<User, "role" | "sessions">,
-    ): { file: string; type: string } | undefined {
+    ): { file: string; type: string; dev: number; ino: number } | undefined {
         const part = this.#parts.get(module);
         const client = part?.client;
 
@@ -490,8 +490,12 @@ export class ExtensionWebs {
             const wanted = client.folder ? join(root, ...path) : root;
             const file = realpathSync(client.folder ? join(client.root, ...path) : client.root);
 
-            return isItself(part.directory, client) && file === wanted && statSync(file).isFile()
-                ? { file, type }
+            const stats = statSync(file);
+
+            // The file as checked, which the one opened must be: a folder on the way swapped for a link after this check
+            // would lead to another file.
+            return isItself(part.directory, client) && file === wanted && stats.isFile()
+                ? { file, type, dev: stats.dev, ino: stats.ino }
                 : undefined;
         } catch {
             return undefined;
@@ -546,7 +550,16 @@ export class ExtensionWebs {
         this.#parts.clear();
         this.#staged.clear();
 
-        return Promise.allSettled([...running, ...this.#settling]).then(() => {});
+        return this.#settled(running);
+    }
+
+    /** Wait for these cleanups and every other still running, also those a cleanup adds as it runs, until none is left. */
+    async #settled(running: Promise<void>[]): Promise<void> {
+        await Promise.allSettled(running);
+
+        while (this.#settling.size > 0) {
+            await Promise.allSettled([...this.#settling]);
+        }
     }
 
     /** Tell the tabs of the people who load either part's browser module. */
@@ -577,8 +590,14 @@ export class ExtensionWebs {
                 if (!isItself(part.directory, client) && !part.warned.has("client gone")) {
                     const message = `${part.file}: its browser module ${client.name} is gone or became a link: tabs cannot load it until it is a file or folder again`;
 
-                    this.#warn(part, "client gone", message.slice(part.file.length + 2));
-                    this.#options.warn?.(message);
+                    // The owner's notice goes to the log too: once is enough.
+                    part.warned.add("client gone");
+
+                    if (this.#options.warn === undefined) {
+                        this.#options.log?.(message);
+                    } else {
+                        this.#options.warn(message);
+                    }
                 }
 
                 const rev = revision(client.root, client.folder);

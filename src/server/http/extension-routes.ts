@@ -2,15 +2,7 @@
  * What extension modules add to the app over HTTP: `/api/x/:module/…`, the routes a module registered (after the API's
  * sign-in, and with the `X-Pocket` header on every method), and `/x/:module/:rev/…`, the files of its browser module.
  */
-import {
-    closeSync,
-    constants,
-    fstatSync,
-    openSync,
-    readFileSync,
-    readlinkSync,
-    statSync,
-} from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readFileSync, readlinkSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PocketApp } from "../app.ts";
 import type { User } from "../config.ts";
@@ -139,19 +131,29 @@ function failed(response: ServerResponse, error: unknown, file: string, user: Us
 }
 
 /**
- * Whether `fd` is the file at `path`: where the system says it is (Linux), or else the same file as the path names now.
+ * Whether `fd`, with these `stats`, is the file that was checked: the same file (device and inode) as the check saw, and,
+ * where the system says where an open file is (Linux), at the path checked. A folder on the way swapped for a link
+ * between the check and the open leads to another file, which fails the first test everywhere. `proc` is for tests.
  */
-function opened(fd: number, path: string, stats: { dev: number; ino: number }): boolean {
-    try {
-        return readlinkSync(`/proc/self/fd/${fd}`) === path;
-    } catch {
-        try {
-            const named = statSync(path);
+export function opened(
+    fd: number,
+    checked: { file: string; dev: number; ino: number },
+    stats: { dev: number; ino: number },
+    proc = true,
+): boolean {
+    if (stats.dev !== checked.dev || stats.ino !== checked.ino) {
+        return false;
+    }
 
-            return named.dev === stats.dev && named.ino === stats.ino;
-        } catch {
-            return false;
-        }
+    if (!proc) {
+        return true;
+    }
+
+    try {
+        return readlinkSync(`/proc/self/fd/${fd}`) === checked.file;
+    } catch {
+        // No /proc here (macOS): the same file as checked is the test.
+        return true;
     }
 }
 
@@ -196,7 +198,7 @@ export function extensionFile(
         const stats = fstatSync(fd);
 
         // The very file that was checked: a folder on its way swapped for a link after the check would lead elsewhere.
-        if (!stats.isFile() || !opened(fd, found.file, stats)) {
+        if (!stats.isFile() || !opened(fd, found, stats)) {
             throw new HttpError(404, "Not found");
         }
 

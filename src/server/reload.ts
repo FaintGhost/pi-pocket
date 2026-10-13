@@ -293,6 +293,11 @@ export class ExtensionLoader {
         const spent = Date.now() + this.#loadLimitMs;
 
         for (const module of this.#modules()) {
+            // The server stopping during its start: the modules not loaded yet stay so.
+            if (this.#closed) {
+                return;
+            }
+
             if (!this.#isOn(module)) {
                 continue;
             }
@@ -436,6 +441,12 @@ export class ExtensionLoader {
             throw new Error(`There is no extension module ${file}`);
         }
 
+        // Nothing loads once the server stops, and a module that is off never runs: the name may lead to the other
+        // folder's module by now (a built-in removed while the server starts leaves its drop-in), whose choice counts.
+        if (this.#closed || !this.#isOn(module)) {
+            throw new Overtaken(file);
+        }
+
         const generation = this.#generation(file);
         // Its own limit, or less when the server's start has spent the shared one.
         const deadline = Math.min(Date.now() + this.#loadLimitMs, until ?? Infinity);
@@ -568,6 +579,11 @@ export class ExtensionLoader {
         });
 
         this.#waiting.add(stop);
+
+        // The server stopped before this load began to wait: it ends now too.
+        if (this.#closed) {
+            stop();
+        }
 
         try {
             return await Promise.race([promise, late]);
