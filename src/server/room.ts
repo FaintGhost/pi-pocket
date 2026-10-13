@@ -10,6 +10,7 @@ import type {
     ConversationId,
     ConversationView,
     EntryRecord,
+    InboxItem,
     InboxState,
     LiveState,
     UsageState,
@@ -87,6 +88,11 @@ const HEAD_MS = 3000;
 /** How much of a waiting call's command and reason a tile gets: the tile allows only short commands anyway. */
 const PEEK_SUBJECT = 500;
 const PEEK_REASON = 300;
+/**
+ * How much of a waiting message the queue gets: its row shows one line. A long paste or a batch of subagents' reports
+ * can be megabytes, which every open tab would download each time the queue changes.
+ */
+const QUEUED_TEXT = 500;
 
 /** What a peek tile shows of a session: its last steps, and the calls waiting for approval. */
 export type PeekSummary = {
@@ -170,6 +176,51 @@ export function reportingOf(
     );
 }
 
+/** What a waiting message says: its text, without the images it carries. */
+function queuedText(content: unknown): string {
+    if (typeof content === "string") {
+        return content;
+    }
+
+    if (!Array.isArray(content)) {
+        return "";
+    }
+
+    return content
+        .flatMap((part: { type?: unknown; text?: unknown } | null) =>
+            part?.type === "text" && typeof part.text === "string" ? [part.text] : [],
+        )
+        .join(" ");
+}
+
+/** The start of `text`, at most `QUEUED_TEXT` characters, ending with "…" when it is cut, and never inside a character. */
+function cutQueued(text: string): string {
+    if (text.length <= QUEUED_TEXT) {
+        return text;
+    }
+
+    const end = /[\uD800-\uDBFF]/.test(text[QUEUED_TEXT - 1] ?? "") ? QUEUED_TEXT - 1 : QUEUED_TEXT;
+
+    return `${text.slice(0, end)}…`;
+}
+
+/**
+ * The subagents a message of reports carries (`extensions/subagents.ts` joins those that arrive together into one), or
+ * undefined for any other message. Read from the whole text: the queue gets only its start.
+ */
+function reportNames(text: string): string[] | undefined {
+    // Only a message that starts with a report is one: a person's own may begin "[subagent " too.
+    if (!/^\[subagent \S+ (?:answered|failed)/.test(text)) {
+        return undefined;
+    }
+
+    return [
+        ...new Set(
+            [...text.matchAll(/\[subagent (\S+) (?:answered|failed)/g)].map((match) => match[1]!),
+        ),
+    ];
+}
+
 /** Whether a subagent failed (not stopped), and a person dealt with that failure: the one it has now. */
 function failureDealtWith(record: SubagentRecord): boolean {
     return (
@@ -226,6 +277,8 @@ export class Room {
     /** The branch this view last read, as JSON. */
     #head = "";
     readonly #projected = new Map<number, ClientEntry | null>();
+    /** Each waiting message's text for the queue, and the subagents it reports from: what it says does not change. */
+    readonly #queued = new Map<number, { text: string; reports: string[] | undefined }>();
     authors: Record<string, string> = {};
     artifacts: Record<string, ArtifactMeta> = {};
     subagents: Record<string, SubagentRecord> = {};
@@ -469,6 +522,8 @@ export class Room {
         // These grow with the session (authors has one item per message) but rarely change: streaming sends an update
         // every 90 ms, which would repeat them all each time. Send each only when it differs from what this client has.
         const fields: Record<string, unknown> = {
+            // A turn's updates would repeat it every 90 ms, and a waiting paste or batch of reports can be large.
+            inbox: this.#inbox(inbox.items),
             artifacts: Object.entries(this.artifacts).map(([id, meta]) => ({
                 id,
                 title: meta.title,
@@ -555,27 +610,6 @@ export class Room {
             entries,
             ...(orderChanged || full ? { order } : {}),
             live: projectLive(live),
-            inbox: inbox.items.map((item) =>
-                item.mode === "write"
-                    ? {
-                          id: item.id,
-                          mode: item.mode,
-                          ...(item.entry.kind === SHELL_ENTRY
-                              ? {
-                                    text: `$ ${String((item.entry.data as { command?: unknown } | undefined)?.command ?? "")}`,
-                                }
-                              : {}),
-                      }
-                    : {
-                          id: item.id,
-                          mode: item.mode,
-                          text:
-                              typeof item.content === "string"
-                                  ? item.content
-                                  : JSON.stringify(item.content).slice(0, 500),
-                          ...this.#app.attribution.submitterOf(item.id as unknown as number, this),
-                      },
-            ),
             agent: agentInfo(
                 this.#app.models,
                 agentState,
@@ -588,6 +622,60 @@ export class Room {
             approvals: this.#app.approvals.forConversation(this.id),
             ...fields,
         });
+    }
+
+    /** The queue as its rows show it: each message's start, who sent it, and the subagents a message of reports is from. */
+    #inbox(items: InboxItem[]) {
+        const waiting = new Set<number>();
+        const rows = items.map((item) => {
+            const id = item.id as unknown as number;
+
+            waiting.add(id);
+
+            if (item.mode === "write") {
+                return {
+                    id,
+                    mode: item.mode,
+                    ...(item.entry.kind === SHELL_ENTRY
+                        ? {
+                              text: cutQueued(
+                                  `$ ${String((item.entry.data as { command?: unknown } | undefined)?.command ?? "")}`,
+                              ),
+                          }
+                        : {}),
+                };
+            }
+
+            let queued = this.#queued.get(id);
+
+            if (queued === undefined) {
+                const text = queuedText(item.content);
+
+                queued = { text: cutQueued(text), reports: reportNames(text) };
+                this.#queued.set(id, queued);
+            }
+
+            const submitter = this.#app.attribution.submitterOf(id, this);
+
+            return {
+                id,
+                mode: item.mode,
+                text: queued.text,
+                ...submitter,
+                // A person's message is not one of reports, whatever it starts with.
+                ...(submitter.by === undefined && queued.reports !== undefined
+                    ? { reports: queued.reports }
+                    : {}),
+            };
+        });
+
+        for (const id of this.#queued.keys()) {
+            if (!waiting.has(id)) {
+                this.#queued.delete(id);
+            }
+        }
+
+        return rows;
     }
 
     /** Update the peek tiles soon: at most once every `PEEK_MS`, and only for tabs whose tile changed. */
@@ -804,5 +892,6 @@ export class Room {
         this.#view?.dispose();
         this.#view = undefined;
         this.#projected.clear();
+        this.#queued.clear();
     }
 }

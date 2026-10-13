@@ -106,6 +106,8 @@ Updates to tabs are coalesced:
 | Peek tiles                                                                 | Once a second      |
 | The session list, and every subagent to tabs that show the subagents board | Every 400 ms       |
 
+Each room update sends a tab its new entries, the live run, and some small fields. The fields that grow with the session, such as the queue, authors, reactions, and pins, go again only when they differ from what the tab has, because a turn sends an update every 90 ms. The queue sends the first 500 characters of each waiting message, without images, and the names of the subagents in a message of reports. Its row shows one line, and a paste or a batch of reports can be megabytes.
+
 ## Who Pi works for
 
 A message to Pi names its person in its request id (`requests.ts`):

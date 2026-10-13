@@ -73,6 +73,11 @@ const route: FauxResponseStep = (context, options) => {
         return fauxAssistantMessage([fauxText("hi from helper")]);
     }
 
+    // About 5 s of streaming at the scripted model's 2000 tokens a second.
+    if (text.includes("stream a long answer")) {
+        return fauxAssistantMessage([fauxText("word ".repeat(8000))]);
+    }
+
     if (text.startsWith("[subagent helper answered")) {
         return fauxAssistantMessage([fauxText("noted")]);
     }
@@ -979,6 +984,95 @@ test("a tab that closes while it is attaching is never counted as there", async 
         );
     } finally {
         app.detach(here.client);
+    }
+});
+
+test("a tab gets the queue when it changes, not with each update of a turn, and only the start of each message", async () => {
+    const { BACKGROUND_CONTEXT } = await import("@earendil-works/chord/context");
+    const id = await newSession();
+    const tab = fakeTab(id, owner());
+    const late = fakeTab(id, owner());
+    type Row = { text?: string; by?: string; reports?: string[] };
+    const queue = (of = tab) => (of.field("inbox") ?? []) as Row[];
+    const views = () => tab.events.flatMap((each) => (each.event === "view" ? [each.data] : []));
+    const streaming = () =>
+        (tab.last("view")?.live as { generation?: unknown } | undefined)?.generation !== undefined;
+
+    await app.attach(tab.client);
+
+    try {
+        const conversation = (await app.harness.conversation(id, BACKGROUND_CONTEXT))!;
+
+        await app.commands.submit(id, owner(), {
+            text: "stream a long answer",
+            requestId: crypto.randomUUID(),
+        });
+        await until(streaming, "the answer to stream");
+        // While it streams: a long paste, a batch of reports whose second starts far in, and a picture.
+        await app.commands.submit(id, owner(), {
+            text: `paste: ${"x".repeat(200_000)}`,
+            requestId: crypto.randomUUID(),
+        });
+        await conversation.submit(
+            {
+                type: "input",
+                content: `[subagent alpha answered, no reply needed] ${"a".repeat(5000)}\n\n[subagent beta failed: it stopped]`,
+                whenBusy: "followUp",
+                requestId: "queue-reports",
+            },
+            BACKGROUND_CONTEXT,
+        );
+        await conversation.submit(
+            {
+                type: "input",
+                content: [
+                    { type: "text", text: "look at this" },
+                    { type: "image", mimeType: "image/png", data: "A".repeat(300_000) },
+                ],
+                whenBusy: "followUp",
+                requestId: "queue-picture",
+            },
+            BACKGROUND_CONTEXT,
+        );
+        await until(
+            () => queue().length === 3 && queue()[0]!.by === owner().id,
+            "all three to wait, the paste with who sent it",
+        );
+        const from = views().length;
+
+        // The answer streams on, updating the view every 90 ms.
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        assert.ok(streaming(), "it still streams");
+        const later = views().slice(from);
+
+        assert.ok(later.length >= 5, `${later.length} updates as it streamed`);
+        assert.equal(
+            later.filter((view) => "inbox" in view).length,
+            0,
+            "no update repeated the queue",
+        );
+
+        const [paste, reports, picture] = queue();
+
+        assert.match(paste!.text!, /paste: x+…$/);
+        assert.equal(paste!.text!.length, 501);
+        assert.equal(paste!.reports, undefined);
+        assert.deepEqual(reports!.reports, ["alpha", "beta"], "both, though the start has one");
+        assert.equal(reports!.by, undefined);
+        assert.ok(reports!.text!.length <= 501);
+        assert.equal(picture!.text, "look at this", "its text, not the picture");
+        assert.ok(JSON.stringify(queue()).length < 2000);
+
+        // A tab that comes now gets the queue with its first view.
+        await app.attach(late.client);
+        assert.deepEqual(queue(late), queue());
+
+        // A change is sent: stopping withdraws them.
+        await app.commands.abort(id, owner());
+        await until(() => queue().length === 0 && queue(late).length === 0, "the queue to empty");
+    } finally {
+        app.detach(tab.client);
+        app.detach(late.client);
     }
 });
 

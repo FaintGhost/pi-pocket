@@ -460,6 +460,13 @@ test(
             `return JSON.stringify(document.querySelectorAll(".queued").length === 17)`,
             "all of them waiting",
         );
+        // An update that leaves out the queue, as a turn's every 90 ms do while it stays the same, keeps it.
+        (await app.openRoom(id))!.schedule();
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        await see(
+            `return JSON.stringify(document.querySelectorAll(".queued").length === 17)`,
+            "all of them waiting after an update without the queue",
+        );
         const sizes = await inPage<{
             queue: number;
             scrolls: boolean;
