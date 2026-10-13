@@ -10,6 +10,7 @@
  * is kept by `ExtensionWebs` and goes in and out with its extensions.
  */
 import {
+    existsSync,
     type FSWatcher,
     lstatSync,
     mkdirSync,
@@ -27,7 +28,10 @@ import { describe } from "./errors.ts";
 import { ExtensionWebs, POCKET_API } from "./extension-web.ts";
 import type { ExtensionModule, PocketHost, WebAccess } from "./host.ts";
 
-/** How long a module may take to load (its import, and an async default export) before its load fails. */
+/**
+ * How long a module may take to load (its import, and an async default export) before its load fails. At the server's
+ * start the modules share it: once it is spent, each module after has a fifteenth of it (2 s).
+ */
 const LOAD_LIMIT_MS = 30_000;
 /** Loads so far in this process: each import of a module gets an address of its own. */
 let imports = 0;
@@ -183,6 +187,10 @@ export class ExtensionLoader {
      */
     readonly #generations = new Map<string, number>();
     readonly #loadLimitMs: number;
+    /** The folder of each file's latest load: its removal from that folder takes that version away. */
+    readonly #sources = new Map<string, string>();
+    /** How to end each load still waiting for its module: the server stopping ends them. */
+    readonly #waiting = new Set<() => void>();
     #closed = false;
 
     /**
@@ -281,13 +289,20 @@ export class ExtensionLoader {
     async loadAll(): Promise<void> {
         this.#reportClashes();
 
+        // One limit for them all: modules that hang cannot each hold up the start by the whole of it.
+        const spent = Date.now() + this.#loadLimitMs;
+
         for (const module of this.#modules()) {
             if (!this.#isOn(module)) {
                 continue;
             }
 
             try {
-                await this.#load(module.file, false);
+                await this.#load(
+                    module.file,
+                    false,
+                    Math.max(spent, Date.now() + this.#loadLimitMs / 15),
+                );
             } catch (error) {
                 if (error instanceof Overtaken) {
                     continue;
@@ -323,6 +338,7 @@ export class ExtensionLoader {
     #uninstall(file: string): void {
         // A load still running for it installs nothing.
         this.#generation(file);
+        this.#sources.delete(file);
 
         for (const extension of this.#installed.get(file) ?? []) {
             try {
@@ -413,7 +429,7 @@ export class ExtensionLoader {
         return [...this.#installed.values()].flat().map((extension) => extension.name);
     }
 
-    async #load(file: string, cacheBust: boolean): Promise<Extension[]> {
+    async #load(file: string, cacheBust: boolean, until?: number): Promise<Extension[]> {
         const module = this.#module(file);
 
         if (module === undefined) {
@@ -421,9 +437,13 @@ export class ExtensionLoader {
         }
 
         const generation = this.#generation(file);
+        // Its own limit, or less when the server's start has spent the shared one.
+        const deadline = Math.min(Date.now() + this.#loadLimitMs, until ?? Infinity);
+
+        this.#sources.set(file, module.directory);
 
         try {
-            return await this.#build(module, generation, cacheBust);
+            return await this.#build(module, generation, cacheBust, deadline);
         } catch (error) {
             // A load that no longer counts fails quietly too: the newer load, or the module turned off, says what holds.
             if (!(error instanceof Overtaken) && !this.#isLatest(file, generation)) {
@@ -434,16 +454,20 @@ export class ExtensionLoader {
         }
     }
 
-    async #build(module: Module, generation: number, cacheBust: boolean): Promise<Extension[]> {
+    async #build(
+        module: Module,
+        generation: number,
+        cacheBust: boolean,
+        deadline: number,
+    ): Promise<Extension[]> {
         const { file } = module;
         // A load waits for the module (its import, and an async default export), but not forever: one that never settles
         // would hold up the server's start, and every load after it.
-        const deadline = Date.now() + this.#loadLimitMs;
         const url =
             pathToFileURL(join(module.directory, file)).href +
             // Each load its own address, or a second load in the same millisecond would get the first one's module.
             (cacheBust ? `?v=${Date.now()}-${++imports}` : "");
-        const loaded = (await this.#within(import(url), deadline)) as ExtensionModule;
+        const loaded = (await this.#within(import(url), deadline, file)) as ExtensionModule;
 
         // The import can take a while (a module may wait at its top level): the module may be off by now, or edited.
         this.#stillLatest(file, generation);
@@ -469,7 +493,7 @@ export class ExtensionLoader {
             const returned = loaded.default(this.#host, web) as unknown;
             // An async default export: it may register until it settles.
             const built = isThenable(returned)
-                ? await this.#within(Promise.resolve(returned), deadline)
+                ? await this.#within(Promise.resolve(returned), deadline, file)
                 : returned;
 
             this.#stillLatest(file, generation);
@@ -490,10 +514,15 @@ export class ExtensionLoader {
             }
 
             const names = extensions.map((extension) => extension?.name);
+
+            if (names.some((name) => typeof name !== "string" || name === "")) {
+                throw new Error("the module returns an extension without a name");
+            }
+
             const twice = names.find((name, index) => names.indexOf(name) !== index);
 
             if (twice !== undefined) {
-                throw new Error(`the module returns two extensions named ${String(twice)}`);
+                throw new Error(`the module returns two extensions named ${twice}`);
             }
 
             if (module.source === "drop-in") {
@@ -518,14 +547,19 @@ export class ExtensionLoader {
      * `promise`, or a failure once `deadline` passed. The load then has failed, whatever the module does later: what it
      * staged is discarded, and what it would return is never installed.
      */
-    async #within<T>(promise: Promise<T>, deadline: number): Promise<T> {
+    async #within<T>(promise: Promise<T>, deadline: number, file: string): Promise<T> {
         let timer: NodeJS.Timeout | undefined;
+
+        let stop = () => {};
+
         const late = new Promise<never>((_resolve, reject) => {
+            // The server stopping: the load ends now, as one that no longer counts.
+            stop = () => reject(new Overtaken(file));
             timer = setTimeout(
                 () => {
                     reject(
                         new Error(
-                            `it did not finish loading in ${this.#loadLimitMs / 1000} s: a module must not wait for long while it loads`,
+                            `it did not finish loading in time (${this.#loadLimitMs / 1000} s at most, less at the server's start): a module must not wait for long while it loads`,
                         ),
                     );
                 },
@@ -533,18 +567,23 @@ export class ExtensionLoader {
             );
         });
 
+        this.#waiting.add(stop);
+
         try {
             return await Promise.race([promise, late]);
         } finally {
             clearTimeout(timer);
+            this.#waiting.delete(stop);
         }
     }
 
     /**
      * Put a version's extensions in place of the previous version's, all or none: when the registry refuses one, or a
-     * listener of it throws, every name either version has is put back as the previous version had it.
+     * listener of it throws, the registry is put back as it was before, every extension in its place.
      */
     #replace(extensions: readonly Extension[], previous: readonly Extension[]): void {
+        const before = this.#registry.snapshot().installed();
+
         try {
             for (const extension of extensions) {
                 this.#registry.install(extension);
@@ -556,46 +595,51 @@ export class ExtensionLoader {
                 }
             }
         } catch (error) {
-            this.#restore(extensions, previous);
+            this.#restore(before);
 
             throw error;
         }
     }
 
-    /** Make the registry hold the previous version again, for every name the failed version touched or had before. */
-    #restore(extensions: readonly Extension[], previous: readonly Extension[]): void {
-        const holds = (name: string) => this.#registry.snapshot().extension(name);
+    /**
+     * Make the registry hold `before` again, in its order: from the first place it differs, take out what is there
+     * (last first), then put back what was (in order). Taking out first frees what the extensions own (a task's name),
+     * so putting them back meets no clash.
+     */
+    #restore(before: readonly Extension[]): void {
+        const now = () => this.#registry.snapshot().installed();
 
-        for (const name of new Set(
-            [...extensions, ...previous].map((extension) => extension.name),
-        )) {
-            const before = previous.find((old) => old.name === name);
-
-            const put = () => {
-                const now = holds(name);
-
-                if (before !== undefined && now !== before) {
-                    this.#registry.install(before);
-                } else if (before === undefined && now !== undefined && extensions.includes(now)) {
-                    this.#registry.uninstall(now);
-                }
-            };
-
+        // A listener that throws once the registry changed: what counts is what it holds after.
+        const quietly = (change: () => void) => {
             try {
-                put();
+                change();
             } catch {
-                // A listener that throws after the registry changed: what counts is what it holds now.
+                // Checked below.
             }
+        };
 
-            const now = holds(name);
+        const current = now();
+        let from = 0;
 
-            if (
-                before === undefined
-                    ? now !== undefined && extensions.includes(now)
-                    : now !== before
-            ) {
-                this.#notify("error", `Could not put back the extension ${name} as it was`);
-            }
+        while (from < before.length && current[from] === before[from]) {
+            from++;
+        }
+
+        for (const extension of current.slice(from).reverse()) {
+            quietly(() => this.#registry.uninstall(extension));
+        }
+
+        for (const extension of before.slice(from)) {
+            quietly(() => this.#registry.install(extension));
+        }
+
+        const after = now();
+
+        if (after.length !== before.length || after.some((each, at) => each !== before[at])) {
+            this.#notify(
+                "error",
+                "Could not put the extensions back as they were: restart the server to load them again",
+            );
         }
     }
 
@@ -707,9 +751,12 @@ export class ExtensionLoader {
     #settle(file: string, directory: string): void {
         const module = this.#module(file);
 
-        // Gone from both folders: what it installed goes, and a load of it still running (its first, say) installs
-        // nothing.
-        if (module === undefined) {
+        // Gone from the folder its version came from (or from both folders): that version goes, and a load of it still
+        // running (its first, say) installs nothing. A module of that name in the other folder is not loaded by this.
+        if (
+            !existsSync(join(directory, file)) &&
+            (module === undefined || this.#sources.get(file) === directory)
+        ) {
             const installed = this.#installed.has(file);
 
             this.#uninstall(file);
@@ -754,8 +801,12 @@ export class ExtensionLoader {
 
     /** Stop watching, and run every module's cleanups: settles once they finished, the ones that wait included. */
     close(): Promise<void> {
-        // Loads still running install nothing.
+        // Loads still running install nothing, and those waiting for their module end now.
         this.#closed = true;
+
+        for (const stop of this.#waiting) {
+            stop();
+        }
 
         for (const watcher of this.#watchers) {
             watcher.close();

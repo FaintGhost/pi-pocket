@@ -38,6 +38,9 @@ const MAX_EVENT = 256 * 1024;
 /** How many events, and how many bytes of them, a module may send each second; more are dropped and logged. */
 const MAX_EVENTS_PER_SECOND = 100;
 const MAX_EVENT_BYTES_PER_SECOND = 1024 * 1024;
+
+/** The largest file a browser module serves: each request reads it whole, and anyone it is for may ask often. */
+export const MAX_FILE_BYTES = 8 * 1024 * 1024;
 /** How many served files of a browser module's folder count for its version; more are not looked at. */
 const MAX_FILES = 2000;
 /** How many folders of it are looked through for them. */
@@ -158,6 +161,8 @@ interface Options {
     /** Send a browser module's event to the tabs it loads in (`to`: one person's). */
     deliver?: (part: WebPart, access: WebAccess, event: string, data: unknown, to?: string) => void;
     log?: (message: string) => void;
+    /** Tell the owner something wrong with a module that they can mend (its browser module gone, say). */
+    warn?: (message: string) => void;
 }
 
 export class ExtensionWebs {
@@ -242,8 +247,9 @@ export class ExtensionWebs {
                     throw new Error("web.onDispose: give it a function");
                 }
 
+                // After it went: at once, and a stop waits for it too.
                 if (part.disposed) {
-                    void runDispose(dispose, part, this.#options.log);
+                    this.#track(runDispose(dispose, part, this.#options.log));
 
                     return;
                 }
@@ -568,12 +574,11 @@ export class ExtensionWebs {
                 this.#rewatch(part);
 
                 // Replaced by a link, or gone: nothing of it is served now, and the owner should know why.
-                if (!isItself(part.directory, client)) {
-                    this.#warn(
-                        part,
-                        "client gone",
-                        `its browser module ${client.name} is gone or became a link: tabs cannot load it until it is a file or folder again`,
-                    );
+                if (!isItself(part.directory, client) && !part.warned.has("client gone")) {
+                    const message = `${part.file}: its browser module ${client.name} is gone or became a link: tabs cannot load it until it is a file or folder again`;
+
+                    this.#warn(part, "client gone", message.slice(part.file.length + 2));
+                    this.#options.warn?.(message);
                 }
 
                 const rev = revision(client.root, client.folder);
@@ -647,9 +652,12 @@ export class ExtensionWebs {
             .splice(0)
             .reverse()
             .map((dispose) => runDispose(dispose, part, this.#options.log));
-        const settled = Promise.allSettled(running).then(() => {});
 
-        // Kept until it settles: a stop that comes meanwhile waits for it.
+        return this.#track(Promise.allSettled(running).then(() => {}));
+    }
+
+    /** Keep a cleanup's promise until it settles: a stop that comes meanwhile waits for it. */
+    #track(settled: Promise<void>): Promise<void> {
         this.#settling.add(settled);
         void settled.then(() => this.#settling.delete(settled));
 
@@ -903,14 +911,21 @@ function revision(root: string, folder: boolean): string {
     let files = 0;
     let folders = 0;
 
-    const add = (path: string) => {
+    /** Count a file, unless it is too large to serve: then it takes none of the files looked at. */
+    const add = (path: string): boolean => {
         try {
             const stats = statSync(path);
+
+            if (stats.size > MAX_FILE_BYTES) {
+                return false;
+            }
 
             hash.update(`${path}\0${stats.size}\0${stats.mtimeMs}\0`);
         } catch {
             hash.update(`${path}\0gone\0`);
         }
+
+        return true;
     };
 
     const walk = (directory: string) => {
@@ -940,10 +955,10 @@ function revision(root: string, folder: boolean): string {
             } else if (
                 entry.isFile() &&
                 WEB_FILE_TYPES[extname(entry.name).toLowerCase()] &&
-                files < MAX_FILES
+                files < MAX_FILES &&
+                add(path)
             ) {
                 files++;
-                add(path);
             }
         }
     };

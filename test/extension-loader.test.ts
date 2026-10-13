@@ -346,7 +346,10 @@ export default async (_host, web) => {
     );
     const open = gate("stuck");
 
-    await assert.rejects(loader.reload("stuck.ts"), /did not finish loading in 0\.2 s/);
+    await assert.rejects(
+        loader.reload("stuck.ts"),
+        /did not finish loading in time \(0\.2 s at most/,
+    );
     open();
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(answer(webs, "stuck"), undefined);
@@ -392,4 +395,105 @@ export default (_host, web) => {
     writeFileSync(join(dropIn, "drops.ts"), module(3, ["t-drops-a", "t-drops-a"]));
     await assert.rejects(loader.reload("drops.ts"), /two extensions named t-drops-a/);
     assert.deepEqual(installed(), ["t-drops-a@1", "t-drops-b@1"]);
+});
+
+test("a failed version that moved a task between its extensions is put back whole, in order", async () => {
+    const { dropIn, loader, registry, webs } = setUp();
+    const task = `{ definition: { name: "t-moved-task" } }`;
+    const module = (version: number, body: string) => `/** Moves, version ${version}. */
+export default (_host, web) => {
+	web.route("GET", "v", () => ({ v: ${version} }));
+	return ${body};
+};
+`;
+    const order = () =>
+        registry
+            .snapshot()
+            .installed()
+            .filter((extension) => extension.name.startsWith("t-moves-"))
+            .map(
+                (extension) =>
+                    `${extension.name}@${(extension as { v?: number }).v}${extension.tasks?.length ? "+task" : ""}`,
+            );
+
+    writeFileSync(
+        join(dropIn, "moves.ts"),
+        module(1, `[{ name: "t-moves-a", v: 1, tasks: [${task}] }, { name: "t-moves-b", v: 1 }]`),
+    );
+    await loader.reload("moves.ts");
+    assert.deepEqual(order(), ["t-moves-a@1+task", "t-moves-b@1"]);
+
+    // Version 2 moves the task from a to b, and its third extension is refused.
+    writeFileSync(
+        join(dropIn, "moves.ts"),
+        module(
+            2,
+            `[{ name: "t-moves-a", v: 2 }, { name: "t-moves-b", v: 2, tasks: [${task}] }, { name: "t-moves-c", v: 2, sections: [{ key: "BAD" }] }]`,
+        ),
+    );
+    await assert.rejects(loader.reload("moves.ts"), /Section key "BAD"/);
+    assert.deepEqual(order(), ["t-moves-a@1+task", "t-moves-b@1"]);
+    assert.deepEqual(answer(webs, "moves"), { v: 1 });
+});
+
+test("at the start, modules that hang share one limit, and a stop ends the loads that wait", async () => {
+    const { dropIn, loader, webs } = setUp(new Set(), 900);
+    const stuck = (name: string) => `/** ${name}: waits for ever at its top level. */
+await new Promise(() => {});
+export default () => [];
+`;
+
+    for (const name of ["hang-a", "hang-b", "hang-c"]) {
+        writeFileSync(join(dropIn, `${name}.ts`), stuck(name));
+    }
+
+    writeFileSync(join(dropIn, "zz-fine.ts"), gated("fine", 1));
+
+    const started = Date.now();
+
+    await loader.loadAll();
+
+    const took = Date.now() - started;
+
+    // One by one they would take 2.7 s; sharing, 0.9 s and then a fifteenth of it for each after.
+    assert.ok(took < 1600, `the start took ${took} ms`);
+    assert.deepEqual(answer(webs, "zz-fine"), { v: 1 });
+    assert.match(
+        loader.list().find((each) => each.file === "hang-c.ts")?.error ?? "",
+        /did not finish loading in time/,
+    );
+
+    // A load that waits when the server stops ends at once, with no error.
+    writeFileSync(join(dropIn, "waits.ts"), gated("waits", 1, "waits"));
+    gate("waits");
+    const waiting = loader.reload("waits.ts");
+    const stopping = Date.now();
+
+    await loader.close();
+    await waiting;
+    assert.ok(Date.now() - stopping < 200, "the waiting load ended with the stop");
+    assert.equal(loader.list().find((each) => each.file === "waits.ts")?.error, undefined);
+});
+
+test("a built-in removed while it loads installs nothing, though a drop-in has its name", async () => {
+    const { dropIn, loader, installed } = setUp();
+    const builtIn = join(dropIn, "..", "built-in");
+
+    writeFileSync(join(builtIn, "twin.ts"), gated("twin", 1, "twin"));
+    writeFileSync(join(dropIn, "twin.ts"), gated("twin-drop-in", 1));
+    loader.watch();
+
+    try {
+        const open = gate("twin");
+        const loading = loader.reload("twin.ts");
+
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        rmSync(join(builtIn, "twin.ts"));
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        open();
+        await loading;
+        assert.deepEqual(installed(), []);
+    } finally {
+        await loader.close();
+    }
 });

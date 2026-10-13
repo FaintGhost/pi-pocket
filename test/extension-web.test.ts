@@ -665,20 +665,57 @@ test("the server's web and the app's pocket are the same version of the extensio
     assert.equal(Number(/export const POCKET_API = (\d+);/.exec(app)?.[1]), POCKET_API);
 });
 
-test("a tab that does not acknowledge its polls is cut off before what waits for it grows without end", async () => {
+/** Run `act` with the clock `ms` ahead: how a test waits out the 30 s a tab far behind has to take something. */
+async function later<T>(ms: number, act: () => Promise<T> | T): Promise<T> {
+    const realNow = Date.now;
+
+    Date.now = () => realNow() + ms;
+
+    try {
+        return await act();
+    } finally {
+        Date.now = realNow;
+    }
+}
+
+test("a polling tab far behind is cut off only once it acknowledged nothing for long", async () => {
     type Poll = { session: string; events: { seq: number; event: string }[] };
     const poll = async (query: string): Promise<Poll> =>
         (await call("owner", `/api/poll?${query}`)).data as Poll;
+
+    const megabytes = (count: number) => {
+        for (let each = 0; each < count; each++) {
+            app.notice("info", "é".repeat(512 * 1024));
+        }
+    };
+
     const first = await poll("tab=unread");
 
     assert.equal(first.events[0]?.event, "hello");
 
-    // About 9 MB of notices that this tab never acknowledges.
-    for (let each = 0; each < 9; each++) {
-        app.notice("info", "x".repeat(1024 * 1024));
-    }
+    // Far behind at once (a large first view comes this way): not cut off, as it has had no time to take it.
+    megabytes(9);
 
-    // Its session ended: the next poll starts a new one, with a full view.
+    const second = await poll(`tab=unread&session=${first.session}&ack=0`);
+
+    assert.equal(second.session, first.session);
+
+    // It keeps acknowledging: it keeps up, however far behind, even long after.
+    const acked = await later(31_000, async () => {
+        const next = await poll(
+            `tab=unread&session=${first.session}&ack=${second.events.at(-1)!.seq}`,
+        );
+
+        megabytes(9);
+
+        return next;
+    });
+
+    assert.equal(acked.session, first.session);
+
+    // Then it acknowledges nothing for longer than that: its session ends, and the next poll starts with a full view.
+    await later(62_000, () => megabytes(1));
+
     const next = await poll(`tab=unread&session=${first.session}&ack=0`);
 
     assert.notEqual(next.session, first.session);
@@ -699,13 +736,15 @@ test("web.send's own failure cannot throw, and the server waits for cleanups sti
         }),
     );
 
-    const slow = (done: { at: number }) => () =>
-        new Promise<void>((resolve) =>
-            setTimeout(() => {
-                done.at = Date.now();
-                resolve();
-            }, 60),
-        );
+    const slow =
+        (done: { at: number }, ms = 60) =>
+        () =>
+            new Promise<void>((resolve) =>
+                setTimeout(() => {
+                    done.at = Date.now();
+                    resolve();
+                }, ms),
+            );
     // One turned off whose cleanup still runs, and one still loading when the server stops.
     const removed = { at: 0 };
     const loading = { at: 0 };
@@ -718,9 +757,15 @@ test("web.send's own failure cannot throw, and the server waits for cleanups sti
     const staged = webs.stage("staged.ts", dropIns, "staged");
 
     staged.web.onDispose(slow(loading));
+
+    // A cleanup added after its version went runs at once: the stop waits for it too.
+    const late = { at: 0 };
+
+    gone.web.onDispose(slow(late, 250));
     await webs.close();
     assert.ok(removed.at > 0, "close waited for the cleanup of the module turned off");
     assert.ok(loading.at > 0, "close ran and waited for the cleanup of the version still loading");
+    assert.ok(late.at > 0, "close waited for the cleanup added after its version went");
 });
 
 test("a thousand files a browser module does not serve leave its own edits seen; a client that becomes a link is told", async () => {
@@ -735,7 +780,11 @@ test("a thousand files a browser module does not serve leave its own edits seen;
         writeFileSync(join(folder, "crowded-web", `a${String(each).padStart(4, "0")}.log`), "x");
     }
 
-    const webs = new ExtensionWebs({ log: (line) => log.push(line) });
+    const warned: string[] = [];
+    const webs = new ExtensionWebs({
+        log: (line) => log.push(line),
+        warn: (message) => warned.push(message),
+    });
     const { part, web } = webs.stage("crowded.ts", folder, "crowded");
 
     web.client("crowded-web");
@@ -757,7 +806,13 @@ test("a thousand files a browser module does not serve leave its own edits seen;
     rmSync(join(folder, "crowded-web"), { recursive: true });
     symlinkSync(join(root, "crowded-copy"), join(folder, "crowded-web"));
     webs.touched(folder, "crowded-web");
-    await until(() => log.some((line) => /gone or became a link/.test(line)), "the owner is told");
+    await until(() => log.some((line) => /gone or became a link/.test(line)), "the log says why");
+    // And the owner is told, in the app, once.
+    assert.equal(warned.length, 1);
+    assert.match(
+        warned[0]!,
+        /crowded\.ts: its browser module crowded-web is gone or became a link/,
+    );
     assert.equal(webs.file("crowded", ["index.js"], OWNER), undefined);
     await webs.close();
 });
@@ -789,31 +844,90 @@ export default (_host, web) => {
     assert.equal(existsSync(join(dataDir, "harness.lock")), false, "the rest closed too");
 });
 
-test("a tab that does not read its event stream is cut off before what waits for it grows without end", async () => {
+test("a stream far behind is cut off only once it took nothing for long, and one that reads never is", async () => {
     const { port } = server.address() as { port: number };
-    const socket = connect(port, "127.0.0.1");
-    const closed = new Promise<void>((resolve) => socket.on("close", () => resolve()));
 
-    socket.on("error", () => {});
-    socket.write(
-        `GET /api/events?tab=stalled HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${app.config.ownerToken}\r\n\r\n`,
-    );
-    await new Promise((resolve) => socket.once("data", resolve));
-    // From here on it reads nothing.
-    socket.pause();
+    const open = (tab: string) => {
+        const socket = connect(port, "127.0.0.1");
+        let got = 0;
+
+        socket.on("error", () => {});
+        socket.on("data", (chunk: Buffer) => (got += chunk.length));
+        socket.write(
+            `GET /api/events?tab=${tab} HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${app.config.ownerToken}\r\n\r\n`,
+        );
+
+        return {
+            socket,
+            got: () => got,
+            closed: new Promise<void>((resolve) => socket.on("close", () => resolve())),
+        };
+    };
+
+    const reading = open("reading");
+    const stalled = open("stalled");
+
+    await until(() => reading.got() > 0 && stalled.got() > 0, "both streams start");
+    // One reads nothing from here on.
+    stalled.socket.pause();
 
     let cut = false;
 
-    void closed.then(() => (cut = true));
+    void stalled.closed.then(() => (cut = true));
 
-    for (let each = 0; each < 30; each++) {
-        app.notice("info", "x".repeat(1024 * 1024));
-        await new Promise((resolve) => setTimeout(resolve, 5));
+    const flood = async (count: number) => {
+        for (let each = 0; each < count; each++) {
+            app.notice("info", "x".repeat(1024 * 1024));
+            await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+    };
+
+    // Far behind, but only for a moment: nothing is cut off yet.
+    await flood(20);
+    stalled.socket.resume();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(cut, false, "not cut off for being behind a moment");
+    stalled.socket.pause();
+    await flood(20);
+
+    // Long after, the one that reads still gets everything; the one that took nothing is cut off.
+    let readingCut = false;
+
+    void reading.closed.then(() => (readingCut = true));
+    await later(31_000, () => flood(3));
+    stalled.socket.resume();
+    await Promise.race([stalled.closed, new Promise((resolve) => setTimeout(resolve, 5000))]);
+    assert.equal(cut, true, "the stalled stream was cut off");
+    assert.equal(readingCut, false, "the stream that reads was not");
+    reading.socket.destroy();
+    stalled.socket.destroy();
+});
+
+test("a file is served only when what was opened is the file that was checked", async () => {
+    const ownerUi = await uiFor("owner");
+    const folder = ownerUi.find((each) => each.module === "solo")!.url.replace(/solo\.js$/, "");
+    // A folder on the way swapped for a link after the check: the path checked leads elsewhere when opened.
+    const outside = join(root, "swapped-outside");
+
+    mkdirSync(outside, { recursive: true });
+    writeFileSync(join(outside, "secret.json"), '{"secret":"sk-outside"}\n');
+    symlinkSync(outside, join(root, "swapped-link"));
+
+    const checked = app.webs.file.bind(app.webs);
+
+    app.webs.file = () => ({
+        file: join(root, "swapped-link", "secret.json"),
+        type: "application/json",
+    });
+
+    try {
+        const answer = await call("owner", `${folder}solo.js`);
+
+        assert.equal(answer.status, 404);
+        assert.doesNotMatch(String(JSON.stringify(answer.data)), /sk-outside/);
+    } finally {
+        app.webs.file = checked;
     }
 
-    // Reading again, it gets what was sent before the cut, and then the end: a stream not cut off would stay open.
-    socket.resume();
-    await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, 5000))]);
-    assert.equal(cut, true, "the stream was cut off");
-    socket.destroy();
+    assert.equal((await call("owner", `${folder}solo.js`)).status, 200);
 });

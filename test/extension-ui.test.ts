@@ -224,6 +224,7 @@ before(async () => {
 			pocket.style("late.css");
 			pocket.on("tick", () => {});
 			pocket.onDispose(() => { globalThis.brokenLateDisposed = true; });
+			pocket.notify("info", "broken says late");
 		} finally {
 			globalThis.brokenLateRan = true;
 		}
@@ -504,13 +505,13 @@ test(
 test("adding or updating what is already there draws nothing again", real, async () => {
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(rail("Meter")), "the meter's rail button");
-    // Redraws come once for all the changes before them: each step waits for its own.
+    // A task's changes draw once, in the task after: each step waits for its own.
     const revs = await withMeter<number[]>(`
         const { store } = await import("/store.js");
         const out = [];
         const step = async (change) => {
-            change();
-            await new Promise((resolve) => setTimeout(resolve));
+            await change();
+            await new Promise((resolve) => setTimeout(resolve, 50));
             out.push(store.state.extensionsRev);
         };
         const run = () => {};
@@ -539,6 +540,14 @@ test("adding or updating what is already there draws nothing again", real, async
             second.remove();
             globalThis.meterRail.update({ badge: undefined });
         });
+        // So do changes one after another in a task, each after an await.
+        await step(async () => {
+            for (let count = 1; count <= 150; count++) {
+                await Promise.resolve();
+                globalThis.meterRail.update({ badge: count });
+            }
+        });
+        await step(() => globalThis.meterRail.update({ badge: undefined }));
 
         return JSON.stringify(out);
     `);
@@ -549,6 +558,7 @@ test("adding or updating what is already there draws nothing again", real, async
     assert.equal(revs[5], revs[4]! + 1, "an update that changes something");
     assert.equal(revs[6], revs[5]! + 1, "300 added at once draw once");
     assert.equal(revs[7], revs[6]! + 1, "and go at once");
+    assert.equal(revs[8], revs[7]! + 1, "150 changes in a task, between awaits, draw once");
     assert.equal(await has(rail("At once 0")), false);
 
     // A page that updates its rail button each time it draws, as an effect without deps would, settles.
@@ -826,28 +836,60 @@ test("a sheet stays open on the Esc that ends composing, and closes on Esc", rea
     await until(async () => !(await has(".sheet")), "Esc closes it");
 });
 
-test("a rail button's badge hides at 0, empty, or none, as the app's counts do", real, async () => {
-    await page.navigate(`${base}/s/${session}`);
-    await until(() => has(rail("Meter")), "the meter's rail button");
+test(
+    "a rail button's badge shows as the app's counts do: none at 0, 99+ past 99, short",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
 
-    const shown = async (badge: string) => {
-        await inPage<null>(`globalThis.meterRail.update({ badge: ${badge} }); return "null"`);
-        await sleep(100);
+        const shown = async (badge: string) => {
+            await inPage<null>(`globalThis.meterRail.update({ badge: ${badge} }); return "null"`);
+            await sleep(100);
 
-        return {
-            count: await text(`${rail("Meter")} .rail-count`),
-            label: await inPage<string>(
-                `return JSON.stringify(document.querySelector(${JSON.stringify(rail("Meter"))}).getAttribute("aria-label"))`,
-            ),
+            return {
+                count: await text(`${rail("Meter")} .rail-count`),
+                label: await inPage<string>(
+                    `return JSON.stringify(document.querySelector(${JSON.stringify(rail("Meter"))}).getAttribute("aria-label"))`,
+                ),
+            };
         };
-    };
 
-    assert.deepEqual(await shown("2"), { count: "2", label: "Meter, 2" });
+        assert.deepEqual(await shown("2"), { count: "2", label: "Meter, 2" });
+        assert.deepEqual(await shown("150"), { count: "99+", label: "Meter, 99+" });
+        assert.deepEqual(await shown(`" new "`), { count: "new", label: "Meter, new" });
 
-    for (const badge of ["0", `""`, `"  "`, "null", "false", "undefined"]) {
-        assert.deepEqual(await shown(badge), { count: "", label: "Meter" }, `badge ${badge}`);
-    }
-});
+        for (const badge of [
+            "0",
+            `"0"`,
+            `""`,
+            `"  "`,
+            "NaN",
+            "Infinity",
+            "-Infinity",
+            "null",
+            "false",
+            "undefined",
+        ]) {
+            assert.deepEqual(await shown(badge), { count: "", label: "Meter" }, `badge ${badge}`);
+        }
+
+        // Long text is cut, and stays within its button.
+        const long = await shown(`"${"x".repeat(40)}"`);
+
+        assert.equal(long.count, `${"x".repeat(23)}…`);
+        assert.ok(
+            await inPage<boolean>(`
+            const button = document.querySelector(${JSON.stringify(rail("Meter"))}).getBoundingClientRect();
+            const count = document.querySelector(${JSON.stringify(`${rail("Meter")} .rail-count`)}).getBoundingClientRect();
+
+            return JSON.stringify(count.left >= button.left && count.right <= button.right && count.width <= 32);
+        `),
+            "within the button",
+        );
+        await shown("undefined");
+    },
+);
 
 test("a sheet that opens a page closes first, so back closes the page", real, async () => {
     await page.navigate(`${base}/s/${session}`);
@@ -961,6 +1003,7 @@ test("a browser module that fails says so, and the rest of the app goes on", rea
     await sleep(100);
     assert.equal(await has(rail("Late")), false);
     assert.equal(await has('link[data-extension="broken"]'), false);
+    assert.equal((await notices()).includes("broken says late"), false, "it says nothing more");
     assert.equal(
         await inPage<boolean>(`return JSON.stringify(globalThis.brokenLateDisposed === true)`),
         true,
@@ -1280,6 +1323,25 @@ test(
         await inPage<null>(
             `globalThis.oldMeterPocket = globalThis.meterPocket; globalThis.oldMeterClose = globalThis.meterClose; return "null"`,
         );
+        // Five notices just before the edit: the new version's next one waits for the same few seconds.
+        await withMeter<null>(`
+            const { store } = await import("/store.js");
+
+            globalThis.saysSeen = new Set();
+            store.subscribe((state) => {
+                for (const notice of state.notices) {
+                    if (notice.message.startsWith("meter says")) {
+                        globalThis.saysSeen.add(notice.message);
+                    }
+                }
+            });
+
+            for (let count = 1; count <= 5; count++) {
+                pocket.notify("info", "meter says " + count);
+            }
+
+            return "null";
+        `);
         writeFileSync(join(dropIns, "meter.js"), `${METER_JS}\n// Edited.\n`);
         await app.loader.reload("meter.ts");
         await until(
@@ -1288,6 +1350,13 @@ test(
                     `return JSON.stringify(globalThis.meterPocket !== globalThis.oldMeterPocket && globalThis.meterDrawnBy === globalThis.meterPocket && document.querySelector(${JSON.stringify(rail("Meter"))}) !== null && document.querySelector(".ext-page .meter") !== null)`,
                 ),
             "the new version, its page in the old one's place",
+        );
+        await withMeter<null>(`pocket.notify("info", "meter says again"); return "null";`);
+        await sleep(200);
+        assert.deepEqual(
+            await inPage<string[]>(`return JSON.stringify([...globalThis.saysSeen])`),
+            ["meter says 1", "meter says 2", "meter says 3", "meter says 4", "meter says 5"],
+            "an edit does not start its notices afresh",
         );
         // The close the old version's page was given closes nothing of the new one's.
         await inPage<null>(`globalThis.oldMeterClose(); return "null"`);
@@ -1369,7 +1438,7 @@ test(
     async () => {
         await page.navigate(`${base}/s/${session}`);
         await until(() => has(rail("Meter")), "the meter's rail button");
-        // Each draw takes 15 ms, fewer than the redraws a second allows: it still never lets the page answer.
+        // Each draw takes 15 ms, far fewer than the redraws a second allows: it is still a loop.
         await withMeter<null>(`
             let count = 0;
 
@@ -1398,7 +1467,7 @@ test(
             20_000,
         );
 
-        // Its own tasks, one after another, letting the page answer between them, but far more than 100 a second.
+        // Its own tasks, one after another, letting the page answer between them, but far more than 300 a second.
         await page.navigate(`${base}/s/${session}`);
         await until(() => has(rail("Meter")), "the meter, loaded again");
         await withMeter<null>(`
@@ -1426,14 +1495,413 @@ test(
     },
 );
 
+test(
+    "busy modules that are not loops are never stopped: chains of awaits, streams, timers, and frames",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+            const rail = globalThis.meterRail;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const many = Array.from({ length: 30 }, (_, index) =>
+                pocket.rail({ id: "busy" + index, title: "Busy " + index, run() {} }),
+            );
+            let count = 0;
+
+            // 150 changes, each after an await; and a stream of 150 chunks waiting to be read.
+            for (let step = 0; step < 150; step++) {
+                await Promise.resolve();
+                rail.update({ badge: ++count });
+            }
+
+            const stream = new ReadableStream({
+                start(controller) {
+                    for (let chunk = 0; chunk < 150; chunk++) {
+                        controller.enqueue(chunk);
+                    }
+
+                    controller.close();
+                },
+            });
+
+            for await (const chunk of stream) {
+                rail.update({ badge: chunk + 1 });
+            }
+
+            // One after another, for a second and a half each: a change every 4 ms (as fast as timers go, 250 a
+            // second), a change each frame, and 30 buttons changed together 20 times a second.
+            const timer = setInterval(() => rail.update({ badge: ++count }), 4);
+
+            await sleep(1500);
+            clearInterval(timer);
+
+            let framing = true;
+            const frame = () => {
+                rail.update({ badge: ++count });
+
+                if (framing) {
+                    requestAnimationFrame(frame);
+                }
+            };
+
+            requestAnimationFrame(frame);
+            await sleep(1500);
+            framing = false;
+
+            const together = setInterval(() => many.forEach((each) => each.update({ badge: ++count })), 50);
+
+            await sleep(1500);
+            clearInterval(together);
+            many.forEach((each) => each.remove());
+
+            return "null";
+        `);
+        assert.deepEqual(await stateOf("meter"), { status: "ready", error: null });
+
+        // A page of 1,500 rows, its rail button changed 40 times every 100 ms, for two seconds; and a meter page that
+        // shows a reading 20 times a second, and puts it on its rail button as it draws.
+        await withMeter<null>(`
+            const rail = globalThis.meterRail;
+            let reading = 0;
+            let setReading = null;
+
+            pocket.page({
+                id: "rows",
+                title: "Rows",
+                component: () => {
+                    const [value, set] = pocket.useState(0);
+
+                    setReading = set;
+                    rail.update({ badge: value });
+
+                    return html\`<ul class="rows">
+                        \${Array.from({ length: 1500 }, (_, index) => html\`<li>\${index}: \${value}</li>\`)}
+                    </ul>\`;
+                },
+            });
+            pocket.openPage("rows");
+
+            const timers = [
+                setInterval(() => {
+                    for (let step = 0; step < 40; step++) {
+                        rail.update({ badge: ++reading });
+                    }
+                }, 100),
+                setInterval(() => setReading?.(++reading), 50),
+            ];
+
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            timers.forEach(clearInterval);
+            pocket.closePage();
+
+            return "null";
+        `);
+        assert.deepEqual(await stateOf("meter"), { status: "ready", error: null });
+        await withMeter<null>(`globalThis.meterRail.update({ badge: undefined }); return "null";`);
+    },
+);
+
+/** Time, in the page, from now until the meter stops, kept as `globalThis.meterTook`. */
+const timeTheStop = () =>
+    inPage<null>(`
+        const { store } = await import("/store.js");
+        const { browserModuleState } = await import("/extension-ui.js");
+        const started = performance.now();
+        const stop = store.subscribe(() => {
+            if (browserModuleState("meter")?.status === "failed") {
+                globalThis.meterTook = performance.now() - started;
+                stop();
+            }
+        });
+
+        globalThis.meterTook = null;
+
+        return "null";
+    `);
+
+test(
+    "a loop whose draws take 100 ms is stopped in about a second, and so is one that opens a sheet as it draws",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await timeTheStop();
+        await withMeter<null>(`
+            let count = 0;
+
+            pocket.page({
+                id: "slower",
+                title: "Slower",
+                component: () => {
+                    const until = performance.now() + 100;
+
+                    while (performance.now() < until) {
+                        // Drawing slowly.
+                    }
+
+                    globalThis.meterRail.update({ badge: ++count });
+
+                    return html\`<p class="slower">\${count}</p>\`;
+                },
+            });
+            pocket.openPage("slower");
+
+            return "null";
+        `);
+        await until(
+            async () => /redraws without end/.test(await text(".ext-page .error-box")),
+            "the slow loop stopped",
+            20_000,
+        );
+
+        const slow = await inPage<number>(`return JSON.stringify(globalThis.meterTook)`);
+
+        assert.ok(slow < 1600, `stopped after ${Math.round(slow)} ms`);
+
+        // Opening its sheet again as the sheet draws, slowly, holds the page, with no task between: stopped too.
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter, loaded again");
+        await timeTheStop();
+        await withMeter<null>(`
+            pocket.sheet({
+                id: "again",
+                title: "Again",
+                component: () => {
+                    const until = performance.now() + 50;
+
+                    while (performance.now() < until) {
+                        // Drawing slowly.
+                    }
+
+                    pocket.openSheet("again");
+
+                    return html\`<p class="again">Again</p>\`;
+                },
+            });
+            pocket.openSheet("again");
+
+            return "null";
+        `);
+        await until(
+            async () => /redraws without end/.test(await text(".sheet .error-box")),
+            "the sheet's loop stopped",
+            20_000,
+        );
+
+        const held = await inPage<number>(`return JSON.stringify(globalThis.meterTook)`);
+
+        assert.ok(held < 1600, `stopped after ${Math.round(held)} ms`);
+    },
+);
+
+test(
+    "nothing at all thrown by a class's other methods, an effect, or a render replaced later, shows in the error box",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await inPage<null>(`
+            // What escapes Preact: its own error, reading what was thrown.
+            globalThis.uncaught = [];
+            addEventListener("error", (event) => {
+                if (String(event.message).includes("'then'")) {
+                    globalThis.uncaught.push(String(event.message));
+                }
+            });
+
+            return "null";
+        `);
+        await withMeter<null>(`
+            const { Component } = await import("/vendor/preact.mjs");
+            const breaker = (self) =>
+                html\`<button class="button break-it" onClick=\${() => self.setState({ broken: true })}>
+                    Break
+                </button>\`;
+
+            class WillUpdate extends Component {
+                componentWillUpdate() {
+                    throw undefined;
+                }
+
+                render() {
+                    return breaker(this);
+                }
+            }
+
+            class ShouldUpdate extends Component {
+                shouldComponentUpdate() {
+                    throw null;
+                }
+
+                render() {
+                    return breaker(this);
+                }
+            }
+
+            class Snapshot extends Component {
+                getSnapshotBeforeUpdate() {
+                    throw null;
+                }
+
+                componentDidUpdate() {}
+
+                render() {
+                    return breaker(this);
+                }
+            }
+
+            class Derived extends Component {
+                static getDerivedStateFromProps(props, state) {
+                    if (state.broken) {
+                        throw null;
+                    }
+
+                    return null;
+                }
+
+                render() {
+                    return breaker(this);
+                }
+            }
+
+            class Swapped extends Component {
+                componentDidMount() {
+                    this.render = () => {
+                        if (this.state.broken) {
+                            throw undefined;
+                        }
+
+                        return breaker(this);
+                    };
+                    this.forceUpdate();
+                }
+
+                render() {
+                    return html\`<p>First</p>\`;
+                }
+            }
+
+            class SwappedUpdate extends Component {
+                componentDidMount() {
+                    this.componentWillUpdate = () => {
+                        throw null;
+                    };
+                }
+
+                render() {
+                    return breaker(this);
+                }
+            }
+
+            function Early() {
+                const [drawn, setDrawn] = pocket.useState(0);
+
+                pocket.useLayoutEffect(() => {
+                    if (drawn === 0) {
+                        setDrawn(1);
+                    }
+                }, [drawn]);
+                pocket.useEffect(() => {
+                    globalThis.earlyRuns = (globalThis.earlyRuns ?? 0) + 1;
+
+                    throw null;
+                }, []);
+
+                return html\`<p class="early">\${drawn}</p>\`;
+            }
+
+            const pages = { WillUpdate, ShouldUpdate, Snapshot, Derived, Swapped, SwappedUpdate, Early };
+
+            for (const [id, component] of Object.entries(pages)) {
+                pocket.page({ id, title: id, component });
+            }
+
+            return "null";
+        `);
+
+        // Each opened, and its button pressed at once, so that it draws again alone, its own state changed.
+        for (const id of [
+            "WillUpdate",
+            "ShouldUpdate",
+            "Snapshot",
+            "Derived",
+            "Swapped",
+            "SwappedUpdate",
+            "Early",
+        ]) {
+            await withMeter<null>(`
+                pocket.openPage(${JSON.stringify(id)});
+
+                for (let tries = 0; tries < 100; tries++) {
+                    await new Promise((resolve) => setTimeout(resolve, 10));
+                    const button = document.querySelector(".ext-page .break-it");
+
+                    if (button) {
+                        button.click();
+                        break;
+                    }
+                }
+
+                return "null";
+            `);
+            await until(
+                async () =>
+                    (await text(".ext-page .error-box")) === `${id} failed: it gave no reason`,
+                `${id}'s error box, at once`,
+                3000,
+            );
+        }
+
+        await sleep(500);
+        assert.equal(await inPage<number>(`return JSON.stringify(globalThis.earlyRuns)`), 1);
+        assert.deepEqual(await inPage<string[]>(`return JSON.stringify(globalThis.uncaught)`), []);
+        await withMeter<null>(`pocket.closePage(); return "null";`);
+    },
+);
+
+test(
+    "a class whose render is a getter draws under the Guard as it does elsewhere",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await withMeter<null>(`
+        const { Component } = await import("/vendor/preact.mjs");
+
+        class Gotten extends Component {
+            get render() {
+                return () => html\`<p class="gotten">Gotten</p>\`;
+            }
+        }
+
+        pocket.page({ id: "gotten", title: "Gotten", component: Gotten });
+        pocket.openPage("gotten");
+
+        return "null";
+    `);
+        await until(() => has(".ext-page .gotten"), "the class drawn");
+        await withMeter<null>(`pocket.closePage(); return "null";`);
+    },
+);
+
 test("a module's notices come a few at a time, and the rest are dropped", real, async () => {
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(rail("Meter")), "the meter's rail button");
     // A component that says something each time it draws, which a notice makes it do again.
     await withMeter<null>(`
         const { store } = await import("/store.js");
+        const warn = console.warn;
         let count = 0;
 
+        globalThis.floodWarnings = 0;
+        console.warn = (...args) => {
+            if (String(args[0]).includes("too many notices")) {
+                globalThis.floodWarnings++;
+            }
+
+            warn(...args);
+        };
         globalThis.floodSeen = new Set();
         store.subscribe((state) => {
             for (const notice of state.notices) {
@@ -1461,6 +1929,17 @@ test("a module's notices come a few at a time, and the rest are dropped", real, 
     assert.equal(await has(rail("Meter")), true, "notices alone do not stop it");
     await withMeter<null>(`pocket.closePage(); return "null";`);
     await until(async () => !(await has(".ext-page")), "the page closes");
+
+    // Saying more on, past the few seconds: five more get through, and the console says so once for the whole burst.
+    await withMeter<null>(`
+        globalThis.floodTimer = setInterval(() => pocket.notify("info", "flood tick"), 100);
+
+        return "null";
+    `);
+    await sleep(5600);
+    await inPage<null>(`clearInterval(globalThis.floodTimer); return "null"`);
+    assert.equal(await inPage<number>(`return JSON.stringify(globalThis.floodSeen.size)`), 10);
+    assert.equal(await inPage<number>(`return JSON.stringify(globalThis.floodWarnings)`), 1);
 });
 
 test(
@@ -1559,6 +2038,10 @@ test(
             await until(async () => !(await has(".sheet")), "back closes it");
             await sleep(400);
             assert.equal(await has(".sheet"), false, "and shows no sheet of the module that went");
+            // A version that went says nothing more.
+            await withMeter<null>(`pocket.notify("info", "gone says"); return "null";`);
+            await sleep(200);
+            assert.equal((await notices()).includes("gone says"), false);
         } finally {
             await app.setExtensionEnabled(owner(app), "meter.ts", true);
             await until(() => has(rail("Meter")), "the meter back");

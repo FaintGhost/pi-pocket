@@ -2,16 +2,21 @@
  * What extension modules add to the app over HTTP: `/api/x/:module/…`, the routes a module registered (after the API's
  * sign-in, and with the `X-Pocket` header on every method), and `/x/:module/:rev/…`, the files of its browser module.
  */
-import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
+import {
+    closeSync,
+    constants,
+    fstatSync,
+    openSync,
+    readFileSync,
+    readlinkSync,
+    statSync,
+} from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PocketApp } from "../app.ts";
 import type { User } from "../config.ts";
 import { describe, HttpError } from "../errors.ts";
-import { exposedError } from "../extension-web.ts";
+import { exposedError, MAX_FILE_BYTES } from "../extension-web.ts";
 import { type ApiRequest, json, readJson, send } from "./io.ts";
-
-/** The largest file a browser module serves: each request reads the file whole, and anyone it is for may ask often. */
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
 /** Opened on its own, an SVG could run script with the app's origin: give it an opaque one. */
 const SVG_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'";
@@ -133,6 +138,23 @@ function failed(response: ServerResponse, error: unknown, file: string, user: Us
     });
 }
 
+/**
+ * Whether `fd` is the file at `path`: where the system says it is (Linux), or else the same file as the path names now.
+ */
+function opened(fd: number, path: string, stats: { dev: number; ino: number }): boolean {
+    try {
+        return readlinkSync(`/proc/self/fd/${fd}`) === path;
+    } catch {
+        try {
+            const named = statSync(path);
+
+            return named.dev === stats.dev && named.ino === stats.ino;
+        } catch {
+            return false;
+        }
+    }
+}
+
 /** A file of a module's browser module: `parts` is the path after `/x/`, its version first and then the file's path. */
 export function extensionFile(
     app: PocketApp,
@@ -173,7 +195,8 @@ export function extensionFile(
     try {
         const stats = fstatSync(fd);
 
-        if (!stats.isFile()) {
+        // The very file that was checked: a folder on its way swapped for a link after the check would lead elsewhere.
+        if (!stats.isFile() || !opened(fd, found.file, stats)) {
             throw new HttpError(404, "Not found");
         }
 

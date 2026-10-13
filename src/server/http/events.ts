@@ -13,11 +13,16 @@ import { conversationId, json } from "./io.ts";
 const POLL_HOLD_MS = 25_000;
 const POLL_EXPIRE_MS = 60_000;
 /**
- * How much may wait for one tab, unread: a tab that does not read its stream, or does not acknowledge its polls, is
- * cut off past it rather than hold the server's memory. It connects again, and gets a full view.
+ * How far behind a tab may fall. Past `BEHIND_BYTES` (or `BEHIND_EVENTS` waiting), a tab must keep up: one that took
+ * nothing (its stream did not drain, or it acknowledged no poll) for `STALLED_MS` is cut off, rather than hold the
+ * server's memory without end; it connects again, and gets a full view. A tab that keeps taking is not cut off for being
+ * behind, so a session's first view, however large, and a slow phone that still reads both come through. Past
+ * `MAX_BEHIND_BYTES` any tab is cut off.
  */
-const MAX_BACKLOG_BYTES = 8 * 1024 * 1024;
-const MAX_BACKLOG_EVENTS = 5000;
+const BEHIND_BYTES = 8 * 1024 * 1024;
+const BEHIND_EVENTS = 5000;
+const STALLED_MS = 30_000;
+const MAX_BEHIND_BYTES = 128 * 1024 * 1024;
 
 /** One browser tab that receives events by long polling instead of an event stream. */
 interface Poller {
@@ -27,6 +32,8 @@ interface Poller {
     queue: { seq: number; event: string; data: unknown; size: number }[];
     /** The queue's events, as JSON, in bytes. */
     bytes: number;
+    /** When the tab last took something: its poll acknowledged events, or nothing waited for it. */
+    tookAt: number;
     seq: number;
     waiting: ServerResponse | undefined;
     timer: NodeJS.Timeout | undefined;
@@ -55,19 +62,37 @@ export function createEventStreams(app: PocketApp) {
         url: URL,
         user: User,
     ): Promise<void> => {
+        // What went to the stream, and of it what the tab took (left the stream's buffer), and when it last took some.
+        let written = 0;
+        let taken = 0;
+        let tookAt = Date.now();
+
+        const write = (text: string) => {
+            written += Buffer.byteLength(text);
+            response.write(text);
+        };
+
         const client = newClient(url, user, (event, data) => {
             if (response.writableEnded || response.destroyed) {
                 return;
             }
 
-            // A tab that does not read: cut off, so what waits for it does not grow without end.
-            if (response.writableLength > MAX_BACKLOG_BYTES) {
+            const behind = response.writableLength;
+            const now = Date.now();
+
+            if (written - behind > taken || behind <= BEHIND_BYTES) {
+                taken = written - behind;
+                tookAt = now;
+            }
+
+            // A tab that takes nothing for long while far behind, or one too far behind: cut off.
+            if (behind > MAX_BEHIND_BYTES || now - tookAt > STALLED_MS) {
                 response.destroy();
 
                 return;
             }
 
-            response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+            write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
         });
 
         client.close = () => response.end();
@@ -77,8 +102,8 @@ export function createEventStreams(app: PocketApp) {
             connection: "keep-alive",
             "x-accel-buffering": "no",
         });
-        response.write("retry: 1500\n\n");
-        const ping = setInterval(() => response.write(": ping\n\n"), 15_000);
+        write("retry: 1500\n\n");
+        const ping = setInterval(() => write(": ping\n\n"), 15_000);
 
         request.on("close", () => {
             clearInterval(ping);
@@ -154,6 +179,7 @@ export function createEventStreams(app: PocketApp) {
                 client: undefined as unknown as Client,
                 queue: [],
                 bytes: 0,
+                tookAt: Date.now(),
                 seq: 0,
                 waiting: undefined,
                 timer: undefined,
@@ -161,15 +187,24 @@ export function createEventStreams(app: PocketApp) {
             };
 
             created.client = newClient(url, user, (event, data) => {
-                const size = JSON.stringify(data ?? null)?.length ?? 0;
+                let size = 0;
+
+                try {
+                    size = Buffer.byteLength(JSON.stringify(data ?? null) ?? "null");
+                } catch {
+                    // Not JSON: its answer would fail as it is, and it weighs nothing here.
+                }
 
                 created.queue.push({ seq: ++created.seq, event, data, size });
                 created.bytes += size;
 
-                // A tab that does not acknowledge what it got: its session ends, and its next poll starts afresh.
+                const behind = created.bytes > BEHIND_BYTES || created.queue.length > BEHIND_EVENTS;
+
+                // A tab far behind that acknowledged nothing for long, or one too far behind: its session ends, and its
+                // next poll starts afresh, with a full view.
                 if (
-                    created.bytes > MAX_BACKLOG_BYTES ||
-                    created.queue.length > MAX_BACKLOG_EVENTS
+                    created.bytes > MAX_BEHIND_BYTES ||
+                    (behind && Date.now() - created.tookAt > STALLED_MS)
                 ) {
                     created.queue = [];
                     created.bytes = 0;
@@ -192,8 +227,16 @@ export function createEventStreams(app: PocketApp) {
         } else {
             const ack = Number(url.searchParams.get("ack") ?? 0);
 
+            const before = poller.queue.length;
+
             poller.queue = poller.queue.filter((item) => item.seq > ack);
             poller.bytes = poller.queue.reduce((sum, item) => sum + item.size, 0);
+
+            // It took something, or nothing waits for it: it keeps up.
+            if (poller.queue.length < before || poller.queue.length === 0) {
+                poller.tookAt = Date.now();
+            }
+
             keepPoller(poller);
         }
 

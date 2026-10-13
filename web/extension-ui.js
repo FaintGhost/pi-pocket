@@ -45,57 +45,90 @@ const liveRecord = (record) =>
 // ─── Drawing again, within bounds ────────────────────────────────────────────
 
 /**
- * How often a module may make the app draw again: what it adds or changes, and the pages and sheets it opens and closes.
- * A component that does so as it draws, with a value that changes each time, would draw for ever and hold the tab: past
- * either bound, the module stops, as one that failed to load does.
+ * How often a module may make the app draw again: what it adds, changes, or removes, and the pages and sheets it opens
+ * and closes. Its changes in one task draw once, in the task after. A component that changes what it added as it
+ * draws, with a value that changes each time, would draw for ever, and one that opens a page as it draws would hold the
+ * tab: past these bounds, the module stops, as one that failed to load does.
+ *
+ * - More than 300 redraws within any second.
+ * - A redraw made while the app drew the module's own previous one, 20 times in a row, or 5 times or more in a row over
+ *   more than a second: a loop, however slowly it draws.
+ * - Changes that hold the page, with no task between them: more than 1000, or 5 or more over more than a second.
  */
-const REDRAWS_PER_SECOND = 100;
-const REDRAWS_PER_TURN = 100;
-/** And how many notices it may show: past these, the rest are dropped, with a word in the console. */
+const REDRAWS_PER_SECOND = 300;
+const LOOP_COUNT = 20;
+const HELD_COUNT = 1000;
+const SLOW_MIN = 5;
+const SLOW_MS = 1000;
+/** And how many notices a module may show, across its versions: past these, the rest are dropped. */
 const NOTICES = 5;
 const NOTICES_MS = 5000;
 
 /**
- * The browser's turns, counted: one ends when a posted message gets through, which it never does while a loop holds the
- * tab. A message rather than a timer: a hidden tab's timers wait up to a minute, and the turns would seem to last that
- * long.
+ * The page's tasks, counted by a message that gets through only between them (a loop that holds the page lets none
+ * through), and the redraw, which comes with it. A message rather than a timer: a hidden tab's timers wait up to a
+ * minute.
  */
 let turn = 0;
-let turnEnding = false;
-const turns = new MessageChannel();
+let posted = false;
+const tasks = new MessageChannel();
 
-turns.port1.onmessage = () => {
-    turnEnding = false;
+tasks.port1.onmessage = () => {
+    posted = false;
     turn++;
+
+    if (due !== null) {
+        flush();
+    }
 };
 
-function endOfTurn() {
-    if (!turnEnding) {
-        turnEnding = true;
-        turns.port2.postMessage(null);
+function nextTurn() {
+    if (!posted) {
+        posted = true;
+        tasks.port2.postMessage(null);
     }
 }
 
-/** Count one more redraw a module caused; false, once it stopped the module for going past its bounds. */
-function charge(record) {
-    const now = performance.now();
+/**
+ * What a module spent lately: when its last redraws were (for the second), how many in this task and since when, and
+ * how many of its redraws in a row its own drawing made.
+ */
+const spending = () => ({
+    times: [],
+    turn: -1,
+    inTurn: 0,
+    turnSince: 0,
+    loops: 0,
+    loopsSince: 0,
+    lastFlush: 0,
+    selfMade: false,
+});
+
+/** Count one more redraw a module caused; false, once that stopped the module for going past its bounds. */
+function charge(record, now = performance.now()) {
     const spent = record.spent;
 
-    if (now - spent.since >= 1000) {
-        spent.since = now;
-        spent.second = 0;
+    spent.times.push(now);
+
+    while (now - spent.times[0] >= 1000) {
+        spent.times.shift();
     }
 
     if (spent.turn !== turn) {
         spent.turn = turn;
         spent.inTurn = 0;
+        spent.turnSince = now;
     }
 
-    spent.second++;
     spent.inTurn++;
-    endOfTurn();
+    nextTurn();
 
-    if (spent.second > REDRAWS_PER_SECOND || spent.inTurn > REDRAWS_PER_TURN) {
+    const held =
+        spent.inTurn > HELD_COUNT || (spent.inTurn >= SLOW_MIN && now - spent.turnSince > SLOW_MS);
+    const looping =
+        spent.loops >= LOOP_COUNT || (spent.loops >= SLOW_MIN && now - spent.loopsSince > SLOW_MS);
+
+    if (spent.times.length > REDRAWS_PER_SECOND || held || looping) {
         fail(record, new Error("it redraws without end"), "was stopped");
 
         return false;
@@ -106,51 +139,81 @@ function charge(record) {
 
 /** The modules whose changes wait for the next redraw, which comes once for all of them; null when none is due. */
 let due = null;
+/** The modules whose redraw the app is drawing now: what they change meanwhile, their drawing made. */
+let drawing = null;
 
-/** Draw what extensions add again, soon: every change until then goes in the same redraw, charged to `record`. */
+/** Draw what extensions add again, in the next task: every change until then goes in the same redraw. */
 function redraw(record) {
     if (due === null) {
         due = new Set();
-        queueMicrotask(flush);
     }
 
     if (record !== undefined) {
         due.add(record);
+
+        if (drawing?.has(record)) {
+            record.spent.selfMade = true;
+        }
     }
+
+    nextTurn();
 }
 
 function flush() {
-    const records = due;
+    const records = [...due].filter(liveRecord);
+    const now = performance.now();
 
     due = null;
 
     for (const record of records) {
-        if (liveRecord(record)) {
-            charge(record);
+        const spent = record.spent;
+
+        if (spent.selfMade) {
+            spent.loops++;
+
+            if (spent.loops === 1) {
+                spent.loopsSince = spent.lastFlush;
+            }
+        } else {
+            spent.loops = 0;
         }
+
+        spent.selfMade = false;
+        spent.lastFlush = now;
+        charge(record, now);
     }
 
+    // The app draws in a microtask queued as the store changes; this one comes after it.
+    drawing = new Set(records.filter(liveRecord));
     store.set((state) => ({ extensionsRev: state.extensionsRev + 1 }));
+    queueMicrotask(() => {
+        drawing = null;
+    });
 }
 
-/** A notice from a module, as many as its bound lets through. */
+/** Each module's recent notices, by name, so that a new version does not start afresh: `{ times, droppedAt }`. */
+const noticeBudgets = new Map();
+
+/** A notice from a module, as many as its bound lets through; the rest are dropped, with a word in the console. */
 function noticeFrom(record, level, message, action) {
     const now = performance.now();
-    const recent = record.notices.filter((at) => now - at < NOTICES_MS);
+    const budget = noticeBudgets.get(record.module) ?? { times: [], droppedAt: -Infinity };
 
-    if (recent.length >= NOTICES) {
-        if (!record.noticesDropped) {
-            record.noticesDropped = true;
+    budget.times = budget.times.filter((at) => now - at < NOTICES_MS);
+    noticeBudgets.set(record.module, budget);
+
+    if (budget.times.length >= NOTICES) {
+        // Once a burst: a drop soon after another is the same one.
+        if (now - budget.droppedAt >= NOTICES_MS) {
             console.warn(`${record.title}: too many notices; dropping the rest for a few seconds`);
         }
 
-        record.notices = recent;
+        budget.droppedAt = now;
 
         return;
     }
 
-    record.notices = [...recent, now];
-    record.noticesDropped = false;
+    budget.times.push(now);
     notify(level, message, action);
 }
 
@@ -343,10 +406,8 @@ async function load(entry) {
         dead: false,
         // How it failed, for its page and sheets: "failed to load", or "was stopped".
         how: null,
-        // The redraws it caused lately, and the times of its notices (`charge`, `noticeFrom`).
-        spent: { since: 0, second: 0, turn: -1, inTurn: 0 },
-        notices: [],
-        noticesDropped: false,
+        // The redraws it caused lately (`charge`).
+        spent: spending(),
     };
 
     record.pocket = pocketFor(record);
@@ -684,8 +745,11 @@ function pocketFor(record) {
             return () => record.listeners.delete(listener);
         },
         /** A short notice, as the app's own: `info`, `warning`, or `error`. A few at a time (`NOTICES`). */
-        notify: (level, message) =>
-            noticeFrom(record, LEVELS.has(level) ? level : "info", String(message)),
+        notify(level, message) {
+            if (live()) {
+                noticeFrom(record, LEVELS.has(level) ? level : "info", String(message));
+            }
+        },
         rail: (spec) => add("rail", spec),
         menu: (spec) => add("menu", spec),
         launcher: (spec) => add("launcher", spec),
@@ -886,11 +950,30 @@ function added(kind) {
 /** An extension's icon: its own path, one of the app's by name, or a square of four when it gave none it knows. */
 const pathOf = (spec) => spec.iconPath ?? (iconPath(spec.icon ?? "") || iconPath("grid"));
 
-/** A rail button's badge as it shows: none for nothing, 0, or empty text, as the app's own counts hide at 0. */
-const badgeOf = (badge) =>
-    badge === undefined || badge === null || badge === false || badge === 0
-        ? ""
-        : String(badge).trim();
+/** The most of a badge's text kept (its button shows less, cut with an ellipsis), for its button's label. */
+const BADGE_TEXT = 24;
+
+/**
+ * A rail button's badge as it shows: as the app's own counts, none at 0 and "99+" above 99; a number that is not one
+ * (NaN, Infinity) shows nothing; text, trimmed, with "" and "0" as nothing, and long text cut.
+ */
+function badgeOf(badge) {
+    if (typeof badge === "number") {
+        if (!Number.isFinite(badge) || badge === 0) {
+            return "";
+        }
+
+        return badge > 99 ? "99+" : String(badge);
+    }
+
+    const text = typeof badge === "string" ? badge.trim() : "";
+
+    if (text === "" || text === "0") {
+        return "";
+    }
+
+    return text.length > BADGE_TEXT ? `${text.slice(0, BADGE_TEXT - 1)}…` : text;
+}
 
 /**
  * How this tab's copy of a module's browser module stands, for the Extensions sheet: `loading`, `ready`, `failed` (with
@@ -989,43 +1072,176 @@ class Guard extends Component {
 
 // Preact reads `.then` of whatever a component throws while it draws, to tell a pause from a failure, so a thrown `null`
 // or `undefined` breaks Preact itself, past every boundary (and, from a component that drew again alone, out of its
-// queue). So every component under a Guard, an extension's own and the ones inside it, gets a render that turns those
-// into an Error first. Preact's render hook, and a vnode's component and parent, go by these short names in its build,
-// as preact/hooks uses them; the app's own components are left as they are. Should the names change, this does nothing,
-// and `Drawn` still keeps such a failure under the Guard, with Preact's own words.
+// queue, which then drops what else waited to draw). So under a Guard, what Preact calls of a component while it draws
+// turns those into an Error first: its render and the lifecycle methods called with it, its class's
+// getDerivedStateFromProps, and the effects hooks run before it draws again. Checked again each time it draws, so a
+// method it replaces is covered too. A method given by a getter is left as it is, and so is a class's constructor, which
+// Preact calls only when its parent draws: what that throws stays under the Guard, in Preact's own words.
+//
+// Preact's hooks (`_diff`, `_render`) and a vnode's component and parent go by these short names in its build, as
+// preact/hooks uses them; the app's own components are left as they are. Should the names change, this does nothing,
+// and `Drawn` still keeps such a failure under the Guard, in Preact's own words.
+const DIFF_HOOK = "__b";
 const RENDER_HOOK = "__r";
 const COMPONENT = "__c";
 const PARENT = "__";
-/** Each component checked once: whether it draws under a Guard. */
-const checked = new WeakSet();
+const NO_REASON = "it gave no reason";
+/** What Preact calls of a component while it draws, besides its class's getDerivedStateFromProps. */
+const DRAWING = [
+    "render",
+    "componentWillMount",
+    "componentWillReceiveProps",
+    "shouldComponentUpdate",
+    "componentWillUpdate",
+    "getChildContext",
+    "getSnapshotBeforeUpdate",
+];
+/** The wrappers made here, so none is wrapped again. */
+const wrappers = new WeakSet();
+/** Each component instance, and each class, once known: whether it draws under a Guard. */
+const guardedComponents = new WeakMap();
+const guardedClasses = new WeakSet();
+
+/** `run`, but what it throws is never `null` or `undefined`. */
+function throwsSomething(run) {
+    const wrapped = function (...args) {
+        try {
+            return run.apply(this, args);
+        } catch (error) {
+            throw error ?? new Error(NO_REASON);
+        }
+    };
+
+    wrappers.add(wrapped);
+
+    return wrapped;
+}
+
+/** Wrap the methods `names` of `target`, own or inherited, where they are plain functions that can be replaced. */
+function wrapMethods(target, names) {
+    for (const name of names) {
+        let owner = target;
+        let found;
+
+        while (owner !== null && owner !== Object.prototype) {
+            found = Object.getOwnPropertyDescriptor(owner, name);
+
+            if (found !== undefined) {
+                break;
+            }
+
+            owner = Object.getPrototypeOf(owner);
+        }
+
+        // None; a getter (left as it is); or one wrapped already.
+        if (found === undefined || !("value" in found)) {
+            continue;
+        }
+
+        if (typeof found.value !== "function" || wrappers.has(found.value)) {
+            continue;
+        }
+
+        try {
+            Object.defineProperty(target, name, {
+                value: throwsSomething(found.value),
+                writable: true,
+                configurable: true,
+                enumerable: owner === target ? found.enumerable : false,
+            });
+        } catch {
+            // Frozen, or a property that cannot change: left as it is.
+        }
+    }
+}
+
+const isClass = (type) =>
+    typeof type === "function" && typeof type.prototype?.render === "function";
+
+/** Whether a vnode draws under a Guard (not counting a Guard itself). */
+function underGuard(vnode) {
+    for (let above = vnode?.[PARENT]; above; above = above[PARENT]) {
+        if (above.type === Guard) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** Whether a component instance draws under a Guard, worked out once. */
+function guarded(component, vnode) {
+    if (typeof component !== "object" || component === null) {
+        return false;
+    }
+
+    let inside = guardedComponents.get(component);
+
+    if (inside === undefined) {
+        inside = underGuard(vnode);
+        guardedComponents.set(component, inside);
+    }
+
+    return inside;
+}
+
+/** A class drawn under a Guard: its methods, and its getDerivedStateFromProps, before any of its instances draws. */
+function guardClass(type) {
+    if (guardedClasses.has(type)) {
+        return;
+    }
+
+    guardedClasses.add(type);
+    wrapMethods(type.prototype, DRAWING);
+    wrapMethods(type, ["getDerivedStateFromProps"]);
+}
+
+const beforeDiff = options[DIFF_HOOK];
 const beforeRender = options[RENDER_HOOK];
 
-options[RENDER_HOOK] = (vnode) => {
-    if (typeof beforeRender === "function") {
-        beforeRender(vnode);
+// Before a vnode draws: a class under a Guard is guarded before its first instance is made; a component drawing again
+// alone (its own state changed) has what it may have replaced since wrapped again.
+options[DIFF_HOOK] = (vnode) => {
+    if (typeof beforeDiff === "function") {
+        beforeDiff(vnode);
+    }
+
+    const type = vnode?.type;
+
+    if (isClass(type) && !guardedClasses.has(type) && underGuard(vnode)) {
+        guardClass(type);
     }
 
     const component = vnode?.[COMPONENT];
 
-    if (!component || checked.has(component)) {
+    if (guarded(component, vnode)) {
+        wrapMethods(component, DRAWING);
+    }
+};
+
+// Right before a component draws: its methods, and the effects hooks run first when it draws again before they ran.
+options[RENDER_HOOK] = (vnode) => {
+    const component = vnode?.[COMPONENT];
+
+    if (!guarded(component, vnode)) {
+        if (typeof beforeRender === "function") {
+            beforeRender(vnode);
+        }
+
         return;
     }
 
-    checked.add(component);
+    wrapMethods(component, DRAWING);
 
-    for (let above = vnode[PARENT]; above; above = above[PARENT]) {
-        if (above.type === Guard) {
-            const render = component.render;
+    if (isClass(component.constructor)) {
+        guardClass(component.constructor);
+    }
 
-            component.render = function (...args) {
-                try {
-                    return render.apply(this, args);
-                } catch (error) {
-                    throw error ?? new Error("it gave no reason");
-                }
-            };
-
-            return;
+    if (typeof beforeRender === "function") {
+        try {
+            beforeRender(vnode);
+        } catch (error) {
+            throw error ?? new Error(NO_REASON);
         }
     }
 };

@@ -9597,6 +9597,17 @@ textarea.notes {
     outline-offset: -1px;
 }
 
+/* An extension's badge may be text: it stays within its button, cut with an ellipsis. */
+.rail-ext .rail-count {
+    display: block;
+    max-width: 32px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+    line-height: 13px;
+}
+
 /* Safe mode, in the Extensions sheet: this tab loads no extension's browser part. */
 .safe-mode {
     margin: 0 0 0.75rem;

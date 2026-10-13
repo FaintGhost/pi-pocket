@@ -365,6 +365,8 @@ export class PocketApp {
                 }
             },
             log: (line) => this.#log(line),
+            // Something about a module only the owner can mend: their tabs, as what it says can name the server's folders.
+            warn: (message) => this.ownerNotice("warning", message),
         });
     }
 
