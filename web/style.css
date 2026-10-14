@@ -6082,7 +6082,7 @@ textarea.notes {
     width: 6rem;
 }
 
-/* ─── Launcher: Omarchy's Walker, for sessions, actions, and themes ─── */
+/* ─── Launcher: sessions, actions, and themes, with visible search modes ─── */
 
 .launcher-overlay {
     position: fixed;
@@ -6091,18 +6091,19 @@ textarea.notes {
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    padding: calc(env(safe-area-inset-top) + min(14vh, 120px)) 10px 10px;
+    padding: calc(env(safe-area-inset-top) + min(12vh, 100px)) 10px 10px;
     background: var(--scrim);
     animation: fade var(--t-fade) var(--ease-almost);
 }
 
 .launcher {
-    width: min(640px, 100%);
-    max-height: min(560px, 74dvh);
+    --launcher-secondary: color-mix(in oklab, var(--o-fg) 90%, var(--o-bg));
+    width: min(680px, 100%);
+    max-height: min(610px, 80dvh);
     display: flex;
     flex-direction: column;
-    background: color-mix(in srgb, var(--o-bg) 95%, transparent);
-    border: 2px solid var(--o-fg);
+    background: var(--o-bg);
+    border: 2px solid var(--accent);
     animation: popin 0.3s var(--ease-out);
     outline: none;
 }
@@ -6116,13 +6117,22 @@ textarea.notes {
     animation: popout var(--t-out) linear forwards;
 }
 
+.launcher kbd {
+    font-size: max(11px, 0.78rem);
+}
+
 .launcher-input {
     display: flex;
+    flex: none;
     align-items: center;
-    gap: 0.7rem;
-    padding: 0.2rem 0.9rem;
-    border-bottom: 1px solid var(--line);
+    gap: 0.8rem;
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--line-strong);
     color: var(--accent);
+}
+
+.launcher-input:focus-within {
+    box-shadow: inset 0 -2px var(--accent);
 }
 
 .launcher-input .prompt {
@@ -6130,21 +6140,100 @@ textarea.notes {
 }
 
 .launcher-input input {
+    min-width: 0;
+    flex: 1;
     border: 0;
     background: none;
-    padding: 0.75rem 0;
-    font-size: 1.02rem;
+    padding: 0.65rem 0;
+    font-size: 1.05rem;
     color: var(--text);
 }
 
-.launcher-mode {
+.launcher-input input:focus-visible {
+    outline: none;
+}
+
+.launcher-input input::placeholder {
+    color: var(--launcher-secondary);
+}
+
+.launcher-escape {
+    color: var(--launcher-secondary);
+}
+
+.launcher-close {
+    display: grid;
+    place-items: center;
     flex: none;
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted);
+    width: 44px;
+    height: 44px;
     border: 1px solid var(--line-strong);
-    padding: 0.05rem 0.4rem;
+    color: var(--text);
+}
+
+.launcher-close:hover {
+    background: var(--hover);
+}
+
+.launcher-types {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding: 0.65rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+}
+
+.launcher-types button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    min-height: 32px;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--line-strong);
+    color: var(--launcher-secondary);
+    font-size: max(12px, 0.85rem);
+}
+
+.launcher-types button:hover,
+.launcher-types button[aria-pressed="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.launcher-types kbd {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+}
+
+.launcher-summary {
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0 0.9rem;
+    min-height: 36px;
+    color: var(--launcher-secondary);
+    font-size: max(11px, 0.78rem);
+    border-bottom: 1px solid var(--line);
+}
+
+.launcher-summary .launcher-group {
+    padding: 0;
+}
+
+.launcher-summary button {
+    min-height: 36px;
+    padding: 0.4rem;
+    color: var(--text);
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 
 .launcher-list {
@@ -6152,17 +6241,23 @@ textarea.notes {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 0.35rem;
-    scroll-padding: 0.35rem;
+    overscroll-behavior: contain;
+    padding: 0.45rem;
+    scroll-padding: 0.45rem;
 }
 
-/* The selection moves between rows instead of jumping: one highlight that slides. */
+.launcher-list:empty {
+    flex: none;
+    padding: 0;
+}
+
+/* One moving surface; the selected label stays readable, with a separate accent rail. */
 .launcher-list .slide-y {
-    left: 0.35rem;
-    right: 0.35rem;
+    left: 0.45rem;
+    right: 0.45rem;
     width: auto;
-    background: var(--hover);
-    border: 1px solid var(--edge);
+    background: color-mix(in srgb, var(--o-accent) 14%, var(--o-bg));
+    border: 1px solid var(--line-strong);
     z-index: 0;
     transition:
         transform 0.22s var(--ease-out),
@@ -6172,12 +6267,20 @@ textarea.notes {
 .launcher-group {
     position: relative;
     z-index: 1;
-    padding: 0.6rem 0.6rem 0.25rem;
-    font-size: 0.64rem;
-    font-weight: 600;
-    letter-spacing: 0.14em;
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.65rem 0.65rem 0.35rem;
+    font-size: max(11px, 0.78rem);
+    font-weight: 650;
+    letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: var(--faint);
+    color: var(--launcher-secondary);
+}
+
+.launcher-count {
+    letter-spacing: normal;
+    font-weight: 400;
+    text-transform: none;
 }
 
 .launcher-item {
@@ -6185,25 +6288,30 @@ textarea.notes {
     z-index: 1;
     display: flex;
     align-items: center;
-    gap: 0.7rem;
+    gap: 0.8rem;
     width: 100%;
-    min-height: 2.4rem;
-    padding: 0.4rem 0.65rem;
+    min-height: 56px;
+    padding: 0.6rem 0.75rem;
     text-align: left;
-    color: var(--body);
-    transition: color 0.12s var(--ease-out);
+    color: var(--text);
 }
 
-.launcher-item.on {
-    color: var(--accent);
+.launcher-item.on::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    background: var(--accent);
 }
 
 .launcher-item .glyph {
-    width: 1.3rem;
+    width: 1.4rem;
     flex: none;
     display: grid;
     place-items: center;
-    color: var(--muted);
+    color: var(--launcher-secondary);
     font-size: 0.85rem;
 }
 
@@ -6216,17 +6324,56 @@ textarea.notes {
     min-width: 0;
     display: flex;
     flex-direction: column;
+    gap: 0.15rem;
 }
 
-.launcher-item .main > span {
+.launcher-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 550;
+}
+
+.launcher-item.on .launcher-title {
+    font-weight: 650;
+}
+
+.launcher-item .detail {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    min-width: 0;
+    font-size: max(12px, 0.85rem);
+    color: var(--launcher-secondary);
+}
+
+.launcher-path {
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.launcher-item .detail {
-    font-size: 0.7rem;
-    color: var(--muted);
+.launcher-state {
+    flex: none;
+    white-space: nowrap;
+}
+
+.launcher-state::before {
+    content: "· ";
+}
+
+.launcher-match-note {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-style: italic;
+}
+
+.launcher mark {
+    color: var(--text);
+    text-decoration-color: var(--accent);
 }
 
 .launcher-item .hint {
@@ -6234,14 +6381,18 @@ textarea.notes {
     display: flex;
     gap: 0.25rem;
     align-items: center;
-    font-size: 0.72rem;
-    color: var(--muted);
+    font-size: max(11px, 0.78rem);
+    color: var(--launcher-secondary);
+}
+
+.launcher-item .hint kbd {
+    color: inherit;
 }
 
 .launcher-item .swatch {
     display: flex;
     flex: none;
-    border: 1px solid var(--line);
+    border: 1px solid var(--line-strong);
 }
 
 .launcher-item .swatch i {
@@ -6250,20 +6401,47 @@ textarea.notes {
 }
 
 .launcher-empty {
-    padding: 1.4rem 1rem;
-    color: var(--muted);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.65rem;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 1.6rem 1rem;
+    color: var(--launcher-secondary);
     text-align: center;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+}
+
+.launcher-empty strong {
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.launcher-empty .button {
+    min-height: 44px;
+    flex: none;
+    margin-top: 0.45rem;
+}
+
+.launcher-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 .launcher-foot {
     display: flex;
+    flex: none;
     flex-wrap: wrap;
-    gap: 0.4rem 1rem;
-    padding: 0.45rem 0.9rem;
-    border-top: 1px solid var(--line);
-    font-size: 0.68rem;
-    color: var(--muted);
+    gap: 0.5rem 1rem;
+    padding: 0.65rem 0.9rem;
+    border-top: 1px solid var(--line-strong);
+    font-size: max(11px, 0.78rem);
+    color: var(--launcher-secondary);
 }
 
 .launcher-foot span {
@@ -6272,9 +6450,61 @@ textarea.notes {
     gap: 0.3rem;
 }
 
+.launcher-foot kbd {
+    color: inherit;
+}
+
+.launcher-prefix-help {
+    margin-left: auto;
+}
+
+.launcher-foot .launcher-touch-help {
+    display: none;
+}
+
 @media (pointer: coarse) {
-    .launcher-foot {
+    .launcher-overlay {
+        padding: calc(env(safe-area-inset-top) + 16px) 8px calc(env(safe-area-inset-bottom) + 16px);
+    }
+    .launcher {
+        max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 32px);
+    }
+    .launcher-input {
+        padding: 0.5rem 0.7rem;
+        gap: 0.6rem;
+    }
+    .launcher-escape,
+    .launcher-types kbd,
+    .launcher-item .hint:has(kbd) {
         display: none;
+    }
+    .launcher-types {
+        gap: 0.3rem;
+        padding: 0.5rem;
+    }
+    .launcher-types button {
+        flex: 1;
+        min-height: 44px;
+        padding-inline: 0.5rem;
+    }
+    .launcher-summary,
+    .launcher-summary button {
+        min-height: 44px;
+    }
+    .launcher-item {
+        min-height: 60px;
+        gap: 0.6rem;
+        padding-inline: 0.6rem;
+    }
+    .launcher-item .detail {
+        gap: 0.4rem;
+    }
+    .launcher-foot .launcher-key-help,
+    .launcher-foot .launcher-prefix-help {
+        display: none;
+    }
+    .launcher-foot .launcher-touch-help {
+        display: block;
     }
 }
 
