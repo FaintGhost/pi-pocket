@@ -365,9 +365,12 @@ export function pushRoute(path, { replace = false } = {}) {
  */
 export function goHome(fallback) {
     const back = history.state?.pocket?.back;
+    const steps = typeof back === "number" ? back + depth() : 0;
 
-    if (typeof back === "number" && back > 0) {
-        history.go(-(back + depth()));
+    // A tab keeps only so much history (Chrome keeps fifty entries) and drops the oldest: past that the list's entry
+    // is gone, and a traversal that cannot happen does nothing at all. Show the list in this session's place instead.
+    if (steps > 0 && steps <= history.length - 1) {
+        history.go(-steps);
     } else {
         fallback();
     }
