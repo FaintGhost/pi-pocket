@@ -17,7 +17,7 @@ export type ChangedFile = {
     /** Relative to the repository's top folder. */
     path: string;
     kind: ChangeKind;
-    /** Lines added and removed; absent for binary files and new ones. */
+    /** Lines added and removed; absent for binary files or when a count could not be read. */
     added?: number;
     removed?: number;
     /** Pi wrote or edited it in this session. */
@@ -51,11 +51,10 @@ const git = (cwd: string, args: string[], options: GitOptions = {}) =>
     runGit(cwd, args, { timeoutMs: GIT_TIMEOUT_MS, maxBuffer: MAX_DIFF * 4, ...options });
 /**
  * Diffs as the viewer reads them, whatever a person's git config says: no external diff program or text conversion, no
- * colors, git's usual `a/` and `b/` before the paths (`diff.mnemonicPrefix` and `diff.noprefix` change them), and
- * three unchanged lines around each change, so fewer after the last one say where the file ends (`web/diff.js`).
+ * colors, and git's usual `a/` and `b/` before the paths (`diff.mnemonicPrefix` and `diff.noprefix` change them).
+ * Patch requests also ask for three context lines (`web/diff.js`); counts must not request patch output.
  */
 const DIFF_FLAGS = [
-    "-U3",
     "--no-ext-diff",
     "--no-textconv",
     "--no-color",
@@ -213,7 +212,8 @@ export function parseNumstat(output: string): Map<string, { added?: number; remo
     const counts = new Map<string, { added?: number; removed?: number }>();
 
     for (let at = 0; at < fields.length; at++) {
-        const [added = "", removed = "", path = ""] = fields[at]!.split("\t");
+        const [added = "", removed = "", ...parts] = fields[at]!.split("\t");
+        const path = parts.join("\t");
 
         if (added === "") {
             continue;
@@ -287,9 +287,36 @@ export async function changesIn(
     const status = changed.slice(0, MAX_FILES);
     // Without a first commit there is nothing to compare with: every file is new.
     const counts =
-        branch === undefined
+        head === undefined
             ? new Map()
             : parseNumstat(await git(root, ["diff", "HEAD", "--numstat", "-z", ...DIFF_FLAGS]));
+
+    // HEAD diffs omit untracked files. Count only the visible, permitted files, one at a time; Git keeps binary,
+    // attributes, symlinks and final-newline handling the same as each file's diff. No index or files are changed.
+    for (const { code, path } of status) {
+        if (code !== "??" && head !== undefined) {
+            continue;
+        }
+
+        try {
+            const added = parseNumstat(
+                await git(
+                    root,
+                    ["diff", "--no-index", "--numstat", "-z", ...DIFF_FLAGS, "--", devNull, path],
+                    {
+                        allowExit: [1],
+                    },
+                ),
+            ).get(path);
+
+            if (added !== undefined) {
+                counts.set(path, added);
+            }
+        } catch {
+            // A file can disappear or become unreadable after status. Keep the list, with its count unknown.
+        }
+    }
+
     const versions = await Promise.all(status.map(({ path }) => versionOf(join(root, path))));
     const files = status.map(({ code, path }, index): ChangedFile => {
         const version = versions[index];
@@ -343,10 +370,10 @@ export async function diffOf(cwd: string, path: string, onlyHere = false): Promi
     const paths = change.from === undefined ? [path] : [change.from, path];
     const diff =
         change.code === "??" || !hasHead
-            ? await git(root, ["diff", "--no-index", ...DIFF_FLAGS, "--", devNull, path], {
+            ? await git(root, ["diff", "--no-index", "-U3", ...DIFF_FLAGS, "--", devNull, path], {
                   allowExit: [1],
               })
-            : await git(root, ["diff", "HEAD", "-M", ...DIFF_FLAGS, "--", ...paths]);
+            : await git(root, ["diff", "HEAD", "-M", "-U3", ...DIFF_FLAGS, "--", ...paths]);
 
     return diff.length > MAX_DIFF
         ? `${diff.slice(0, MAX_DIFF)}\n… the rest of the diff is left out …\n`
