@@ -313,6 +313,7 @@ const HOME = "/";
 let shown = location.pathname;
 let shownBack = history.state?.pocket?.back;
 let routeTimer = 0;
+let homeRequest = 0;
 
 /**
  * Which way the last route change went, for the screen it brings to slide in from that side (style.css): `forward` to
@@ -334,6 +335,7 @@ export function pushRoute(path, { replace = false } = {}) {
         return;
     }
 
+    homeRequest++;
     heading(path === HOME ? "back" : "forward");
     moved();
     shown = path;
@@ -364,16 +366,46 @@ export function pushRoute(path, { replace = false } = {}) {
  * list leaves the app as it would from any first page. Otherwise `fallback`, which shows the list some other way.
  */
 export function goHome(fallback) {
-    const back = history.state?.pocket?.back;
-    const steps = typeof back === "number" ? back + depth() : 0;
+    const request = ++homeRequest;
 
-    // A tab keeps only so much history (Chrome keeps fifty entries) and drops the oldest: past that the list's entry
-    // is gone, and a traversal that cannot happen does nothing at all. Show the list in this session's place instead.
-    if (steps > 0 && steps <= history.length - 1) {
-        history.go(-steps);
-    } else {
-        fallback();
-    }
+    return queue(() => {
+        if (request !== homeRequest) {
+            return;
+        }
+
+        const state = history.state;
+        const path = shown;
+        const back = state?.pocket?.back;
+        const steps = typeof back === "number" && back > 0 ? back + depth() : 0;
+
+        // Old entries can be dropped. The length also counts forward entries, so even a jump within it may fail.
+        if (steps <= 0 || steps > history.length - 1) {
+            fallback();
+
+            return;
+        }
+
+        return new Promise((resolve) => {
+            const done = () => {
+                clearTimeout(timer);
+                removeEventListener("popstate", done);
+                resolve();
+            };
+
+            const timer = setTimeout(() => {
+                done();
+
+                // A newer request or route must not be undone by recovery from this one.
+                if (request === homeRequest && shown === path && history.state === state) {
+                    fallback();
+                }
+            }, TRAVERSE_MS);
+
+            // Keep normal popstate handling: Home closes layers as well as changing the route.
+            addEventListener("popstate", done);
+            history.go(-steps);
+        });
+    });
 }
 
 /**

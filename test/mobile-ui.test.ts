@@ -525,6 +525,136 @@ test(
     },
 );
 
+/** Fill a long-lived tab through real route changes, until Chrome has dropped the list's entry. */
+async function manySessions(count = 60): Promise<void> {
+    for (let opened = 1; opened <= count; opened++) {
+        await goTo(opened % 2 === 1 ? first : second);
+        await until(
+            async () =>
+                (await inPage<number>(`return JSON.stringify(history.state.pocket.back)`)) ===
+                opened,
+            `session step ${opened}`,
+        );
+    }
+}
+
+const homeEntry = async () => {
+    await reach({ path: "/", layers: 0 }, "the list");
+    assert.equal(await inPage<number>(`return JSON.stringify(history.state.pocket.back)`), 0);
+    assert.equal(
+        await inPage<number | null>(
+            `return JSON.stringify((await import('/store.js')).store.state.conversationId)`,
+        ),
+        null,
+        "the route and app agree",
+    );
+};
+
+test("the top bar reaches the list after history drops its entry", real, async () => {
+    await fresh();
+    await manySessions();
+    assert.ok(
+        await inPage<boolean>(`return JSON.stringify(history.state.pocket.back >= history.length)`),
+    );
+    await tap(".topbar-back");
+    await homeEntry();
+    await tap(row(first));
+    await reach({ path: `/s/${first}` }, "a session after recovery");
+    await back();
+    await homeEntry();
+});
+
+test("forward entries do not leave the top bar's back stuck", real, async () => {
+    await fresh();
+    await manySessions();
+    await page.evaluate(`history.go(-21)`);
+    await until(
+        async () =>
+            (await inPage<number>(`return JSON.stringify(history.state.pocket.back)`)) === 39,
+        "back with forward entries left",
+    );
+    assert.equal(await inPage<number>(`return JSON.stringify(history.length)`), 50);
+    await tap(".topbar-back");
+    await homeEntry();
+});
+
+test("a keyboard-closed launcher or PiP can evict the list's entry", real, async () => {
+    for (const layer of ["launcher", "pip"]) {
+        await fresh();
+        await manySessions(49);
+        // Give the page a real key interaction, so it writes layer entries too.
+        await page.press("Alt");
+
+        if (layer === "launcher") {
+            await page.evaluate(`(await import('/store.js')).store.set({ launcher: true })`);
+        } else {
+            await page.evaluate(`(await import('/pip.js')).openPip()`);
+        }
+
+        await reach({ layers: 1 }, layer);
+        await page.press("Escape");
+        await reach({ layers: 0 }, `${layer} closed by keyboard`);
+        assert.equal(await inPage<number>(`return JSON.stringify(history.state.pocket.back)`), 49);
+        assert.equal(await inPage<number>(`return JSON.stringify(history.length)`), 50);
+        await tap(".topbar-back");
+        await homeEntry();
+    }
+});
+
+test("ordinary Home traversal closes layers and keeps Forward", real, async () => {
+    await fresh();
+    await tap(row(first));
+    await reach({ path: `/s/${first}` }, "the first session");
+    await goTo(second);
+    await reach({ path: `/s/${second}` }, "the second session");
+    await tap('.topbar [aria-label="Menu"]');
+    await reach({ sheet: "menu", layers: 1 }, "the menu");
+    await page.evaluate(`(await import('/back.js')).goHome(() => {
+        throw new Error('ordinary Home must traverse');
+    })`);
+    await homeEntry();
+    await reach({ sheet: null }, "the menu closed by Home");
+    await page.evaluate(`history.forward()`);
+    await reach({ path: `/s/${first}`, layers: 0, sheet: null }, "Forward to the first session");
+});
+
+test("a newer route cancels recovery from an unavailable Home traversal", real, async () => {
+    await fresh();
+    await manySessions();
+    await page.evaluate(`history.go(-21)`);
+    await until(
+        async () =>
+            (await inPage<number>(`return JSON.stringify(history.state.pocket.back)`)) === 39,
+        "back with forward entries",
+    );
+    await tap(".topbar-back");
+    // The impossible jump is pending; another choice must not be undone by its timeout.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await goTo(second);
+    await reach({ path: `/s/${second}` }, "the newer choice");
+    await new Promise((resolve) => setTimeout(resolve, 650));
+    await reach({ path: `/s/${second}` }, "still the newer choice after the timeout");
+});
+
+test("zero route steps with a layer still uses Home's fallback", real, async () => {
+    await fresh();
+    await tap(row(first));
+    await reach({ path: `/s/${first}` }, "the session");
+    await page.evaluate(
+        `history.replaceState({ pocket: { back: 0, layers: 1 } }, '', location.href)`,
+    );
+    assert.equal(
+        await inPage<number>(`
+            let calls = 0;
+
+            await (await import('/back.js')).goHome(() => calls++);
+
+            return JSON.stringify(calls);
+        `),
+        1,
+    );
+});
+
 test(
     "a session picked in the drawer replaces the drawer's step: back returns to the session before",
     real,
