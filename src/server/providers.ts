@@ -17,6 +17,7 @@ import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
 import { describe, HttpError } from "./errors.ts";
 import { modelList } from "./models.ts";
+import { ModelRefresh } from "./model-refresh.ts";
 
 /** How long asking a provider's sign-in afresh may take: a renewal's own limit is 15 seconds. */
 const CHECK_MS = 20_000;
@@ -73,6 +74,7 @@ interface AuthFlow {
 export class Providers {
     readonly #app: PocketApp;
     readonly #flows = new Map<string, AuthFlow>();
+    readonly modelRefresh: ModelRefresh;
     /** Providers whose sign-in could not be renewed, and what they said. In memory: asked again after a restart. */
     readonly #expired = new Map<string, string>();
     /** Checks under way, by provider, so asking twice at once asks once. */
@@ -85,6 +87,7 @@ export class Providers {
 
     constructor(app: PocketApp) {
         this.#app = app;
+        this.modelRefresh = new ModelRefresh(app);
     }
 
     /** Why a provider's sign-in needs a person to sign in again, as last asked; undefined when it does not. */
@@ -364,6 +367,11 @@ export class Providers {
         this.#changed();
     }
 
+    /** A manual catalog reload reached a new snapshot: every picker and session view gets it. */
+    modelsChanged(): void {
+        this.#changed();
+    }
+
     /** Every tab gets the models available now, marked when their sign-in needs renewing. */
     #sendModels(): void {
         const models = modelList(this.#app.models, (provider) => this.#expired.has(provider));
@@ -374,6 +382,8 @@ export class Providers {
     }
 
     close(): void {
+        this.modelRefresh.close();
+
         for (const flow of this.#flows.values()) {
             flow.abort.abort();
         }

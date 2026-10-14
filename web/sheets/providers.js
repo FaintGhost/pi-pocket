@@ -3,6 +3,7 @@
 import { useEffect, useState } from "preact/hooks";
 import { api, attempt, closeSheet, closeSignIn, signInAnswered, store } from "../store.js";
 import { html, Icon, Loader, Sheet } from "../ui.js";
+import { RefreshModels } from "../model-refresh.js";
 
 /** Models past this many get a box to find them by. */
 const MODEL_SEARCH_AT = 8;
@@ -175,6 +176,7 @@ export function ProvidersSheet() {
         <p class="muted small">
             Pi Pocket shares Pi's sign-ins (<span class="mono">~/.pi/agent/auth.json</span>). ${owner ? "" : "Only the owner can change them."}
         </p>
+        <${RefreshModels} />
         ${
             owner &&
             html`<${SubagentModels}

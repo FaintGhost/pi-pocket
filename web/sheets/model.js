@@ -2,6 +2,7 @@
 // and thinking level new sessions start with.
 import { useEffect, useRef, useState } from "preact/hooks";
 import { actions, attempt, closeSheet, openSheet, store } from "../store.js";
+import { modelRefreshAvailable, RefreshModels } from "../model-refresh.js";
 import { anchorStyle, formatTokens, html, Icon, popAnchor } from "../ui.js";
 
 /** Models past this many get a search box in the picker. */
@@ -291,6 +292,10 @@ export function ModelPicker() {
                                     </button>`)
                           }
                       </div>`
+            }
+            ${
+                modelRefreshAvailable() &&
+                html`<div class="pop-menu-foot"><${RefreshModels} /></div>`
             }
         </section>
     </div>`;

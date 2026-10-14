@@ -68,6 +68,8 @@ export const store = {
         me: undefined, // undefined: unknown, null: signed out
         users: [],
         models: [],
+        /** This tab's shared model refresh state and last result (`model-refresh.js`). */
+        modelRefresh: { loading: false, result: null, error: null },
         guard: null,
         server: null,
         sessions: [],

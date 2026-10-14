@@ -599,6 +599,17 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, await app.extensions(user));
         }
 
+        if (
+            first === "models" &&
+            second === "refresh" &&
+            third === undefined &&
+            method === "POST"
+        ) {
+            requireOwner(user);
+
+            return json(response, 200, await app.providers.modelRefresh.refresh());
+        }
+
         // For the owner, each subscription's sign-in is asked afresh first (three seconds at most; a mark found later
         // comes with the models): one that can no longer be renewed shows as needing sign-in. Others see what was last
         // found, so nobody else makes the server ask providers.
