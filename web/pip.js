@@ -289,22 +289,26 @@ function compactPip(id, focus) {
 /** `/compact`, or `/compact what to keep in mind`, typed in PiP's box. */
 const COMPACT = /^\/compact(?:\s+([\s\S]*))?$/;
 
-/** How full PiP's context is, as the status line shows a session's; its title says when PiP compacts itself. */
+/** How close PiP is to its own compaction limit, never beyond the model's context window. */
 function PipContext({ stats, window }) {
     if (!window || stats?.contextTokens === undefined) {
         return null;
     }
 
     const used = stats.contextTokens;
-    const percent = Math.min(100, Math.round((used / window) * 100));
     const at = store.state.server?.pipCompactAt;
+    const limit = at > 0 ? Math.min(at, window) : window;
+    const percent = Math.min(100, Math.round((used / limit) * 100));
     const about = stats.contextEstimated ? "~" : "";
-    const tokens = `${about}${formatTokens(used)} of ${formatTokens(window)} tokens in PiP's context.`;
+    const tokens = `${about}${formatTokens(used)} of ${formatTokens(limit)} tokens in PiP's context.`;
     const when =
-        at > 0
-            ? `PiP compacts itself above ${formatTokens(at)} once idle.`
-            : "Compact it when it grows.";
-    const title = `${tokens} ${when}`;
+        at > window
+            ? `PiP's idle compaction limit is ${formatTokens(at)} tokens.`
+            : at > 0
+              ? `PiP compacts itself above ${formatTokens(at)} once idle.`
+              : "Compact it when it grows.";
+    const cap = at > window ? " The meter is capped at the model's context window." : "";
+    const title = `${tokens} ${when}${cap}`;
 
     return html`<span
         class="pip-context"
