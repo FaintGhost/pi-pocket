@@ -7,6 +7,7 @@ import { planAvailable, schedulesAvailable } from "./commands.js";
 import { extensionLauncherItems } from "./extension-ui.js";
 import { filesAvailable, toggleFiles } from "./files-panel.js";
 import { togglePeeks } from "./peeks.js";
+import { modelRefreshAvailable, refreshModels } from "./model-refresh.js";
 import { openPip, pipAvailable } from "./pip.js";
 import { setArchived, workspaceOrder } from "./sessions.js";
 import { branchAvailable, headLabel } from "./sheets/branch.js";
@@ -260,6 +261,14 @@ function actionItems() {
             detail: "sign in to model providers",
             icon: "key",
             run: () => openSheet({ type: "providers" }),
+        },
+        modelRefreshAvailable() && {
+            label: "Refresh models",
+            detail: store.state.modelRefresh.loading
+                ? "refresh in progress"
+                : "reload configured models and check providers",
+            icon: "reload",
+            run: refreshModels,
         },
         { label: "Extensions", icon: "shield", run: () => openSheet({ type: "extensions" }) },
         { label: "Spend", icon: "pulse", run: () => openSheet({ type: "spend" }) },

@@ -430,6 +430,7 @@ export class PocketApp {
         }
 
         this.models = await ModelRuntime.create();
+        this.providers.modelRefresh.watch(this.models);
         this.#configureModels?.(this.models);
         measureModelStreams(this.models);
         await this.models.getAvailable().catch(() => []);
@@ -1581,6 +1582,8 @@ export class PocketApp {
                 ui: this.webs.clients(user),
                 // Tells the web app this server has people chat and typing indicators.
                 chat: true,
+                // Manual refresh reloads shared model configuration and catalogs; only the owner may start it.
+                refreshModels: user.role === "owner",
                 // Tells the web app this server sends peek tiles (`POST /api/peeks`, `peek` events).
                 peeks: true,
                 // This server's clock: peek tiles compare the browser's looks with when runs ended here.

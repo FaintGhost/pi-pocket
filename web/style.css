@@ -4840,6 +4840,31 @@ button.chip:hover {
     overflow-wrap: anywhere;
 }
 
+/* Shared refresh feedback stays visible after a request and wraps provider messages as plain text. */
+.model-refresh {
+    margin-block: 0.5rem;
+    min-width: 0;
+}
+
+.model-refresh .button.model-refresh-button {
+    min-height: 40px;
+}
+
+.model-refresh-status {
+    max-height: 22dvh;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    overscroll-behavior: contain;
+}
+
+.model-refresh-status p {
+    margin: 0.35rem 0 0;
+}
+
+.pop-menu-foot .model-refresh {
+    margin: 0;
+}
+
 /* The owner's choice of models for subagents, above the providers. */
 .subagent-models {
     display: flex;
