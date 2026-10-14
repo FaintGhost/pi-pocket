@@ -11178,6 +11178,104 @@ textarea.notes {
     min-height: 40px;
 }
 
+/* Quick access to the owner's private all-project memory approval queue. */
+.pip-memory {
+    flex: none;
+    padding: 0.35rem 0.85rem;
+    border-top: 1px solid var(--line);
+}
+
+.pip-memory .button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    width: 100%;
+    min-height: 44px;
+    text-align: left;
+}
+
+.pip-memory-count {
+    flex: none;
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.pip-memory-count.waiting {
+    color: var(--accent);
+}
+
+.pip-composer-wrap {
+    flex: none;
+    min-width: 0;
+}
+
+.pip-attachments {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    max-height: 144px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.45rem 0.85rem;
+    border-top: 1px solid var(--line);
+}
+
+.pip-attachment {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+    padding: 0.25rem 0.35rem;
+    border: 1px solid var(--line);
+    background: var(--card);
+    font-size: 0.78rem;
+}
+
+.pip-attachment .thumb {
+    flex: none;
+}
+
+.pip-attachment .thumb img {
+    width: 48px;
+    height: 48px;
+    object-fit: cover;
+}
+
+.pip-attach,
+.pip-send,
+.pip-attachment-remove {
+    min-width: 44px;
+    min-height: 44px;
+}
+
+.pip-attachment-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pip-attachment > .muted,
+.pip-attachment > .spinner,
+.pip-attachment-remove {
+    flex: none;
+}
+
+.pip-you .thumbs,
+.pip-you .attachments {
+    margin-top: 0.3rem;
+    max-width: 100%;
+    white-space: normal;
+}
+
+.pip-you .attachments .chip {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
 .pip-composer {
     display: flex;
     align-items: flex-end;
@@ -11204,6 +11302,15 @@ textarea.notes {
 @media (pointer: coarse) {
     .pip-composer textarea {
         font-size: 16px;
+    }
+
+    .pip-memory .button,
+    .pip-attachment-remove {
+        min-height: 44px;
+    }
+
+    .pip-attachment-remove {
+        min-width: 44px;
     }
 }
 

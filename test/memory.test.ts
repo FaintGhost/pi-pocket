@@ -5,6 +5,7 @@ import {
     type App,
     cleanUp,
     context,
+    fakeTab,
     lastText,
     newSession,
     openApp,
@@ -12,6 +13,7 @@ import {
     root,
     say,
     scriptedModel,
+    until,
 } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -23,6 +25,7 @@ import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi
 import type { ConversationId } from "@earendil-works/pi-durable";
 import type { User } from "../src/server/config.ts";
 import { ChatDoc, MemoryDoc } from "../src/server/docs.ts";
+import { HttpError } from "../src/server/errors.ts";
 import { MAX_EVERYWHERE_LESSONS, MAX_PENDING, MAX_PROJECT_LESSONS } from "../src/server/memory.ts";
 
 const tool = (args: Parameters<typeof fauxToolCall>[1]) =>
@@ -544,6 +547,380 @@ test("lessons and project names keep no invisible characters", async () => {
     await clear();
 });
 
+test("the owner's pending queue includes all projects and everywhere, and reviews through the same commits", async () => {
+    await clear();
+    const id = await newSession(app, repo);
+    const otherId = await newSession(app, elsewhere);
+    const person = owner(app);
+    const pi = { userId: person.id, byPi: true, name: "Pi" };
+    const pending = await app.memory.add(id, repo, pi, {
+        text: "Pending in repository.",
+        scope: "project",
+    });
+    const remote = await app.memory.add(otherId, elsewhere, pi, {
+        text: "Pending elsewhere.",
+        scope: "project",
+    });
+    const global = await app.memory.add(otherId, elsewhere, pi, {
+        text: "Pending everywhere.",
+        scope: "everywhere",
+    });
+    const revised = await app.memory.remember(otherId, person, { text: "Old text." });
+    const forgotten = await app.memory.remember(otherId, person, { text: "Forget me." });
+    const kept = await app.memory.remember(id, person, { text: "Already approved." });
+    const discardText = await app.memory.remember(otherId, person, {
+        text: "Original global text.",
+        scope: "everywhere",
+    });
+    const discardForget = await app.memory.remember(otherId, person, { text: "Keep this lesson." });
+
+    await app.memory.change(otherId, elsewhere, pi, revised.id, { text: "New text." });
+    await app.memory.change(otherId, elsewhere, pi, forgotten.id, "remove");
+    await app.memory.change(otherId, elsewhere, pi, discardText.id, {
+        text: "Proposed global text.",
+    });
+    await app.memory.change(otherId, elsewhere, pi, discardForget.id, "remove");
+    const pip = await app.pip.ensure(person);
+    const view = await app.memory.view(pip, person, true);
+
+    assert.equal(view.pendingAll, true);
+    assert.ok(!Object.hasOwn(await app.memory.view(pip, person), "pendingAll"));
+    assert.equal(view.project, null);
+    assert.equal(view.owner, true);
+    assert.equal(view.canWrite, false);
+    assert.deepEqual(view.limits, (await app.memory.view(id, person)).limits);
+    assert.deepEqual(
+        new Set(view.lessons.map((lesson) => lesson.id)),
+        new Set([
+            pending.id,
+            remote.id,
+            global.id,
+            revised.id,
+            forgotten.id,
+            discardText.id,
+            discardForget.id,
+        ]),
+    );
+    assert.ok(view.lessons.every((lesson) => !lesson.mine && !lesson.proposal?.mine));
+    assert.equal(
+        view.lessons.find((lesson) => lesson.id === remote.id)?.projectName,
+        "memory-elsewhere",
+    );
+    assert.equal(
+        view.lessons.find((lesson) => lesson.id === pending.id)?.projectName,
+        "memory-repo",
+    );
+    assert.equal(view.lessons.find((lesson) => lesson.id === global.id)?.scope, "everywhere");
+    assert.equal(view.lessons.find((lesson) => lesson.id === global.id)?.projectName, undefined);
+    assert.equal(
+        view.lessons.find((lesson) => lesson.id === revised.id)?.proposal?.text,
+        "New text.",
+    );
+    assert.equal(view.lessons.find((lesson) => lesson.id === forgotten.id)?.proposal?.forget, true);
+    assert.equal(view.lessons.find((lesson) => lesson.id === remote.id)?.from?.id, Number(otherId));
+    assert.ok(!view.lessons.some((lesson) => lesson.id === kept.id));
+
+    // Normal scoped view and edits still cannot reach another project, even for the owner or Pi.
+    assert.ok(
+        !(await app.memory.view(id, person)).lessons.some((lesson) => lesson.id === remote.id),
+    );
+
+    for (const action of ["approve", "discard", "remove"] as const) {
+        await assert.rejects(
+            app.memory.edit(id, person, remote.id, action, { text: remote.text }),
+            { status: 404 },
+        );
+    }
+
+    await assert.rejects(app.memory.change(id, repo, pi, remote.id, "remove"), { status: 404 });
+
+    for (const action of ["approve", "discard"] as const) {
+        await assert.rejects(
+            app.memory.change(id, repo, pi, remote.id, action, { text: remote.text }, true),
+            { status: 403 },
+        );
+    }
+
+    const tab = fakeTab(pip, person);
+
+    await app.attach(tab.client);
+    // Drain coalesced earlier writes so this proves the review emits the existing invalidation event.
+    app.memory.committed();
+    await until(() => tab.last("memory") !== undefined, "memory event from setup");
+    tab.events.length = 0;
+
+    try {
+        await app.memory.edit(pip, person, remote.id, "approve", { text: remote.text }, true);
+        await until(() => tab.last("memory") !== undefined, "memory event from queue approval");
+        await app.memory.edit(pip, person, revised.id, "approve", { text: "New text." }, true);
+        await app.memory.edit(pip, person, forgotten.id, "approve", { forget: true }, true);
+        await app.memory.edit(pip, person, pending.id, "discard", undefined, true);
+        await app.memory.edit(pip, person, global.id, "discard", undefined, true);
+        await app.memory.edit(pip, person, discardText.id, "discard", undefined, true);
+        await app.memory.edit(pip, person, discardForget.id, "discard", undefined, true);
+        assert.equal((await app.memory.view(pip, person, true)).lessons.length, 0);
+        const remaining = await lessons();
+
+        assert.equal(remaining.find((lesson) => lesson.id === remote.id)?.pending, undefined);
+        assert.equal(remaining.find((lesson) => lesson.id === revised.id)?.text, "New text.");
+        assert.equal(remaining.find((lesson) => lesson.id === revised.id)?.proposal, undefined);
+        assert.ok(!remaining.some((lesson) => lesson.id === forgotten.id));
+        assert.equal(
+            remaining.find((lesson) => lesson.id === discardText.id)?.text,
+            "Original global text.",
+        );
+        assert.equal(
+            remaining.find((lesson) => lesson.id === discardForget.id)?.text,
+            "Keep this lesson.",
+        );
+        assert.equal(remaining.find((lesson) => lesson.id === discardText.id)?.proposal, undefined);
+        assert.equal(
+            remaining.find((lesson) => lesson.id === discardForget.id)?.proposal,
+            undefined,
+        );
+        const chat = await app.harness.snapshot(ChatDoc, pip, context);
+
+        assert.ok(
+            chat?.messages.some((message) =>
+                /approved the lesson.*Pending elsewhere/.test(message.text),
+            ),
+        );
+        assert.ok(
+            chat?.messages.some((message) => /approved a lesson's new text/.test(message.text)),
+        );
+        assert.ok(chat?.messages.some((message) => /approved forgetting/.test(message.text)));
+        assert.equal(
+            chat?.messages.filter((message) => /discarded the lesson/.test(message.text)).length,
+            2,
+        );
+    } finally {
+        app.detach(tab.client);
+        await clear();
+    }
+});
+
+test("all-project review refuses unprivileged people and Pi before reading or looking up lessons", async () => {
+    await clear();
+    const id = await newSession(app, repo);
+    const guest = app.config.addUser("Queue guest", "guest").user;
+    const viewer = app.config.addUser("Queue viewer", "viewer").user;
+    const limited = app.config.addUser("Queue limited", "guest", [String(id)]).user;
+    const denied = (error: unknown) => error instanceof HttpError && error.status === 403;
+
+    // Empty queues and nonexistent ids must not distinguish what exists.
+    for (const user of [guest, viewer, limited]) {
+        await assert.rejects(app.memory.view(id, user, true), denied);
+
+        for (const action of ["approve", "discard", "remove", { text: "No." }] as const) {
+            await assert.rejects(
+                app.memory.edit(id, user, "not-found", action, undefined, true),
+                denied,
+            );
+        }
+    }
+
+    const pi = { userId: owner(app).id, byPi: true, name: "Pi" };
+
+    await assert.rejects(
+        app.memory.change(id, repo, pi, "not-found", "approve", undefined, true),
+        denied,
+    );
+    await assert.rejects(
+        app.memory.change(id, repo, pi, "not-found", "discard", undefined, true),
+        denied,
+    );
+    await assert.rejects(
+        app.memory.change(
+            id,
+            repo,
+            { ...pi, userId: guest.id, byPi: false },
+            "not-found",
+            "discard",
+            undefined,
+            true,
+        ),
+        denied,
+    );
+
+    const pip = await app.pip.ensure(owner(app));
+
+    for (const action of ["remove", { text: "No." }] as const) {
+        await assert.rejects(
+            app.memory.edit(pip, owner(app), "not-found", action, undefined, true),
+            { status: 400 },
+        );
+    }
+});
+
+test("the owner cannot review the all-project queue from a shared conversation or leak review activity there", async () => {
+    await clear();
+    const person = owner(app);
+    const shared = await newSession(app, repo);
+    const source = await newSession(app, elsewhere);
+    const pi = { userId: person.id, byPi: true, name: "Pi" };
+    const human = { ...pi, byPi: false, name: person.name };
+    const project = await app.memory.add(source, elsewhere, pi, {
+        text: "Private project pending.",
+        scope: "project",
+    });
+    const global = await app.memory.add(source, elsewhere, pi, {
+        text: "Global pending remains pending.",
+        scope: "everywhere",
+    });
+    const proposed = await app.memory.remember(source, person, { text: "Private original." });
+
+    await app.memory.change(source, elsewhere, pi, proposed.id, {
+        text: "Private proposed words.",
+    });
+    const normal = await app.memory.view(shared, person);
+
+    assert.ok(!Object.hasOwn(normal, "pendingAll"));
+    assert.ok(normal.lessons.some((lesson) => lesson.id === global.id));
+    assert.ok(!normal.lessons.some((lesson) => lesson.id === project.id));
+    const before = JSON.stringify({
+        memory: await app.harness.snapshot(MemoryDoc, context),
+        chat: await app.harness.snapshot(ChatDoc, shared, context),
+    });
+
+    await assert.rejects(app.memory.view(shared, person, true), { status: 403 });
+
+    for (const lesson of [project, global, proposed]) {
+        for (const action of ["approve", "discard"] as const) {
+            await assert.rejects(
+                app.memory.edit(shared, person, lesson.id, action, await shown(lesson.id), true),
+                { status: 403 },
+            );
+            await assert.rejects(
+                app.memory.change(
+                    shared,
+                    repo,
+                    human,
+                    lesson.id,
+                    action,
+                    await shown(lesson.id),
+                    true,
+                ),
+                { status: 403 },
+            );
+        }
+    }
+
+    for (const action of ["approve", "discard", "remove", { text: "Never written." }] as const) {
+        await assert.rejects(app.memory.edit(shared, person, "missing", action, undefined, true), {
+            status: 403,
+        });
+    }
+
+    assert.equal(
+        JSON.stringify({
+            memory: await app.harness.snapshot(MemoryDoc, context),
+            chat: await app.harness.snapshot(ChatDoc, shared, context),
+        }),
+        before,
+        "project/global memory and shared activity are unchanged by refused queue requests",
+    );
+    const pip = await app.pip.ensure(person);
+
+    assert.equal(app.sessionMeta(app.rootOf(pip))?.pip, person.id);
+    assert.equal((await app.memory.view(pip, person, true)).lessons.length, 3);
+    await clear();
+});
+
+test("queue approvals retain stale-text checks and target-project caps, and failed reviews write no activity", async () => {
+    await clear();
+    const person = owner(app);
+    const id = await app.pip.ensure(person);
+    const otherId = await newSession(app, elsewhere);
+    const pi = { userId: person.id, byPi: true, name: "Pi" };
+    const waiting = await app.memory.add(otherId, elsewhere, pi, {
+        text: "First.",
+        scope: "project",
+    });
+    const before = async () =>
+        JSON.stringify({
+            memory: await app.harness.snapshot(MemoryDoc, context),
+            chat: await app.harness.snapshot(ChatDoc, id, context),
+        });
+
+    const rejectsUnchanged = async (review: () => Promise<unknown>, status: number) => {
+        const was = await before();
+
+        await assert.rejects(review(), { status });
+        assert.equal(await before(), was, "failure commits neither lesson nor activity");
+    };
+
+    await app.memory.change(otherId, elsewhere, pi, waiting.id, { text: "Second." });
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "approve", { text: "First." }, true),
+        409,
+    );
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "approve", undefined, true),
+        409,
+    );
+    const full = [];
+
+    for (let index = 0; index < MAX_PROJECT_LESSONS; index++) {
+        full.push(await app.memory.remember(otherId, person, { text: `Full ${index}.` }));
+    }
+
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "approve", { text: "Second." }, true),
+        409,
+    );
+    await app.memory.edit(otherId, person, full[0]!.id, "remove");
+    await app.memory.edit(id, person, waiting.id, "approve", { text: "Second." }, true);
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "approve", { text: "Second." }, true),
+        409,
+    );
+    await app.memory.change(otherId, elsewhere, pi, waiting.id, { text: "Proposed text." });
+    await app.memory.change(otherId, elsewhere, pi, waiting.id, "remove");
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "approve", { text: "Proposed text." }, true),
+        409,
+    );
+    await app.memory.change(otherId, elsewhere, pi, waiting.id, { text: "Replacement." });
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "approve", { forget: true }, true),
+        409,
+    );
+    // Withdrawn proposals cannot accidentally approve the text in force from a stale queue row.
+    await app.memory.change(otherId, elsewhere, pi, waiting.id, { text: "Second." });
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "approve", { text: "Second." }, true),
+        409,
+    );
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "discard", undefined, true),
+        409,
+    );
+    await app.memory.edit(otherId, person, waiting.id, "remove");
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, waiting.id, "approve", { text: "Second." }, true),
+        404,
+    );
+
+    // Everywhere's quota is also checked in the same approval commit, not the queue's anchor project.
+    const global = await app.memory.add(otherId, elsewhere, pi, {
+        text: "Global waiting.",
+        scope: "everywhere",
+    });
+
+    for (let index = 0; index < MAX_EVERYWHERE_LESSONS; index++) {
+        await app.memory.remember(otherId, person, {
+            text: `Global ${index}.`,
+            scope: "everywhere",
+        });
+    }
+
+    await rejectsUnchanged(
+        () => app.memory.edit(id, person, global.id, "approve", { text: global.text }, true),
+        409,
+    );
+    await clear();
+});
+
 test("the routes: viewers read, guests add (pending) and cannot remove the owner's", async () => {
     const { createServer } = await import("node:http");
     const { createHandler } = await import("../src/server/http.ts");
@@ -581,11 +958,13 @@ test("the routes: viewers read, guests add (pending) and cannot remove the owner
         assert.equal(seen.status, 200);
         const view = (await seen.json()) as {
             project: { name: string };
+            pendingAll?: true;
             canWrite: boolean;
             lessons: { id: string; mine: boolean }[];
         };
 
         assert.equal(view.project.name, "memory-repo");
+        assert.ok(!Object.hasOwn(view, "pendingAll"));
         assert.equal(view.canWrite, false);
         assert.deepEqual(
             view.lessons.map((each) => [each.id, each.mine]),
@@ -649,6 +1028,179 @@ test("the routes: viewers read, guests add (pending) and cannot remove the owner
                 path,
             );
         }
+
+        await clear();
+        const limited = app.config.addUser("Queue route limited", "guest", [String(id)]);
+        const deniedTokens = [guest.token, viewer.token, limited.token];
+
+        // These owner-only URLs are forbidden even with an empty queue and a made-up lesson id.
+        for (const token of deniedTokens) {
+            assert.equal((await call(token, `c/${id}/memory?pending=all`)).status, 403);
+
+            for (const suffix of ["", "/nope", "/nope/approve", "/nope/discard", "/nope/remove"]) {
+                assert.equal(
+                    (await call(token, `c/${id}/memory${suffix}?pending=all`, {})).status,
+                    403,
+                );
+            }
+        }
+
+        const otherId = await newSession(app, elsewhere);
+        const person = owner(app);
+        const pi = { userId: person.id, byPi: true, name: "Pi" };
+        const pending = await app.memory.add(otherId, elsewhere, pi, {
+            text: "Cross-project pending.",
+            scope: "project",
+        });
+        const global = await app.memory.add(otherId, elsewhere, pi, {
+            text: "Queue global pending.",
+            scope: "everywhere",
+        });
+        const revised = await app.memory.remember(otherId, person, {
+            text: "Cross-project original.",
+        });
+        const forgotten = await app.memory.remember(otherId, person, {
+            text: "Cross-project forget.",
+        });
+
+        await app.memory.change(otherId, elsewhere, pi, revised.id, { text: "Cross-project new." });
+        await app.memory.change(otherId, elsewhere, pi, forgotten.id, "remove");
+        // Even the owner must use their private PiP: shared routes must not leak other-project review activity.
+        const untouched = JSON.stringify({
+            memory: await app.harness.snapshot(MemoryDoc, context),
+            chat: await app.harness.snapshot(ChatDoc, id, context),
+        });
+        const sharedQueue = await call(ownerToken, `c/${id}/memory?pending=all`);
+
+        assert.equal(sharedQueue.status, 403);
+        assert.doesNotMatch(await sharedQueue.text(), /Cross-project|Queue global/);
+
+        for (const path of [
+            "",
+            "/missing/approve",
+            `/${pending.id}/approve`,
+            `/${revised.id}/discard`,
+            `/${forgotten.id}/approve`,
+            `/${global.id}/discard`,
+        ]) {
+            assert.equal(
+                (
+                    await call(ownerToken, `c/${id}/memory${path}?pending=all`, {
+                        text: pending.text,
+                    })
+                ).status,
+                403,
+            );
+        }
+
+        assert.equal(
+            JSON.stringify({
+                memory: await app.harness.snapshot(MemoryDoc, context),
+                chat: await app.harness.snapshot(ChatDoc, id, context),
+            }),
+            untouched,
+        );
+        const queueId = await app.pip.ensure(person);
+        const queueCall = (path = "", body?: unknown) =>
+            call(ownerToken, `c/${queueId}/memory${path}?pending=all`, body);
+        const queue = (await (await queueCall()).json()) as {
+            project: null;
+            pendingAll?: true;
+            canWrite: boolean;
+            lessons: { id: string; mine: boolean; projectName?: string }[];
+        };
+
+        assert.equal(queue.pendingAll, true);
+        assert.equal(queue.project, null);
+        assert.equal(queue.canWrite, false);
+        assert.equal(queue.lessons.length, 4);
+        assert.ok(queue.lessons.every((lesson) => !lesson.mine));
+        assert.equal(
+            queue.lessons.find((lesson) => lesson.id === pending.id)?.projectName,
+            "memory-elsewhere",
+        );
+
+        for (const token of deniedTokens) {
+            const refused = await call(token, `c/${id}/memory?pending=all`);
+
+            assert.equal(refused.status, 403);
+            assert.doesNotMatch(await refused.text(), /Cross-project|Queue global/);
+
+            for (const action of ["approve", "discard"]) {
+                assert.equal(
+                    (
+                        await call(token, `c/${id}/memory/${pending.id}/${action}?pending=all`, {
+                            text: pending.text,
+                        })
+                    ).status,
+                    403,
+                );
+            }
+        }
+
+        for (const path of ["", `/${pending.id}`, `/${pending.id}/remove`]) {
+            assert.equal(
+                (
+                    await queueCall(path, {
+                        text: "Cannot broaden.",
+                    })
+                ).status,
+                400,
+            );
+        }
+
+        // Without the query flag, cross-project routes remain scoped.
+        assert.equal(
+            (await call(ownerToken, `c/${id}/memory/${pending.id}/approve`, { text: pending.text }))
+                .status,
+            404,
+        );
+        assert.equal(
+            (await call(ownerToken, `c/${id}/memory/${pending.id}/discard`, {})).status,
+            404,
+        );
+        assert.equal((await queueCall("/nope/approve", {})).status, 404);
+        assert.equal(
+            (
+                await queueCall(`/${pending.id}/approve`, {
+                    text: "Stale.",
+                })
+            ).status,
+            409,
+        );
+        assert.equal(
+            (await queueCall(`/${pending.id}/approve`, { text: pending.text })).status,
+            200,
+        );
+        assert.equal(
+            (await queueCall(`/${pending.id}/approve`, { text: pending.text })).status,
+            409,
+        );
+        assert.equal(
+            (
+                await queueCall(`/${revised.id}/approve`, {
+                    text: "Cross-project new.",
+                })
+            ).status,
+            200,
+        );
+        assert.equal(
+            (
+                await queueCall(`/${forgotten.id}/approve`, {
+                    forget: true,
+                })
+            ).status,
+            200,
+        );
+        assert.equal((await queueCall(`/${global.id}/discard`, {})).status, 200);
+        const empty = await queueCall();
+
+        assert.equal(empty.status, 200);
+        const emptyView = (await empty.json()) as { pendingAll?: true; lessons: unknown[] };
+
+        assert.equal(emptyView.pendingAll, true);
+        assert.deepEqual(emptyView.lessons, []);
+        await clear();
     } finally {
         server.closeAllConnections();
         server.close();

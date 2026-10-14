@@ -225,7 +225,14 @@ function sheetBody(sheet) {
             body = html`<${HooksSheet} />`;
             break;
         case "memory":
-            body = view.conversation ? html`<${MemorySheet} draft=${sheet.draft ?? ""} />` : null;
+            body =
+                sheet.conversationId !== undefined || view.conversation
+                    ? html`<${MemorySheet}
+                          draft=${sheet.draft ?? ""}
+                          conversationId=${sheet.conversationId}
+                          pendingOnly=${sheet.pendingOnly === true}
+                      />`
+                    : null;
             break;
         case "share":
             body = html`<${ShareSheet} share=${sheet.share} />`;

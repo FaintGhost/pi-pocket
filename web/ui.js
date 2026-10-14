@@ -439,8 +439,9 @@ export function Markdown({
     cache = true,
     base = null,
     breaks = true,
+    conversationId,
 }) {
-    const parts = markdownParts(text, undefined, cache, base, breaks);
+    const parts = markdownParts(text, conversationId, cache, base, breaks);
 
     if (parts.length === 1 && parts[0].kind === undefined) {
         return html`<div
