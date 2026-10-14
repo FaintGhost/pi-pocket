@@ -1,7 +1,7 @@
 // The launcher, after Omarchy's Walker: one box for sessions, actions, and themes. Mod+K opens it anywhere. Arrowing
 // onto a theme shows it at once; Enter keeps it, Escape goes back. Start with > for actions only, @ for sessions, # for
 // themes.
-import { useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browserAvailable, toggleBrowser } from "./browser.js";
 import { planAvailable, schedulesAvailable } from "./commands.js";
 import { extensionLauncherItems } from "./extension-ui.js";
@@ -32,7 +32,18 @@ import {
     themeVars,
     varsStyle,
 } from "./theme.js";
-import { copyText, html, Icon, Keys, Marked, shortPath, Slide, timeAgo, useSlide } from "./ui.js";
+import {
+    APPLE,
+    copyText,
+    html,
+    Icon,
+    Keys,
+    Marked,
+    shortPath,
+    Slide,
+    timeAgo,
+    useSlide,
+} from "./ui.js";
 
 /**
  * How well `query` matches `text` as a subsequence: null for no match, else a score (higher is better) and the matched
@@ -291,15 +302,24 @@ function sessionItems() {
     const { sessions, server } = store.state;
     const order = workspaceOrder();
     const archived = sessions.filter((session) => session.archived);
+    const numbers = new Map(order.map((session, index) => [session.id, index]));
 
     return [...order, ...archived].map((session) => {
-        const number = order.indexOf(session);
+        const number = numbers.get(session.id) ?? -1;
 
         return {
             kind: "session",
             key: `session:${session.id}`,
             label: session.title ?? "New session",
-            detail: `${shortPath(session.cwd, server?.home)} · ${session.busy ? "working" : timeAgo(session.updatedAt)}${session.archived ? " · archived" : ""}`,
+            detail: shortPath(session.cwd, server?.home),
+            status:
+                [
+                    session.id === store.state.conversationId ? "Current" : null,
+                    session.waiting ? "Waiting" : session.busy ? "Working" : null,
+                    session.archived ? "Archived" : null,
+                ]
+                    .filter(Boolean)
+                    .join(" · ") || timeAgo(session.updatedAt),
             text: `${session.title ?? "New session"} ${shortPath(session.cwd, server?.home)}`,
             icon: session.waiting ? "shield" : session.busy ? "pulse" : "chat",
             keys: number >= 0 && number < 9 ? `Alt ${number + 1}` : undefined,
@@ -338,12 +358,42 @@ function themeItems() {
 const GROUP_NAMES = { session: "Sessions", action: "Actions", theme: "Themes" };
 const PREFIXES = { ">": "action", "@": "session", "#": "theme" };
 
-export function Launcher({ leaving }) {
+/** Hits in one displayed field, without changing the text or score used by the fuzzy matcher. */
+function fieldHits(hits, start, length) {
+    return hits.filter((at) => at >= start && at < start + length).map((at) => at - start);
+}
+
+/** Keep the distinguishing end of a long folder path; a match in the hidden prefix uses the full path instead. */
+function resultDetail(item, hits) {
+    const text = item.detail ?? "";
+
+    if (item.kind !== "session") {
+        return { text, hits };
+    }
+
+    const end = text.lastIndexOf("/");
+    const start = text.lastIndexOf("/", end - 1) + 1;
+
+    if (text.length < 32 || start < 3 || hits.some((at) => at < start)) {
+        return { text, hits };
+    }
+
+    const prefix = text.startsWith("~/") ? "~/…/" : text.startsWith("/") ? "/…/" : "…/";
+
+    return {
+        text: prefix + text.slice(start),
+        hits: hits.map((at) => prefix.length + at - start),
+    };
+}
+
+const optionId = (item) => `launcher-option-${encodeURIComponent(item.key)}`;
+
+export function Launcher({ leaving, returnTo }) {
     const [query, setQuery] = useState("");
     const [pick, setPick] = useState(0);
+    const [announcement, setAnnouncement] = useState("");
     const input = useRef(null);
     const list = useRef(null);
-    const returnTo = useRef(document.activeElement);
     const chosen = useRef(false);
 
     const prefix = PREFIXES[query[0]];
@@ -365,9 +415,28 @@ export function Launcher({ leaving }) {
                 continue;
             }
 
-            const hits = match.hits.filter((at) => at < item.label.length);
+            // Themes' scorer text begins with "theme ", not with their displayed label.
+            const hits = fieldHits(match.hits, item.kind === "theme" ? 6 : 0, item.label.length);
+            const detailHits =
+                item.kind === "theme"
+                    ? []
+                    : fieldHits(match.hits, item.label.length + 1, (item.detail ?? "").length);
+            const detail = resultDetail(item, detailHits);
+            const matchNote =
+                match.hits.length > 0 && hits.length === 0 && detailHits.length === 0
+                    ? item.kind === "theme"
+                        ? "Theme name or ID match"
+                        : "Keyword match"
+                    : null;
 
-            scored.push({ ...item, score: match.score + (item.rank ?? 0), hits });
+            scored.push({
+                ...item,
+                score: match.score + (item.rank ?? 0),
+                hits,
+                fullDetail: item.detail,
+                detail,
+                matchNote,
+            });
         }
 
         const byKind = new Map();
@@ -386,18 +455,17 @@ export function Launcher({ leaving }) {
             }
 
             const limit =
-                needle === "" && prefix === undefined
-                    ? kind === "session"
-                        ? 6
-                        : kind === "theme"
-                          ? 99
-                          : 99
-                    : 40;
+                needle === "" && prefix === undefined ? (kind === "session" ? 6 : 99) : 40;
 
-            return { kind, items: items.slice(0, limit), best: items[0]?.score ?? 0 };
+            return {
+                kind,
+                items: items.slice(0, limit),
+                total: items.length,
+                best: items[0]?.score ?? 0,
+            };
         });
 
-        // With a query, the group with the best match comes first; without, sessions, then actions, then themes.
+        // Preserve group-first ranking: with a query the best group's matches come first.
         if (needle !== "") {
             out.sort((a, b) => b.best - a.best);
         }
@@ -409,45 +477,146 @@ export function Launcher({ leaving }) {
         sessions,
         view.conversation,
         view.plan?.on,
+        view.branch,
         conversationId,
+        store.state.pinned,
+        store.state.browserOpen,
+        store.state.filesOpen,
+        store.state.filesTab,
         store.state.desktopTheme,
         store.state.appearance,
-        // Who you are and what the server keeps (the default model is the owner's), once they are known.
         store.state.me,
         store.state.server,
-        // What extensions' browser modules add, which come and go while it is open.
         store.state.extensionsRev,
     ]);
 
-    const flat = groups.flatMap((group) => group.items);
+    const flat = useMemo(() => groups.flatMap((group) => group.items), [groups]);
     const index = Math.min(pick, Math.max(0, flat.length - 1));
     const selected = flat[index];
     const slide = useSlide(list, ".launcher-item.on");
+    const recent =
+        needle === "" && prefix === undefined
+            ? groups.find((group) => group.kind === "session")
+            : null;
 
-    useEffect(() => {
-        input.current?.focus();
+    const limitedRecent = recent && recent.total > recent.items.length;
+
+    // Focus after inert is removed, not in a pending passive effect. LauncherHost keys every logical opening,
+    // including a same-task reopen, so query, selection, and the theme commit flag cannot leak across openings.
+    // Issue #62, reported by @arunsathiya.
+    useLayoutEffect(() => {
+        if (leaving) {
+            return;
+        }
+
+        const overlay = input.current?.closest(".launcher-overlay");
+        const parent = overlay?.parentElement;
+        const blocked = new Map();
+
+        const restore = (child, { attribute, value }) => {
+            if (value === null) {
+                child.removeAttribute(attribute);
+            } else {
+                child.setAttribute(attribute, value);
+            }
+        };
+
+        const rememberOwners = (records) => {
+            for (const record of records) {
+                const owner = blocked.get(record.target);
+
+                if (record.type === "attributes" && record.attributeName === owner?.attribute) {
+                    owner.value = record.target.getAttribute(owner.attribute);
+                }
+            }
+        };
+
+        const isolate = (records = []) => {
+            rememberOwners([...records, ...owners.takeRecords()]);
+            // Do not observe our own isolation writes. Retained layers can change their state while blocked.
+            owners.disconnect();
+
+            for (const record of records) {
+                for (const child of record.removedNodes) {
+                    if (blocked.has(child)) {
+                        restore(child, blocked.get(child));
+                        blocked.delete(child);
+                    }
+                }
+            }
+
+            for (const child of parent?.children ?? []) {
+                if (child === overlay || child.classList.contains("launcher-overlay")) {
+                    continue;
+                }
+
+                if (!blocked.has(child)) {
+                    // Native inert is costly on a sidebar with thousands of controls. The large primary windows
+                    // are hidden from AT instead; the overlay and focus guard block pointer and keyboard access.
+                    const attribute = child.matches(".sidebar, .pane") ? "aria-hidden" : "inert";
+
+                    blocked.set(child, { attribute, value: child.getAttribute(attribute) });
+                }
+
+                const { attribute } = blocked.get(child);
+
+                child.setAttribute(attribute, attribute === "aria-hidden" ? "true" : "");
+                owners.observe(child, { attributes: true, attributeFilter: [attribute] });
+            }
+        };
+
+        const keepFocus = (event) => {
+            if (!overlay?.contains(event.target)) {
+                input.current?.focus({ preventScroll: true });
+            }
+        };
+
+        const owners = new MutationObserver(isolate);
+        const observer = new MutationObserver(isolate);
+
+        // Move focus out before hiding its old ancestor from AT (Chromium rejects aria-hidden on focused content).
+        document.addEventListener("focusin", keepFocus);
+        input.current?.focus({ preventScroll: true });
+        isolate();
+
+        if (parent) {
+            observer.observe(parent, { childList: true });
+        }
 
         return () => {
+            rememberOwners(owners.takeRecords());
+            observer.disconnect();
+            owners.disconnect();
+            document.removeEventListener("focusin", keepFocus);
+
+            for (const [child, owner] of blocked) {
+                restore(child, owner);
+            }
+        };
+    }, [leaving]);
+    useEffect(
+        () => () => {
             if (!chosen.current) {
                 preview(null);
             }
 
-            // Back to where focus was, or into the sheet an action opened.
-            const sheet = document.querySelector(".sheet-host:not(.leaving) .sheet");
-            const back = sheet ?? returnTo.current;
-
-            // Only when the focus left with the launcher: another launcher (opened again at once) or what took the
-            // focus since keeps it.
             const active = document.activeElement;
             const lost = active === null || active === document.body || active === input.current;
+            const sheet = document.querySelector(".sheet-host:not(.leaving) .sheet");
+            const back = sheet?.contains(returnTo) ? returnTo : (sheet ?? returnTo);
 
-            if (lost && back && back.isConnected && typeof back.focus === "function") {
+            // A new launcher or a destination that already took focus keeps it.
+            if (
+                !store.state.launcher &&
+                lost &&
+                back?.isConnected &&
+                typeof back.focus === "function"
+            ) {
                 back.focus({ preventScroll: true });
             }
-        };
-    }, []);
-    useEffect(() => setPick(0), [needle, prefix]);
-    // Arrowing onto a theme shows it right away; anything else shows the theme in use.
+        },
+        [],
+    );
     useEffect(() => {
         if (leaving) {
             if (!chosen.current) {
@@ -459,9 +628,37 @@ export function Launcher({ leaving }) {
 
         preview(selected?.kind === "theme" ? selected.theme : null);
     }, [selected?.key, leaving]);
+    useLayoutEffect(() => {
+        if (!leaving) {
+            list.current?.querySelector(".launcher-item.on")?.scrollIntoView({ block: "nearest" });
+        }
+    }, [selected?.key, index, needle, prefix, leaving]);
     useEffect(() => {
-        list.current?.querySelector(".launcher-item.on")?.scrollIntoView({ block: "nearest" });
-    }, [index]);
+        const timer = setTimeout(() => {
+            setAnnouncement(
+                flat.length === 0
+                    ? `No results for ${needle}.`
+                    : `${flat.length} results${prefix ? ` in ${GROUP_NAMES[prefix].toLowerCase()}` : ""}.`,
+            );
+        }, 150);
+
+        return () => clearTimeout(timer);
+    }, [flat.length, needle, prefix]);
+
+    const changeQuery = (next) => {
+        setQuery(next);
+        setPick(0);
+    };
+
+    const chooseType = (next) => {
+        changeQuery(next + (prefix ? query.slice(1) : query));
+        input.current?.focus({ preventScroll: true });
+    };
+
+    const clear = () => {
+        changeQuery("");
+        input.current?.focus({ preventScroll: true });
+    };
 
     const close = () => store.set({ launcher: false });
 
@@ -486,14 +683,30 @@ export function Launcher({ leaving }) {
         item.run(event);
     };
 
-    const move = (by) => setPick((index + by + flat.length) % Math.max(1, flat.length));
+    const move = (by) => {
+        setPick((index + by + flat.length) % Math.max(1, flat.length));
+        input.current?.focus({ preventScroll: true });
+    };
 
     const onKey = (event) => {
-        if (event.isComposing) {
+        if (event.isComposing || event.keyCode === 229) {
             return;
         }
 
         const key = event.key;
+
+        if (key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+
+            return;
+        }
+
+        // Toolbar buttons keep their native Enter/Space behavior; options and the input share navigation.
+        if (event.target !== input.current && !event.target.closest(".launcher-item")) {
+            return;
+        }
 
         if (
             key === "ArrowDown" ||
@@ -518,15 +731,10 @@ export function Launcher({ leaving }) {
         } else if (key === "Enter") {
             event.preventDefault();
             run(selected, event);
-        } else if (key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            close();
         }
     };
 
     let at = 0;
-    const mode = prefix ? GROUP_NAMES[prefix] : null;
 
     return html`<div
         class=${`launcher-overlay ${leaving ? "leaving" : ""}`}
@@ -538,86 +746,223 @@ export function Launcher({ leaving }) {
             role="dialog"
             aria-modal="true"
             aria-label="Launcher"
+            onKeyDown=${onKey}
             onMouseDown=${(event) => event.target !== input.current && event.preventDefault()}
         >
-            <label class="launcher-input">
+            <div class="launcher-input">
                 <span class="prompt" aria-hidden="true">❯</span>
                 <input
                     ref=${input}
                     value=${query}
                     placeholder="Sessions, actions, themes…"
+                    aria-label="Search sessions, actions, and themes"
                     autocomplete="off"
                     autocapitalize="none"
                     spellcheck=${false}
                     role="combobox"
                     aria-expanded="true"
-                    onInput=${(event) => setQuery(event.currentTarget.value)}
-                    onKeyDown=${onKey}
+                    aria-autocomplete="list"
+                    aria-controls="launcher-results"
+                    aria-activedescendant=${selected ? optionId(selected) : undefined}
+                    onInput=${(event) => changeQuery(event.currentTarget.value)}
                 />
-                ${mode && html`<span class="launcher-mode">${mode}</span>`}
-            </label>
-            <div class="launcher-list" ref=${list} role="listbox">
-                <${Slide} box=${slide} />
-                ${
-                    flat.length === 0 &&
-                    html`<div class="launcher-empty">Nothing matches “${needle}”.</div>`
-                }
-                ${groups.map(
-                    (group) => html`<div class="launcher-group">${GROUP_NAMES[group.kind]}</div>
-                    ${group.items.map((item) => {
-                        const mine = at++;
-                        const on = mine === index;
-
-                        return html`<button
-                            key=${item.key}
-                            class=${`launcher-item ${on ? "on" : ""}`}
-                            role="option"
-                            aria-selected=${on}
-                            onMouseMove=${() => mine !== index && setPick(mine)}
-                            onClick=${(event) => run(item, event)}
-                        >
-                            ${
-                                item.kind === "theme"
-                                    ? html`<span class="swatch" style=${varsStyle(item.vars)}>
-                                        <i style="background:var(--o-bg)"></i>
-                                        <i style="background:var(--o-accent)"></i>
-                                        <i style="background:var(--o-green)"></i>
-                                        <i style="background:var(--o-red)"></i>
-                                    </span>`
-                                    : html`<span class="glyph">
-                                        ${
-                                            item.kind === "session" && item.id === conversationId
-                                                ? "●"
-                                                : html`<${Icon}
-                                                      name=${item.icon}
-                                                      path=${item.iconPath}
-                                                      size=${15}
-                                                  />`
-                                        }
-                                    </span>`
-                            }
-                            <span class="main">
-                                <span><${Marked} text=${item.label} hits=${item.hits} /></span>
-                                ${item.detail && html`<span class="detail">${item.detail}</span>`}
-                            </span>
-                            ${
-                                item.kind === "theme" &&
-                                item.theme === prefs().theme &&
-                                html`<span class="hint">current</span>`
-                            }
-                            ${
-                                item.keys &&
-                                html`<span class="hint"><${Keys} keys=${item.keys} /></span>`
-                            }
-                        </button>`;
-                    })}`,
+                <kbd class="launcher-escape" aria-hidden="true">esc</kbd>
+                <button class="launcher-close" aria-label="Close launcher" onClick=${close}>
+                    <${Icon} name="close" size=${18} />
+                </button>
+            </div>
+            <div class="launcher-types" role="group" aria-label="Search type">
+                ${[
+                    ["", "All"],
+                    ["@", "Sessions"],
+                    [">", "Actions"],
+                    ["#", "Themes"],
+                ].map(
+                    ([token, label]) => html`<button
+                        aria-pressed=${(prefix ? query[0] : "") === token}
+                        onClick=${() => chooseType(token)}
+                    >
+                        ${label}${token && html`<kbd aria-hidden="true">${token}</kbd>`}
+                    </button>`,
                 )}
             </div>
+            ${
+                limitedRecent &&
+                html`<div
+                    class="launcher-summary"
+                    role="group"
+                    aria-label="Recent session options"
+                >
+                    <div class="launcher-group">
+                        <span id="launcher-group-session">Recent sessions</span>
+                        <span class="launcher-count">
+                            ${recent.items.length} of ${recent.total}
+                        </span>
+                    </div>
+                    <button aria-label="Show all sessions" onClick=${() => chooseType("@")}>
+                        Show all <span aria-hidden="true">@</span>
+                    </button>
+                </div>`
+            }
+            <div
+                class="launcher-list"
+                id="launcher-results"
+                ref=${list}
+                role="listbox"
+                aria-label="Search results"
+            >
+                <${Slide} box=${slide} />
+                ${groups.map(
+                    (group) => html`
+                        <div role="group" aria-labelledby=${`launcher-group-${group.kind}`}>
+                            ${
+                                !(group.kind === "session" && limitedRecent) &&
+                                html`<div class="launcher-group">
+                                    <span id=${`launcher-group-${group.kind}`}>
+                                        ${
+                                            group.kind === "session" && recent
+                                                ? "Recent sessions"
+                                                : GROUP_NAMES[group.kind]
+                                        }
+                                    </span>
+                                    <span class="launcher-count">
+                                        ${group.items.length}${
+                                            group.total > group.items.length
+                                                ? ` of ${group.total}`
+                                                : ""
+                                        }
+                                    </span>
+                                </div>`
+                            }
+                            ${group.items.map((item) => {
+                                const mine = at++;
+                                const on = mine === index;
+                                const fullDetail = item.fullDetail;
+                                const description = [
+                                    item.label,
+                                    fullDetail,
+                                    item.status,
+                                    item.matchNote,
+                                    item.keys?.replace("Mod", APPLE ? "Command" : "Control"),
+                                ]
+                                    .filter(Boolean)
+                                    .join(", ");
+
+                                return html`<button
+                                    key=${item.key}
+                                    id=${optionId(item)}
+                                    class=${`launcher-item ${on ? "on" : ""}`}
+                                    role="option"
+                                    tabindex="-1"
+                                    aria-label=${description}
+                                    aria-selected=${on}
+                                    title=${description}
+                                    onFocus=${() => mine !== index && setPick(mine)}
+                                    onMouseMove=${() => mine !== index && setPick(mine)}
+                                    onClick=${(event) => run(item, event)}
+                                >
+                                    ${
+                                        item.kind === "theme"
+                                            ? html`
+                                                <span
+                                                    class="swatch"
+                                                    style=${varsStyle(item.vars)}
+                                                    aria-hidden="true"
+                                                >
+                                                    <i style="background:var(--o-bg)"></i>
+                                                    <i style="background:var(--o-accent)"></i>
+                                                    <i style="background:var(--o-green)"></i>
+                                                    <i style="background:var(--o-red)"></i>
+                                                </span>
+                                            `
+                                            : html`
+                                                <span class="glyph" aria-hidden="true">
+                                                    ${
+                                                        item.kind === "session" &&
+                                                        item.id === conversationId
+                                                            ? "●"
+                                                            : html`
+                                                                <${Icon}
+                                                                    name=${item.icon}
+                                                                    path=${item.iconPath}
+                                                                    size=${16}
+                                                                />
+                                                            `
+                                                    }
+                                                </span>
+                                            `
+                                    }
+                                    <span class="main">
+                                        <span class="launcher-title">
+                                            <${Marked} text=${item.label} hits=${item.hits} />
+                                        </span>
+                                        ${
+                                            (item.detail.text || item.status || item.matchNote) &&
+                                            html`<span class="detail">
+                                                <span class="launcher-path">
+                                                    <${Marked}
+                                                        text=${item.detail.text}
+                                                        hits=${item.detail.hits}
+                                                    />
+                                                </span>
+                                                ${
+                                                    item.status &&
+                                                    html`<span class="launcher-state">
+                                                        ${item.status}
+                                                    </span>`
+                                                }
+                                                ${
+                                                    item.matchNote &&
+                                                    html`<span class="launcher-match-note">
+                                                        ${item.matchNote}
+                                                    </span>`
+                                                }
+                                            </span>`
+                                        }
+                                    </span>
+                                    ${
+                                        item.kind === "theme" &&
+                                        item.theme === prefs().theme &&
+                                        html`<span class="hint">current</span>`
+                                    }
+                                    ${
+                                        item.keys &&
+                                        html`<span class="hint">
+                                            <${Keys} keys=${item.keys} />
+                                        </span>`
+                                    }
+                                </button>`;
+                            })}
+                        </div>
+                    `,
+                )}
+            </div>
+            ${
+                flat.length === 0 &&
+                html`<div class="launcher-empty">
+                    <strong>No matches for “${needle}”.</strong>
+                    <span>Try fewer words, or search all types.</span>
+                    <button class="button" onClick=${clear}>Clear search</button>
+                </div>`
+            }
+            <div
+                class="launcher-status"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+            >
+                ${announcement}
+            </div>
             <div class="launcher-foot">
-                <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
-                <span><kbd>↵</kbd> open</span>
-                <span><kbd>esc</kbd> close</span>
-                <span><kbd>></kbd> actions <kbd>@</kbd> sessions <kbd>#</kbd> themes</span>
+                <span class="launcher-key-help">
+                    <kbd>↑</kbd><kbd>↓</kbd> move <kbd>↵</kbd> open <kbd>esc</kbd> close
+                </span>
+                <span class="launcher-prefix-help">
+                    <kbd>></kbd> actions <kbd>@</kbd> sessions <kbd>#</kbd> themes
+                </span>
+                <span class="launcher-touch-help">
+                    Tap a result · > actions, @ sessions, # themes
+                </span>
             </div>
         </section>
     </div>`;

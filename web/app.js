@@ -1,6 +1,6 @@
 // Pi Pocket web app. No build step: edit a file under web/ and every open browser reloads.
 import { render } from "preact";
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { folderColor } from "./avatar.js";
 import { canGoBack, goBack, goHome, replaceAddress, startHistory, useBack } from "./back.js";
 import { BrowserButton, BrowserPanel } from "./browser-panel.js";
@@ -262,11 +262,40 @@ function Notices() {
 
 /** The launcher, kept on screen a moment after it closes so it can fade out. */
 function LauncherHost() {
-    const [open, leaving] = usePresence(store.state.launcher || null, 150);
+    const [opening, setOpening] = useState({ n: 0, returnTo: document.activeElement });
+    const wasOpen = useRef(Boolean(store.state.launcher));
+
+    // Observe logical openings before batched renders: even a close/reopen in one task gets a fresh launcher.
+    // Issue #62, reported by @arunsathiya: a retained, inert launcher must not reopen without its input focused.
+    useLayoutEffect(
+        () =>
+            store.subscribe((state) => {
+                const next = Boolean(state.launcher);
+
+                if (next && !wasOpen.current) {
+                    const target = document.activeElement;
+
+                    setOpening((previous) => ({
+                        n: previous.n + 1,
+                        returnTo:
+                            target === document.body || target?.closest(".launcher-overlay")
+                                ? previous.returnTo
+                                : target,
+                    }));
+                }
+
+                wasOpen.current = next;
+            }),
+        [],
+    );
+
+    const [open, leaving] = usePresence(store.state.launcher ? opening : null, 150);
 
     useBack(Boolean(store.state.launcher), () => store.set({ launcher: false }));
 
-    return open ? html`<${Launcher} leaving=${leaving} />` : null;
+    return open
+        ? html`<${Launcher} key=${open.n} leaving=${leaving} returnTo=${open.returnTo} />`
+        : null;
 }
 
 /**
