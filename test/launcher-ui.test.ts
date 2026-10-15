@@ -859,7 +859,7 @@ test(
                 leavingInert,
                 openedBeforeRemoval,
                 ownerRemovedInert: changes.some((record) => record.oldValue !== null),
-                backgroundInert: host.inert,
+                backgroundInert: host.closest('[inert]') !== null,
                 launcherFocused: document.activeElement === document.querySelector('.launcher input'),
             });
         `);

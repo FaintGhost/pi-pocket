@@ -172,6 +172,8 @@ Plain ES modules, loaded as they are. `store.js` holds the shared state, and not
 
 Manual refresh lives in `src/server/model-refresh.ts`, owned by `Providers.modelRefresh`; `web/model-refresh.js` shares its control and feedback between the model picker, Providers, and the launcher. `test/model-refresh.test.ts` checks local configuration, external sign-ins, provider isolation, cancellation, session use, and endpoint access; `test/refresh-models-ui.test.ts` checks it in real Chromium.
 
+PiP's window helpers are `pip-window.js` (pointer resize zones and the account/browser size preference) and `pip-popout.js` (stable overlay roots adopted by Document Picture-in-Picture, with the existing composer, sheets and live connection).
+
 ## How a message travels
 
 1. `POST /api/c/:id/submit` → `commands.submit`: checks access, turns, and spend, expands a template, then `conversation.submit()` with request id `u:<userId>:<clientId>`. The request id makes a retry a no-op and names the author.
