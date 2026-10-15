@@ -100,6 +100,14 @@ test(
     "off or folded skips thought work; open thoughts do not redraw on timer ticks",
     real,
     async () => {
+        await page.press("Alt+T");
+        await see(
+            `document.querySelector(".notices")?.textContent.includes("Show thinking: on.") === true && (await import("/theme.js")).prefs().showThinking === true`,
+        );
+        await page.press("Alt+T");
+        await see(
+            `document.querySelector(".notices")?.textContent.includes("Show thinking: off.") === true && (await import("/theme.js")).prefs().showThinking === false`,
+        );
         await project(thinking("First words"));
         await see(`document.querySelector(".live-line") !== null`);
         assert.equal(
