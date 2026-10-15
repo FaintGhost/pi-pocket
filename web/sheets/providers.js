@@ -140,17 +140,29 @@ function SubagentModels({ names }) {
 }
 
 export function ProvidersSheet() {
-    const { me } = store.state;
+    const { me, auth } = store.state;
     const [providers, setProviders] = useState(null);
     const [query, setQuery] = useState("");
+    const loginButton = useRef(null);
     const load = () => attempt(async () => setProviders(await api("providers")));
 
     useEffect(() => {
         load();
     }, [store.state.models]);
+    useLayoutEffect(() => {
+        if (!auth) {
+            loginButton.current?.focus();
+            loginButton.current = null;
+        }
+    }, [auth]);
     const owner = me?.role === "owner";
-    const login = (provider, type) =>
-        attempt(() => api(`providers/${encodeURIComponent(provider.id)}/login`, { type }));
+
+    const login = (provider, type, button) => {
+        loginButton.current = button;
+
+        return attempt(() => api(`providers/${encodeURIComponent(provider.id)}/login`, { type }));
+    };
+
     const logout = (provider) =>
         confirm(
             `Log out of ${provider.name}? Pi uses the same sign-in, so it is signed out too.`,
@@ -220,7 +232,7 @@ export function ProvidersSheet() {
                                 provider.oauth &&
                                 html`<button
                                     class="button small"
-                                    onClick=${() => login(provider, "oauth")}
+                                    onClick=${(event) => login(provider, "oauth", event.currentTarget)}
                                 >
                                     ${provider.oauth}
                                 </button>`
@@ -229,7 +241,7 @@ export function ProvidersSheet() {
                                 provider.apiKey &&
                                 html`<button
                                     class="button small"
-                                    onClick=${() => login(provider, "api_key")}
+                                    onClick=${(event) => login(provider, "api_key", event.currentTarget)}
                                 >
                                     API key
                                 </button>`
