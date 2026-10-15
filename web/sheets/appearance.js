@@ -161,7 +161,7 @@ export function AppearanceSheet() {
             <//>
             <${SettingRow} title="Text size">
                 <div class="segmented">
-                    ${[12, 13, 14, 15, 16].map(
+                    ${[13, 14, 15, 16, 17].map(
                         (size) => html`<button
                             class=${p.text === size ? "on" : ""}
                             onClick=${() => setPrefs({ text: size })}

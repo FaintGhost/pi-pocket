@@ -1,8 +1,9 @@
 /*
- * Pi Pocket's theme, after Omarchy. The palette is the Omarchy theme's colors.toml (theme.js sets the --o-* variables,
- * from a bundled theme or the desktop's own); everything else mixes from it the way omarchy-shell does: the foreground
- * over the background at a few percent for fills, square tiles, 2px window borders, no shadows or blur, JetBrains Mono
- * everywhere, and Hyprland's animation curves and timings for motion.
+ * Pi Pocket's theme: soft tiles over an Omarchy palette. The palette is the Omarchy theme's colors.toml (theme.js sets
+ * the --o-* variables, from a bundled theme or the desktop's own); everything else mixes from it the way omarchy-shell
+ * does: the foreground over the background at a few percent for fills and hairlines. Windows still tile like
+ * Hyprland's, with rounded corners, 1px hairlines, and a soft accent ring on the one in focus. Geist sets the words;
+ * JetBrains Mono only code, paths, branches, numbers, counts, and keys. Motion keeps Hyprland's curves.
  */
 /*
  * Contents, in the order the cascade reads them. Search for "─── " and a name to jump to a section. A rule later in
@@ -49,6 +50,13 @@
     font-display: swap;
 }
 
+@font-face {
+    font-family: "Pocket Sans";
+    src: url("/fonts/Geist.woff2") format("woff2");
+    font-weight: 100 900;
+    font-display: swap;
+}
+
 :root {
     /* The palette. These defaults are Tokyo Night; theme.js replaces them. */
     --o-bg: #1a1b26;
@@ -79,32 +87,37 @@
     --panel: var(--o-bg);
     --card: color-mix(in srgb, var(--o-fg) 4%, var(--o-bg));
     --card-2: color-mix(in srgb, var(--o-fg) 8%, var(--o-bg));
-    --raised: color-mix(in srgb, var(--o-fg) 11%, var(--o-bg));
-    --hover: color-mix(in srgb, var(--o-fg) 8%, transparent);
+    /* A selected segment, raised from its track. */
+    --raised: color-mix(in srgb, var(--o-fg) 12%, var(--o-bg));
+    --hover: color-mix(in srgb, var(--o-fg) 7%, transparent);
     --pressed: color-mix(in srgb, var(--o-fg) 18%, transparent);
     --line: color-mix(in srgb, var(--o-fg) 13%, var(--o-bg));
     --line-strong: color-mix(in srgb, var(--o-fg) 26%, var(--o-bg));
     --edge: color-mix(in srgb, var(--o-fg) 25%, transparent);
+    /* Hairlines: the usual 1px line, and a stronger one (fields, a switch's track while off). */
+    --hair: color-mix(in srgb, var(--o-fg) 10%, transparent);
+    --hair-2: color-mix(in srgb, var(--o-fg) 17%, transparent);
     --text: var(--o-fg-bright);
     --body: var(--o-fg);
-    --muted: color-mix(in oklab, var(--o-fg) 62%, var(--o-bg));
-    --faint: color-mix(in oklab, var(--o-fg) 38%, var(--o-bg));
+    --muted: color-mix(in oklab, var(--o-fg) 64%, var(--o-bg));
+    --faint: color-mix(in oklab, var(--o-fg) 42%, var(--o-bg));
     --accent: var(--o-accent);
     --accent-ink: var(--o-bg);
     /* The accent as a fill under text (buttons, badges): darker in light themes, so text on it stays readable. */
     --accent-fill: var(--accent);
-    --accent-soft: color-mix(in srgb, var(--o-accent) 13%, transparent);
-    --accent-line: color-mix(in srgb, var(--o-accent) 55%, transparent);
+    --accent-soft: color-mix(in srgb, var(--o-accent) 14%, transparent);
+    --accent-line: color-mix(in srgb, var(--o-accent) 50%, transparent);
     /* The second color of loaders: the active border's last stop, or magenta when the border is one color. */
     --spark: var(--o-magenta);
     --brand: var(--o-orange);
     --ok: var(--o-green);
+    --ok-soft: color-mix(in srgb, var(--o-green) 14%, transparent);
     --warn: var(--o-yellow);
-    --warn-soft: color-mix(in srgb, var(--o-yellow) 9%, transparent);
-    --warn-line: color-mix(in srgb, var(--o-yellow) 60%, transparent);
+    --warn-soft: color-mix(in srgb, var(--o-yellow) 10%, transparent);
+    --warn-line: color-mix(in srgb, var(--o-yellow) 42%, transparent);
     --err: var(--o-red);
-    --err-soft: color-mix(in srgb, var(--o-red) 9%, transparent);
-    --err-line: color-mix(in srgb, var(--o-red) 55%, transparent);
+    --err-soft: color-mix(in srgb, var(--o-red) 14%, transparent);
+    --err-line: color-mix(in srgb, var(--o-red) 50%, transparent);
     --code-bg: var(--o-bg-dark);
     /* Syntax colors, from the theme's own palette so every Omarchy theme colors code its way. */
     --hl-kw: var(--o-magenta);
@@ -115,12 +128,32 @@
     --hl-op: var(--o-cyan);
     --hl-tag: var(--o-red);
     --active: var(--o-active);
-    --scrim: color-mix(in srgb, var(--o-bg-darker) 62%, transparent);
-    --radius: 0;
-    /* Hyprland's look as Omarchy sets it: gaps_out 10, gaps_in 5, border_size 2. */
-    --gap-out: 10px;
-    --gap-in: 5px;
-    --border: 2px;
+    --scrim: color-mix(in srgb, var(--o-bg-darker) 55%, transparent);
+    /* Shadows: a soft lift (the message box), and what floats over the page (popovers, sheets, the launcher, PiP). */
+    --sh: rgba(0, 0, 0, 0.5);
+    --shadow: 0 18px 40px -18px var(--sh), 0 2px 6px -2px var(--sh);
+    --pop: 0 24px 60px -16px var(--sh), 0 0 0 1px var(--hair-2);
+    /*
+     * Corners, from small to large: state squares; inline code, keys, and small tags; a segment in its track; small
+     * buttons and list rows; icon buttons, fields, and segmented tracks; cards and primary buttons; windows, approval
+     * cards, and peek tiles; the message box, sheets, and the launcher; PiP. Pills and avatars are round (999px).
+     */
+    --r-mark: 3px;
+    --r-tag: 5px;
+    --r-seg: 7px;
+    --r-row: 9px;
+    --r-control: 10px;
+    --r-card: 12px;
+    --r-window: 14px;
+    --r-sheet: 18px;
+    --r-float: 20px;
+    --r-pill: 999px;
+    /* Fields and plain controls that name no corner of their own. */
+    --radius: var(--r-control);
+    /* Hyprland's layout, softened: gaps_out 8, gaps_in 4, border_size 1. */
+    --gap-out: 8px;
+    --gap-in: 4px;
+    --border: 1px;
 
     /* Motion: Omarchy's Hyprland curves, and its speeds in milliseconds. */
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* easeOutQuint */
@@ -135,12 +168,15 @@
     --mono:
         "Pocket Mono", "JetBrains Mono", "JetBrainsMono Nerd Font", ui-monospace, "SF Mono", Menlo,
         Consolas, monospace;
+    --sans: "Pocket Sans", "Geist", ui-sans-serif, system-ui, sans-serif;
     color-scheme: dark;
 }
 
 /* Light themes: quieter text and the status colors darken toward the foreground, so they stay readable on light grounds. */
 :root[data-mode="light"] {
     color-scheme: light;
+    --sh: rgba(40, 40, 70, 0.14);
+    --accent-ink: #fff;
     --o-inactive: rgba(89, 89, 89, 0.4);
     --scrim: color-mix(in srgb, var(--o-bg-darker) 55%, transparent);
     --line: color-mix(in srgb, var(--o-fg) 15%, var(--o-bg));
@@ -170,7 +206,7 @@ body {
     height: 100%;
     background: var(--desk);
     color: var(--body);
-    font: var(--text-size, 14px) / 1.6 var(--mono);
+    font: 14px / 1.55 var(--sans);
     font-variant-ligatures: none;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
@@ -208,7 +244,7 @@ input,
 textarea,
 select {
     background: var(--card);
-    border: 1px solid var(--line);
+    border: 1px solid var(--hair-2);
     border-radius: var(--radius);
     padding: 0.6rem 0.75rem;
     width: 100%;
@@ -222,13 +258,13 @@ select {
 input:hover,
 textarea:hover,
 select:hover {
-    border-color: var(--line-strong);
+    border-color: var(--edge);
 }
 
 input:focus,
 textarea:focus,
 select:focus {
-    border-color: var(--accent);
+    border-color: var(--accent-line);
 }
 
 ::placeholder {
@@ -252,10 +288,10 @@ a {
     text-underline-offset: 2px;
 }
 
-/* Thin square scrollbars, like a terminal's. */
+/* Thin round scrollbars, on hairline thumbs. */
 * {
     scrollbar-width: thin;
-    scrollbar-color: var(--line-strong) transparent;
+    scrollbar-color: var(--hair-2) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -264,8 +300,9 @@ a {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--line-strong);
+    background: var(--hair-2);
     border: 2px solid transparent;
+    border-radius: var(--r-pill);
     background-clip: padding-box;
 }
 
@@ -281,14 +318,15 @@ a {
 kbd {
     display: inline-grid;
     place-items: center;
-    min-width: 1.45em;
-    height: 1.45em;
-    padding: 0 0.3em;
+    min-width: 1.6em;
+    height: 1.6em;
+    padding: 0 0.4em;
     font: 600 0.68rem/1 var(--mono);
-    color: var(--muted);
+    color: var(--text);
     background: var(--card);
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--hair-2);
     border-bottom-width: 2px;
+    border-radius: 6px;
     vertical-align: middle;
 }
 
@@ -315,7 +353,9 @@ kbd {
 .meter {
     display: inline-flex;
     height: 4px;
-    background: var(--line);
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--hair-2);
 }
 
 .meter > span {
@@ -380,6 +420,21 @@ kbd {
     from {
         opacity: 0;
         transform: translateY(8px);
+    }
+}
+
+/* What floats over the page (popovers, sheets, the launcher) rises a little and grows from 98% as it fades in. */
+@keyframes pop {
+    from {
+        opacity: 0;
+        transform: translateY(6px) scale(0.98);
+    }
+}
+
+@keyframes pop-out {
+    to {
+        opacity: 0;
+        transform: translateY(6px) scale(0.98);
     }
 }
 
@@ -602,27 +657,14 @@ kbd {
     background: var(--bg);
 }
 
-/* The sidebar and the conversation are windows. On wide screens with tiling on, they tile like Hyprland's: gaps over
- * the desktop (or its wallpaper), a 2px inactive border, and the active border on the one in focus. */
+/* The sidebar and the conversation are windows. On wide screens with tiling on, they tile like Hyprland's, softened:
+ * gaps over the desktop (or its wallpaper), rounded corners and a hairline, and a soft accent ring on the one in focus. */
 .window {
     position: relative;
     min-width: 0;
     display: flex;
     flex-direction: column;
     background: var(--bg);
-}
-
-.window::after {
-    content: "";
-    position: absolute;
-    inset: calc(-1 * var(--border));
-    border: var(--border) solid transparent;
-    border-image: var(--active) 1;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--t-border) var(--ease-out);
-    z-index: 6;
-    display: none;
 }
 
 /* The sidebar: the rail and the session list beside it, cut off rather than squeezed while it folds and unfolds. */
@@ -705,36 +747,40 @@ kbd {
         gap: calc(var(--gap-in) * 2);
         background: var(--desk) var(--wallpaper, none) center / cover no-repeat;
     }
+    /* Rounded, so what they hold is cut to their corners; the edges to drag sit inside them. */
     :root[data-tiling="on"] .window {
-        border: var(--border) solid var(--o-inactive);
+        border: var(--border) solid var(--hair);
+        border-radius: var(--r-window);
+        overflow: hidden;
         height: auto;
         animation: popin var(--t-in) var(--ease-out) backwards;
+        transition:
+            border-color var(--t-border) var(--ease-out),
+            box-shadow var(--t-border) var(--ease-out);
     }
     :root[data-tiling="on"] .pane {
         animation-delay: 60ms;
     }
-    :root[data-tiling="on"] .window::after {
-        display: block;
-    }
-    :root[data-tiling="on"][data-focus="sidebar"] .sidebar::after,
-    :root[data-tiling="on"][data-focus="browser"] .browser::after,
-    :root[data-tiling="on"][data-focus="files-tile"] .files-tile::after,
-    :root[data-tiling="on"][data-focus="people"] .people::after,
+    :root[data-tiling="on"][data-focus="sidebar"] .sidebar,
+    :root[data-tiling="on"][data-focus="browser"] .browser,
+    :root[data-tiling="on"][data-focus="files-tile"] .files-tile,
+    :root[data-tiling="on"][data-focus="people"] .people,
     :root[data-tiling="on"]:not([data-focus="sidebar"]):not([data-focus="browser"]):not(
             [data-focus="files-tile"]
         ):not([data-focus="people"]):not([data-focus="peeks"])
-        .pane::after {
-        opacity: 1;
+        .pane {
+        border-color: var(--accent-line);
+        box-shadow: 0 0 0 3px var(--accent-soft);
     }
 }
 
-/* Drag the sidebar's edge to resize it; double-click puts it back. */
+/* Drag the sidebar's edge to resize it; double-click puts it back. Inside the window, which cuts off what is past it. */
 .resize-handle {
     position: absolute;
     top: 0;
     bottom: 0;
-    right: -7px;
-    width: 12px;
+    right: 0;
+    width: 8px;
     cursor: col-resize;
     z-index: 7;
     touch-action: none;
@@ -744,10 +790,11 @@ kbd {
     content: "";
     position: absolute;
     top: 50%;
-    left: 5px;
+    left: 3px;
     width: 2px;
     height: 36px;
     margin-top: -18px;
+    border-radius: 1px;
     background: var(--accent);
     opacity: 0;
     transform: scaleY(0.4);
@@ -4080,17 +4127,17 @@ button.chip:hover {
     animation: fade var(--t-fade) var(--ease-almost);
 }
 
-/* Phones: a sheet from the bottom edge. Wide screens: a popup window with the active border, popping in at 87%. */
+/* Phones: a sheet from the bottom edge, rounded on top. Wide screens: a rounded popup near the top that floats. */
 .sheet {
     background: var(--panel);
     width: 100%;
     max-width: 560px;
     max-height: 86dvh;
-    border-radius: var(--radius);
-    border: 1px solid var(--line);
-    border-top: 2px solid transparent;
-    border-image: var(--active) 1;
-    border-bottom: 0;
+    border-radius: 26px 26px 0 0;
+    box-shadow:
+        0 -1px 0 var(--hair-2),
+        0 -20px 40px -20px var(--sh);
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     animation: sheet-up var(--t-in) var(--ease-out);
@@ -4125,18 +4172,20 @@ button.chip:hover {
 
 @media (min-width: 700px) {
     .overlay {
-        align-items: center;
+        align-items: flex-start;
+        padding: 7vh 16px 16px;
     }
     .sheet {
-        border: 2px solid transparent;
-        border-image: var(--active) 1;
-        animation: popin 0.32s var(--ease-out);
+        max-width: 500px;
+        border-radius: var(--r-sheet);
+        box-shadow: var(--pop);
+        animation: pop 0.28s var(--ease-out);
     }
     .sheet.wide {
-        max-width: 720px;
+        max-width: 760px;
     }
     .leaving .sheet {
-        animation: popout var(--t-out) linear forwards;
+        animation: pop-out var(--t-out) linear forwards;
     }
 }
 
@@ -4151,8 +4200,11 @@ button.chip:hover {
     width: min(86vw, 340px);
     height: 100dvh;
     background: var(--panel);
-    border-right: 2px solid transparent;
-    border-image: var(--active) 1;
+    border-radius: 0 var(--r-sheet) var(--r-sheet) 0;
+    box-shadow:
+        1px 0 0 var(--hair-2),
+        20px 0 40px -20px var(--sh);
+    overflow: hidden;
     animation: drawer-in var(--t-in) var(--ease-out);
 }
 
@@ -4185,10 +4237,11 @@ button.chip:hover {
     display: flex;
     flex-direction: column;
     background: var(--panel);
-    border: 1px solid var(--line-strong);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+    border-radius: var(--r-window);
+    box-shadow: var(--pop);
+    overflow: hidden;
     outline: none;
-    animation: pop-menu-in var(--t-in) var(--ease-out);
+    animation: pop 0.25s var(--ease-out);
 }
 
 /* No chip to open from: in the middle of the screen. */
@@ -4200,21 +4253,7 @@ button.chip:hover {
 }
 
 .leaving .pop-menu {
-    animation: pop-menu-out var(--t-out) linear forwards;
-}
-
-@keyframes pop-menu-in {
-    from {
-        opacity: 0;
-        transform: translateY(8px);
-    }
-}
-
-@keyframes pop-menu-out {
-    to {
-        opacity: 0;
-        transform: translateY(8px);
-    }
+    animation: pop-out var(--t-out) linear forwards;
 }
 
 /* A menu down from a control near the top (the branch in the top bar): it comes and goes from above. */
@@ -4455,13 +4494,13 @@ button.chip:hover {
 
 .grip {
     position: absolute;
-    top: 6px;
+    top: 8px;
     left: 50%;
     width: 36px;
-    height: 3px;
+    height: 5px;
     margin-left: -18px;
-    border-radius: var(--radius);
-    background: var(--line-strong);
+    border-radius: 3px;
+    background: var(--hair-2);
 }
 
 .sheet-head h2 {
@@ -7455,10 +7494,9 @@ textarea.notes {
     :root[data-tiling="on"] .peeks.window {
         height: auto;
         border: 0;
+        border-radius: 0;
+        overflow: visible;
         background: none;
-    }
-    :root[data-tiling="on"] .peeks.window::after {
-        display: none;
     }
     :root[data-tiling="on"] .peeks-list {
         gap: calc(var(--gap-in) * 2);
@@ -8115,12 +8153,12 @@ textarea.notes {
     display: none;
 }
 
+/* Over the conversation, below 1100px: no frame of its own. */
 @media (max-width: 1099px) {
     :root[data-tiling="on"] .files-tile.window {
         border: 0;
-    }
-    .files-tile.window::after {
-        display: none !important;
+        border-radius: 0;
+        box-shadow: none;
     }
 }
 
@@ -8140,7 +8178,7 @@ textarea.notes {
     }
     .files-resize {
         display: block;
-        left: -7px;
+        left: 0;
         right: auto;
     }
 }
@@ -8454,12 +8492,12 @@ textarea.notes {
     display: none;
 }
 
+/* Over the conversation, below 1100px: no frame of its own. */
 @media (max-width: 1099px) {
     :root[data-tiling="on"] .browser.window {
         border: 0;
-    }
-    .browser.window::after {
-        display: none !important;
+        border-radius: 0;
+        box-shadow: none;
     }
 }
 
@@ -8479,7 +8517,7 @@ textarea.notes {
     }
     .browser-resize {
         display: block;
-        left: -7px;
+        left: 0;
         right: auto;
     }
 }

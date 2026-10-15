@@ -151,7 +151,7 @@ Pi knows where Pi Pocket's own documentation is: [docs/index.md](docs/index.md) 
 
 ## Credits
 
-Inspired by [Mario Zechner's demo](https://x.com/badlogicgames/status/2106452296087302173) of his own Pi app. Pi Pocket is an independent project, not affiliated with Earendil. JetBrains Mono is bundled under the [SIL Open Font License](web/fonts/OFL.txt).
+Inspired by [Mario Zechner's demo](https://x.com/badlogicgames/status/2106452296087302173) of his own Pi app. Pi Pocket is an independent project, not affiliated with Earendil. JetBrains Mono and Geist are bundled under the SIL Open Font License ([JetBrains Mono](web/fonts/OFL.txt), [Geist](web/fonts/Geist-OFL.txt)).
 
 ## License
 
