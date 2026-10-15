@@ -10991,6 +10991,13 @@ textarea.notes {
     color: var(--text);
 }
 
+.pip-head .pip-model {
+    flex: 0 1 140px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0 5px;
+}
+
 .pip-status {
     flex: 1;
     min-width: 0;
@@ -11417,6 +11424,19 @@ textarea.notes {
 
     .pip-head {
         padding-top: 0.75rem;
+        display: grid;
+        grid-template-columns: 18px auto minmax(44px, 1fr) repeat(4, 40px);
+    }
+
+    .pip-status {
+        grid-column: 1 / 4;
+        grid-row: 2;
+    }
+
+    .pip-context {
+        grid-column: 4 / -1;
+        grid-row: 2;
+        justify-self: end;
     }
 
     .pip-head .grip {

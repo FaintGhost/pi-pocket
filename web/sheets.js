@@ -108,7 +108,7 @@ export function Sheets() {
         return auth;
     }
 
-    const key = `${sheet.type}:${sheet.entryId ?? sheet.id ?? ""}`;
+    const key = `${sheet.type}:${sheet.entryId ?? sheet.id ?? sheet.pipId ?? ""}`;
 
     return html`<div class=${`sheet-host ${leaving ? "leaving" : ""}`} inert=${leaving}>
         <${Boundary} key=${key} reset=${sheet}>${sheetBody(sheet)}<//>

@@ -19,6 +19,7 @@ import {
     html,
     Icon,
     Markdown,
+    modelLabel,
     readable,
     Spinner,
     Thumb,
@@ -835,6 +836,8 @@ function PipPanel({ leaving, scrim }) {
     const items = itemsOf(rows, blocks.length > 0 ? { kind: "assistant", blocks } : null);
     const speaking = blocks.some(says);
     const busy = live.busy === true;
+    const model = modelLabel(view.agent);
+    const thinking = view.agent?.thinkingLevel === "off" ? "" : (view.agent?.thinkingLevel ?? "");
     // Calls of PiP's held for approval: the panel cannot answer them, so it says so and leads to where they can be.
     const waiting = ready ? (view.approvals ?? []) : [];
     const compacting = ready && (live.compactions ?? []).length > 0;
@@ -901,6 +904,18 @@ function PipPanel({ leaving, scrim }) {
                 <${Icon} name="pip" size=${18} />
             </span>
             <h2>PiP</h2>
+            <button
+                class="model-chip pip-model"
+                disabled=${!ready || busy || compacting}
+                aria-label=${`PiP model: ${model}${thinking ? ` · ${thinking}` : ""}`}
+                title="Change PiP's model and thinking level"
+                onClick=${() => openSheet({ type: "model", pipId: id })}
+            >
+                <span class="model-name">
+                    ${model.replace(/^(?:anthropic:\s*)?claude\s+/i, "")}
+                </span>
+                ${thinking && html`<span class="model-level">${thinking}</span>`}
+            </button>
             <span class="pip-status" aria-live="polite">${status}</span>
             ${
                 ready &&

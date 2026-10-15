@@ -1865,7 +1865,7 @@ test(
             }>(`
                 const head = document.querySelector(".pip-head");
                 const box = head.getBoundingClientRect();
-                const parts = [...head.querySelectorAll(".pip-context, .icon-button")].map((each) =>
+                const parts = [...head.querySelectorAll(".pip-context, .pip-model, .icon-button")].map((each) =>
                     each.getBoundingClientRect(),
                 );
 
@@ -1884,7 +1884,9 @@ test(
                     context: head.querySelector(".pip-context").textContent.replace(/\\s+/g, ""),
                     meter: head.querySelector(".pip-context .meter > span") !== null,
                     overlaps: parts.some((one, index) =>
-                        parts.slice(index + 1).some((two) => one.right > two.left + 0.5 && two.right > one.left + 0.5),
+                        parts.slice(index + 1).some((two) =>
+                            one.right > two.left + 0.5 && two.right > one.left + 0.5 &&
+                            one.bottom > two.top + 0.5 && two.bottom > one.top + 0.5),
                     ),
                 });
             `);

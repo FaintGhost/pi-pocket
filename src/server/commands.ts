@@ -18,6 +18,7 @@ import {
 import { resizeImage } from "@earendil-works/pi-coding-agent";
 import {
     type AgentChange,
+    AgentDoc,
     type ConversationCreateOptions,
     type ConversationId,
     defineTask,
@@ -1145,12 +1146,18 @@ export class Commands {
             model?: { provider: string; modelId: string };
             thinkingLevel?: string;
             cwd?: string;
+            pipPanel?: boolean;
         },
     ): Promise<void> {
         const app = this.#app;
 
         app.requireSee(user, id);
         await app.requireDriver(id, user);
+
+        if (request.pipPanel === true && app.pip.ownerOf(id) !== user.id) {
+            throw new HttpError(403, "Only your own PiP can use this control.");
+        }
+
         const asked = request.model as { provider?: unknown; modelId?: unknown } | undefined;
 
         checkModel(asked);
@@ -1192,21 +1199,28 @@ export class Commands {
         const cwd =
             request.cwd === undefined ? undefined : app.workspace.checkDirectory(request.cwd);
 
-        await conversation.configure(
-            {
-                ...(request.model === undefined
-                    ? {}
-                    : {
-                          model: {
-                              provider: request.model.provider,
-                              modelId: request.model.modelId,
-                          },
-                      }),
-                thinkingLevel,
-                ...(cwd === undefined ? {} : { cwd }),
-            },
-            context,
-        );
+        const change = {
+            ...(request.model === undefined
+                ? {}
+                : { model: { provider: request.model.provider, modelId: request.model.modelId } }),
+            thinkingLevel,
+            ...(cwd === undefined ? {} : { cwd }),
+        };
+
+        if (request.pipPanel === true) {
+            // Check and save together: a turn may have started while the picker was open.
+            await app.harness.commit(async (tx) => {
+                const live = await tx.doc(LiveDoc, id);
+
+                if (live.run !== undefined || (live.compactions?.length ?? 0) > 0) {
+                    throw new HttpError(409, "PiP is working. Change its model when it is idle.");
+                }
+
+                Object.assign(await tx.doc(AgentDoc, id), change);
+            }, context);
+        } else {
+            await conversation.configure(change, context);
+        }
 
         if (cwd !== undefined && app.sessionMeta(id) !== undefined) {
             await app.harness.commit(async (tx) => {
@@ -1218,7 +1232,7 @@ export class Commands {
             }, context);
         }
 
-        if (ref !== undefined) {
+        if (ref !== undefined && request.pipPanel !== true) {
             app.config.lastModel = { provider: ref.provider, modelId: ref.modelId, thinkingLevel };
         }
 
