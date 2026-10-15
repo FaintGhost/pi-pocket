@@ -3,6 +3,7 @@
 // themes.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { browserAvailable, toggleBrowser } from "./browser.js";
+import { folderColor } from "./avatar.js";
 import { planAvailable, schedulesAvailable } from "./commands.js";
 import { extensionLauncherItems } from "./extension-ui.js";
 import { filesAvailable, toggleFiles } from "./files-panel.js";
@@ -33,18 +34,7 @@ import {
     themeVars,
     varsStyle,
 } from "./theme.js";
-import {
-    APPLE,
-    copyText,
-    html,
-    Icon,
-    Keys,
-    Marked,
-    shortPath,
-    Slide,
-    timeAgo,
-    useSlide,
-} from "./ui.js";
+import { APPLE, copyText, html, Icon, Keys, Marked, shortPath, timeAgo } from "./ui.js";
 
 /**
  * How well `query` matches `text` as a subsequence: null for no match, else a score (higher is better) and the matched
@@ -337,11 +327,11 @@ function sessionItems() {
                     .filter(Boolean)
                     .join(" · ") || timeAgo(session.updatedAt),
             text: `${session.title ?? "New session"} ${shortPath(session.cwd, server?.home)}`,
-            icon: session.waiting ? "shield" : session.busy ? "pulse" : "chat",
             keys: number >= 0 && number < 9 ? `Alt ${number + 1}` : undefined,
             rank: session.archived ? -20 : -number * 0.01,
             run: () => navigate(session.id),
-            id: session.id,
+            folder: folderColor(session.cwd),
+            tone: session.waiting ? "waiting" : session.busy ? "working" : "quiet",
         };
     });
 }
@@ -509,7 +499,6 @@ export function Launcher({ leaving, returnTo }) {
     const flat = useMemo(() => groups.flatMap((group) => group.items), [groups]);
     const index = Math.min(pick, Math.max(0, flat.length - 1));
     const selected = flat[index];
-    const slide = useSlide(list, ".launcher-item.on");
     const recent =
         needle === "" && prefix === undefined
             ? groups.find((group) => group.kind === "session")
@@ -827,7 +816,6 @@ export function Launcher({ leaving, returnTo }) {
                 role="listbox"
                 aria-label="Search results"
             >
-                <${Slide} box=${slide} />
                 ${groups.map(
                     (group) => html`
                         <div role="group" aria-labelledby=${`launcher-group-${group.kind}`}>
@@ -894,9 +882,11 @@ export function Launcher({ leaving, returnTo }) {
                                             : html`
                                                 <span class="glyph" aria-hidden="true">
                                                     ${
-                                                        item.kind === "session" &&
-                                                        item.id === conversationId
-                                                            ? "●"
+                                                        item.kind === "session"
+                                                            ? html`<span
+                                                                class="launcher-folder"
+                                                                style=${`--folder:${item.folder}`}
+                                                            ></span>`
                                                             : html`
                                                                 <${Icon}
                                                                     name=${item.icon}
@@ -913,20 +903,16 @@ export function Launcher({ leaving, returnTo }) {
                                             <${Marked} text=${item.label} hits=${item.hits} />
                                         </span>
                                         ${
-                                            (item.detail.text || item.status || item.matchNote) &&
+                                            (item.detail.text || item.matchNote) &&
                                             html`<span class="detail">
-                                                <span class="launcher-path">
+                                                <span
+                                                    class=${`launcher-path ${item.kind === "session" ? "session-path" : ""}`}
+                                                >
                                                     <${Marked}
                                                         text=${item.detail.text}
                                                         hits=${item.detail.hits}
                                                     />
                                                 </span>
-                                                ${
-                                                    item.status &&
-                                                    html`<span class="launcher-state">
-                                                        ${item.status}
-                                                    </span>`
-                                                }
                                                 ${
                                                     item.matchNote &&
                                                     html`<span class="launcher-match-note">
@@ -936,6 +922,12 @@ export function Launcher({ leaving, returnTo }) {
                                             </span>`
                                         }
                                     </span>
+                                    ${
+                                        item.status &&
+                                        html`<span class=${`launcher-state ${item.tone}`}>
+                                            ${item.status}
+                                        </span>`
+                                    }
                                     ${
                                         item.kind === "theme" &&
                                         item.theme === prefs().theme &&

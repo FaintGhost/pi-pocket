@@ -6928,20 +6928,21 @@ textarea.notes {
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    padding: calc(env(safe-area-inset-top) + min(12vh, 100px)) 10px 10px;
+    padding: calc(env(safe-area-inset-top) + 11vh) 10px 10px;
     background: var(--scrim);
     animation: fade var(--t-fade) var(--ease-almost);
 }
 
 .launcher {
-    --launcher-secondary: color-mix(in oklab, var(--o-fg) 90%, var(--o-bg));
-    width: min(680px, 100%);
-    max-height: min(610px, 80dvh);
+    width: min(640px, 100%);
+    max-height: 74dvh;
     display: flex;
     flex-direction: column;
     background: var(--o-bg);
-    border: 2px solid var(--accent);
-    animation: popin 0.3s var(--ease-out);
+    border-radius: var(--r-sheet);
+    box-shadow: var(--pop);
+    overflow: hidden;
+    animation: pop 0.28s var(--ease-out);
     outline: none;
 }
 
@@ -6951,29 +6952,31 @@ textarea.notes {
 }
 
 .leaving .launcher {
-    animation: popout var(--t-out) linear forwards;
+    animation: pop-out var(--t-out) linear forwards;
 }
 
 .launcher kbd {
-    font-size: max(11px, 0.78rem);
+    padding: 4px 6px;
+    border: 1px solid var(--hair);
+    border-radius: 5px;
+    background: none;
+    font-size: 10.5px;
+    color: var(--faint);
 }
 
 .launcher-input {
     display: flex;
     flex: none;
     align-items: center;
-    gap: 0.8rem;
-    padding: 0.6rem 0.9rem;
-    border-bottom: 1px solid var(--line-strong);
+    gap: 10px;
+    height: 58px;
+    padding: 0 12px 0 18px;
+    border-bottom: 1px solid var(--hair);
     color: var(--accent);
 }
 
-.launcher-input:focus-within {
-    box-shadow: inset 0 -2px var(--accent);
-}
-
 .launcher-input .prompt {
-    font-weight: 800;
+    font: 600 15px var(--mono);
 }
 
 .launcher-input input {
@@ -6981,8 +6984,8 @@ textarea.notes {
     flex: 1;
     border: 0;
     background: none;
-    padding: 0.65rem 0;
-    font-size: 1.05rem;
+    padding: 0;
+    font-size: 16px;
     color: var(--text);
 }
 
@@ -6991,21 +6994,21 @@ textarea.notes {
 }
 
 .launcher-input input::placeholder {
-    color: var(--launcher-secondary);
+    color: var(--muted);
 }
 
 .launcher-escape {
-    color: var(--launcher-secondary);
+    color: var(--muted);
 }
 
 .launcher-close {
     display: grid;
     place-items: center;
     flex: none;
-    width: 44px;
-    height: 44px;
-    border: 1px solid var(--line-strong);
-    color: var(--text);
+    width: 32px;
+    height: 32px;
+    border-radius: var(--r-control);
+    color: var(--muted);
 }
 
 .launcher-close:hover {
@@ -7016,27 +7019,28 @@ textarea.notes {
     display: flex;
     flex: none;
     flex-wrap: wrap;
-    gap: 0.45rem;
-    padding: 0.65rem 0.9rem;
-    border-bottom: 1px solid var(--line);
+    gap: 4px;
+    padding: 10px 14px 4px;
 }
 
 .launcher-types button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem;
-    min-height: 32px;
-    padding: 0.3rem 0.8rem;
-    border: 1px solid var(--line-strong);
-    color: var(--launcher-secondary);
-    font-size: max(12px, 0.85rem);
+    gap: 6px;
+    height: 28px;
+    padding: 0 11px;
+    border: 1px solid transparent;
+    border-radius: var(--r-pill);
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 500;
 }
 
 .launcher-types button:hover,
 .launcher-types button[aria-pressed="true"] {
-    background: var(--accent-soft);
-    border-color: var(--accent);
+    background: var(--card-2);
+    border-color: var(--hair-2);
     color: var(--text);
 }
 
@@ -7044,7 +7048,8 @@ textarea.notes {
     padding: 0;
     border: 0;
     background: none;
-    color: inherit;
+    font-size: 11px;
+    color: var(--faint);
 }
 
 .launcher-summary {
@@ -7053,15 +7058,15 @@ textarea.notes {
     flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 0.6rem;
-    padding: 0 0.9rem;
+    gap: 8px;
+    padding: 4px 18px 0;
     min-height: 36px;
-    color: var(--launcher-secondary);
-    font-size: max(11px, 0.78rem);
-    border-bottom: 1px solid var(--line);
+    color: var(--faint);
+    font-size: 12px;
 }
 
 .launcher-summary .launcher-group {
+    flex: 1;
     padding: 0;
 }
 
@@ -7079,8 +7084,8 @@ textarea.notes {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 0.45rem;
-    scroll-padding: 0.45rem;
+    padding: 4px 8px 8px;
+    scroll-padding: 8px;
 }
 
 .launcher-list:empty {
@@ -7088,72 +7093,45 @@ textarea.notes {
     padding: 0;
 }
 
-/* One moving surface; the selected label stays readable, with a separate accent rail. */
-.launcher-list .slide-y {
-    left: 0.45rem;
-    right: 0.45rem;
-    width: auto;
-    background: color-mix(in srgb, var(--o-accent) 14%, var(--o-bg));
-    border: 1px solid var(--line-strong);
-    z-index: 0;
-    transition:
-        transform 0.22s var(--ease-out),
-        height 0.22s var(--ease-out);
-}
-
 .launcher-group {
-    position: relative;
-    z-index: 1;
     display: flex;
-    gap: 0.6rem;
-    padding: 0.65rem 0.65rem 0.35rem;
-    font-size: max(11px, 0.78rem);
-    font-weight: 650;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    color: var(--launcher-secondary);
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 10px 5px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--faint);
 }
 
 .launcher-count {
-    letter-spacing: normal;
-    font-weight: 400;
-    text-transform: none;
+    font: 400 11px var(--mono);
 }
 
 .launcher-item {
-    position: relative;
-    z-index: 1;
     display: flex;
     align-items: center;
-    gap: 0.8rem;
+    gap: 12px;
     width: 100%;
-    min-height: 56px;
-    padding: 0.6rem 0.75rem;
+    min-height: 42px;
+    padding: 6px 10px;
+    border-radius: var(--r-control);
     text-align: left;
     color: var(--text);
 }
 
-.launcher-item.on::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 8px;
-    bottom: 8px;
-    width: 3px;
-    background: var(--accent);
+.launcher-item.on {
+    background: var(--card-2);
 }
 
 .launcher-item .glyph {
-    width: 1.4rem;
+    width: 28px;
+    height: 28px;
     flex: none;
     display: grid;
     place-items: center;
-    color: var(--launcher-secondary);
-    font-size: 0.85rem;
-}
-
-.launcher-item.on .glyph {
-    color: var(--accent);
+    border-radius: 8px;
+    background: var(--card);
+    color: var(--muted);
 }
 
 .launcher-item .main {
@@ -7161,27 +7139,24 @@ textarea.notes {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
+    line-height: 1.35;
 }
 
 .launcher-title {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-weight: 550;
-}
-
-.launcher-item.on .launcher-title {
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 400;
 }
 
 .launcher-item .detail {
     display: flex;
     align-items: baseline;
-    gap: 0.6rem;
+    gap: 8px;
     min-width: 0;
-    font-size: max(12px, 0.85rem);
-    color: var(--launcher-secondary);
+    font-size: 12px;
+    color: var(--muted);
 }
 
 .launcher-path {
@@ -7191,13 +7166,39 @@ textarea.notes {
     text-overflow: ellipsis;
 }
 
-.launcher-state {
-    flex: none;
-    white-space: nowrap;
+.launcher-path.session-path {
+    font-family: var(--mono);
 }
 
-.launcher-state::before {
-    content: "· ";
+.launcher-state {
+    flex: none;
+    max-width: 32%;
+    padding: 2px 8px;
+    border-radius: var(--r-pill);
+    background: var(--card);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.launcher-state.waiting {
+    background: var(--warn-soft);
+    color: var(--warn);
+}
+
+.launcher-state.working {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.launcher-folder {
+    width: 9px;
+    height: 9px;
+    border-radius: 3px;
+    background: var(--folder);
 }
 
 .launcher-match-note {
@@ -7216,10 +7217,10 @@ textarea.notes {
 .launcher-item .hint {
     flex: none;
     display: flex;
-    gap: 0.25rem;
+    gap: 4px;
     align-items: center;
-    font-size: max(11px, 0.78rem);
-    color: var(--launcher-secondary);
+    font-size: 11px;
+    color: var(--faint);
 }
 
 .launcher-item .hint kbd {
@@ -7227,14 +7228,14 @@ textarea.notes {
 }
 
 .launcher-item .swatch {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 28px;
+    height: 28px;
     flex: none;
-    border: 1px solid var(--line-strong);
-}
-
-.launcher-item .swatch i {
-    width: 9px;
-    height: 14px;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px var(--hair-2);
 }
 
 .launcher-empty {
@@ -7245,7 +7246,7 @@ textarea.notes {
     min-height: 0;
     overflow-y: auto;
     padding: 1.6rem 1rem;
-    color: var(--launcher-secondary);
+    color: var(--muted);
     text-align: center;
     font-size: 0.9rem;
 }
@@ -7274,11 +7275,11 @@ textarea.notes {
     display: flex;
     flex: none;
     flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-    padding: 0.65rem 0.9rem;
-    border-top: 1px solid var(--line-strong);
-    font-size: max(11px, 0.78rem);
-    color: var(--launcher-secondary);
+    gap: 8px 16px;
+    padding: 10px 18px;
+    border-top: 1px solid var(--hair);
+    font-size: 12px;
+    color: var(--faint);
 }
 
 .launcher-foot span {
@@ -7288,6 +7289,8 @@ textarea.notes {
 }
 
 .launcher-foot kbd {
+    padding: 0;
+    border: 0;
     color: inherit;
 }
 
@@ -7319,7 +7322,12 @@ textarea.notes {
         gap: 0.3rem;
         padding: 0.5rem;
     }
+    .launcher-close {
+        width: 44px;
+        height: 44px;
+    }
     .launcher-types button {
+        height: auto;
         flex: 1;
         min-height: 44px;
         padding-inline: 0.5rem;
