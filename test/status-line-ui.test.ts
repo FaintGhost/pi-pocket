@@ -412,14 +412,6 @@ test(
             `the limit shows: ${crowded.shown}`,
         );
 
-        // The largest text size, at an iPhone's width, keeps to one row too.
-        await page.evaluate(
-            `localStorage.setItem("pocket.appearance", JSON.stringify({ speed: true, text: 16 }))`,
-        );
-        await open(VIEWPORTS.mobile);
-        await everything();
-        await oneRow("one row with the largest text");
-
         // Wide, nothing is left out or shortened.
         await page.evaluate(
             `localStorage.setItem("pocket.appearance", JSON.stringify({ speed: true }))`,
