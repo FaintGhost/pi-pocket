@@ -455,15 +455,18 @@ test("a sheet closed with a tap takes its step back with it", real, async () => 
     await reach({ path: "/" }, "back leaves for the list, not into the menu");
 });
 
-test("a sheet dragged down far enough closes; a short drag springs back", real, async () => {
-    await fresh();
-    await tap(row(first));
-    await tap('.topbar [aria-label="Menu"]');
-    await reach({ sheet: "menu", layers: 1 }, "the menu");
+test(
+    "a sheet or a menu dragged away far enough closes; a short drag springs back",
+    real,
+    async () => {
+        await fresh();
+        await tap(row(first));
+        await tap('.topbar [aria-label="Menu"]');
+        await reach({ sheet: "menu", layers: 1 }, "the menu");
 
-    const drag = (to: number) =>
-        page.evaluate(`
-            const head = document.querySelector(".sheet-head");
+        const drag = (to: number, at = ".sheet-head") =>
+            page.evaluate(`
+            const head = document.querySelector("${at}");
             const from = head.getBoundingClientRect().top + 10;
             const touch = (y) => new Touch({ identifier: 1, target: head, clientX: 200, clientY: y });
             const fire = (type, y) =>
@@ -486,20 +489,34 @@ test("a sheet dragged down far enough closes; a short drag springs back", real, 
             fire("touchend", from + ${to});
         `);
 
-    await drag(40);
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    await reach({ sheet: "menu", layers: 1 }, "still open after a short drag");
-    assert.equal(
-        await inPage<string>(
-            `return JSON.stringify(document.querySelector(".sheet").style.transform)`,
-        ),
-        "",
-        "back in place",
-    );
+        await drag(40);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        await reach({ sheet: "menu", layers: 1 }, "still open after a short drag");
+        assert.equal(
+            await inPage<string>(
+                `return JSON.stringify(document.querySelector(".sheet").style.transform)`,
+            ),
+            "",
+            "back in place",
+        );
 
-    await drag(400);
-    await reach({ sheet: null, layers: 0, path: `/s/${first}` }, "closed by the long drag");
-});
+        await drag(400);
+        await reach({ sheet: null, layers: 0, path: `/s/${first}` }, "closed by the long drag");
+
+        // The model picker over the message box goes down; the branch picker under the top bar goes up.
+        for (const [opener, sheet, to] of [
+            [".model-chip", "model", 300],
+            [".topbar button.title-branch", "branch", -300],
+        ] as const) {
+            await new Promise((resolve) => setTimeout(resolve, 450));
+            await tap(opener);
+            await reach({ sheet, layers: 1 }, `the ${sheet} picker`);
+            await new Promise((resolve) => setTimeout(resolve, 450));
+            await drag(to, ".pop-menu-head");
+            await reach({ sheet: null, layers: 0 }, `the ${sheet} picker, dragged away`);
+        }
+    },
+);
 
 test(
     "from one session to another, back returns to the first; the top bar's back goes to the list",

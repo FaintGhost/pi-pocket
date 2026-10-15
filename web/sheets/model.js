@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { actions, api, attempt, closeSheet, openSheet, store } from "../store.js";
 import { modelRefreshAvailable, RefreshModels } from "../model-refresh.js";
-import { anchorStyle, formatTokens, html, Icon, popAnchor } from "../ui.js";
+import { useDragToClose } from "../gestures.js";
+import { anchorStyle, BOTTOM_SHEETS, formatTokens, html, Icon, popAnchor } from "../ui.js";
 
 /** Models past this many get a search box in the picker. */
 const MODEL_SEARCH_AT = 8;
@@ -73,6 +74,13 @@ export function ModelPicker() {
     // Arrows scroll the list to the model they reach; the mouse does not, or the list would run away under it.
     const keyed = useRef(false);
     const agent = view.agent;
+
+    // On a phone, a swipe away from where it opens closes it, as a sheet's does.
+    useDragToClose(box, {
+        dir: anchor?.down ? "up" : "down",
+        onClose: closeSheet,
+        enabled: BOTTOM_SHEETS.matches,
+    });
     const owner = me?.role === "owner";
     const chosen = server?.defaultModel ?? null;
     const isDefault = (model) =>
@@ -199,6 +207,7 @@ export function ModelPicker() {
             tabindex="-1"
             onKeyDown=${onKeyDown}
         >
+            <div class="grip" aria-hidden="true"></div>
             <header class="pop-menu-head">
                 <span>
                     ${forDefault ? "Default model" : "Model"}

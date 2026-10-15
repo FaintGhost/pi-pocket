@@ -1142,7 +1142,8 @@ export class Boundary extends Component {
 }
 
 /** Sheets come up from the bottom edge below this width, and drag back down to close; above it they are popups. */
-const BOTTOM_SHEETS = matchMedia("(max-width: 699px)");
+/** Phones: sheets from the bottom edge, and menus that a swipe closes. */
+export const BOTTOM_SHEETS = matchMedia("(max-width: 699px)");
 
 /** The sheet host supplies a back action only when another sheet is under this one. */
 export const SheetBack = createContext(null);

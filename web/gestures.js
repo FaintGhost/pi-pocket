@@ -20,10 +20,18 @@ const SPRING_MS = 260;
  */
 const fingerOf = (list, id) => [...list].find((touch) => touch.identifier === id);
 
-/** Something scrolled away from its top, from `target` up to `root`: dragging down there scrolls it back first. */
-function scrolledDown(target, root) {
+/**
+ * Something from `target` up to `root` that a drag `dir` would scroll first: scrolled away from its top, for a drag
+ * down; with more below, for a drag up.
+ */
+function scrollsFirst(target, root, dir) {
     for (let node = target; node && node !== root.parentElement; node = node.parentElement) {
-        if (node.scrollTop > 0 && node.scrollHeight > node.clientHeight) {
+        const more =
+            dir === "down"
+                ? node.scrollTop > 0
+                : node.scrollTop + node.clientHeight < node.scrollHeight - 1;
+
+        if (more && node.scrollHeight > node.clientHeight) {
             return true;
         }
     }
@@ -44,8 +52,9 @@ function speedOf(samples) {
 }
 
 /**
- * Drag `ref`'s element to close it: `"down"` for a sheet from the bottom edge, `"left"` for the drawer. It follows the
- * finger and dims the scrim behind it (its parent, or the `scrim` ref's element) as it goes. Let go far or fast enough,
+ * Drag `ref`'s element to close it: `"down"` for a sheet from the bottom edge, `"up"` for a menu down from the top
+ * bar, `"left"` for the drawer. It follows the finger and dims the scrim behind it (its parent, or the `scrim` ref's
+ * element) as it goes. Let go far or fast enough,
  * it calls `onClose` and stays where the finger left it, for its closing animation to go on from there; otherwise it
  * springs back. Only on touch.
  */
@@ -60,17 +69,22 @@ export function useDragToClose(ref, { dir, onClose, enabled = true, scrim: scrim
             return undefined;
         }
 
-        const down = dir === "down";
+        const vertical = dir !== "left";
         // PiP's sheet has a scrim beside it, not around it: dimming its parent would dim the whole app.
         const scrim = scrimRef?.current ?? element.parentElement;
         let start = null;
         let dragging = false;
         let samples = [];
 
-        const size = () => (down ? element.offsetHeight : element.offsetWidth) || 1;
+        const size = () => (vertical ? element.offsetHeight : element.offsetWidth) || 1;
 
         const place = (offset) => {
-            element.style.transform = down ? `translateY(${offset}px)` : `translateX(${-offset}px)`;
+            element.style.transform =
+                dir === "down"
+                    ? `translateY(${offset}px)`
+                    : dir === "up"
+                      ? `translateY(${-offset}px)`
+                      : `translateX(${-offset}px)`;
             scrim.style.opacity = String(1 - Math.min(1, offset / size()) * 0.8);
         };
 
@@ -96,7 +110,7 @@ export function useDragToClose(ref, { dir, onClose, enabled = true, scrim: scrim
             start =
                 event.touches.length === 1 &&
                 !ownDrag(target) &&
-                !(down && scrolledDown(target, element))
+                !(vertical && scrollsFirst(target, element, dir))
                     ? {
                           x: event.touches[0].clientX,
                           y: event.touches[0].clientY,
@@ -114,8 +128,13 @@ export function useDragToClose(ref, { dir, onClose, enabled = true, scrim: scrim
                 return;
             }
 
-            const offset = down ? touch.clientY - start.y : start.x - touch.clientX;
-            const across = Math.abs(down ? touch.clientX - start.x : touch.clientY - start.y);
+            const offset =
+                dir === "down"
+                    ? touch.clientY - start.y
+                    : dir === "up"
+                      ? start.y - touch.clientY
+                      : start.x - touch.clientX;
+            const across = Math.abs(vertical ? touch.clientX - start.x : touch.clientY - start.y);
 
             if (!dragging) {
                 if (Math.max(Math.abs(offset), across) < SLOP) {

@@ -2,7 +2,8 @@
 // menu down from the branch in the top bar.
 import { useEffect, useRef, useState } from "preact/hooks";
 import { actions, attempt, canSteer, closeSheet, notify, scoped, store } from "../store.js";
-import { anchorStyle, html, Icon, popAnchor, shortPath, timeAgo } from "../ui.js";
+import { useDragToClose } from "../gestures.js";
+import { anchorStyle, BOTTOM_SHEETS, html, Icon, popAnchor, shortPath, timeAgo } from "../ui.js";
 
 const coarsePointer = matchMedia("(pointer: coarse)").matches;
 
@@ -78,6 +79,13 @@ export function BranchPicker() {
     const list = useRef(null);
     // Arrows scroll the list to the row they reach; the mouse does not, or the list would run away under it.
     const keyed = useRef(false);
+
+    // On a phone, a swipe away from where it opens closes it: up, under the top bar's branch.
+    useDragToClose(box, {
+        dir: anchor?.down ? "up" : "down",
+        onClose: closeSheet,
+        enabled: BOTTOM_SHEETS.matches,
+    });
     const blocked = whyNot();
     const needle = query.trim().toLowerCase();
     const matches = (name) => needle === "" || name.toLowerCase().includes(needle);
@@ -266,6 +274,7 @@ export function BranchPicker() {
             tabindex="-1"
             onKeyDown=${onKeyDown}
         >
+            <div class="grip" aria-hidden="true"></div>
             <header class="pop-menu-head">
                 <span>Branch</span>
                 <span class="branch-head mono" title=${view.branch?.detached ? "No branch: a commit" : "Checked out"}>

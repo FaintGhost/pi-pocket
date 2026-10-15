@@ -5210,6 +5210,17 @@ button.rail-brand:hover {
     .grip {
         display: block;
     }
+    /* A menu a swipe closes: its grip at the edge it goes from, with room. */
+    .pop-menu > .grip + .pop-menu-head {
+        padding-top: 20px;
+    }
+    .pop-menu.down {
+        padding-bottom: 16px;
+    }
+    .pop-menu.down > .grip {
+        top: auto;
+        bottom: 6px;
+    }
 }
 
 .sheet-head h2 {
