@@ -245,3 +245,56 @@ test(
         );
     },
 );
+
+test(
+    "recall uses this session for arrows and search, and Down restores the draft",
+    real,
+    async () => {
+        await home(VIEWPORTS.desktop);
+
+        for (const [id, text] of [
+            [one, "recall A marker"],
+            [two, "recall B marker"],
+        ] as const) {
+            await page.navigate(`${base}/s/${Number(id)}`);
+            await opened(id);
+            await page.type({ selector: BOX }, text);
+            await page.press("Enter");
+            await until(
+                () =>
+                    inPage<boolean>(
+                        `return JSON.stringify(document.querySelector('${BOX}').value === '')`,
+                    ),
+                "message sent",
+            );
+        }
+
+        await page.navigate(`${base}/s/${Number(one)}`);
+        await opened(one);
+        await page.type({ selector: BOX }, "draft");
+        await page.press("Home");
+        await page.press("ArrowUp");
+        const value = () =>
+            inPage<string>(`return JSON.stringify(document.querySelector('${BOX}').value)`);
+
+        assert.equal(await value(), "recall A marker");
+        await page.press("ArrowDown");
+        assert.equal(await value(), "draft");
+        await page.type({ selector: BOX }, "recall");
+        await page.press("Control+R");
+        await until(
+            () =>
+                inPage<boolean>(
+                    `return JSON.stringify(document.querySelector('.history-options') !== null)`,
+                ),
+            "recall search open",
+        );
+        assert.deepEqual(
+            await inPage<string[]>(
+                `return JSON.stringify([...document.querySelectorAll('.history-options [role="option"]')].map(each => each.textContent.trim()))`,
+            ),
+            ["recall A marker"],
+        );
+        await page.press("Escape");
+    },
+);

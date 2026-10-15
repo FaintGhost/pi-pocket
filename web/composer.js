@@ -336,6 +336,7 @@ function WatchBar() {
 
 export function Composer() {
     const { view, conversationId } = store.state;
+    const historyScope = { person: store.state.me?.id, conversation: conversationId };
     const [text, setText] = useState(() => drafts.get(conversationId));
     const [files, setFiles] = useState([]);
     const [steer, setSteer] = useState(true);
@@ -465,7 +466,7 @@ export function Composer() {
     };
 
     // Ctrl+R: what was sent before that has the words in the box.
-    const recalled = searching ? searchHistory(text) : [];
+    const recalled = searching ? searchHistory(text, historyScope) : [];
     const chosenRecall = recalled[Math.min(pick, recalled.length - 1)];
     const suggestions = hideCommands || searching ? [] : suggestCommands(text);
     const chosen = suggestions[Math.min(pick, suggestions.length - 1)];
@@ -583,7 +584,7 @@ export function Composer() {
     /** What went out stays for ↑; its pastes are done with. */
     const sent = (full) => {
         if (full.length <= REMEMBER_CHARS) {
-            remember(full);
+            remember(full, historyScope);
         }
 
         setPastes({});
@@ -632,7 +633,7 @@ export function Composer() {
 
         if (parsed) {
             if (full.length <= REMEMBER_CHARS) {
-                remember(full);
+                remember(full, historyScope);
             }
 
             return runCommand(parseCommand(full) ?? parsed);
@@ -686,7 +687,7 @@ export function Composer() {
             return false;
         }
 
-        const list = sentHistory();
+        const list = sentHistory(historyScope);
 
         if (event.key === "ArrowUp") {
             const starts =
@@ -1045,7 +1046,7 @@ export function Composer() {
                           ref=${list}
                       >
                           <div class="file-note">
-                              Sent before${text.trim() ? ` with “${text.trim()}”` : ""} · Enter puts it in the box · Esc closes
+                              Sent in this session${text.trim() ? ` with “${text.trim()}”` : ""} · Enter puts it in the box · Esc closes
                           </div>
                           ${recalled.map(
                               (each) => html`<button
@@ -1066,7 +1067,7 @@ export function Composer() {
                           ${
                               recalled.length === 0 &&
                               html`<div class="file-note">
-                                  Nothing sent from this browser matches.
+                                  Nothing you sent from this browser in this session matches.
                               </div>`
                           }
                       </div>`
