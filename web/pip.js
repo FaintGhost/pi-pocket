@@ -535,18 +535,31 @@ function Item({ item, last, busy, conversationId }) {
     return null;
 }
 
-function Welcome({ id, name }) {
+function Welcome({ id, name, hasModel }) {
     const first = (name ?? "").split(/\s+/)[0];
 
     return html`<div class="pip-welcome">
         <p class="pip-hello">Hi${first ? ` ${first}` : ""}. I’m PiP.</p>
         <p class="pip-intro">${INTRO}</p>
+        ${
+            !hasModel &&
+            html`<p class="pip-intro">
+                <button
+                    type="button"
+                    class="button small"
+                    onClick=${() => openSheet({ type: "model", pipId: id })}
+                >
+                    Choose a model to use these suggestions
+                </button>
+            </p>`
+        }
         <div class="pip-chips">
             ${SUGGESTIONS.map(
                 (suggestion) => html`<button
                     type="button"
                     class="pip-chip"
                     key=${suggestion}
+                    disabled=${!hasModel && !suggestion.endsWith("…")}
                     onClick=${() =>
                         suggestion.endsWith("…")
                             ? openPip(suggestion.slice(0, -1))
@@ -976,7 +989,11 @@ function PipPanel({ leaving, scrim }) {
                 !ready
                     ? html`<div class="pip-loading"><${Spinner} label="Waking PiP" /></div>`
                     : rows.length === 0 && !busy
-                      ? html`<${Welcome} id=${id} name=${me?.name} />`
+                      ? html`<${Welcome}
+                            id=${id}
+                            name=${me?.name}
+                            hasModel=${Boolean(view.agent?.model)}
+                        />`
                       : items.map(
                             (item, index) =>
                                 html`<${Item}
