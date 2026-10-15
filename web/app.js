@@ -148,7 +148,7 @@ function Topbar() {
                 }
                 ${
                     conversation?.kind === "subagent"
-                        ? html`<span class="title-folder">
+                        ? html`<span class="title-folder title-parent">
                               subagent of ${conversation.parent?.title ?? "?"}
                           </span>`
                         : html`${
@@ -189,6 +189,7 @@ function Topbar() {
                 <span class="count">${busySubagents}</span>
             </button>`
         }
+        ${filesAvailable() && html`<${ChangesButton} key=${conversationId} />`}
         <${PeeksButton} />
         <${FilesButton} />
         <${BrowserButton} />
@@ -200,7 +201,6 @@ function Topbar() {
             <${Icon} name="artifact" />
             ${artifacts > 0 && html`<span class="badge">${artifacts}</span>`}
         </button>
-        ${filesAvailable() && html`<${ChangesButton} key=${conversationId} />`}
         <${PeopleButton} />
         <button
             class="icon-button"

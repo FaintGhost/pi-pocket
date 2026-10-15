@@ -1170,8 +1170,8 @@ export function RailNav({ foldable = false, folded = false }) {
                 ? html`<button
                     class=${`rail-button ${folded ? "" : "on"}`}
                     title=${`Sessions (${keys} ${folded ? "unfolds" : "folds"} the list)`}
-                    aria-label=${folded ? "Unfold the sidebar" : "Fold the sidebar"}
-                    aria-pressed=${!folded}
+                    aria-label="Sessions"
+                    aria-expanded=${!folded}
                     onClick=${fold}
                 >
                     <${Icon} name="chat" size=${19} />

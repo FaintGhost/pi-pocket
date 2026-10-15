@@ -796,9 +796,14 @@ kbd {
     align-items: center;
     gap: 6px;
     min-height: calc(58px + env(safe-area-inset-top));
-    padding: env(safe-area-inset-top) 10px 0 20px;
+    padding: env(safe-area-inset-top) 0 0;
     border-bottom: 1px solid var(--hair);
     background: var(--bg);
+}
+
+/* Its room is the container's: the margins, not padding, keep the buttons off the edges. */
+.topbar > :last-child {
+    margin-right: 10px;
 }
 
 /*
@@ -872,8 +877,15 @@ kbd {
 @media (max-width: 959px) {
     .topbar {
         gap: 2px;
-        padding-left: 4px;
-        padding-right: 6px;
+    }
+    .topbar > :first-child {
+        margin-left: 4px;
+    }
+    .topbar > :last-child {
+        margin-right: 6px;
+    }
+    .title {
+        margin-left: -8px;
     }
     .topbar > .icon-button {
         width: 44px;
@@ -890,27 +902,29 @@ kbd {
         z-index: 1;
         color: var(--text);
     }
+    /* Out past the chevron's tip, so it covers neither the arrow nor the title. */
     .topbar-back .badge {
-        top: 2px;
-        right: 0;
+        top: -1px;
+        right: -3px;
     }
 }
 
-/* The room in the pane: the changes lose their count of files, the toggles go, then the avatars. */
-@container topbar (max-width: 559px) {
+/* The room in the pane: the changes lose their count of files under 560px, the toggles go under 480px, then the
+ * avatars under 420px. The widths are the pane's less its 2px of border (tiled windows). */
+@container topbar (max-width: 557px) {
     .changes-button .changes-files {
         display: none;
     }
 }
 
-@container topbar (max-width: 479px) {
+@container topbar (max-width: 477px) {
     .topbar .top-toggle {
         display: none;
     }
 }
 
 @media (min-width: 700px) {
-    @container topbar (max-width: 419px) {
+    @container topbar (max-width: 417px) {
         .topbar .people-button {
             display: none;
         }
@@ -926,7 +940,7 @@ kbd {
     flex-direction: column;
     gap: 2px;
     padding: 4px 8px;
-    margin-left: -8px;
+    margin-left: 12px;
     border-radius: var(--r-row);
     transition: background-color var(--t-hover) var(--ease-out);
 }
@@ -980,11 +994,19 @@ kbd {
     background: var(--folder, var(--accent));
 }
 
+/* The folder's name stays whole (up to a share of the line); the branch gives way first. */
 .title-sub > .title-folder {
-    flex: 0 1 auto;
-    min-width: 0;
+    flex: none;
+    max-width: 55%;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* A subagent's line names its parent session instead, which may take the whole line. */
+.title-sub > .title-folder.title-parent {
+    flex: 0 1 auto;
+    max-width: none;
+    min-width: 0;
 }
 
 /* The branch: a small tag with the fork mark, cut short from its end when the room is short. */
@@ -3628,6 +3650,7 @@ button.rail-brand:hover {
     align-items: center;
     gap: 8px;
     height: 34px;
+    min-height: 34px;
     padding: 0 6px 0 10px;
     background: var(--card);
     border: 1px solid var(--hair);
@@ -6318,7 +6341,7 @@ button.rail-brand:hover {
 /* ─── Notices, sign-in, plain pages ────────────────────────── */
 
 /* Toasts: inverted (the bright text color as the ground), with a countdown line until the notice goes. A tap
- * dismisses one, or does what it offers (Undo). Top center on phones, top right on wide screens. */
+ * dismisses one, or does what it offers (Undo). Top center on phones, bottom center on wide screens. */
 .notices {
     position: fixed;
     left: 50%;
@@ -6334,11 +6357,9 @@ button.rail-brand:hover {
 
 @media (min-width: 700px) {
     .notices {
-        left: auto;
-        right: calc(var(--gap-out) * 2);
-        top: calc(var(--gap-out) * 2);
-        transform: none;
-        width: 380px;
+        top: auto;
+        bottom: 24px;
+        width: min(92vw, 420px);
     }
 }
 
@@ -8515,6 +8536,7 @@ textarea.notes {
 
 /* Pi's own words: its mark in Georgia, as everywhere. */
 .peek-mark.pi {
+    color: var(--brand);
     font:
         13px / 1.5 Georgia,
         serif;
