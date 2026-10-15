@@ -857,20 +857,11 @@ kbd {
 .topbar .online-mark {
     width: 8px;
     height: 8px;
-    border: 0;
-    border-radius: 50%;
-    box-shadow: 0 0 0 2px var(--bg);
 }
 
-/* The shell's avatars (top bar, session rows, the rail) are round, tinted with their person's color. */
 .topbar .avatar,
-.session-side .avatar,
 .rail .avatar {
-    border: 0;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--who) 22%, var(--bg));
     font-size: 11px;
-    font-weight: 600;
 }
 
 /* Below the sidebar's width the top bar leads back to the session list, each button a thumb wide. */
@@ -6498,7 +6489,7 @@ body.plain-page {
     height: 9px;
     border-radius: 50%;
     background: var(--ok);
-    box-shadow: 0 0 0 2px var(--bg);
+    box-shadow: 0 0 0 2px var(--o-bg);
 }
 
 .online-mark.away {
@@ -6510,23 +6501,16 @@ body.plain-page {
     color: var(--muted);
 }
 
-.people-here .avatar,
-.people-content .avatar {
-    border: 0;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--who, var(--accent)) 20%, transparent);
-    font-weight: 600;
-}
-
 .avatar {
     display: inline-grid;
     place-items: center;
     flex: none;
-    background: var(--card-2);
+    background: color-mix(in srgb, var(--who, var(--accent)) 20%, transparent);
     color: var(--who, var(--accent));
-    border: 1px solid var(--who, var(--accent));
+    border: 0;
+    border-radius: 50%;
     font-size: 0.62rem;
-    font-weight: 700;
+    font-weight: 600;
     line-height: 1;
     letter-spacing: 0;
 }
@@ -6686,10 +6670,6 @@ body.plain-page {
     max-height: 30vh;
     overflow-x: hidden;
     font: 13.5px/1.45 var(--sans);
-}
-
-.chat-compose textarea::placeholder {
-    white-space: nowrap;
 }
 
 .chat-compose .round.send {
@@ -7045,12 +7025,6 @@ textarea.notes {
     padding: 12px 14px;
 }
 
-.person-row > .online-dot {
-    border-radius: var(--r-pill);
-    width: 6px;
-    height: 6px;
-}
-
 @media (max-width: 480px) {
     .person-row {
         flex-wrap: wrap;
@@ -7070,17 +7044,6 @@ textarea.notes {
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 0.3rem;
-}
-
-.online-dot {
-    width: 7px;
-    height: 7px;
-    flex: none;
-    background: var(--line-strong);
-}
-
-.online-dot.on {
-    background: var(--ok);
 }
 
 .flash {

@@ -310,8 +310,13 @@ function PeopleList() {
         <div class="sheet-list">
         ${ordered.map(
             (person) => html`<div class="person-row" key=${person.id}>
-                <span class=${`online-dot ${person.online ? "on" : ""}`}></span>
-                <${Avatar} person=${person} size=${32} />
+                <span class="people-here">
+                    <${Avatar} person=${person} size=${32} />
+                    <span
+                        class=${`online-mark ${person.online ? "" : "away"}`}
+                        aria-hidden="true"
+                    ></span>
+                </span>
                 <div class="person-main">
                     <div>
                         ${person.name}
