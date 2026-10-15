@@ -2065,7 +2065,7 @@ test(
     },
 );
 
-test("the menu's arrows reach its places and Esc returns focus to its opener", real, async () => {
+test("the menu's grid arrows and Home/End reach items, and Esc returns focus", real, async () => {
     await fresh();
     await page.setViewport(VIEWPORTS.desktop);
     await goTo(first);
@@ -2077,6 +2077,27 @@ test("the menu's arrows reach its places and Esc returns focus to its opener", r
             `return JSON.stringify(document.activeElement?.getAttribute("data-place"))`,
         ),
         "files",
+    );
+    await page.press("ArrowDown");
+    assert.equal(
+        await inPage<boolean>(
+            `return JSON.stringify(document.activeElement === document.querySelectorAll('.nav-menu .place')[3])`,
+        ),
+        true,
+    );
+    await page.press("End");
+    assert.equal(
+        await inPage<boolean>(
+            `return JSON.stringify(document.activeElement === [...document.querySelectorAll('.nav-menu .list-item')].at(-1))`,
+        ),
+        true,
+    );
+    await page.press("Home");
+    assert.equal(
+        await inPage<boolean>(
+            `return JSON.stringify(document.activeElement === document.querySelector('.nav-menu .place'))`,
+        ),
+        true,
     );
     await page.press("Escape");
     await reach({ sheet: null }, "the closed menu");

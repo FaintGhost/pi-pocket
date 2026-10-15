@@ -7633,7 +7633,9 @@ textarea.notes {
 .launcher-state {
     flex: none;
     max-width: 32%;
-    padding: 2px 8px;
+    height: 20px;
+    padding: 0 8px;
+    line-height: 20px;
     border-radius: var(--r-pill);
     background: var(--card);
     color: var(--muted);
@@ -10710,6 +10712,11 @@ button.dr-branch:hover {
 
 /* ─── Phones: places, pushed screens, and going back ───────── */
 
+/* Keep the anchored menu out of the layout's flex row, including its gap. */
+.nav-menu-host {
+    display: contents;
+}
+
 /* The menu and the phone's places share a three-column grid of soft tiles. */
 .places {
     display: grid;
@@ -10788,7 +10795,12 @@ button.dr-branch:hover {
 }
 
 .places-sheet .list-item {
+    width: auto;
     margin: 0 6px 8px;
+}
+
+.nav-menu .menu-signout {
+    color: var(--err);
 }
 
 @media (min-width: 700px) {

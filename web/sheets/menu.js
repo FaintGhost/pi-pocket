@@ -4,6 +4,7 @@ import { browserAvailable, displayUrl, setBrowserOpen } from "../browser.js";
 import { chatUnread } from "../chat.js";
 import { schedulesAvailable, triggersOn, watchAvailable, watchPr } from "../commands.js";
 import { extensionMenuItems, safeMode } from "../extension-ui.js";
+import { useChanges } from "../diff.js";
 import { filesAvailable, setFilesOpen } from "../files-panel.js";
 import { peeksOn, togglePeeks } from "../peeks.js";
 import { openPip, pipAvailable, pipUnread } from "../pip.js";
@@ -48,13 +49,26 @@ function extensionsHint() {
  * thumb's width each.
  */
 function Places() {
-    const { view, browser, browserOpen, server, filesOpen, filesTab } = store.state;
-    const conversation = view.conversation;
-
-    if (!conversation) {
+    if (!store.state.view.conversation) {
         return null;
     }
 
+    return filesAvailable() ? html`<${PlacesWithChanges} />` : html`<${PlacesGrid} />`;
+}
+
+/** Only people who can open Files request its shared changes data, just as the top bar does. */
+function PlacesWithChanges() {
+    const { changes } = useChanges();
+
+    return html`<${PlacesGrid} changes=${changes} />`;
+}
+
+function PlacesGrid({ changes = null }) {
+    const { view, browser, browserOpen, server, filesOpen, filesTab } = store.state;
+    // Match the top bar: uncommitted files in a repository, Pi's edits elsewhere, plus any unlisted files.
+    const changeCount = changes
+        ? changes.files.length + (changes.repo ? 0 : changes.piOnly.length) + (changes.more ?? 0)
+        : 0;
     const live = browser?.open && browser.url !== "" && browser.url !== "about:blank";
     const unread = collab() ? chatUnread() : 0;
     const places = [
@@ -69,6 +83,8 @@ function Places() {
             id: "changes",
             icon: "diff",
             label: "Changes",
+            count: changeCount,
+            counted: changeCount === 1 ? "changed file" : "changed files",
             on: filesOpen && filesTab === "changes",
             run: () => setFilesOpen(true, "changes"),
         },
@@ -221,34 +237,45 @@ function MenuFrame({ title, children }) {
             return;
         }
 
-        const controls = [
-            ...host.current.querySelectorAll(".place, .list-item"),
-            ...host.current.querySelectorAll(".sheet-head button"),
-        ];
-        const index = controls.indexOf(document.activeElement);
-        let next;
+        const items = [...host.current.querySelectorAll(".place, .list-item")];
+        const active = document.activeElement;
+        const index = items.indexOf(active);
+        let target;
 
-        if (event.key === "ArrowDown" || event.key === "ArrowRight") {
-            next = (index + 1) % controls.length;
-        } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
-            next =
-                index < 0 ? controls.length - 1 : (index - 1 + controls.length) % controls.length;
-        } else if (event.key === "Home") {
-            next = 0;
-        } else if (event.key === "End") {
-            next = controls.length - 1;
-        } else if (event.key === "Tab") {
-            next =
-                index < 0
+        if (event.key === "Tab") {
+            // Close stays reachable with Tab, but is not part of the menu's item navigation.
+            const controls = [...items, ...host.current.querySelectorAll(".sheet-head button")];
+            const at = controls.indexOf(active);
+            const next =
+                at < 0
                     ? event.shiftKey
                         ? controls.length - 1
                         : 0
-                    : (index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+                    : (at + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+
+            target = controls[next];
+        } else if (event.key === "Home") {
+            target = items[0];
+        } else if (event.key === "End") {
+            target = items.at(-1);
+        } else if (["ArrowDown", "ArrowRight", "ArrowUp", "ArrowLeft"].includes(event.key)) {
+            const down = event.key === "ArrowDown" || event.key === "ArrowRight";
+            const vertical = event.key === "ArrowDown" || event.key === "ArrowUp";
+            const tiles = host.current.querySelectorAll(".place").length;
+            const step = vertical && index >= 0 && index < tiles ? 3 : 1;
+            let next = index < 0 ? (down ? 0 : items.length - 1) : index + (down ? step : -step);
+
+            // Down from the grid's last row enters the first text row; Up from its first row wraps to the last item.
+            if (vertical && index >= 0 && index < tiles) {
+                next = next < 0 ? items.length - 1 : Math.min(next, tiles);
+            }
+
+            target = items[(next + items.length) % items.length];
         }
 
-        if (next !== undefined && controls.length > 0) {
+        if (target) {
             event.preventDefault();
-            controls[next].focus();
+            target.focus();
         }
     };
 
@@ -464,7 +491,7 @@ export function MenuSheet() {
                     "running work resumes",
                 )
             }
-            ${item("Sign out", () =>
+            ${item(html`<span class="menu-signout">Sign out</span>`, () =>
                 attempt(async () => {
                     await api("logout", {});
                     location.href = "/";
