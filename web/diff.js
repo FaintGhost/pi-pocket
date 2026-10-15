@@ -697,6 +697,7 @@ function FileHead({ file, tools, viewed, onViewed, open, onToggle, note }) {
             html`<label class=${`dv-viewed ${viewed ? "on" : ""}`} title="Mark as viewed (v)">
                 <input
                     type="checkbox"
+                    aria-label="Viewed"
                     checked=${Boolean(viewed)}
                     onChange=${(event) => onViewed(event.currentTarget.checked)}
                 />
@@ -737,7 +738,7 @@ const LAYOUTS = [
 
 /** Auto, unified, or split: the same on every diff of this device (`s` steps through them). */
 function LayoutSwitch() {
-    return html`<div class="dr-layout" role="group" aria-label="Diff layout">
+    return html`<div class="dr-layout" role="group" aria-label="Diff layout" title="Layout (s)">
         ${LAYOUTS.map(
             ([layout, label]) => html`<button
                 type="button"

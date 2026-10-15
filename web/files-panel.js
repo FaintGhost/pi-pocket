@@ -178,7 +178,7 @@ function TreeFolder({ path, depth, ctx }) {
                         : html`<span class="ft-spacer"></span>`
                 }
                 <span class="ft-name">${entry.name}</span>
-                ${inside && html`<span class="ft-dot" title="Has changes"></span>`}
+                ${inside && !open && html`<span class="ft-dot" title="Has changes"></span>`}
                 ${change && html`<span class=${`ft-kind ${change}`}>${KIND_LETTERS[change]}</span>`}
             </button>
             ${open && html`<${TreeFolder} path=${full} depth=${depth + 1} ctx=${ctx} />`}

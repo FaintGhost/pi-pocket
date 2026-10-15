@@ -11437,25 +11437,47 @@ button.dr-branch:hover {
 }
 
 /*
- * Phones: a diff's header in two lines when it would squeeze the file's name. The name keeps the first line beside
- * the fold, and the counts and the file's tools take the second.
+ * Phones: a diff's header in two lines when it would squeeze the file's name. The first line is the fold, the kind,
+ * the name, and Viewed; the counts and the file's tools take the second, which a break between the two keeps.
  */
 @media (max-width: 480px) {
     .dv-head {
         flex-wrap: wrap;
         row-gap: 0;
+        padding-block: 3px;
     }
-    .dv-head > .dv-title {
-        flex: 1 1 calc(100% - 5rem);
+    .dv-head::after {
+        content: "";
+        order: 1;
+        flex: 0 0 100%;
+    }
+    .dv-head > :is(.dv-chip, .dv-counts, .dv-tool) {
+        order: 2;
+    }
+    /* Under the name: the first of them starts where the kind's tile does. */
+    .dv-head > :is(.dv-chip, .dv-counts) {
+        margin-left: 2.9rem;
+    }
+    .dv-head > .dv-chip ~ :is(.dv-chip, .dv-counts) {
+        margin-left: 0;
     }
     .dv-head > .dv-counts {
-        margin-left: 2.4rem;
         margin-right: auto;
+    }
+    /* Compact, with the tap reaching past the icon, but not up into Viewed above it. */
+    .dv-head > .dv-tool.icon-button {
+        width: 32px;
+        height: 32px;
+    }
+    .dv-head > .dv-tool.icon-button::before {
+        content: "";
+        position: absolute;
+        inset: 0 -4px -4px;
     }
     /* Going to a change (n, p) clears the header's two lines. */
     .dr .dv-row,
     .dr .dv-hunk {
-        scroll-margin-top: 6.4rem;
+        scroll-margin-top: 5.6rem;
     }
 }
 
