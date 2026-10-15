@@ -76,10 +76,6 @@
     --o-cyan: #449dab;
     --o-blue: #7aa2f7;
     --o-magenta: #ad8ee6;
-    --o-active-a: #7aa2f7;
-    --o-active-b: #7aa2f7;
-    --o-active: linear-gradient(#7aa2f7, #7aa2f7);
-    --o-inactive: rgba(89, 89, 89, 0.67);
 
     /* Surfaces, after omarchy-shell's control states: the foreground laid over the background. */
     --desk: var(--o-bg-darker);
@@ -107,7 +103,7 @@
     --accent-fill: var(--accent);
     --accent-soft: color-mix(in srgb, var(--o-accent) 14%, transparent);
     --accent-line: color-mix(in srgb, var(--o-accent) 50%, transparent);
-    /* The second color of loaders: the active border's last stop, or magenta when the border is one color. */
+    /* The second color of loaders and thoughts. */
     --spark: var(--o-magenta);
     --brand: var(--o-orange);
     --ok: var(--o-green);
@@ -127,7 +123,6 @@
     --hl-type: var(--o-yellow);
     --hl-op: var(--o-cyan);
     --hl-tag: var(--o-red);
-    --active: var(--o-active);
     --scrim: color-mix(in srgb, var(--o-bg-darker) 55%, transparent);
     /* Shadows: a soft lift (the message box), and what floats over the page (popovers, sheets, the launcher, PiP). */
     --sh: rgba(0, 0, 0, 0.5);
@@ -177,7 +172,6 @@
     color-scheme: light;
     --sh: rgba(40, 40, 70, 0.14);
     --accent-ink: #fff;
-    --o-inactive: rgba(89, 89, 89, 0.4);
     --scrim: color-mix(in srgb, var(--o-bg-darker) 55%, transparent);
     --line: color-mix(in srgb, var(--o-fg) 15%, var(--o-bg));
     --muted: color-mix(in oklab, var(--o-fg) 78%, var(--o-bg));
@@ -4922,12 +4916,10 @@ button.rail-brand:hover {
 
 /* A heading between a menu's groups of rows. */
 .pop-menu-label {
-    padding: 0.55rem 0.8rem 0.25rem;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--muted);
-    border-bottom: 1px solid var(--line);
+    padding: 10px 10px 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--faint);
 }
 
 /* The branch picker: what is checked out beside its title, and how far each branch is from its remote one. */
@@ -4974,16 +4966,6 @@ button.rail-brand:hover {
 .branch-picker .pop-menu-row-sub {
     font-size: 11.5px;
     color: var(--faint);
-}
-
-.branch-picker .pop-menu-label {
-    padding: 10px 10px 4px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--faint);
-    text-transform: none;
-    letter-spacing: 0;
-    border: 0;
 }
 
 .branch-head {
@@ -7292,29 +7274,6 @@ textarea.notes {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-/* Changes: one row per changed file, with its diff under it once tapped. */
-.changed {
-    border-bottom: 1px solid var(--line);
-}
-
-.changed:last-child {
-    border-bottom: 0;
-}
-
-.changed-head {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    width: 100%;
-    text-align: left;
-    padding: 0.5rem 0;
-    font-size: 0.84rem;
-}
-
-.changed-head .mono {
-    overflow-wrap: anywhere;
 }
 
 /* Spend: a person or a session, what Pi spent for it, and its limit. */
@@ -10447,13 +10406,6 @@ button.dr-branch:hover {
     text-align: center;
     font-size: 12.5px;
     color: var(--muted);
-}
-
-/* Changes: open a file or undo it. */
-.changed-actions {
-    display: flex;
-    gap: 1rem;
-    padding: 0 0 0.4rem 1.8rem;
 }
 
 .link.danger {

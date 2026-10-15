@@ -114,31 +114,6 @@ export function togglePin(id) {
 
 // ─── Palettes ───────────────────────────────────────────────────────────────────
 
-/** A Hyprland color (`rgba(33ccffee)`, `rgb(1e1e1e)`, `#hex`) as CSS. */
-function hyprColor(value) {
-    const match = /^rgba?\(\s*([0-9a-f]{6}(?:[0-9a-f]{2})?)\s*\)$/i.exec(value.trim());
-
-    if (match) {
-        return `#${match[1]}`;
-    }
-
-    return /^#[0-9a-f]{3,8}$/i.test(value.trim()) ? value.trim() : null;
-}
-
-/** A Hyprland border (`rgba(…) rgba(…) 45deg`): its color stops and angle, or null for anything else. */
-function hyprBorder(value) {
-    if (typeof value !== "string") {
-        return null;
-    }
-
-    const angle = /(-?\d+)deg\s*$/.exec(value)?.[1] ?? "45";
-    const stops = (value.match(/rgba?\([^)]*\)|#[0-9a-f]{3,8}/gi) ?? [])
-        .map(hyprColor)
-        .filter(Boolean);
-
-    return stops.length === 0 ? null : { stops, angle: Number(angle) };
-}
-
 /** The palette a theme id means: a bundled theme, or the desktop's (falling back when there is none). */
 export function paletteOf(id = prefs().theme) {
     if (id === "desktop") {
@@ -169,9 +144,6 @@ export function themeVars(palette) {
     const bg = pick("background") ?? "#1a1b26";
     const fg = pick("foreground") ?? "#a9b1d6";
     const accent = pick("accent", "blue") ?? fg;
-    const border = hyprBorder(c.hyprland_active_border);
-    const stops = border?.stops ?? [accent];
-    const inactive = hyprBorder(c.hyprland_inactive_border)?.stops[0];
 
     return {
         "--o-bg": bg,
@@ -191,31 +163,18 @@ export function themeVars(palette) {
         "--o-cyan": pick("cyan") ?? "#7dcfff",
         "--o-blue": pick("blue", "accent") ?? accent,
         "--o-magenta": pick("magenta") ?? "#bb9af7",
-        "--o-active-a": stops[0],
-        "--o-active-b": stops[stops.length - 1],
-        "--o-active":
-            stops.length > 1
-                ? `linear-gradient(${border.angle}deg, ${stops.join(", ")})`
-                : `linear-gradient(${stops[0]}, ${stops[0]})`,
-        // Only when the theme names one: otherwise style.css's default for dark or light themes.
-        "--o-inactive": inactive ?? null,
     };
 }
 
-/** Variables as an inline style, leaving out the ones a theme does not set. */
+/** Variables as an inline style. */
 export const varsStyle = (vars) =>
     Object.entries(vars)
-        .filter(([, value]) => value !== null)
         .map(([name, value]) => `${name}:${value}`)
         .join(";");
 
 function setVars(root, vars) {
     for (const [name, value] of Object.entries(vars)) {
-        if (value === null) {
-            root.style.removeProperty(name);
-        } else {
-            root.style.setProperty(name, value);
-        }
+        root.style.setProperty(name, value);
     }
 }
 
@@ -254,13 +213,11 @@ export function apply() {
     Object.assign(root.dataset, attrs);
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", vars["--o-bg"]);
     document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", attrs.mode);
-    const cached = Object.fromEntries(Object.entries(vars).filter(([, value]) => value !== null));
-
     localStorage.setItem(
         CACHE,
         JSON.stringify({
             vars: {
-                ...cached,
+                ...vars,
                 "--wallpaper": wallpaper,
                 "--text-size": `${p.text}px`,
                 "--sidebar-w": sidebarWidth(p),
