@@ -35,6 +35,7 @@ const PNG =
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 const requests: { text: string; images: { data: string; mimeType: string }[] }[] = [];
 let replyImage = "";
+let heldReply: Promise<void> | undefined;
 let app: App;
 let server: Server;
 let browsers: Browsers;
@@ -232,7 +233,9 @@ before(async () => {
     mkdirSync(project);
     mkdirSync(elsewhere);
     app = await openApp(
-        scriptedModel((request) => {
+        scriptedModel(async (request) => {
+            await heldReply;
+
             const { text } = lastText(request as never);
             const messages = (request as { messages: { role: string; content: unknown }[] })
                 .messages;
@@ -301,6 +304,50 @@ after(async () => {
             cleanUp();
         }
     }
+});
+
+test("PiP's header picker saves to PiP and cannot change a running turn", real, async () => {
+    await fresh(VIEWPORTS.mobile, true);
+    assert.equal(
+        await inPage(`return JSON.stringify(!!document.querySelector('.pip-model'))`),
+        true,
+    );
+    await tap(".pip-model");
+    await see(`document.querySelector('[role=dialog][aria-label=Model]')`, "PiP's model picker");
+    await tap("[role=option]:nth-child(3)");
+    await until(
+        async () => (await app.agentState(pip))?.model?.modelId === "faux-2",
+        "PiP's model saved",
+    );
+    assert.equal((await app.agentState(background))?.model?.modelId, "faux-1");
+    let releaseReply!: () => void;
+
+    heldReply = new Promise<void>((resolve) => {
+        releaseReply = resolve;
+    });
+    await tap(".pip-model");
+
+    try {
+        await app.commands.submit(pip, owner(app), { text: "hold", requestId: "model-chip-hold" });
+        await see(`document.querySelector('.pip-model').disabled`, "busy PiP's chip disabled");
+        await see(`document.querySelector('[role=option]').disabled`, "open picker locked too");
+        await assert.rejects(
+            app.commands.configure(pip, owner(app), {
+                model: { provider: "faux", modelId: "faux-1" },
+                pipPanel: true,
+            }),
+            { status: 409 },
+        );
+    } finally {
+        releaseReply();
+        heldReply = undefined;
+    }
+
+    await see(`!document.querySelector('.pip-model').disabled`, "idle PiP's chip enabled");
+    await page.evaluate(`(await import('/store.js')).closeSheet()`);
+    await app.commands.configure(pip, owner(app), {
+        model: { provider: "faux", modelId: "faux-vision" },
+    });
 });
 
 for (const [device, viewport] of [
