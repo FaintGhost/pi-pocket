@@ -321,7 +321,7 @@ test(
         assert.ok(!byId.has(Number(ids.idle)), "not an idle session");
         assert.equal(byId.get(Number(ids.waiting))?.label, "needs you");
         assert.deepEqual(byId.get(Number(ids.waiting))?.buttons.slice(-2), ["Deny", "Allow"]);
-        assert.match(byId.get(Number(ids.waiting))!.ask, /bash: git push -u origin deps/);
+        assert.match(byId.get(Number(ids.waiting))!.ask, /bash\s*git push -u origin deps/);
         assert.match(byId.get(Number(ids.waiting))!.ask, /pushes to a remote/, "and why it asks");
         assert.equal(byId.get(Number(ids.pinned))?.label, "pinned");
         assert.equal(byId.get(Number(ids.finished))?.label, "done · new");
@@ -911,6 +911,21 @@ test("turned on with nothing to show, the column says what will show there", rea
         await browsers.close(4);
         app.config.removeUser(user.id);
     }
+});
+
+test("the rail has the tiles switch too, and its Pi goes home", real, async () => {
+    const rail = `document.querySelector('.sidebar .rail [aria-label="Peek tiles"]')`;
+    const was = await pressed();
+
+    await page.evaluate(`${rail}.click()`);
+    assert.notEqual(await pressed(), was, "the top bar's switch follows the rail's");
+    await page.evaluate(`${rail}.click()`);
+    assert.equal(await pressed(), was);
+    await page.evaluate(`document.querySelector(".sidebar .rail-brand").click()`);
+    await until(
+        async () => (await inPage<string>(`return JSON.stringify(location.pathname)`)) === "/",
+        "the home screen",
+    );
 });
 
 test("nothing went wrong in the page", real, async () => {

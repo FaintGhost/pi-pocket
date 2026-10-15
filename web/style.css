@@ -7110,14 +7110,14 @@ textarea.notes {
 /* ─── Peek tiles ───────────────────────────────────────────── */
 
 /* Other sessions beside the conversation, one tile each: a column on wide screens, scrolling, and a strip under the
- * top bar on narrow ones. With tiling, the column is bare and each tile is a window of its own; the tile under the
- * mouse takes the active border. Turned on or off, the column slides like the People panel; the tiles in it then
- * change without motion: only the conversation moves. */
+ * top bar on narrow ones. With tiling, the column is bare and each tile a card of its own; the column takes the focus
+ * ring. Turned on or off, the column slides like the People panel; the tiles in it then change without motion: only
+ * the conversation moves. */
 .peeks {
     flex: 0 0 var(--peeks-w, clamp(260px, 21vw, 340px));
     height: 100dvh;
     min-height: 0;
-    border-left: 1px solid var(--line);
+    border-left: 1px solid var(--hair);
     background: var(--panel);
 }
 
@@ -7132,14 +7132,14 @@ textarea.notes {
 /* Turned on with nothing to show yet: what will show here. */
 .peeks-empty {
     margin: auto 0;
-    padding: 1.5rem 1rem;
+    padding: 24px 16px;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.6rem;
     text-align: center;
     color: var(--muted);
-    font-size: 0.86rem;
+    font-size: 13px;
 }
 
 .peeks-empty p {
@@ -7153,11 +7153,13 @@ textarea.notes {
 /* The top bar's switch, while off: another session waits for you. */
 .peek-dot {
     position: absolute;
-    top: 7px;
-    right: 7px;
-    width: 7px;
-    height: 7px;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
     background: var(--warn);
+    box-shadow: 0 0 0 2px var(--bg);
 }
 
 .peeks-list {
@@ -7168,8 +7170,8 @@ textarea.notes {
     overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.6rem;
+    gap: 8px;
+    padding: 8px;
     scroll-snap-type: y proximity;
     scrollbar-width: thin;
 }
@@ -7177,58 +7179,41 @@ textarea.notes {
 .peek {
     position: relative;
     flex: none;
-    height: var(--peek-h, 13rem);
     display: flex;
     flex-direction: column;
     min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-window);
     background: var(--card);
-    border: 1px solid var(--line);
     scroll-snap-align: start;
     transition: border-color var(--t-hover) var(--ease-out);
 }
 
-.peek:hover,
-.peek:focus-within {
-    border-color: var(--accent-line);
-}
-
 .peek.waiting {
-    height: auto;
-    min-height: var(--peek-h, 13rem);
     border-color: var(--warn-line);
 }
 
-/* A waiting tile grows to show its whole call; its own lines keep to a few. */
-.peek.waiting .peek-lines {
-    flex: none;
-    max-height: 5.6rem;
-}
-
+/* Its header opens the session: its folder's square and title, and its path. */
 .peek-head {
     display: flex;
-    align-items: center;
-    gap: 0.55rem;
+    flex-direction: column;
+    gap: 2px;
     min-width: 0;
-    padding: 0.5rem 0.6rem;
-    border-bottom: 1px solid var(--line);
+    padding: 12px 14px 8px;
     text-align: left;
+    transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.peek-head .session-state {
-    align-self: center;
-    margin-top: 0;
-}
-
-.peek.done .state-idle {
-    background: var(--ok);
-    border-color: var(--ok);
+.peek-head:hover {
+    background: var(--hover);
 }
 
 .peek-name {
-    flex: 1;
-    min-width: 0;
     display: flex;
-    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
 }
 
 .peek-title,
@@ -7239,95 +7224,76 @@ textarea.notes {
 }
 
 .peek-title {
+    flex: 1;
+    min-width: 0;
     color: var(--text);
-    font-size: 0.86rem;
+    font-size: 13.5px;
+    font-weight: 500;
 }
 
 .peek-cwd {
+    padding-left: 16px;
     color: var(--faint);
-    font-size: 0.7rem;
+    font-size: 11px;
 }
 
+/* The last few lines: a mark for who or what, then the words, two lines at most. */
 .peek-lines {
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    gap: 2px;
-    padding: 0.35rem 0.6rem;
-    font-size: 0.74rem;
+    gap: 3px;
+    padding: 2px 14px 10px;
     cursor: pointer;
-    mask-image: linear-gradient(to bottom, transparent, #000 1.5rem);
 }
 
 .peek-line {
-    flex: none;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    color: var(--muted);
-}
-
-.peek-line.text {
-    color: var(--text);
-    white-space: normal;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-}
-
-.peek-line.user b {
-    color: var(--accent);
-    font-weight: 600;
-}
-
-.peek-line .pi {
-    color: var(--brand);
-    font-weight: 700;
+    display: flex;
+    gap: 7px;
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--body);
 }
 
 .peek-mark {
+    flex: none;
+    width: 14px;
+    font: 600 11px / 18px var(--mono);
     color: var(--faint);
 }
 
-/* The call a session waits on: the whole command when it is short enough to allow from here, and the guard's reason. */
-.peek-ask {
-    flex: none;
-    padding: 0.3rem 0.6rem;
-    border-top: 1px solid var(--warn-line);
-    background: var(--warn-soft);
-    font-size: 0.72rem;
+.peek-line.user .peek-mark {
+    color: var(--accent);
 }
 
-.peek-ask-what {
-    color: var(--warn);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 4;
-    line-clamp: 4;
-    overflow: hidden;
+/* Pi's own words: its mark in Georgia, as everywhere. */
+.peek-mark.pi {
+    font:
+        13px / 1.5 Georgia,
+        serif;
 }
 
-/* A command short enough to allow from here shows whole, never clamped. */
-.peek-ask-what.whole {
-    display: block;
-    -webkit-line-clamp: unset;
-    line-clamp: none;
-    overflow: visible;
-}
-
-.peek-ask-why {
-    color: var(--muted);
+.peek-text {
+    min-width: 0;
     display: -webkit-box;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.peek-line.user .peek-text {
+    color: var(--muted);
+}
+
+.peek-line.user b {
+    color: var(--o-cyan);
+    font-weight: 600;
+}
+
+.peek-line.cmd .peek-text {
+    font: 12px / 1.5 var(--mono);
 }
 
 .peek-line.err,
@@ -7347,6 +7313,7 @@ textarea.notes {
     display: block;
     height: 0.45rem;
     margin: 0.3rem 0;
+    border-radius: var(--r-mark);
     background: var(--card-2);
 }
 
@@ -7358,20 +7325,80 @@ textarea.notes {
     width: 60%;
 }
 
+/* The call a session waits on: the whole command when it is short enough to allow from here, and the guard's reason. */
+.peek-ask {
+    flex: none;
+    margin: 0 10px 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border: 1px solid var(--warn-line);
+    border-radius: var(--r-control);
+    background: var(--warn-soft);
+}
+
+.peek-ask-tool {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--warn);
+}
+
+.peek-ask-what {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
+    overflow: hidden;
+}
+
+/* A command short enough to allow from here shows whole, never clamped. */
+.peek-ask-what.whole {
+    display: block;
+    -webkit-line-clamp: unset;
+    line-clamp: none;
+    overflow: visible;
+}
+
+.peek-ask-why {
+    font-size: 12px;
+    color: var(--muted);
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+}
+
+/* The state in words (needs you, working, done, new), and Deny and Allow where a call waits. */
 .peek-foot {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
-    min-height: 2.4rem;
-    padding: 0.3rem 0.45rem 0.3rem 0.6rem;
-    border-top: 1px solid var(--line);
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 10px 0 14px;
+    border-top: 1px solid var(--hair);
 }
 
 .peek-status {
-    margin-right: auto;
+    flex: 1;
+    min-width: 0;
     color: var(--faint);
-    font-size: 0.74rem;
+    font-size: 12.5px;
+    font-weight: 500;
     white-space: nowrap;
+}
+
+.peek-status::first-letter {
+    text-transform: uppercase;
 }
 
 .peek.working .peek-status {
@@ -7394,17 +7421,40 @@ textarea.notes {
 
 .peek-actions {
     display: inline-flex;
-    gap: 0.3rem;
+    gap: 8px;
 }
 
-.peek-actions .button.small,
-.peek-seen {
-    min-height: 1.9rem;
+.peek-actions .button.small {
+    min-height: 30px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--card-2);
+    color: var(--text);
+    font-size: 12.5px;
+    font-weight: 500;
+}
+
+.peek-actions .button.small:hover:not(:disabled) {
+    color: var(--err);
+}
+
+.peek-actions .button.small.primary {
+    padding: 0 14px;
+    background: var(--accent-fill);
+    color: var(--accent-ink);
+    font-weight: 600;
+}
+
+.peek-actions .button.small.primary:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+    color: var(--accent-ink);
 }
 
 .peek-seen {
-    width: 1.9rem;
-    height: 1.9rem;
+    width: 30px;
+    height: 30px;
+    color: var(--ok);
 }
 
 /* Calls waiting for approval out of view: a way to them, at the column's edge. */
@@ -7413,31 +7463,33 @@ textarea.notes {
     left: 50%;
     z-index: 2;
     transform: translateX(-50%);
-    padding: 0.3rem 0.75rem;
+    padding: 5px 12px;
+    border-radius: var(--r-pill);
     background: var(--warn);
+    box-shadow: var(--pop);
     color: var(--accent-ink);
-    font-size: 0.75rem;
-    font-weight: 700;
+    font-size: 12px;
+    font-weight: 600;
     white-space: nowrap;
 }
 
 .peeks-jump.up {
-    top: 0.5rem;
+    top: 8px;
 }
 
 .peeks-jump.down {
-    bottom: 0.5rem;
+    bottom: 8px;
 }
 
 .peek-strip {
     flex: none;
     animation: peek-strip-in var(--t-in) var(--ease-out) backwards;
     display: flex;
-    gap: 0.5rem;
+    gap: 8px;
     overflow-x: auto;
     overscroll-behavior-x: contain;
-    padding: 0.45rem 0.6rem;
-    border-bottom: 1px solid var(--line);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--hair);
     scroll-snap-type: x proximity;
     scrollbar-width: none;
 }
@@ -7453,16 +7505,13 @@ textarea.notes {
     }
 }
 
-.peek-strip .peek,
-.peek-strip .peek.waiting {
-    width: 15rem;
-    height: auto;
-    min-height: 0;
+.peek-strip .peek {
+    width: 240px;
+    border-radius: var(--r-card);
 }
 
 .peek-strip .peek-head {
-    padding: 0.35rem 0.55rem 0.15rem;
-    border-bottom: 0;
+    padding: 8px 12px 2px;
 }
 
 .peek-strip .peek-cwd {
@@ -7470,48 +7519,38 @@ textarea.notes {
 }
 
 .peek-strip .peek-lines {
-    padding: 0 0.55rem;
-    mask-image: none;
-}
-
-.peek-strip .peek-line.text {
-    display: block;
-    white-space: nowrap;
+    padding: 0 12px 8px;
 }
 
 .peek-strip .peek-ask {
-    margin: 0.2rem 0.55rem 0;
-    border: 1px solid var(--warn-line);
+    margin: 0 8px 8px;
+    padding: 8px 10px;
 }
 
 .peek-strip .peek-foot {
     min-height: 0;
-    padding: 0.1rem 0.4rem 0.35rem 0.55rem;
+    padding: 0 8px 8px 12px;
     border-top: 0;
 }
 
 @media (min-width: 960px) {
+    /* Bare: the tiles are the cards, and the column's ring shows the focus. */
     :root[data-tiling="on"] .peeks.window {
         height: auto;
         border: 0;
-        border-radius: 0;
+        border-radius: var(--r-window);
         overflow: visible;
         background: none;
     }
+    :root[data-tiling="on"][data-focus="peeks"] .peeks.window {
+        outline: 1px solid var(--accent-line);
+        outline-offset: 2px;
+    }
     :root[data-tiling="on"] .peeks-list {
-        gap: calc(var(--gap-in) * 2);
         padding: 0;
     }
     :root[data-tiling="on"] .peeks .peek {
-        border: var(--border) solid var(--o-inactive);
         background: var(--bg);
-    }
-    :root[data-tiling="on"] .peeks .peek.waiting {
-        border-color: var(--warn);
-    }
-    :root[data-tiling="on"] .peeks .peek:hover,
-    :root[data-tiling="on"] .peeks .peek:focus-within {
-        border-image: var(--active) 1;
     }
 }
 

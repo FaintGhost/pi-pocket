@@ -6,10 +6,19 @@
 // last had. Their state marks stay current from the session list, which covers every session.
 import { Component } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
+import { folderColor } from "./avatar.js";
 import { describeCall } from "./calls.js";
 import { finishedUnseen, markSeen, seenSince } from "./seen.js";
-import { workspaceOrder } from "./sessions.js";
-import { actions, api, attempt, canSteer, navigate, notify, store } from "./store.js";
+import {
+    actions,
+    api,
+    attempt,
+    canSteer,
+    navigate,
+    notify,
+    store,
+    workspaceOrder,
+} from "./store.js";
 import { prefs, setPrefs } from "./theme.js";
 import { html, Icon, shortPath, usePresence } from "./ui.js";
 
@@ -136,6 +145,25 @@ export function togglePeeks() {
     }
 }
 
+/** The rail's switch, where the top bar's is out of room (a narrow pane). */
+export function PeeksRailButton() {
+    if (store.state.server?.peeks !== true) {
+        return null;
+    }
+
+    const on = peeksOn();
+
+    return html`<button
+        class=${`rail-button rail-peeks ${on ? "open" : ""}`}
+        title=${on ? "Hide peek tiles (Alt+P)" : "Peek at other sessions (Alt+P)"}
+        aria-label="Peek tiles"
+        aria-pressed=${on}
+        onClick=${togglePeeks}
+    >
+        <${Icon} name="tiles" size=${19} />
+    </button>`;
+}
+
 /** The top bar's switch. While off, a dot says another session waits for you. */
 export function PeeksButton() {
     const { server, sessions, conversationId } = store.state;
@@ -151,16 +179,14 @@ export function PeeksButton() {
             (session) => session.waiting && !session.archived && session.id !== conversationId,
         );
 
-    // Quiet while off, unless another session waits for you; where the top bar leads back to the sessions, its way back
-    // counts those waiting, and it stays quiet then too.
     return html`<button
-        class=${`icon-button badge-host ${on ? "on" : waiting ? "quiet-narrow" : "quiet"}`}
+        class=${`icon-button badge-host top-toggle ${on ? "on" : ""}`}
         aria-label="Peek tiles"
         aria-pressed=${on}
         title=${on ? "Hide peek tiles (Alt+P)" : "Peek at other sessions (Alt+P)"}
         onClick=${togglePeeks}
     >
-        <${Icon} name="tiles" />
+        <${Icon} name="tiles" size=${18} />
         ${waiting && html`<span class="peek-dot" aria-hidden="true"></span>`}
     </button>`;
 }
@@ -377,36 +403,52 @@ function Status({ status }) {
     return status === "error" ? html`<span class="err" title="Failed">✕</span>` : null;
 }
 
+/** A line of a tile: a mark column (who or what), then the words, two lines at most. */
 function PeekLine({ line }) {
     switch (line.kind) {
         case "user":
             return html`<div class="peek-line user">
-                <span class="peek-mark">›</span>${" "}
-                ${line.from && html`<b>${line.from}</b> `}${line.text}
+                <span class="peek-mark">›</span>
+                <span class="peek-text">${line.from && html`<b>${line.from}</b> `}${line.text}</span>
             </div>`;
         case "text":
-            return html`<div class="peek-line text"><span class="pi">π</span> ${line.text}</div>`;
+            return html`<div class="peek-line text">
+                <span class="peek-mark pi">π</span>
+                <span class="peek-text">${line.text}</span>
+            </div>`;
 
         case "tool": {
             const call = describeCall({ name: line.name, args: line.args });
 
-            return html`<div class="peek-line">
-                <span class="peek-mark">${call.icon}</span> ${call.label} ${call.subject}${" "}
-                <${Status} status=${line.status} />
+            return html`<div class="peek-line cmd">
+                <span class="peek-mark">${call.icon}</span>
+                <span class="peek-text">
+                    ${call.label} ${call.subject}${" "}
+                    <${Status} status=${line.status} />
+                </span>
             </div>`;
         }
 
         case "shell":
-            return html`<div class="peek-line">
-                <span class="peek-mark">$</span> ${line.command}${" "}
-                <${Status} status=${line.status} />
+            return html`<div class="peek-line cmd">
+                <span class="peek-mark">${">_"}</span>
+                <span class="peek-text">${line.command}${" "}<${Status} status=${line.status} /></span>
             </div>`;
         case "note":
-            return html`<div class="peek-line faint">${line.name}: ${line.text}</div>`;
+            return html`<div class="peek-line faint">
+                <span class="peek-mark">⑂</span>
+                <span class="peek-text">${line.name}: ${line.text}</span>
+            </div>`;
         case "error":
-            return html`<div class="peek-line err">${line.text}</div>`;
+            return html`<div class="peek-line err">
+                <span class="peek-mark">×</span>
+                <span class="peek-text">${line.text}</span>
+            </div>`;
         default:
-            return html`<div class="peek-line faint">${line.text}</div>`;
+            return html`<div class="peek-line faint">
+                <span class="peek-mark"></span>
+                <span class="peek-text">${line.text}</span>
+            </div>`;
     }
 }
 
@@ -420,8 +462,9 @@ const wholeOnTile = (approval) =>
 /** The call a session waits on, in full when it is short, and why the guard asks. */
 function PeekAsk({ approval, compact }) {
     return html`<div class="peek-ask" title=${`${approval.subject}\n\n${approval.reason}`}>
+        <span class="peek-ask-tool mono"><${Icon} name="shield" size=${12} />${approval.tool}</span>
         <div class=${`peek-ask-what mono ${wholeOnTile(approval) ? "whole" : ""}`}>
-            <${Icon} name="shield" size=${11} /> ${approval.tool}: ${approval.subject}
+            ${approval.subject}
         </div>
         ${!compact && approval.reason && html`<div class="peek-ask-why">${approval.reason}</div>`}
     </div>`;
@@ -463,6 +506,9 @@ function PeekApproval({ approval, me, rule, whole }) {
         }
     </span>`;
 }
+
+/** A tile's square, in the shape the session list gives the same state: its folder's color. */
+const SHAPES = { waiting: "waiting", working: "working", done: "fresh", idle: "seen" };
 
 /**
  * One tile. The whole app renders on every update while a session streams; a tile renders again only when what it
@@ -513,28 +559,27 @@ class PeekTile extends Component {
         // A call answered elsewhere can stay on a tile scrolled away: the session list says whether one still waits.
         const approval = session.waiting ? peek?.approvals?.[0] : undefined;
         const lines = peek?.lines;
-        const shown = compact ? (lines ?? []).slice(-1) : lines;
-        const mark =
-            status === "waiting"
-                ? html`<span class="state-warn">!</span>`
-                : status === "working"
-                  ? html`<span class="mini-sweep"><i></i><i></i><i></i></span>`
-                  : html`<span class="state-idle"></span>`;
+        // The last few lines, which the tile gives two lines of text each.
+        const shown = compact ? (lines ?? []).slice(-1) : lines?.slice(-3);
 
         return html`<div class=${`peek ${status}`} data-peek=${session.id}>
             <button class="peek-head" title=${`Open ${title}`} onClick=${open}>
-                <span class="session-state">${mark}</span>
                 <span class="peek-name">
+                    <span
+                        class=${`state-mark ${SHAPES[status]}`}
+                        style=${`--folder:${folderColor(session.cwd)}`}
+                        aria-hidden="true"
+                    ></span>
                     <span class="peek-title">${title}</span>
-                    <span class="peek-cwd mono">${shortPath(session.cwd, home)}</span>
+                    ${
+                        number !== undefined &&
+                        number < 9 &&
+                        html`<kbd class="session-num">${number + 1}</kbd>`
+                    }
                 </span>
-                ${
-                    number !== undefined &&
-                    number < 9 &&
-                    html`<kbd class="session-num">${number + 1}</kbd>`
-                }
+                <span class="peek-cwd mono">${shortPath(session.cwd, home)}</span>
             </button>
-            <div class="peek-lines mono" onClick=${open}>
+            <div class="peek-lines" onClick=${open}>
                 ${
                     shown === undefined
                         ? html`<span class="peek-skeleton"><i></i><i></i><i></i></span>`
@@ -570,7 +615,7 @@ class PeekTile extends Component {
                         aria-label="Mark as seen"
                         onClick=${() => markSeen(session.id)}
                     >
-                        <${Icon} name="check" size=${14} />
+                        <${Icon} name="check" size=${16} />
                     </button>`
                 }
             </div>

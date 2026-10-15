@@ -218,6 +218,19 @@ export function sessionUnread(session, state = store.state) {
     return session.chatAt !== undefined && session.chatBy !== state.me?.id && session.chatAt > read;
 }
 
+/**
+ * Sessions in "workspace" order, as Alt+1…9 and the rail number them: pinned ones first (in the order they were
+ * pinned), then the rest, newest first. Archived sessions are left out.
+ */
+export function workspaceOrder(state = store.state) {
+    const active = state.sessions.filter((session) => !session.archived);
+    const pinned = state.pinned
+        .map((id) => active.find((session) => session.id === id))
+        .filter(Boolean);
+
+    return [...pinned, ...active.filter((session) => !pinned.includes(session))];
+}
+
 /** Server features the web app may use. `collab` 2 adds roles, take turns, reactions, pins, notes, mentions, push. */
 export const collab = () => (store.state.server?.collab ?? 0) >= 2;
 /** Viewers read and chat; they never steer Pi. */
