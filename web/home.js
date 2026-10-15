@@ -1,6 +1,8 @@
 // The wide home screen, shown beside the session list when no session is open.
 
 import { folderColor } from "./avatar.js";
+import { useEffect } from "preact/hooks";
+import { sessionMark } from "./sessions.js";
 import { canSteer, navigate, openSheet, scoped, store, workspaceOrder } from "./store.js";
 import { paletteOf, prefs } from "./theme.js";
 import { html, Icon, Keys, shortPath, timeAgo } from "./ui.js";
@@ -21,8 +23,40 @@ export function Splash() {
     const { me, sessions, models, server, guard } = store.state;
     const palette = paletteOf();
     const p = prefs();
-    const busy = sessions.filter((session) => session.busy).length;
+    const busy = sessions.filter((session) => session.busy && !session.archived).length;
     const recent = workspaceOrder().slice(0, 5);
+
+    // The keys beside Jump back in: a digit opens its session, as Alt and the digit does anywhere.
+    useEffect(() => {
+        const onKey = (event) => {
+            const target = event.target;
+            const index = Number(event.key) - 1;
+
+            if (
+                event.defaultPrevented ||
+                event.altKey ||
+                event.ctrlKey ||
+                event.metaKey ||
+                !(index >= 0 && index < 5) ||
+                target?.closest?.("input, textarea, select, [contenteditable]") ||
+                store.state.sheet ||
+                store.state.launcher
+            ) {
+                return;
+            }
+
+            const session = workspaceOrder()[index];
+
+            if (session) {
+                event.preventDefault();
+                navigate(session.id);
+            }
+        };
+
+        addEventListener("keydown", onKey);
+
+        return () => removeEventListener("keydown", onKey);
+    }, []);
     const rows = [
         ["theme", `${palette.name}${p.theme === "desktop" && palette.desktop ? " (desktop)" : ""}`],
         [
@@ -104,14 +138,14 @@ export function Splash() {
                     ) => html`<button class="splash-row" onClick=${() => navigate(session.id)}>
                         <span class="splash-key">${index + 1}</span>
                         <span
-                            class="splash-mark"
+                            class=${`state-mark ${sessionMark(session).shape}`}
                             style=${`--folder:${folderColor(session.cwd)}`}
                             aria-hidden="true"
                         ></span>
                         <span class="splash-title">${session.title ?? "New session"}</span>
                         <span class="splash-meta">
-                            ${session.busy ? "working · " : ""}
-                            ${timeAgo(session.updatedAt)}
+                            ${session.waiting ? html`<span class="session-needs">${canSteer() ? "needs you" : "waiting"}</span>` : session.busy ? "working · " : ""}
+                            ${!session.waiting && timeAgo(session.updatedAt)}
                         </span>
                     </button>`,
                 )}

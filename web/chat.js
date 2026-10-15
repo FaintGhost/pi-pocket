@@ -233,7 +233,7 @@ class ChatLine extends Component {
                 html`<div class="chat-meta">
                     <span class="chat-name">${mine ? "You" : senderName(message, users)}</span>
                     <span class="muted">${clock(message.at)}</span>
-                    ${pinned && html`<span class="muted">📌</span>`}
+                    ${pinned && html`<${Icon} name="pin" size=${11} class="muted" />`}
                 </div>`
             }
             ${
@@ -324,6 +324,34 @@ function ChatTab({ highlight, focus }) {
             element.scrollTop = element.scrollHeight;
         }
     }, [newest]);
+    // At the bottom, it stays there while the log's height settles: the panel opening, the box under it growing.
+    useEffect(() => {
+        const element = log.current;
+
+        if (!element) {
+            return undefined;
+        }
+
+        let atBottom = !highlight;
+
+        const onScroll = () => {
+            atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+        };
+
+        const observer = new ResizeObserver(() => {
+            if (atBottom) {
+                element.scrollTop = element.scrollHeight;
+            }
+        });
+
+        element.addEventListener("scroll", onScroll, { passive: true });
+        observer.observe(element);
+
+        return () => {
+            element.removeEventListener("scroll", onScroll);
+            observer.disconnect();
+        };
+    }, []);
     useEffect(() => {
         if (focus && !coarse) {
             box.current?.focus();
@@ -398,10 +426,7 @@ function ChatTab({ highlight, focus }) {
         <${Icon} name="eye" size=${12} />Side chat · Pi does not see this chat.
     </div>
     <div class="chat-log" ref=${log}>
-        ${
-            chat.length === 0 &&
-            html`<div class="muted">No messages yet. Pi does not see this chat.</div>`
-        }
+        ${chat.length === 0 && html`<div class="muted">No messages yet.</div>`}
         ${chat.map((message, index) => {
             const previous = chat[index - 1];
             const grouped =
@@ -462,7 +487,7 @@ function ChatTab({ highlight, focus }) {
             rows="1"
             maxlength="4000"
             value=${text}
-            placeholder=${collab() ? "Message the people here… @ to mention" : "Message the people here…"}
+            placeholder=${collab() ? "Message… @ to mention" : "Message the people here…"}
             onInput=${(event) => update(event.currentTarget.value, event.currentTarget.selectionStart)}
             onKeyDown=${(event) => {
                 if (

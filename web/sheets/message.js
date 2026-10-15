@@ -122,11 +122,14 @@ export function MessageSheet({ entryId }) {
     const toPi = entry.kind === "user";
     const text = toPi ? writtenText(entry) : replyText(entry);
     const prompt = toPi ? entry : promptBefore(entryId);
-    const copy = () =>
+
+    const copy = () => {
+        closeSheet();
         copyText(text).then(
             () => notify("info", "Copied."),
             () => notify("error", "Could not copy."),
         );
+    };
 
     if (draft !== null) {
         return html`<${Sheet} title="Edit and send again" onClose=${closeSheet}>

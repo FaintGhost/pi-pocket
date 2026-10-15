@@ -251,10 +251,12 @@ select {
         background-color var(--t-hover) var(--ease-out);
 }
 
-input:hover,
-textarea:hover,
-select:hover {
-    border-color: var(--edge);
+@media (hover: hover) {
+    input:hover,
+    textarea:hover,
+    select:hover {
+        border-color: var(--edge);
+    }
 }
 
 input:focus,
@@ -309,8 +311,10 @@ a {
     background-clip: padding-box;
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background-color: var(--muted);
+@media (hover: hover) {
+    ::-webkit-scrollbar-thumb:hover {
+        background-color: var(--muted);
+    }
 }
 
 ::-webkit-scrollbar-track,
@@ -782,10 +786,16 @@ kbd {
         transform var(--t-in) var(--ease-out);
 }
 
-.resize-handle:hover::before,
 :root.resizing .resize-handle::before {
     opacity: 1;
     transform: none;
+}
+
+@media (hover: hover) {
+    .resize-handle:hover::before {
+        opacity: 1;
+        transform: none;
+    }
 }
 
 :root[data-rail="on"] .resize-handle {
@@ -840,8 +850,10 @@ kbd {
     color: var(--muted);
 }
 
-.topbar .icon-button:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .topbar .icon-button:hover {
+        color: var(--text);
+    }
 }
 
 .topbar .icon-button.on {
@@ -904,8 +916,8 @@ kbd {
     }
     /* Out past the chevron's tip, so it covers neither the arrow nor the title. */
     .topbar-back .badge {
-        top: -1px;
-        right: -3px;
+        top: -3px;
+        right: -6px;
     }
 }
 
@@ -945,8 +957,10 @@ kbd {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.title:has(> .title-open:hover) {
-    background: var(--hover);
+@media (hover: hover) {
+    .title:has(> .title-open:hover) {
+        background: var(--hover);
+    }
 }
 
 /* Over the whole title, under the branch. */
@@ -1039,9 +1053,11 @@ kbd {
     z-index: 1;
 }
 
-.title-sub > button.title-branch:hover {
-    color: var(--accent);
-    background: var(--card-2);
+@media (hover: hover) {
+    .title-sub > button.title-branch:hover {
+        color: var(--accent);
+        background: var(--card-2);
+    }
 }
 
 .title-sub > .title-worktree {
@@ -1059,8 +1075,10 @@ kbd {
     .title-branch .icon {
         display: none;
     }
-    .title-sub > button.title-branch:hover {
-        background: none;
+    @media (hover: hover) {
+        .title-sub > button.title-branch:hover {
+            background: none;
+        }
     }
 }
 
@@ -1099,8 +1117,10 @@ kbd {
     transition: border-color var(--t-hover) var(--ease-out);
 }
 
-.changes-button:hover {
-    border-color: var(--hair-2);
+@media (hover: hover) {
+    .changes-button:hover {
+        border-color: var(--hair-2);
+    }
 }
 
 .changes-button .added,
@@ -1274,8 +1294,10 @@ kbd {
     text-align: left;
 }
 
-.parent-session:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .parent-session:hover {
+        background: var(--hover);
+    }
 }
 
 .parent-session > :not(.parent-session-title) {
@@ -1315,8 +1337,10 @@ kbd {
     cursor: pointer;
 }
 
-.user-row > .prompt.tappable:hover {
-    background: var(--card-2);
+@media (hover: hover) {
+    .user-row > .prompt.tappable:hover {
+        background: var(--card-2);
+    }
 }
 
 .prompt-head {
@@ -1530,6 +1554,13 @@ kbd {
     border-bottom: 1px solid var(--hair);
 }
 
+.md hr {
+    height: 0;
+    margin: 1.1em 0;
+    border: 0;
+    border-top: 1px solid var(--hair);
+}
+
 .md blockquote {
     margin: 0.5rem 0;
     padding-left: 0.8rem;
@@ -1579,9 +1610,11 @@ kbd {
         background-color var(--t-hover) var(--ease-out);
 }
 
-.code-head .copy:hover {
-    color: var(--text);
-    background: var(--hover);
+@media (hover: hover) {
+    .code-head .copy:hover {
+        color: var(--text);
+        background: var(--hover);
+    }
 }
 
 .md pre {
@@ -1671,8 +1704,10 @@ kbd {
     font: 11.5px var(--mono);
 }
 
-.reaction:hover {
-    border-color: var(--edge);
+@media (hover: hover) {
+    .reaction:hover {
+        border-color: var(--edge);
+    }
 }
 
 .reaction.mine {
@@ -1684,6 +1719,7 @@ kbd {
 .reaction.add {
     display: inline-flex;
     align-items: center;
+    gap: 4px;
     flex: none;
     height: 26px;
     padding: 0 8px;
@@ -1746,8 +1782,10 @@ kbd {
     line-height: 1;
 }
 
-.reaction-picker button:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .reaction-picker button:hover {
+        background: var(--hover);
+    }
 }
 
 /* ─── Tool cards ───────────────────────────────────────────── */
@@ -1791,9 +1829,11 @@ kbd {
     border-bottom: 1px solid var(--hair);
 }
 
-.activity-head:hover {
-    color: var(--text);
-    background: var(--hover);
+@media (hover: hover) {
+    .activity-head:hover {
+        color: var(--text);
+        background: var(--hover);
+    }
 }
 
 /* Inside a card that cuts off what is past it. */
@@ -1807,6 +1847,15 @@ kbd {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.activity-failed {
+    flex: none;
+    padding: 1px 7px;
+    border-radius: var(--r-pill);
+    background: var(--err-soft);
+    color: var(--err);
+    font: 500 11px var(--sans);
 }
 
 .activity-time {
@@ -1866,8 +1915,10 @@ kbd {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.step-head:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .step-head:hover {
+        background: var(--hover);
+    }
 }
 
 /* Just finished: the line flashes its success color once. */
@@ -1988,8 +2039,10 @@ kbd {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.step-open:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .step-open:hover {
+        background: var(--hover);
+    }
 }
 
 /* Who allowed or denied a call Lancet Guard asked about. */
@@ -2118,8 +2171,10 @@ pre.diff .del {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.artifact-link:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .artifact-link:hover {
+        background: var(--hover);
+    }
 }
 
 /* A subagent's report: a card. */
@@ -2249,8 +2304,10 @@ pre.diff .del {
     color: var(--text);
 }
 
-.approval-actions .button.deny:hover {
-    color: var(--err);
+@media (hover: hover) {
+    .approval-actions .button.deny:hover {
+        color: var(--err);
+    }
 }
 
 /* On a phone: the answers share the width, thumb-tall. */
@@ -2501,9 +2558,11 @@ pre.diff .del {
         transform 90ms var(--ease-out);
 }
 
-.jump:hover {
-    border-color: var(--accent-line);
-    color: var(--accent);
+@media (hover: hover) {
+    .jump:hover {
+        border-color: var(--accent-line);
+        color: var(--accent);
+    }
 }
 
 .jump:active {
@@ -2614,16 +2673,38 @@ pre.diff .del {
 .queued-text {
     flex: 1;
     min-width: 0;
+    align-self: stretch;
+    padding: 0;
     color: var(--text);
+    font: inherit;
+    text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* Tapped: the whole message, wrapped, scrolling past a few lines. */
+.queued-text.open {
+    padding: 8px 0;
+    max-height: 30vh;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .queued .queued-remove {
     width: 26px;
     height: 26px;
     color: var(--muted);
+}
+
+/* A thumb's room around the small mark. */
+@media (pointer: coarse) {
+    .queued .queued-remove::after {
+        content: "";
+        position: absolute;
+        inset: -8px -4px;
+    }
 }
 
 /* Slash commands: suggestions while typing a name, then a hint for the one that will run. */
@@ -2653,9 +2734,14 @@ pre.diff .del {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.command:hover,
 .command.on {
     background: var(--hover);
+}
+
+@media (hover: hover) {
+    .command:hover {
+        background: var(--hover);
+    }
 }
 
 .command-name {
@@ -2812,8 +2898,10 @@ pre.diff .del {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.model-chip:hover {
-    background: var(--card-2);
+@media (hover: hover) {
+    .model-chip:hover {
+        background: var(--card-2);
+    }
 }
 
 .model-chip .model-spark {
@@ -2885,9 +2973,23 @@ pre.diff .del {
         color var(--t-hover) var(--ease-out);
 }
 
-button.chip:hover {
-    border-color: var(--edge);
-    color: var(--text);
+/* An attachment: a long name gives way, never its size or the button that removes it. */
+.files .chip > * {
+    flex: none;
+}
+
+.files .chip > .chip-name {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (hover: hover) {
+    button.chip:hover {
+        border-color: var(--edge);
+        color: var(--text);
+    }
 }
 
 .chip.toggle.on {
@@ -2912,8 +3014,10 @@ button.chip:hover {
         color var(--t-hover) var(--ease-out);
 }
 
-.composer-row .plan-chip:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .composer-row .plan-chip:hover {
+        color: var(--text);
+    }
 }
 
 .composer-row .plan-chip.on {
@@ -2943,8 +3047,10 @@ button.chip:hover {
         background-color var(--t-hover) var(--ease-out);
 }
 
-.mode-switch button:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .mode-switch button:hover {
+        color: var(--text);
+    }
 }
 
 .mode-switch button.on {
@@ -2976,8 +3082,10 @@ button.chip:hover {
     background: var(--err-soft);
 }
 
-.stop-button:hover {
-    background: color-mix(in srgb, var(--o-red) 22%, transparent);
+@media (hover: hover) {
+    .stop-button:hover {
+        background: color-mix(in srgb, var(--o-red) 22%, transparent);
+    }
 }
 
 .stop-square {
@@ -3004,16 +3112,20 @@ button.chip:hover {
     cursor: pointer;
 }
 
-.send-button.ready:hover {
-    background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+@media (hover: hover) {
+    .send-button.ready:hover {
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+    }
 }
 
 .send-button.ready .icon {
     transition: transform var(--t-in) var(--ease-out);
 }
 
-.send-button.ready:hover .icon {
-    transform: translateY(-2px);
+@media (hover: hover) {
+    .send-button.ready:hover .icon {
+        transform: translateY(-2px);
+    }
 }
 
 /* Dictation (voice.js): a quiet mic beside Send; while it listens, the accent and a ring that breathes. */
@@ -3086,16 +3198,20 @@ button.chip:hover {
     color: var(--accent-ink);
 }
 
-.round.send:not(:disabled):hover {
-    background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+@media (hover: hover) {
+    .round.send:not(:disabled):hover {
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+    }
 }
 
 .round.send:not(:disabled) .icon {
     transition: transform var(--t-in) var(--ease-out);
 }
 
-.round.send:not(:disabled):hover .icon {
-    transform: translateY(-2px);
+@media (hover: hover) {
+    .round.send:not(:disabled):hover .icon {
+        transform: translateY(-2px);
+    }
 }
 
 .round.send:disabled {
@@ -3354,8 +3470,10 @@ button.chip:hover {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-button.rail-brand:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    button.rail-brand:hover {
+        background: var(--hover);
+    }
 }
 
 .rail-button {
@@ -3365,9 +3483,11 @@ button.rail-brand:hover {
         color var(--t-hover) var(--ease-out);
 }
 
-.rail-button:hover {
-    background: var(--hover);
-    color: var(--text);
+@media (hover: hover) {
+    .rail-button:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
 }
 
 .rail-gap {
@@ -3392,7 +3512,7 @@ button.rail-brand:hover {
 }
 
 .rail-new,
-.rail-running,
+.rail-running.lit,
 .rail-agents.lit,
 .rail-pip.lit {
     color: var(--accent);
@@ -3513,9 +3633,11 @@ button.rail-brand:hover {
         background-color var(--t-hover) var(--ease-out);
 }
 
-.ws:hover {
-    color: var(--text);
-    background: var(--hover);
+@media (hover: hover) {
+    .ws:hover {
+        color: var(--text);
+        background: var(--hover);
+    }
 }
 
 .ws.active {
@@ -3594,8 +3716,10 @@ button.rail-brand:hover {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.new-button:hover {
-    background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+@media (hover: hover) {
+    .new-button:hover {
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+    }
 }
 
 .new-button .icon {
@@ -3620,8 +3744,10 @@ button.rail-brand:hover {
         background-color var(--t-hover) var(--ease-out);
 }
 
-.search:hover {
-    border-color: var(--line-strong);
+@media (hover: hover) {
+    .search:hover {
+        border-color: var(--line-strong);
+    }
 }
 
 .search:focus-within {
@@ -3676,8 +3802,10 @@ button.rail-brand:hover {
         color var(--t-hover) var(--ease-out);
 }
 
-.sessions .search:hover {
-    border-color: var(--hair-2);
+@media (hover: hover) {
+    .sessions .search:hover {
+        border-color: var(--hair-2);
+    }
 }
 
 .sessions .search:focus-within {
@@ -3732,9 +3860,11 @@ button.rail-brand:hover {
         color var(--t-hover) var(--ease-out);
 }
 
-.search-clear:hover {
-    background: var(--hover);
-    color: var(--text);
+@media (hover: hover) {
+    .search-clear:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
 }
 
 /* Touch screens have no Ctrl K: the launcher's button takes its place. */
@@ -3783,8 +3913,10 @@ button.rail-brand:hover {
     transition: color var(--t-hover) var(--ease-out);
 }
 
-.session-tabs button:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .session-tabs button:hover {
+        color: var(--text);
+    }
 }
 
 .session-tabs button.on {
@@ -3854,8 +3986,10 @@ button.rail-brand:hover {
     transition: color var(--t-hover) var(--ease-out);
 }
 
-.group-head:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .group-head:hover {
+        color: var(--text);
+    }
 }
 
 .group-head:focus-visible {
@@ -3956,8 +4090,10 @@ button.rail-brand:hover {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.session:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .session:hover {
+        background: var(--hover);
+    }
 }
 
 /* Keep focus outlines inside list controls: scrolling and folding groups clip their edges. */
@@ -4228,6 +4364,11 @@ button.rail-brand:hover {
     border-radius: 50%;
 }
 
+/* A call waiting says more than how long ago: the title keeps the room. */
+.session-needs ~ .session-time {
+    display: none;
+}
+
 .session-time {
     min-width: 22px;
     text-align: right;
@@ -4276,9 +4417,11 @@ button.rail-brand:hover {
         border-color var(--t-hover) var(--ease-out);
 }
 
-.session-act:hover {
-    color: var(--accent);
-    border-color: var(--accent-line);
+@media (hover: hover) {
+    .session-act:hover {
+        color: var(--accent);
+        border-color: var(--accent-line);
+    }
 }
 
 .session-act + .session-act {
@@ -4411,9 +4554,11 @@ button.rail-brand:hover {
         color var(--t-hover) var(--ease-out);
 }
 
-.select-clear:hover {
-    background: var(--hover);
-    color: var(--text);
+@media (hover: hover) {
+    .select-clear:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
 }
 
 /* A thumb's size on a touch screen, where a long press starts a selection. */
@@ -4548,8 +4693,10 @@ button.rail-brand:hover {
     transition: transform var(--t-in) var(--ease-out);
 }
 
-.fetch-colors span:hover {
-    transform: translateY(-3px);
+@media (hover: hover) {
+    .fetch-colors span:hover {
+        transform: translateY(-3px);
+    }
 }
 
 /* New session, the launcher, and Appearance: 38px buttons, set in full here. */
@@ -4572,9 +4719,11 @@ button.rail-brand:hover {
     font-weight: 500;
 }
 
-.splash-actions .button:hover {
-    border-color: var(--hair-2);
-    background: var(--card-2);
+@media (hover: hover) {
+    .splash-actions .button:hover {
+        border-color: var(--hair-2);
+        background: var(--card-2);
+    }
 }
 
 .splash-actions .button.primary {
@@ -4584,9 +4733,11 @@ button.rail-brand:hover {
     font-weight: 600;
 }
 
-.splash-actions .button.primary:hover {
-    border-color: transparent;
-    background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+@media (hover: hover) {
+    .splash-actions .button.primary:hover {
+        border-color: transparent;
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+    }
 }
 
 /* The key's name, in mono beside the label. */
@@ -4632,8 +4783,10 @@ button.rail-brand:hover {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.splash-row:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .splash-row:hover {
+        background: var(--hover);
+    }
 }
 
 .splash-key {
@@ -4646,14 +4799,6 @@ button.rail-brand:hover {
     border-radius: 6px;
     font: 11px / 1 var(--mono);
     color: var(--muted);
-}
-
-.splash-mark {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    border-radius: 2.5px;
-    background: var(--folder, var(--muted));
 }
 
 .splash-title {
@@ -4860,8 +5005,10 @@ button.rail-brand:hover {
     transition: color var(--t-hover) var(--ease-out);
 }
 
-.pop-menu-link:hover {
-    color: var(--accent);
+@media (hover: hover) {
+    .pop-menu-link:hover {
+        color: var(--accent);
+    }
 }
 
 .pop-menu-search {
@@ -5155,8 +5302,10 @@ button.rail-brand:hover {
     color: var(--text);
 }
 
-.segmented.model-levels button:not(.on):hover {
-    color: var(--text);
+@media (hover: hover) {
+    .segmented.model-levels button:not(.on):hover {
+        color: var(--text);
+    }
 }
 
 /* ─── Sheet parts and controls ───────────────────────────────── */
@@ -5309,8 +5458,10 @@ button.rail-brand:hover {
         padding var(--t-in) var(--ease-out);
 }
 
-.list-item:hover {
-    background: var(--card);
+@media (hover: hover) {
+    .list-item:hover {
+        background: var(--card);
+    }
 }
 
 .list-item:active {
@@ -5441,8 +5592,10 @@ button.rail-brand:hover {
         transform 90ms var(--ease-out);
 }
 
-.button:hover {
-    background: var(--raised);
+@media (hover: hover) {
+    .button:hover {
+        background: var(--raised);
+    }
 }
 
 .button:active:not(:disabled) {
@@ -5456,8 +5609,10 @@ button.rail-brand:hover {
     font-weight: 600;
 }
 
-.button.primary:hover {
-    background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+@media (hover: hover) {
+    .button.primary:hover {
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+    }
 }
 
 .button kbd {
@@ -5529,9 +5684,11 @@ button.rail-brand:hover {
         color var(--t-hover) var(--ease-out);
 }
 
-.segmented button:hover {
-    background: var(--hover);
-    color: var(--text);
+@media (hover: hover) {
+    .segmented button:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
 }
 
 .segmented button.on {
@@ -5603,9 +5760,11 @@ button.rail-brand:hover {
     color: var(--muted);
 }
 
-.fp-crumb:hover {
-    background: var(--hover);
-    color: var(--accent);
+@media (hover: hover) {
+    .fp-crumb:hover {
+        background: var(--hover);
+        color: var(--accent);
+    }
 }
 
 .fp-crumb.here {
@@ -5723,8 +5882,10 @@ button.rail-brand:hover {
     color: var(--muted);
 }
 
-.fp-place:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .fp-place:hover {
+        background: var(--hover);
+    }
 }
 
 .fp-place.on {
@@ -5779,8 +5940,10 @@ button.rail-brand:hover {
     user-select: none;
 }
 
-.fp-row:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .fp-row:hover {
+        background: var(--hover);
+    }
 }
 
 /* The selected folder: what Open takes. */
@@ -6182,8 +6345,10 @@ button.rail-brand:hover {
     text-align: left;
 }
 
-.artifact-card:hover {
-    border-color: var(--accent-line);
+@media (hover: hover) {
+    .artifact-card:hover {
+        border-color: var(--accent-line);
+    }
 }
 
 .artifact-cover {
@@ -6231,7 +6396,9 @@ button.rail-brand:hover {
     -webkit-box-orient: vertical;
     overflow: hidden;
     overflow-wrap: anywhere;
-    padding: 12px 14px;
+    /* Room as a clear border, not padding: the clamp clips at the padding's edge, so a fourth line would show in it. */
+    border: solid transparent;
+    border-width: 12px 14px;
     border-radius: var(--r-card);
     background: var(--card);
     color: var(--body);
@@ -6545,6 +6712,10 @@ button.rail-brand:hover {
     animation: countdown var(--life, 4.5s) linear forwards;
 }
 
+.notice.held::after {
+    animation-play-state: paused;
+}
+
 @keyframes countdown {
     to {
         transform: scaleX(0);
@@ -6646,9 +6817,11 @@ body.plain-page {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.people-button:hover {
-    background: var(--hover);
-    color: var(--text);
+@media (hover: hover) {
+    .people-button:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
 }
 
 .people-here {
@@ -6922,6 +7095,7 @@ body.plain-page {
 
 .tabs button {
     flex: 1;
+    white-space: nowrap;
 }
 
 .chat-event {
@@ -7160,8 +7334,15 @@ textarea.notes {
 }
 
 .driver-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: var(--text);
     font-weight: 600;
+}
+
+.driver-label > .icon {
+    color: var(--tone, var(--muted));
 }
 
 .driver-ask {
@@ -7654,8 +7835,10 @@ textarea.notes {
     color: var(--muted);
 }
 
-.launcher-close:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .launcher-close:hover {
+        background: var(--hover);
+    }
 }
 
 .launcher-types {
@@ -7680,11 +7863,18 @@ textarea.notes {
     font-weight: 500;
 }
 
-.launcher-types button:hover,
 .launcher-types button[aria-pressed="true"] {
     background: var(--card-2);
     border-color: var(--hair-2);
     color: var(--text);
+}
+
+@media (hover: hover) {
+    .launcher-types button:hover {
+        background: var(--card-2);
+        border-color: var(--hair-2);
+        color: var(--text);
+    }
 }
 
 .launcher-types kbd {
@@ -8023,8 +8213,10 @@ textarea.notes {
         box-shadow var(--t-hover) var(--ease-out);
 }
 
-.theme-card:hover {
-    border-color: var(--o-accent);
+@media (hover: hover) {
+    .theme-card:hover {
+        border-color: var(--o-accent);
+    }
 }
 
 .theme-card:active {
@@ -8259,8 +8451,10 @@ textarea.notes {
     transition: opacity var(--t-hover) var(--ease-out);
 }
 
-.search-keys:hover {
-    opacity: 1;
+@media (hover: hover) {
+    .search-keys:hover {
+        opacity: 1;
+    }
 }
 
 .search:focus-within .search-keys {
@@ -8623,8 +8817,10 @@ textarea.notes {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.peek-head:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .peek-head:hover {
+        background: var(--hover);
+    }
 }
 
 /* Inside the tile, which cuts off what is past its rounded edge. */
@@ -8859,8 +9055,10 @@ textarea.notes {
     font-weight: 500;
 }
 
-.peek-actions .button.small:hover:not(:disabled) {
-    color: var(--err);
+@media (hover: hover) {
+    .peek-actions .button.small:hover:not(:disabled) {
+        color: var(--err);
+    }
 }
 
 .peek-actions .button.small.primary {
@@ -8870,9 +9068,11 @@ textarea.notes {
     font-weight: 600;
 }
 
-.peek-actions .button.small.primary:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
-    color: var(--accent-ink);
+@media (hover: hover) {
+    .peek-actions .button.small.primary:hover:not(:disabled) {
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+        color: var(--accent-ink);
+    }
 }
 
 .peek-seen {
@@ -9032,9 +9232,11 @@ textarea.notes {
     color: var(--muted);
 }
 
-.dv-fold:hover {
-    background: var(--hover);
-    color: var(--text);
+@media (hover: hover) {
+    .dv-fold:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
 }
 
 /* What kind of change: M, A, D, R in a small tile. */
@@ -9133,8 +9335,10 @@ textarea.notes {
     color: var(--muted);
 }
 
-.dv-tool.icon-button:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .dv-tool.icon-button:hover {
+        color: var(--text);
+    }
 }
 
 /* On touch, the icons a size up. */
@@ -9173,8 +9377,10 @@ textarea.notes {
         color var(--t-hover) var(--ease-out);
 }
 
-.dv-viewed:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .dv-viewed:hover {
+        color: var(--text);
+    }
 }
 
 .dv-viewed.on {
@@ -9273,9 +9479,11 @@ textarea.notes {
     cursor: pointer;
 }
 
-.dv-n.go:hover {
-    color: var(--accent);
-    text-decoration: underline;
+@media (hover: hover) {
+    .dv-n.go:hover {
+        color: var(--accent);
+        text-decoration: underline;
+    }
 }
 
 /* The code, with the sign of an added or removed line in an 18px column of its own. */
@@ -9375,8 +9583,10 @@ textarea.notes {
     font: 11.5px var(--mono);
 }
 
-.dv-gap button:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .dv-gap button:hover {
+        background: var(--hover);
+    }
 }
 
 .dv-reading {
@@ -9481,9 +9691,11 @@ textarea.notes {
     color: var(--muted);
 }
 
-button.dr-branch:hover {
-    background: var(--card-2);
-    color: var(--accent);
+@media (hover: hover) {
+    button.dr-branch:hover {
+        background: var(--card-2);
+        color: var(--accent);
+    }
 }
 
 .dr-stats {
@@ -9585,9 +9797,11 @@ button.dr-branch:hover {
     color: var(--muted);
 }
 
-.dr-row:hover,
-.ft-row:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .dr-row:hover,
+    .ft-row:hover {
+        background: var(--hover);
+    }
 }
 
 .dr-row.on,
@@ -9738,8 +9952,10 @@ button.dr-branch:hover {
     color: var(--muted);
 }
 
-.files-bar .icon-button:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .files-bar .icon-button:hover {
+        color: var(--text);
+    }
 }
 
 .files-root {
@@ -9778,9 +9994,11 @@ button.dr-branch:hover {
         color var(--t-hover) var(--ease-out);
 }
 
-.files-tabs button:hover,
-.dr-layout button:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .files-tabs button:hover,
+    .dr-layout button:hover {
+        color: var(--text);
+    }
 }
 
 .files-tabs button.on,
@@ -9863,8 +10081,10 @@ button.dr-branch:hover {
     color: var(--muted);
 }
 
-.ft-tools .icon-button:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .ft-tools .icon-button:hover {
+        color: var(--text);
+    }
 }
 
 .ft-tree {
@@ -10384,8 +10604,10 @@ button.dr-branch:hover {
     text-align: left;
 }
 
-.browser-server:hover {
-    background: var(--card);
+@media (hover: hover) {
+    .browser-server:hover {
+        background: var(--card);
+    }
 }
 
 .browser-server .mono {
@@ -10543,8 +10765,10 @@ button.dr-branch:hover {
     text-underline-offset: 3px;
 }
 
-.md code[data-path]:hover {
-    color: var(--accent);
+@media (hover: hover) {
+    .md code[data-path]:hover {
+        color: var(--accent);
+    }
 }
 
 /* @mentions of files in messages, and the files sent along. */
@@ -10709,9 +10933,14 @@ button.dr-branch:hover {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.find-result:hover,
 .find-result.on {
     background: var(--hover);
+}
+
+@media (hover: hover) {
+    .find-result:hover {
+        background: var(--hover);
+    }
 }
 
 .find-who {
@@ -10823,9 +11052,11 @@ button.dr-branch:hover {
         background-color var(--t-hover) var(--ease-out);
 }
 
-.rich-tabs button:hover,
-.rich-run:hover {
-    color: var(--text);
+@media (hover: hover) {
+    .rich-tabs button:hover,
+    .rich-run:hover {
+        color: var(--text);
+    }
 }
 
 .rich-tabs button.on {
@@ -10838,8 +11069,10 @@ button.dr-branch:hover {
     color: var(--ok);
 }
 
-.rich-run:hover {
-    color: var(--ok);
+@media (hover: hover) {
+    .rich-run:hover {
+        color: var(--ok);
+    }
 }
 
 .rich-run.on {
@@ -10902,8 +11135,10 @@ button.dr-branch:hover {
     font: 12px var(--mono);
 }
 
-.code-more:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .code-more:hover {
+        background: var(--hover);
+    }
 }
 
 .file-tools .button.on {
@@ -10966,14 +11201,18 @@ button.dr-branch:hover {
     font-size: 13.5px;
 }
 
-.nav-menu .list-item:hover,
-.places-sheet .list-item:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .nav-menu .list-item:hover,
+    .places-sheet .list-item:hover {
+        background: var(--hover);
+    }
 }
 
-.nav-menu .list-item:hover > span:first-child,
-.places-sheet .list-item:hover > span:first-child {
-    color: var(--text);
+@media (hover: hover) {
+    .nav-menu .list-item:hover > span:first-child,
+    .places-sheet .list-item:hover > span:first-child {
+        color: var(--text);
+    }
 }
 
 .nav-menu .list-item > :first-child,
@@ -11067,10 +11306,12 @@ button.dr-branch:hover {
         transform 90ms var(--ease-out);
 }
 
-.place:hover {
-    border-color: var(--hair-2);
-    background: var(--card-2);
-    color: var(--text);
+@media (hover: hover) {
+    .place:hover {
+        border-color: var(--hair-2);
+        background: var(--card-2);
+        color: var(--text);
+    }
 }
 
 .place:active {
@@ -11189,8 +11430,8 @@ button.dr-branch:hover {
     .mode-switch button {
         padding-inline: 8px;
     }
-    /* While Pi works the row is full: the mic takes Send's place while there is nothing to send, and gives it back once
-       there is (staying while it listens, to stop it). */
+    /* While Pi works the row is full: the mic stays where it was and Stop takes Send's place while there is nothing to
+       send; once there is, Send comes back and the mic gives way (staying while it listens, to stop it). */
     .composer.busy:not(.filled):has(.composer-mic) .send-button,
     .composer.busy.filled .composer-mic:not(.listening) {
         display: none;
@@ -11776,12 +12017,16 @@ button.dr-branch:hover {
     border-top: 0;
 }
 
-.pi-session:hover {
-    background: var(--card-2);
+@media (hover: hover) {
+    .pi-session:hover {
+        background: var(--card-2);
+    }
 }
 
-.pi-session:hover .pi-session-title {
-    color: var(--accent);
+@media (hover: hover) {
+    .pi-session:hover .pi-session-title {
+        color: var(--accent);
+    }
 }
 
 .pi-session > .icon {
@@ -12080,8 +12325,10 @@ button.dr-branch:hover {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.agent-open:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .agent-open:hover {
+        background: var(--hover);
+    }
 }
 
 .agent-mark {
@@ -12418,10 +12665,16 @@ button.dr-branch:hover {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.board-filter:hover,
 .board-filter.on {
     background: var(--card-2);
     border-color: var(--hair-2);
+}
+
+@media (hover: hover) {
+    .board-filter:hover {
+        background: var(--card-2);
+        border-color: var(--hair-2);
+    }
 }
 
 .board-filter .board-mark {
@@ -12504,8 +12757,10 @@ button.dr-branch:hover {
     transition: color var(--t-hover) var(--ease-out);
 }
 
-.board-session:hover .board-session-name {
-    color: var(--accent);
+@media (hover: hover) {
+    .board-session:hover .board-session-name {
+        color: var(--accent);
+    }
 }
 
 .board-summary {
@@ -12561,8 +12816,10 @@ button.dr-branch:hover {
     transition: opacity var(--t-fade) var(--ease-almost);
 }
 
-.board-cell:hover {
-    border-color: var(--state);
+@media (hover: hover) {
+    .board-cell:hover {
+        border-color: var(--state);
+    }
 }
 
 .board-cell.on {
@@ -12683,8 +12940,10 @@ button.dr-branch:hover {
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.board-need:hover {
-    background: var(--hover);
+@media (hover: hover) {
+    .board-need:hover {
+        background: var(--hover);
+    }
 }
 
 .board-need.on {
@@ -12784,9 +13043,11 @@ button.dr-branch:hover {
     text-overflow: ellipsis;
 }
 
-.board-link:hover {
-    text-decoration: underline;
-    text-underline-offset: 2px;
+@media (hover: hover) {
+    .board-link:hover {
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
 }
 
 .board-when {
@@ -12832,9 +13093,11 @@ button.dr-branch:hover {
     font-size: 13px;
 }
 
-.board-stop:hover {
-    border-color: var(--err);
-    color: var(--err);
+@media (hover: hover) {
+    .board-stop:hover {
+        border-color: var(--err);
+        color: var(--err);
+    }
 }
 
 .board-actions .button.primary {
@@ -13456,9 +13719,11 @@ button.dr-branch:hover {
     cursor: default;
 }
 
-.pip-chip:not(:disabled):hover {
-    border-color: var(--accent-line);
-    color: var(--text);
+@media (hover: hover) {
+    .pip-chip:not(:disabled):hover {
+        border-color: var(--accent-line);
+        color: var(--text);
+    }
 }
 
 .pip-loading {
@@ -13505,8 +13770,10 @@ button.dr-branch:hover {
     text-align: left;
 }
 
-.pip-memory .button:hover {
-    background: var(--card-2);
+@media (hover: hover) {
+    .pip-memory .button:hover {
+        background: var(--card-2);
+    }
 }
 
 .pip-memory-count {

@@ -823,7 +823,10 @@ function ToolStep({
             parts.push(html`<pre class="output">${JSON.stringify(args, null, 2)}</pre>`);
         }
 
-        const output = resultText ?? slot?.output;
+        // The harness's own errors come wrapped in its tags: what it says is inside them.
+        const output = (resultText ?? slot?.output)
+            ?.replace(/^<harness>\s*/, "")
+            .replace(/\s*<\/harness>\s*$/, "");
 
         if (output && !(call.name === "edit" && details?.diff && !result?.isError)) {
             parts.push(
@@ -1030,7 +1033,17 @@ function GroupTime({ id, start, end, live }) {
  * into a timeline, a line per call, each drawn again only when what it shows changes. Open while it is live or in the
  * newest turn, closed before, unless opened or closed by hand.
  */
-function ActivityGroup({ item, live, newest, busy, results, slots, approvals, conversationId }) {
+function ActivityGroup({
+    item,
+    live,
+    newest,
+    after,
+    busy,
+    results,
+    slots,
+    approvals,
+    conversationId,
+}) {
     const id = `${conversationId}:${item.key}`;
     const [, redraw] = useState(0);
     const [fresh] = useState(() => settledFor !== null && settledFor === conversationId);
@@ -1049,12 +1062,22 @@ function ActivityGroup({ item, live, newest, busy, results, slots, approvals, co
     // which stay folded until asked for, as a thought on the timeline does.
     const lone = all.length === 1 && all[0].block.type === "thinking" ? all[0] : null;
     const open = chosen ?? (lone ? false : live || newest);
+    // Calls that failed, said on the line too: folded, "edited 1" alone would read as done.
+    const failed = all.filter((step) => {
+        const result = step.block.type === "toolCall" ? results.get(step.block.id) : undefined;
+
+        return result?.isError === true && !STOPPED.test(result.text ?? "");
+    }).length;
     const first = all[0];
     let start = first.entry?.at === undefined ? undefined : fromServer(first.entry.at);
 
     if (start === undefined && first.entry === undefined) {
         if (!groupSeen.has(id)) {
-            keep(groupSeen, id, Date.now());
+            keep(
+                groupSeen,
+                id,
+                after === undefined ? Date.now() : Math.min(Date.now(), fromServer(after)),
+            );
         }
 
         start = groupSeen.get(id);
@@ -1110,6 +1133,7 @@ function ActivityGroup({ item, live, newest, busy, results, slots, approvals, co
         >
             <${Icon} name="chevron" size=${14} class="chev" />
             <span class="activity-summary">${summarize(all, thinking)}</span>
+            ${failed > 0 && html`<span class="activity-failed">${failed} failed</span>`}
             <${GroupTime} id=${id} start=${start} end=${end} live=${live} />
         </button>
         ${
@@ -1313,7 +1337,7 @@ function AnswerActions({ entry }) {
             class="answer-tool"
             onClick=${() => attempt(() => actions.pin({ entryId: entry.id }))}
         >
-            ${pinned ? "📌 Pinned" : "Pin"}
+            ${pinned ? html`<${Icon} name="pin" size=${12} /> Pinned` : "Pin"}
         </button>
         <button
             class="answer-tool"
@@ -1739,6 +1763,8 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
             (item.steps.some((step) => stepLive(step, results, slots, approvals, busy)) ||
                 (busy && index === items.length - 1));
         const newest = !past && index > lastMessage;
+        // When what came before it was stored: a group still streaming began about then, also before a reload.
+        const after = items[index - 1]?.entry?.at;
         const deps = [
             item.steps.length,
             item.before.length,
@@ -1749,6 +1775,7 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
             newest,
             busy,
             conversationId,
+            after,
         ];
 
         // The calls before the rows shown count in the group's line: their results, for its time.
@@ -1771,6 +1798,7 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
                 item=${item}
                 live=${live}
                 newest=${newest}
+                after=${after}
                 busy=${busy}
                 results=${results}
                 slots=${slots}
@@ -1845,8 +1873,20 @@ function canAnswer(approvals) {
     );
 }
 
-/** The sessions whose live thinking is open, in this tab: open stays open from one run to the next. */
-const thinkingOpen = new Map();
+/** The sessions whose live thinking is open, in this tab: open stays open from one run to the next, and a reload. */
+const THINKING_OPEN_KEY = "pocket.thinkingOpen";
+const thinkingOpen = new Map(
+    (() => {
+        try {
+            return JSON.parse(sessionStorage.getItem(THINKING_OPEN_KEY) ?? "[]").map((id) => [
+                id,
+                true,
+            ]);
+        } catch {
+            return [];
+        }
+    })(),
+);
 
 /**
  * The active response is authoritative, even before it shares any thinking: never pass an old thought off as the new
@@ -1997,6 +2037,16 @@ function LiveLine({ live, approvals, start, entries, conversationId }) {
     const fold = () => {
         was.current = line.current.getBoundingClientRect().top;
         keep(thinkingOpen, conversationId, !open);
+
+        try {
+            sessionStorage.setItem(
+                THINKING_OPEN_KEY,
+                JSON.stringify([...thinkingOpen].filter(([, on]) => on).map(([id]) => id)),
+            );
+        } catch {
+            // Storage is full or off: open still holds in this page.
+        }
+
         tick((n) => n + 1);
     };
 

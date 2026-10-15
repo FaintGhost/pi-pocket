@@ -52,6 +52,7 @@ import {
     canSteer,
     dismiss,
     filesShown,
+    holdNotice,
     navigate,
     notify,
     openSheet,
@@ -118,7 +119,7 @@ function Topbar() {
     const title =
         conversation?.title ??
         store.state.sessions.find((session) => session.id === store.state.conversationId)?.title ??
-        "Loading…";
+        (store.state.missing ? "Not found" : "Loading…");
     const busySubagents = (view.subagents ?? []).filter((agent) => agent.busy).length;
     // Other sessions waiting for an approval, counted on the way back to them.
     const waiting = store.state.sessions.filter(
@@ -229,6 +230,12 @@ function Topbar() {
  */
 function Notice({ notice, leaving }) {
     const ref = useRef(null);
+    const [pointed, setPointed] = useState(false);
+    const [focused, setFocused] = useState(false);
+    const held = (pointed || focused) && !leaving;
+
+    // Its countdown, and the line that shows it, wait while it is being read or reached for.
+    useEffect(() => holdNotice(notice.id, held), [held]);
 
     useDragToClose(ref, {
         dir: "up",
@@ -240,8 +247,12 @@ function Notice({ notice, leaving }) {
 
     return html`<button
         ref=${ref}
-        class=${`notice ${notice.level} ${notice.action ? "acts" : ""} ${leaving ? "leaving" : ""}`}
-        style=${`--life:${notice.level === "error" ? 9 : 4.5}s`}
+        class=${`notice ${notice.level} ${notice.action ? "acts" : ""} ${held ? "held" : ""} ${leaving ? "leaving" : ""}`}
+        style=${`--life:${notice.life ?? 4500}ms`}
+        onPointerEnter=${() => setPointed(true)}
+        onPointerLeave=${() => setPointed(false)}
+        onFocus=${() => setFocused(true)}
+        onBlur=${() => setFocused(false)}
         onClick=${() => {
             dismiss(notice.id);
             notice.action?.();
@@ -685,6 +696,8 @@ addEventListener("keydown", (event) => {
 });
 /** When Esc was last pressed while Pi worked: a second press soon after stops it. */
 let escapedAt = 0;
+/** The notice the first press shows. */
+let escapeNotice = null;
 const ESCAPE_TWICE_MS = 1500;
 
 /** Esc twice stops Pi, as Esc does in other agents' terminals. Twice, since Esc also closes things and leaves fields. */
@@ -698,13 +711,15 @@ function stopOnSecondEscape() {
 
     if (Date.now() - escapedAt < ESCAPE_TWICE_MS) {
         escapedAt = 0;
+        // Pressed again: what it asked for is done.
+        dismiss(escapeNotice);
         attempt(actions.abort);
 
         return;
     }
 
     escapedAt = Date.now();
-    notify("info", "Press Esc again to stop Pi.");
+    escapeNotice = notify("info", "Press Esc again to stop Pi.");
 }
 
 const altUp = () => delete document.documentElement.dataset.alt;

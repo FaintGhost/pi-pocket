@@ -72,11 +72,25 @@ export function useDragToClose(ref, { dir, onClose, enabled = true, scrim: scrim
         const vertical = dir !== "left";
         // PiP's sheet has a scrim beside it, not around it: dimming its parent would dim the whole app.
         const scrim = scrimRef?.current ?? element.parentElement;
+        // Around the element (a sheet's overlay), the scrim's color fades, so the sheet in it stays solid; beside it
+        // (PiP's), or the element itself (a notice), the whole of it does.
+        const around = scrim !== element && scrim.contains(element);
+        const fading = around ? "background-color" : "opacity";
+        let ground = null;
         let start = null;
         let dragging = false;
         let samples = [];
 
         const size = () => (vertical ? element.offsetHeight : element.offsetWidth) || 1;
+
+        const dim = (share) => {
+            if (around) {
+                ground ??= getComputedStyle(scrim).backgroundColor;
+                scrim.style.backgroundColor = `color-mix(in srgb, ${ground} ${Math.round((1 - share) * 100)}%, transparent)`;
+            } else {
+                scrim.style.opacity = String(1 - share);
+            }
+        };
 
         const place = (offset) => {
             element.style.transform =
@@ -85,20 +99,21 @@ export function useDragToClose(ref, { dir, onClose, enabled = true, scrim: scrim
                     : dir === "up"
                       ? `translateY(${-offset}px)`
                       : `translateX(${-offset}px)`;
-            scrim.style.opacity = String(1 - Math.min(1, offset / size()) * 0.8);
+            dim(Math.min(1, offset / size()) * 0.8);
         };
 
         const springBack = () => {
             const spring = `${SPRING_MS}ms var(--ease-out)`;
 
             // What fades as it goes may be the element itself (a notice): one transition for both.
-            scrim.style.transition = `opacity ${spring}`;
+            scrim.style.transition = `${fading} ${spring}`;
             element.style.transition =
                 scrim === element
                     ? `transform ${spring}, opacity ${spring}`
                     : `transform ${spring}`;
             element.style.transform = "";
             scrim.style.opacity = "";
+            scrim.style.backgroundColor = "";
             setTimeout(() => {
                 element.style.transition = "";
                 scrim.style.transition = "";
@@ -112,6 +127,8 @@ export function useDragToClose(ref, { dir, onClose, enabled = true, scrim: scrim
             if (dragging) {
                 springBack();
             }
+
+            ground = null;
 
             start =
                 event.touches.length === 1 &&
@@ -225,6 +242,7 @@ export function useDragToClose(ref, { dir, onClose, enabled = true, scrim: scrim
 
             // The scrim may outlive the element: it never stays dimmed by a drag that closed it.
             scrim.style.opacity = "";
+            scrim.style.backgroundColor = "";
             scrim.style.transition = "";
         };
     }, [ref.current, dir, enabled, scrimRef?.current]);

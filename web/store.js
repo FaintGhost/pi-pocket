@@ -361,18 +361,50 @@ export async function api(path, body, options = {}) {
 }
 
 let nextNotice = 1;
+/** Each notice's countdown, by id: what is left of it, and its timer while it runs. */
+const countdowns = new Map();
 
-/** Show a short notice. With `action`, tapping it runs the action as well as dismissing it. */
+/**
+ * Show a short notice, and return its id. With `action`, tapping it runs the action as well as dismissing it. It stays longer when it
+ * offers something (an Undo) or says what went wrong, and its countdown holds while a pointer or the focus is on it.
+ */
 export function notify(level, message, action) {
     const id = nextNotice++;
+    const life = level === "error" ? 9000 : action ? 7000 : 4500;
 
     store.set((state) => ({
-        notices: [...state.notices, { id, level, message, action }].slice(-4),
+        notices: [...state.notices, { id, level, message, action, life }].slice(-4),
     }));
-    setTimeout(() => dismiss(id), level === "error" ? 9000 : 4500);
+    countdowns.set(id, {
+        left: life,
+        since: Date.now(),
+        timer: setTimeout(() => dismiss(id), life),
+    });
+
+    return id;
+}
+
+/** Hold a notice's countdown (`held`), or let it go on with what was left. */
+export function holdNotice(id, held) {
+    const countdown = countdowns.get(id);
+
+    if (!countdown || held === (countdown.timer === null)) {
+        return;
+    }
+
+    if (held) {
+        clearTimeout(countdown.timer);
+        countdown.timer = null;
+        countdown.left -= Date.now() - countdown.since;
+    } else {
+        countdown.since = Date.now();
+        countdown.timer = setTimeout(() => dismiss(id), Math.max(countdown.left, 1000));
+    }
 }
 
 export function dismiss(id) {
+    clearTimeout(countdowns.get(id)?.timer);
+    countdowns.delete(id);
     store.set((state) => ({ notices: state.notices.filter((notice) => notice.id !== id) }));
 }
 

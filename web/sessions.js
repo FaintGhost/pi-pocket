@@ -266,6 +266,17 @@ function stateMark(session, working, marked) {
     return fresh ? { shape: "fresh", label: "Not read" } : { shape: "seen", label: "" };
 }
 
+/** A session's square, as its row in the list draws it (the home screen's Jump back in too). */
+export function sessionMark(session) {
+    const counts = session.subagents ?? {};
+
+    return stateMark(
+        session,
+        (counts.working ?? 0) + (counts.waiting ?? 0) > 0,
+        isUnread(session.id),
+    );
+}
+
 /**
  * One session on one line: its folder's color in the shape of its state, its title, and on the right what goes on there (its working subagents,
  * who else is in it, Pi working, a call waiting for you), unread chat, and how long ago. Its folder and model are in
@@ -1199,7 +1210,7 @@ export function RailNav({ foldable = false, folded = false }) {
         ${foldable && html`<${PeeksRailButton} />`}
         <${PipRailButton} />
         <button
-            class="rail-button rail-running"
+            class=${`rail-button rail-running ${busy > 0 ? "lit" : ""}`}
             title="Running now"
             aria-label=${busy > 0 ? `Running now, ${busy}` : "Running now"}
             onClick=${() => openSheet({ type: "running" })}
@@ -1342,6 +1353,28 @@ export function Drawer() {
         onClose: close,
         enabled: Boolean(open) && !leaving && !store.state.sheet,
     });
+    // Esc closes it, as it does a sheet; one over it closes first.
+    useEffect(() => {
+        if (!open || leaving) {
+            return undefined;
+        }
+
+        const onKey = (event) => {
+            if (
+                event.key === "Escape" &&
+                !event.defaultPrevented &&
+                !store.state.sheet &&
+                !store.state.launcher
+            ) {
+                event.preventDefault();
+                close();
+            }
+        };
+
+        addEventListener("keydown", onKey);
+
+        return () => removeEventListener("keydown", onKey);
+    }, [open, leaving]);
 
     if (!open) {
         return null;

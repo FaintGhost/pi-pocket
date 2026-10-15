@@ -163,7 +163,7 @@ function DriverBar() {
         );
 
         return html`<div class="driver-bar mine">
-            <span class="driver-label">🚗 You're driving</span>
+            <span class="driver-label"><${Icon} name="wheel" size=${14} /> You're driving</span>
             ${turns.asks.map(
                 (id) => html`<span class="driver-ask">
                     ${name(id)} asks to drive <button class="link small" onClick=${() => run("handover", id)}>Hand over</button>
@@ -198,7 +198,8 @@ function DriverBar() {
 
     return html`<div class="driver-bar">
         <span class="driver-label">
-            ${turns.driver === undefined ? "🚗 No one is driving" : `🚗 ${name(turns.driver)} is driving${driverHere ? "" : " (away)"}`}
+            <${Icon} name="wheel" size=${14} />
+            ${turns.driver === undefined ? "No one is driving" : `${name(turns.driver)} is driving${driverHere ? "" : " (away)"}`}
         </span>
         <span class="grow"></span>
         ${
@@ -340,6 +341,8 @@ export function Composer() {
     const [text, setText] = useState(() => drafts.get(conversationId));
     const [files, setFiles] = useState([]);
     const [steer, setSteer] = useState(true);
+    // The queued message read in full, tapped open: one line each until then.
+    const [reading, setReading] = useState(null);
     const [sending, setSending] = useState(false);
     // Slash command suggestions: the highlighted one, and whether Escape hid the list.
     const [pick, setPick] = useState(0);
@@ -1002,7 +1005,13 @@ export function Composer() {
                                 ${queuedMode(item)}
                                 <span class="muted">${queuedBy(item)}</span>
                             </span>
-                            <span class="queued-text">${queuedText(item)}</span>
+                            <button
+                                class=${`queued-text ${reading === item.id ? "open" : ""}`}
+                                aria-expanded=${reading === item.id}
+                                onClick=${() => setReading(reading === item.id ? null : item.id)}
+                            >
+                                ${queuedText(item)}
+                            </button>
                             ${
                                 canSteer() &&
                                 (!blocked || item.by === me?.id) &&
@@ -1219,7 +1228,9 @@ export function Composer() {
                                         file.preview &&
                                         html`<img class="chip-thumb" src=${file.preview} alt="" />`
                                     }
-                                    ${file.state === "uploading" ? html`<${Spinner} />` : file.preview ? "" : "📎"} ${file.name} <span class="muted">${formatBytes(file.size)}</span>
+                                    ${file.state === "uploading" ? html`<${Spinner} />` : file.preview ? "" : html`<${Icon} name="clip" size=${13} />`}
+                                    <span class="chip-name" title=${file.name}>${file.name}</span>
+                                    <span class="muted">${formatBytes(file.size)}</span>
                                     <button
                                         class="icon-button small"
                                         aria-label=${`Remove ${file.name}`}
@@ -1331,8 +1342,8 @@ export function Composer() {
                                 )}
                             </div>`
                         }
-                        ${busy && html`<${StopButton} />`}
                         <${MicButton} dictation=${dictation} class="composer-mic" />
+                        ${busy && html`<${StopButton} />`}
                         <button
                             class=${`send-button ${canSend ? "ready" : ""}`}
                             aria-label="Send"

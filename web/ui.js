@@ -851,6 +851,8 @@ const ICONS = {
     fit: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
     // Compact: two rules, and what is between them pressed toward the middle.
     compact: "M4 3h16M4 21h16M12 6v5M9 8l3 3 3-3M12 18v-5M9 16l3-3 3 3",
+    // Taking turns: a steering wheel.
+    wheel: "M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zM12 10a2 2 0 1 0 0 4 2 2 0 1 0 0-4zM3.3 11.2l6.7.6M20.7 11.2l-6.7.6M12 14v6.9",
 };
 
 /** An icon's SVG path, for marks drawn outside Preact (gestures.js); "" for a name that is not one of the icons. */

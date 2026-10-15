@@ -76,6 +76,7 @@ export function RunningSheet() {
                             ${task.subagent && html`<span class="mono">${task.subagent}</span>: `}
                             ${task.label}
                         </span>
+                        <span class="muted small mono">${task.status}</span>
                         ${
                             steer &&
                             task.scheduleId &&
@@ -107,7 +108,6 @@ export function RunningSheet() {
                                 Stop
                             </button>`
                         }
-                        <span class="muted small mono">${task.status}</span>
                     </div>`,
                 )}
             </div>`,
