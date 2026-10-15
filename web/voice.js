@@ -24,6 +24,14 @@ const ERRORS = {
 
 /** The dictation that listens now: one at a time, in the whole app. */
 let current = null;
+
+/** Visibility can change in the app or its floating PiP document. */
+export function stopHiddenDictation() {
+    if ((current?.box.current?.ownerDocument ?? document).hidden) {
+        current?.stop();
+    }
+}
+
 /**
  * The boxes that can dictate, newest last. The shortcut (Alt+V) dictates into PiP's while it shows (its box is `top`),
  * else into the newest in the page: one gone for now (view only, someone else's turn) is passed over.
@@ -155,7 +163,7 @@ export function useDictation(box, onText, { top = false } = {}) {
                 // the person is.
                 let moving = false;
 
-                const focused = () => document.activeElement === element;
+                const focused = () => (element.ownerDocument ?? document).activeElement === element;
                 const selected = () => [element.selectionStart, element.selectionEnd];
 
                 const rebase = () => {
@@ -303,7 +311,7 @@ export function useDictation(box, onText, { top = false } = {}) {
 
     // The newest box takes the shortcut while it shows; leaving it ends dictation, as does the tab going out of sight.
     useEffect(() => {
-        const hidden = () => document.hidden && dictation.stop();
+        const hidden = () => stopHiddenDictation();
 
         boxes.push(dictation);
         document.addEventListener("visibilitychange", hidden);

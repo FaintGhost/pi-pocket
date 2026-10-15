@@ -112,19 +112,20 @@ export function ModelPicker() {
         // The default's picker has no chip to open from: it stays in the middle.
         const place = () => setAnchor(forDefault || pipId !== undefined ? null : modelAnchor());
         const onKey = (event) => event.key === "Escape" && closeSheet();
+        const win = box.current.ownerDocument.defaultView;
 
-        addEventListener("resize", place);
-        visualViewport?.addEventListener("resize", place);
-        addEventListener("keydown", onKey);
+        win.addEventListener("resize", place);
+        win.visualViewport?.addEventListener("resize", place);
+        win.addEventListener("keydown", onKey);
         // Keys go to the picker, not the message box behind it. Phones keep their keyboard down until the search is tapped.
         (searchable && !coarsePointer ? search.current : box.current)?.focus({
             preventScroll: true,
         });
 
         return () => {
-            removeEventListener("resize", place);
-            visualViewport?.removeEventListener("resize", place);
-            removeEventListener("keydown", onKey);
+            win.removeEventListener("resize", place);
+            win.visualViewport?.removeEventListener("resize", place);
+            win.removeEventListener("keydown", onKey);
         };
     }, []);
     useEffect(() => {
