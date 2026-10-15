@@ -40,6 +40,10 @@ const route: FauxResponseStep = (request) => {
     const asked = messages.findLast((message) => message.role === "user");
     const askedText = JSON.stringify(asked?.content ?? "");
 
+    if (role === "user" && text.endsWith("fail please")) {
+        return fauxAssistantMessage([], { stopReason: "error", errorMessage: "Bad request" });
+    }
+
     if (role === "user" && text.includes("read the notes")) {
         return call("read", { path: "notes.txt" });
     }
@@ -500,6 +504,29 @@ test("the session list says when a session's last run ended", async () => {
         () => (app.sessions().find((each) => each.id === Number(id))?.endedAt ?? 0) >= started,
         "the end of the run",
     );
+});
+
+test("the session list says a run failed, until the next run starts", async () => {
+    const id = await newSession(app);
+    const listed = () => app.sessions().find((each) => each.id === Number(id));
+
+    await say(app, id, "fail please");
+    await until(() => listed()?.failed === true, "the failure in the list");
+    assert.equal(listed()?.busy, false);
+
+    await say(app, id, "hi");
+    await until(() => !listed()?.busy && listed()?.failed === undefined, "the next run's answer");
+});
+
+test("a run stopped by someone has not failed", async () => {
+    const id = await newSession(app);
+    const listed = () => app.sessions().find((each) => each.id === Number(id));
+
+    void say(app, id, "work slowly");
+    await until(() => listed()?.busy === true, "the run");
+    await app.commands.abort(id, owner(app));
+    await until(() => listed()?.busy === false, "stopped");
+    assert.equal(listed()?.failed, undefined);
 });
 
 // ─── Over HTTP ──────────────────────────────────────────────────────────────

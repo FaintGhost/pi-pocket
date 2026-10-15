@@ -19,6 +19,7 @@ import {
     stillMoving,
     store,
 } from "./store.js";
+import { finishedUnseen } from "./seen.js";
 import { isPinned, prefs, setPrefs, togglePin } from "./theme.js";
 import { APPLE, html, Icon, shortPath, Slide, timeAgo, usePresence, useSlide } from "./ui.js";
 
@@ -241,7 +242,32 @@ export function selectFromList(id) {
 }
 
 /**
- * One session on one line: its folder's color, its title, and on the right what goes on there (its working subagents,
+ * The square at the start of a session's row: its folder's color, in the shape of where the session is. The first that
+ * holds wins: a call waiting for you, Pi or its subagents at work, a failed run (solid while new, drawn once seen),
+ * finished since this browser last looked or marked unread (solid), and read or never run (hollow).
+ */
+function stateMark(session, working, marked) {
+    const fresh = marked || finishedUnseen(session);
+
+    if (session.waiting) {
+        return { shape: "waiting", label: "Waiting for approval" };
+    }
+
+    if (session.busy || working) {
+        return { shape: "working", label: "Working" };
+    }
+
+    if (session.failed) {
+        return fresh
+            ? { shape: "failed", label: "Failed, not read" }
+            : { shape: "failed seen", label: "Failed" };
+    }
+
+    return fresh ? { shape: "fresh", label: "Not read" } : { shape: "seen", label: "" };
+}
+
+/**
+ * One session on one line: its folder's color in the shape of its state, its title, and on the right what goes on there (its working subagents,
  * who else is in it, Pi working, a call waiting for you), unread chat, and how long ago. Its folder and model are in
  * its tooltip.
  */
@@ -276,6 +302,7 @@ function SessionRow({
     // Subagents at work, or failed ones nobody dealt with, but not over a call waiting for you: that says more.
     const fork = !session.waiting && (live > 0 || failed > 0);
     const person = collab() ? (session.people ?? []).find((each) => each.id !== me?.id) : undefined;
+    const mark = stateMark(session, live > 0, marked);
     // Archive, pin, and mark-unread show on hover; an archived session only comes back, and only for people who steer.
     const acts = (canSteer() ? 1 : 0) + (session.archived ? 0 : 2);
 
@@ -298,8 +325,11 @@ function SessionRow({
                             <${Icon} name="check" size=${9} />
                         </span>`
                         : html`<span
-                            class="folder-mark"
+                            class=${`state-mark ${mark.shape}`}
                             style=${`--folder:${folderColor(session.cwd)}`}
+                            role=${mark.label ? "img" : undefined}
+                            aria-label=${mark.label || undefined}
+                            aria-hidden=${mark.label ? undefined : "true"}
                         ></span>`
                 }
             </span>
