@@ -276,6 +276,13 @@ select:focus {
     outline-offset: 1px;
 }
 
+/* A field's ring lies on its own border, not a second line beside it. */
+input:not([type="checkbox"], [type="radio"]):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+    outline-offset: -1px;
+}
+
 a {
     color: var(--accent);
     text-decoration-thickness: 1px;
