@@ -1973,6 +1973,93 @@ pre.diff .del {
     color: var(--faint);
 }
 
+/*
+ * Show thinking adds the timeline's bare chevron before the spinner. It turns up when open, toward the thought above
+ * the line. Its hit area reaches past the glyph without drawing a box, and the gap after it stays the line's own.
+ */
+.live-fold {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin-right: -4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--faint);
+    position: relative;
+    transition: color var(--t-hover) var(--ease-out);
+}
+
+.live-fold::before {
+    content: "";
+    position: absolute;
+    inset: -8px;
+}
+
+.live-fold.open {
+    color: var(--muted);
+}
+
+.live-fold.open > .chev {
+    transform: rotate(-90deg);
+}
+
+@media (hover: hover) {
+    .live-fold:hover {
+        color: var(--body);
+    }
+}
+
+@media (pointer: coarse) {
+    .live-fold::before {
+        inset: -13px;
+    }
+}
+
+/* A quiet reading area, not another timeline card. The existing Thought steps and their boxes are unchanged. */
+.live-thought {
+    min-width: 0;
+    margin: 2px 0 -4px 6px;
+    padding: 2px 0 2px 14px;
+    border-left: 2px solid var(--accent-line);
+    animation: fade var(--t-fade) var(--ease-almost);
+}
+
+.live-thought-label {
+    margin-bottom: 6px;
+    color: var(--faint);
+    font-size: 0.68rem;
+}
+
+.live-thought-text {
+    max-height: min(32vh, 260px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    font-size: 0.8rem;
+    line-height: 1.65;
+    color: var(--muted);
+}
+
+.live-thought-text.is-empty {
+    color: var(--faint);
+}
+
+.live-thought-text.streaming::after {
+    content: "";
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    margin-left: 3px;
+    vertical-align: -2px;
+    background: var(--accent);
+    animation: blink 1s steps(2) infinite;
+}
+
 .error-box {
     border: 1px solid var(--err-line);
     border-left: 2px solid var(--err);
