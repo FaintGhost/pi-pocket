@@ -11589,10 +11589,10 @@ button.dr-branch:hover {
     .dv-head > .dv-counts {
         margin-right: auto;
     }
-    /* Compact, with the tap reaching past the icon, but not up into Viewed above it. */
+    /* Compact, with the tap reaching to 40px past the button, but not up into Viewed above it. */
     .dv-head > .dv-tool.icon-button {
-        width: 32px;
-        height: 32px;
+        width: 36px;
+        height: 36px;
     }
     .dv-head > .dv-tool.icon-button::before {
         content: "";
