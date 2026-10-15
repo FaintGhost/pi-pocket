@@ -134,6 +134,11 @@ export interface PocketHost {
      * sign-in expired), or undefined when it may. `fresh` asks the provider's sign-in again first.
      */
     modelProblem(ref: ModelRef, fresh?: boolean): Promise<string | undefined>;
+    /**
+     * Whether an installed tool's extension marks it read-only (`annotations: { readOnlyHint: true }`, as in Pi's tool
+     * definitions): plan mode lets it run. The author's word, not checked.
+     */
+    readOnlyTool(name: string): boolean;
     /** Who Pi works for in a conversation now: whose message led to its current work. */
     requesterOf(conversationId: ConversationId): string | undefined;
     /** Report something odd to the log and the connected clients: with `conversationId`, to that session's tabs only. */

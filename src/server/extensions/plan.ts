@@ -1,15 +1,16 @@
 /**
  * Plan mode lets Pi read and explore but change nothing, so it proposes a plan for people to approve first. While a
  * session is in plan mode, Pi may read files, run read-only shell commands, publish artifacts, look at pages in the
- * browser, and run codemode scripts (whose calls get the same checks); everything else is blocked with a note saying
- * why. This keeps Pi to planning; it is not a security boundary: Lancet Guard is. Programs that people configured to
- * run on their own, such as a git diff driver or file system monitor, run as they would for anyone.
+ * browser, run codemode scripts (whose calls get the same checks), and call tools their extension marks read-only;
+ * everything else is blocked with a note saying why. This keeps Pi to planning; it is not a security boundary: Lancet
+ * Guard is. Programs that people configured to run on their own, such as a git diff driver or file system monitor, run
+ * as they would for anyone.
  */
 import { defineExtension, hook, section, ToolTask } from "@earendil-works/pi-durable";
 import { PlanDoc } from "../docs.ts";
 import type { PocketHost } from "../host.ts";
 
-const PLANNING = `Plan mode is on. Read and explore, then propose a plan; change nothing yet. You can use read, artifact, the browser to look at pages (not to click, type, or run scripts in them), and bash for simple read-only commands such as ls, cat, grep, find, and git status/log/diff/show, without redirects, globs, variables, or command substitution. Writing, editing, other commands, and subagents are blocked until a person approves the plan. End your answer with the plan as a short numbered list.`;
+const PLANNING = `Plan mode is on. Read and explore, then propose a plan; change nothing yet. You can use read, artifact, the browser to look at pages (not to click, type, or run scripts in them), and bash for simple read-only commands such as ls, cat, grep, find, and git status/log/diff/show, without redirects, globs, variables, or command substitution, and tools marked read-only. Writing, editing, other commands, and subagents are blocked until a person approves the plan. End your answer with the plan as a short numbered list.`;
 
 /** Tools that change nothing, or whose own calls are checked one by one (codemode). */
 const ALWAYS_ALLOWED = new Set(["read", "artifact", "codemode"]);
@@ -248,9 +249,16 @@ export function readOnlyCommand(command: string): boolean {
     );
 }
 
-/** Why a call may not run in plan mode, or undefined when it may. */
-export function blockedInPlanMode(tool: string, args: Record<string, unknown>): string | undefined {
-    if (ALWAYS_ALLOWED.has(tool)) {
+/**
+ * Why a call may not run in plan mode, or undefined when it may. `readOnly`: the tool's extension marks it read-only
+ * (`annotations: { readOnlyHint: true }`, as in Pi's tool definitions).
+ */
+export function blockedInPlanMode(
+    tool: string,
+    args: Record<string, unknown>,
+    readOnly = false,
+): string | undefined {
+    if (ALWAYS_ALLOWED.has(tool) || readOnly) {
         return undefined;
     }
 
@@ -283,7 +291,7 @@ export function blockedInPlanMode(tool: string, args: Record<string, unknown>): 
     return `Plan mode is on: ${what}, so it is blocked. Keep exploring with read and read-only commands, then propose your plan; a person approves it before anything changes.`;
 }
 
-export default function createPlan(_host: PocketHost) {
+export default function createPlan(host: PocketHost) {
     return defineExtension({
         name: "pocket-plan",
         sections: [
@@ -303,6 +311,7 @@ export default function createPlan(_host: PocketHost) {
                     const reason = blockedInPlanMode(
                         call.name,
                         call.arguments as Record<string, unknown>,
+                        host.readOnlyTool?.(call.name) === true,
                     );
 
                     return reason === undefined ? undefined : { block: reason };
