@@ -1830,8 +1830,8 @@ const thinkingOpen = new Map();
 
 /**
  * The active response is authoritative, even before it shares any thinking: never pass an old thought off as the new
- * one. Between responses, while tools work, retain the last thought in this turn. Keys follow responses and block
- * positions, not text prefixes: two thoughts may start with the same words.
+ * one. While tools work, use only the latest response in this turn, even if it shared no thinking. Keys follow
+ * responses and block positions, not text prefixes: two thoughts may start with the same words.
  */
 function newestThought(generation, entries) {
     if (generation !== undefined) {
@@ -1847,6 +1847,7 @@ function newestThought(generation, entries) {
         return {
             block: blocks[index],
             key: `live:${previous}:${generation.attempt}:${index}`,
+            handoff: `${previous}:${index}`,
             writing: true,
             streaming: index === blocks.length - 1,
         };
@@ -1864,15 +1865,19 @@ function newestThought(generation, entries) {
         }
 
         const at = entry.blocks.findLastIndex((block) => block.type === "thinking");
+        const previous = entries.findLast(
+            (each, before) => before < index && each.kind === "assistant",
+        )?.id;
 
-        if (at !== -1) {
-            return {
-                block: entry.blocks[at],
-                key: `entry:${entry.id}:${at}`,
-                writing: false,
-                streaming: false,
-            };
-        }
+        return at === -1
+            ? null
+            : {
+                  block: entry.blocks[at],
+                  key: `entry:${entry.id}:${at}`,
+                  handoff: `${previous}:${at}`,
+                  writing: false,
+                  streaming: false,
+              };
     }
 
     return null;
@@ -1889,7 +1894,11 @@ function LiveThought({ generation, entries, id }) {
     const previous = useRef(null);
     const thought = newestThought(generation, entries);
     const text = thought?.block.text ?? "";
-    const handedOff = previous.current?.writing === true && thought?.writing === false;
+    // A coalesced update can skip whole responses. Only the same response/block keeps the reader's scroll.
+    const handedOff =
+        previous.current?.writing === true &&
+        thought?.writing === false &&
+        previous.current.handoff === thought.handoff;
 
     if (thought?.key !== previous.current?.key && !handedOff) {
         follow.current = true;

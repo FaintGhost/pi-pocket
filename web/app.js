@@ -565,7 +565,7 @@ addEventListener("keydown", (event) => {
             return;
         }
 
-if (event.code === "KeyT") {
+        if (event.code === "KeyT") {
             event.preventDefault();
             setPrefs({ showThinking: !prefs().showThinking });
 
