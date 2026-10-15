@@ -1697,10 +1697,12 @@ kbd {
         opacity var(--t-fade) var(--ease-out);
 }
 
-.answer-actions > button.answer-tool:hover,
-.reaction.add:hover {
-    color: var(--text);
-    background: var(--hover);
+@media (hover: hover) {
+    .answer-actions > button.answer-tool:hover,
+    .reaction.add:hover {
+        color: var(--text);
+        background: var(--hover);
+    }
 }
 
 /* With a mouse they show while the reply is hovered; touch screens always show them. */
@@ -11508,8 +11510,7 @@ button.dr-branch:hover {
     }
     .answer-actions > button:not(.reaction),
     .link.small,
-    .running-head .link,
-    .dr-branch {
+    .running-head .link {
         padding-block: 11px;
         margin-block: -11px;
     }
@@ -11519,11 +11520,13 @@ button.dr-branch:hover {
         padding-inline: 6px;
         margin-inline: -6px;
     }
-    /* The guard keeps its small pill; an invisible layer past it takes a thumb's tap. */
-    .status-line .guard {
+    /* The guard and the review's branch keep their small pills; an invisible layer past each takes a thumb's tap. */
+    .status-line .guard,
+    .dr-branch {
         position: relative;
     }
-    .status-line .guard::after {
+    .status-line .guard::after,
+    .dr-branch::after {
         content: "";
         position: absolute;
         inset: -9px -6px;
