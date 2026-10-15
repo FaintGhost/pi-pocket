@@ -882,7 +882,7 @@ kbd {
     .topbar > :last-child {
         margin-right: 6px;
     }
-    .title {
+    .topbar > .title {
         margin-left: -8px;
     }
     .topbar > .icon-button {
@@ -4132,8 +4132,9 @@ button.rail-brand:hover {
     font-weight: 600;
 }
 
-/* Marked unread (this browser): the title reads bold, like the dot beside the time says. */
-.session-row.marked-unread .session-title {
+/* Marked unread, or finished since this browser last looked: the title reads bold, like the dot beside the time says. */
+.session-row.marked-unread .session-title,
+.session-row.unseen .session-title {
     font-weight: 600;
 }
 
@@ -6384,7 +6385,7 @@ button.rail-brand:hover {
 /* ─── Notices, sign-in, plain pages ────────────────────────── */
 
 /* Toasts: inverted (the bright text color as the ground), with a countdown line until the notice goes. A tap
- * dismisses one, or does what it offers (Undo). Top center on phones, bottom center on wide screens. */
+ * dismisses one, or does what it offers (Undo). Top center, from above. */
 .notices {
     position: fixed;
     left: 50%;
@@ -6400,8 +6401,6 @@ button.rail-brand:hover {
 
 @media (min-width: 700px) {
     .notices {
-        top: auto;
-        bottom: 24px;
         width: min(92vw, 420px);
     }
 }
@@ -6418,7 +6417,7 @@ button.rail-brand:hover {
     font-size: 13.5px;
     font-weight: 500;
     pointer-events: auto;
-    animation: pop 0.25s var(--ease-out);
+    animation: toast-in 0.25s var(--ease-out);
 }
 
 .notice::after {
@@ -6439,8 +6438,23 @@ button.rail-brand:hover {
     }
 }
 
+/* Like the popovers' pop, but from above: the toast hangs from the top edge. */
+@keyframes toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+}
+
+@keyframes toast-out {
+    to {
+        opacity: 0;
+        transform: translateY(-6px) scale(0.98);
+    }
+}
+
 .notice.leaving {
-    animation: pop-out var(--t-out) linear forwards;
+    animation: toast-out var(--t-out) linear forwards;
 }
 
 .notice.error::after {
@@ -8498,6 +8512,11 @@ textarea.notes {
 
 .peek-head:hover {
     background: var(--hover);
+}
+
+/* Inside the tile, which cuts off what is past its rounded edge. */
+.peek-head:focus-visible {
+    outline-offset: -2px;
 }
 
 .peek-name {

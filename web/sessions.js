@@ -303,11 +303,13 @@ function SessionRow({
     const fork = !session.waiting && (live > 0 || failed > 0);
     const person = collab() ? (session.people ?? []).find((each) => each.id !== me?.id) : undefined;
     const mark = stateMark(session, live > 0, marked);
+    // Finished since this browser last looked: its result is unread, so its title reads bold.
+    const unseen = finishedUnseen(session);
     // Archive, pin, and mark-unread show on hover; an archived session only comes back, and only for people who steer.
     const acts = (canSteer() ? 1 : 0) + (session.archived ? 0 : 2);
 
     return html`<div
-        class=${`session-row ${open ? "active" : ""} ${selected ? "selected" : ""} ${pressing ? "pressing" : ""} ${moving ? "moving" : ""} ${marked ? "marked-unread" : ""} ${["no-acts", "one-act", "", "three-acts"][acts]}`}
+        class=${`session-row ${open ? "active" : ""} ${selected ? "selected" : ""} ${pressing ? "pressing" : ""} ${moving ? "moving" : ""} ${marked ? "marked-unread" : ""} ${unseen ? "unseen" : ""} ${["no-acts", "one-act", "", "three-acts"][acts]}`}
         data-id=${session.id}
         style=${`--i:${index}`}
     >
