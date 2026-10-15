@@ -529,6 +529,13 @@ addEventListener("keydown", (event) => {
             return;
         }
 
+        if (event.code === "KeyT") {
+            event.preventDefault();
+            setPrefs({ showThinking: !prefs().showThinking });
+
+            return;
+        }
+
         // The panels are not beside the subagents board.
         if (
             event.code === "KeyB" &&

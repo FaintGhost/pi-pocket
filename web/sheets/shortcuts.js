@@ -17,6 +17,7 @@ const SHORTCUTS = [
     ["s", "In Changes: the layout, auto, split, or unified"],
     ["w", "In Changes: wrap long lines, or not"],
     ["Alt P", "Show or hide peek tiles"],
+    ["Alt T", "Show thinking: turn the live disclosure on or off"],
     ["Mod B", "Fold or unfold the sidebar"],
     ["Mod Click", "In the sidebar: select a session; drag to select every one you pass"],
     ["Shift Click", "In the sidebar: select a run of sessions"],

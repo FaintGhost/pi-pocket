@@ -115,7 +115,7 @@ function actionItems() {
         },
         {
             label: "Appearance",
-            detail: "theme, tiling, motion, text size, reply speed",
+            detail: "theme, tiling, motion, text size, thinking, reply speed",
             icon: "palette",
             run: () => openSheet({ type: "appearance" }),
         },
@@ -131,6 +131,13 @@ function actionItems() {
             icon: "tiles",
             keys: "Alt P",
             run: togglePeeks,
+        },
+        {
+            label: prefs().showThinking ? "Hide thinking" : "Show thinking",
+            detail: "a chevron before the live spinner opens Pi's thinking",
+            icon: "sparkle",
+            keys: "Alt T",
+            run: () => setPrefs({ showThinking: !prefs().showThinking }),
         },
         {
             label: prefs().speed ? "Hide reply speed" : "Show reply speed",
