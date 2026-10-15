@@ -1,7 +1,7 @@
 // The wide home screen, shown beside the session list when no session is open.
 
-import { workspaceOrder } from "./sessions.js";
-import { canSteer, navigate, openSheet, scoped, store } from "./store.js";
+import { folderColor } from "./avatar.js";
+import { canSteer, navigate, openSheet, scoped, store, workspaceOrder } from "./store.js";
 import { paletteOf, prefs } from "./theme.js";
 import { html, Icon, Keys, shortPath, timeAgo } from "./ui.js";
 
@@ -65,7 +65,6 @@ export function Splash() {
                 <div class="fetch-title" style=${`--i:${line++}`}>
                     <b>${(me?.name ?? "you").toLowerCase().replace(/\s+/g, "-")}</b>@<b>pi-pocket</b>
                 </div>
-                <div class="fetch-rule" style=${`--i:${line++}`}>${"─".repeat(30)}</div>
                 ${rows.map(
                     ([key, value]) => html`<dl class="fetch-row" style=${`--i:${line++}`}>
                         <dt>${key}</dt>
@@ -97,14 +96,20 @@ export function Splash() {
         ${
             recent.length > 0 &&
             html`<div class="splash-recent">
-                <div class="group-title">Jump back in</div>
+                <div class="splash-heading">Jump back in</div>
                 ${recent.map(
                     (
                         session,
                         index,
-                    ) => html`<button class="list-item" onClick=${() => navigate(session.id)}>
-                        <span><kbd>${index + 1}</kbd>${session.title ?? "New session"}</span>
-                        <span class="muted small mono">
+                    ) => html`<button class="splash-row" onClick=${() => navigate(session.id)}>
+                        <span class="splash-key">${index + 1}</span>
+                        <span
+                            class="splash-mark"
+                            style=${`--folder:${folderColor(session.cwd)}`}
+                            aria-hidden="true"
+                        ></span>
+                        <span class="splash-title">${session.title ?? "New session"}</span>
+                        <span class="splash-meta">
                             ${session.busy ? "working · " : ""}
                             ${timeAgo(session.updatedAt)}
                         </span>

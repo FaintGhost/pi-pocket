@@ -624,7 +624,7 @@ test("on a phone the top bar keeps only the buttons with something to say", real
         await inPage<string>(
             `return JSON.stringify(document.querySelector(".topbar .title-sub").textContent)`,
         ),
-        /work.*⎇ main/,
+        /work.*main/,
         "the folder and the branch under the title",
     );
 });

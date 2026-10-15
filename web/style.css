@@ -790,21 +790,25 @@ kbd {
 
 /* ─── Top bar ──────────────────────────────────────────────── */
 
-/* The session's title over its folder and branch, what changed, who is here, and the menu. */
+/*
+ * The session's title over its folder and branch, what changed, the toggles, who is here, and the menu. The bar is as
+ * wide as its pane and answers to that width, not the screen's: the room left decides which buttons show.
+ */
 .topbar {
+    container: topbar / inline-size;
     position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
-    min-height: 52px;
-    padding: calc(env(safe-area-inset-top) + 4px) 8px 4px 16px;
-    border-bottom: 1px solid var(--line);
+    min-height: calc(58px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 10px 0 20px;
+    border-bottom: 1px solid var(--hair);
     background: var(--bg);
 }
 
 /*
- * The top bar keeps only the buttons with something to say (a page open, artifacts made, people here, peek tiles on,
- * Files open): the menu's tiles open the rest.
+ * The top bar keeps only the buttons with something to say (a page open, artifacts made, people here): the menu's
+ * tiles open the rest. The peek and Files toggles always show where there is room (`top-toggle`, below).
  */
 .topbar .quiet {
     display: none;
@@ -820,15 +824,61 @@ kbd {
     }
 }
 
+/* Its buttons: quiet, and lit in the accent while what they open is open. */
+.topbar .icon-button {
+    width: 36px;
+    height: 36px;
+    color: var(--muted);
+}
+
+.topbar .icon-button:hover {
+    color: var(--text);
+}
+
+.topbar .icon-button.on {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+/* Who is here: an avatar with its online mark, and how many more, in a pill that lights while the panel is open. */
+.topbar .people-button {
+    height: 36px;
+    min-width: 36px;
+    padding: 0 4px;
+    border-radius: var(--r-pill);
+    color: var(--muted);
+}
+
+.topbar .people-button.on {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.topbar .online-mark {
+    width: 8px;
+    height: 8px;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px var(--bg);
+}
+
+/* The shell's avatars (top bar, session rows, the rail) are round, tinted with their person's color. */
+.topbar .avatar,
+.session-side .avatar,
+.rail .avatar {
+    border: 0;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--who) 22%, var(--bg));
+    font-size: 11px;
+    font-weight: 600;
+}
+
 /* Below the sidebar's width the top bar leads back to the session list, each button a thumb wide. */
 @media (max-width: 959px) {
     .topbar {
-        gap: 0;
+        gap: 2px;
         padding-left: 4px;
-    }
-    /* Its way back says what the button would. */
-    .topbar .quiet-narrow {
-        display: none;
+        padding-right: 6px;
     }
     .topbar > .icon-button {
         width: 44px;
@@ -841,7 +891,7 @@ kbd {
         height: 44px;
     }
     /* Over the title's button, whose box reaches a little under it. */
-    .topbar-back {
+    .topbar > .topbar-back {
         z-index: 1;
         color: var(--text);
     }
@@ -851,15 +901,38 @@ kbd {
     }
 }
 
+/* The room in the pane: the changes lose their count of files, the toggles go, then the avatars. */
+@container topbar (max-width: 559px) {
+    .changes-button .changes-files {
+        display: none;
+    }
+}
+
+@container topbar (max-width: 479px) {
+    .topbar .top-toggle {
+        display: none;
+    }
+}
+
+@media (min-width: 700px) {
+    @container topbar (max-width: 419px) {
+        .topbar .people-button {
+            display: none;
+        }
+    }
+}
+
 /* The title and its line under it open the menu, all but the branch, which opens the branch picker. */
 .title {
     position: relative;
     flex: 1;
-    min-width: 0;
+    min-width: 120px;
     display: flex;
     flex-direction: column;
-    padding: 2px 6px;
-    margin-left: -6px;
+    gap: 2px;
+    padding: 4px 8px;
+    margin-left: -8px;
+    border-radius: var(--r-row);
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
@@ -871,6 +944,7 @@ kbd {
 .title-open {
     position: absolute;
     inset: 0;
+    border-radius: inherit;
 }
 
 .title-open:focus-visible {
@@ -878,8 +952,9 @@ kbd {
 }
 
 .title-main {
-    font-weight: 700;
-    font-size: 0.95rem;
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 1.3;
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
@@ -890,16 +965,24 @@ kbd {
 .title-sub {
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     min-width: 0;
-    min-height: 1lh;
-    font-size: 0.72rem;
+    min-height: 20px;
+    font-size: 12px;
+    line-height: 20px;
     color: var(--muted);
     white-space: nowrap;
 }
 
 .title-sub > span {
     flex: none;
+}
+
+.title-sub > .folder-mark {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--folder, var(--accent));
 }
 
 .title-sub > .title-folder {
@@ -909,19 +992,28 @@ kbd {
     text-overflow: ellipsis;
 }
 
+/* The branch: a small tag with the fork mark, cut short from its end when the room is short. */
 .title-sub > .title-branch {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     flex: 0 1 auto;
-    min-width: 2ch;
-    padding: 0 4px;
-    margin: 0 -4px;
-    font: inherit;
-    color: inherit;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    min-width: 0;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 6px;
+    background: var(--card);
+    font: 11px / 1 var(--mono);
+    color: var(--muted);
     transition:
         color var(--t-hover) var(--ease-out),
         background-color var(--t-hover) var(--ease-out);
+}
+
+.title-branch-name {
+    min-width: 2ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Over the title's button, which takes the taps around it. */
@@ -932,38 +1024,46 @@ kbd {
 
 .title-sub > button.title-branch:hover {
     color: var(--accent);
-    background: var(--hover);
+    background: var(--card-2);
+}
+
+.title-sub > .title-worktree {
+    font-size: 11.5px;
+    color: var(--faint);
+}
+
+/* A phone shows the branch as plain mono text, as the design's phone board does. */
+@media (max-width: 699px) {
+    .title-sub > .title-branch {
+        padding: 0;
+        background: none;
+        color: var(--faint);
+    }
+    .title-branch .icon {
+        display: none;
+    }
+    .title-sub > button.title-branch:hover {
+        background: none;
+    }
 }
 
 /*
- * A thumb's height on a touch screen, with its look kept: the room around it takes the tap. The top bar is a little
- * taller there, and the line under the title too, so that room stays in the top bar; it reaches the bottom of the
- * title's line above the branch (its descenders), and the rest of the title opens the menu.
+ * A thumb's height on a touch screen, with its look kept: a layer past the branch takes the tap. The line under the
+ * title is a little taller there, so that room stays in the top bar; the layer reaches into the bottom of the title's
+ * line above (its descenders), and the rest of the title opens the menu.
  */
 @media (pointer: coarse) {
-    .topbar {
-        min-height: 56px;
-    }
     .title {
         padding-block: 0;
     }
     .title-sub {
         min-height: 24px;
     }
-    .title-sub > button.title-branch {
-        padding-block: 10px;
-        margin-block: -10px;
+    .title-sub > button.title-branch::after {
+        content: "";
+        position: absolute;
+        inset: -8px;
     }
-}
-
-.title-sub > .folder-mark {
-    width: 7px;
-    height: 7px;
-    background: var(--folder, var(--accent));
-}
-
-.title-sub .faint {
-    color: var(--faint);
 }
 
 /* What changed in the session's folder: lines added and removed, and how many files. */
@@ -973,17 +1073,22 @@ kbd {
     align-items: center;
     gap: 8px;
     height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--line);
-    font-size: 0.76rem;
-    transition:
-        border-color var(--t-hover) var(--ease-out),
-        background-color var(--t-hover) var(--ease-out);
+    padding: 0 12px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-pill);
+    background: var(--card);
+    font-size: 12px;
+    color: var(--muted);
+    transition: border-color var(--t-hover) var(--ease-out);
 }
 
 .changes-button:hover {
-    border-color: var(--line-strong);
-    background: var(--hover);
+    border-color: var(--hair-2);
+}
+
+.changes-button .added,
+.changes-button .removed {
+    font-family: var(--mono);
 }
 
 .changes-button .added {
@@ -991,11 +1096,8 @@ kbd {
 }
 
 .changes-button .removed {
+    margin-left: -3px;
     color: var(--err);
-}
-
-.changes-button .changes-files {
-    color: var(--muted);
 }
 
 @media (max-width: 959px) {
@@ -1004,10 +1106,12 @@ kbd {
     }
 }
 
-/* A narrow phone: the counts of lines alone. */
-@media (max-width: 380px) {
-    .changes-button .changes-files {
-        display: none;
+/* A phone: the counts alone, in a slimmer pill. */
+@media (max-width: 699px) {
+    .changes-button {
+        height: 28px;
+        padding: 0 10px;
+        font-size: 11.5px;
     }
 }
 
@@ -4012,6 +4116,7 @@ button.rail-brand:hover {
 
 /* ─── The home screen on wide screens: a fastfetch for Pi Pocket ─── */
 
+/* One centered column, 640px at most. */
 .splash {
     flex: 1;
     min-height: 0;
@@ -4019,32 +4124,36 @@ button.rail-brand:hover {
     align-items: center;
     justify-content: safe center;
     flex-direction: column;
-    gap: 2.2rem;
-    padding: 2rem;
+    gap: 28px;
+    padding: 40px;
+}
+
+.splash > * {
+    width: min(640px, 100%);
+    flex: none;
 }
 
 .fetch {
     display: flex;
-    align-items: flex-start;
-    gap: 2.6rem;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 36px;
 }
 
 .fetch-logo {
     margin: 0;
-    font: 700 1.05rem/1.1 var(--mono);
-    background: linear-gradient(170deg, var(--accent), var(--spark));
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    font: 13px / 1.15 var(--mono);
+    color: var(--brand);
     user-select: none;
     animation: popin 0.6s var(--ease-out) backwards;
 }
 
 .fetch-info {
+    flex: 1;
+    min-width: 260px;
     display: flex;
     flex-direction: column;
-    font-size: 0.86rem;
-    min-width: 18rem;
+    gap: 2px;
 }
 
 .fetch-info > * {
@@ -4053,7 +4162,8 @@ button.rail-brand:hover {
 }
 
 .fetch-title {
-    font-weight: 700;
+    margin-bottom: 8px;
+    font: 600 15px var(--mono);
     color: var(--text);
 }
 
@@ -4061,46 +4171,37 @@ button.rail-brand:hover {
     color: var(--accent);
 }
 
-.fetch-rule {
-    color: var(--faint);
-    letter-spacing: -0.05em;
-    overflow: hidden;
-    white-space: nowrap;
-}
-
 .fetch-row {
-    display: flex;
-    gap: 0.5rem;
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    gap: 12px;
     margin: 0;
-    white-space: nowrap;
+    font-size: 13.5px;
+    line-height: 1.75;
 }
 
 .fetch-row dt {
-    color: var(--accent);
-    font-weight: 700;
-    min-width: 6.5rem;
-}
-
-.fetch-row dt::after {
-    content: ":";
     color: var(--muted);
 }
 
 .fetch-row dd {
     margin: 0;
-    color: var(--body);
+    color: var(--text);
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .fetch-colors {
     display: flex;
-    margin-top: 0.8rem;
+    gap: 6px;
+    margin-top: 10px;
 }
 
 .fetch-colors span {
-    width: 1.6rem;
-    height: 0.9rem;
+    width: 16px;
+    height: 16px;
+    border-radius: var(--r-tag);
     transition: transform var(--t-in) var(--ease-out);
 }
 
@@ -4108,31 +4209,124 @@ button.rail-brand:hover {
     transform: translateY(-3px);
 }
 
+/* New session, the launcher, and Appearance: 38px buttons, set in full here. */
 .splash-actions {
     display: flex;
     flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.5rem;
+    gap: 8px;
     animation: rise-in 0.5s var(--ease-out) 0.45s backwards;
 }
 
 .splash-actions .button {
-    gap: 0.6rem;
+    height: 38px;
+    padding: 0 14px;
+    gap: 8px;
+    border: 1px solid var(--hair-2);
+    border-radius: var(--r-control);
+    background: var(--card);
+    color: var(--text);
+    font-size: 13.5px;
+    font-weight: 500;
 }
 
+.splash-actions .button:hover {
+    border-color: var(--hair-2);
+    background: var(--card-2);
+}
+
+.splash-actions .button.primary {
+    border-color: transparent;
+    background: var(--accent-fill);
+    color: var(--accent-ink);
+    font-weight: 600;
+}
+
+.splash-actions .button.primary:hover {
+    border-color: transparent;
+    background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+}
+
+/* The key's name, in mono beside the label. */
+.splash-actions .button kbd {
+    min-width: 0;
+    height: auto;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: 400 11px var(--mono);
+    color: var(--faint);
+    opacity: 1;
+}
+
+.splash-actions .button.primary kbd {
+    color: inherit;
+    opacity: 0.7;
+}
+
+/* Jump back in: a row per recent session, numbered as Alt+1…9 number them. */
 .splash-recent {
     display: flex;
     flex-direction: column;
-    width: min(34rem, 100%);
+    gap: 4px;
     animation: rise-in 0.5s var(--ease-out) 0.55s backwards;
 }
 
-.splash-recent .list-item {
-    background: transparent;
+.splash-heading {
+    padding: 0 4px 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
 }
 
-.splash-recent .list-item kbd {
-    margin-right: 0.6rem;
+.splash-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 40px;
+    padding: 0 12px;
+    border-radius: var(--r-control);
+    text-align: left;
+    transition: background-color var(--t-hover) var(--ease-out);
+}
+
+.splash-row:hover {
+    background: var(--hover);
+}
+
+.splash-key {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--hair-2);
+    border-radius: 6px;
+    font: 11px / 1 var(--mono);
+    color: var(--muted);
+}
+
+.splash-mark {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 2.5px;
+    background: var(--folder, var(--muted));
+}
+
+.splash-title {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.splash-meta {
+    flex: none;
+    font: 11.5px var(--mono);
+    color: var(--faint);
 }
 
 /* ─── Sheets ───────────────────────────────────────────────── */
@@ -5467,7 +5661,8 @@ button.rail-brand:hover {
 
 /* ─── Notices, sign-in, plain pages ────────────────────────── */
 
-/* Omarchy's notifications: the active border, and a countdown line until the notice goes. Top right on wide screens. */
+/* Toasts: inverted (the bright text color as the ground), with a countdown line until the notice goes. A tap
+ * dismisses one, or does what it offers (Undo). Top center on phones, top right on wide screens. */
 .notices {
     position: fixed;
     left: 50%;
@@ -5494,16 +5689,16 @@ button.rail-brand:hover {
 .notice {
     position: relative;
     overflow: hidden;
-    background: var(--bg);
-    border: 2px solid transparent;
-    border-image: var(--active) 1;
-    border-radius: var(--radius);
-    padding: 0.6rem 0.85rem 0.7rem;
+    padding: 10px 16px 12px;
+    border-radius: var(--r-card);
+    background: var(--o-fg-bright);
+    box-shadow: var(--pop);
+    color: var(--o-bg);
     text-align: left;
-    font-size: 0.82rem;
-    color: var(--text);
+    font-size: 13.5px;
+    font-weight: 500;
     pointer-events: auto;
-    animation: notice-in var(--t-in) var(--ease-out);
+    animation: pop 0.25s var(--ease-out);
 }
 
 .notice::after {
@@ -5513,7 +5708,7 @@ button.rail-brand:hover {
     right: 0;
     bottom: 0;
     height: 2px;
-    background: var(--accent);
+    background: color-mix(in srgb, var(--o-bg) 40%, transparent);
     transform-origin: left;
     animation: countdown var(--life, 4.5s) linear forwards;
 }
@@ -5524,36 +5719,12 @@ button.rail-brand:hover {
     }
 }
 
-@keyframes notice-in {
-    from {
-        opacity: 0;
-        transform: translateX(28px);
-    }
-}
-
 .notice.leaving {
-    animation: notice-out var(--t-out) linear forwards;
-}
-
-@keyframes notice-out {
-    to {
-        opacity: 0;
-        transform: translateX(16px);
-    }
-}
-
-.notice.error {
-    border-image: none;
-    border-color: var(--err);
+    animation: pop-out var(--t-out) linear forwards;
 }
 
 .notice.error::after {
     background: var(--err);
-}
-
-.notice.warning {
-    border-image: none;
-    border-color: var(--warn);
 }
 
 .notice.warning::after {
@@ -8604,8 +8775,7 @@ textarea.notes {
     transform: none;
 }
 
-.browser-bar .icon-button.on,
-.topbar .icon-button.on {
+.browser-bar .icon-button.on {
     color: var(--accent);
 }
 
@@ -11718,8 +11888,6 @@ textarea.notes {
 
     .pip-memory .button,
     .pip-attachment-remove {
-    top: 5px;
-    right: 5px;
         min-height: 44px;
     }
 
@@ -11759,6 +11927,8 @@ textarea.notes {
 
 .pip-dot {
     position: absolute;
+    top: 5px;
+    right: 5px;
     width: 7px;
     height: 7px;
     background: var(--accent);

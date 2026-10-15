@@ -71,7 +71,7 @@ export function PeopleButton() {
             others.length === 0
                 ? html`<${Icon} name="chat" />`
                 : html`<span class="people-here">
-                      <${Avatar} person=${shown} size=${24} />
+                      <${Avatar} person=${shown} size=${28} />
                       <span
                           class=${`online-mark ${shown.away ? "away" : ""}`}
                           aria-hidden="true"

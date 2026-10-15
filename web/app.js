@@ -2,7 +2,7 @@
 import { render } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { folderColor } from "./avatar.js";
-import { canGoBack, goBack, goHome, replaceAddress, startHistory, useBack } from "./back.js";
+import { canGoBack, goBack, replaceAddress, startHistory, useBack } from "./back.js";
 import { BrowserButton, BrowserPanel } from "./browser-panel.js";
 import { browserAvailable, toggleBrowser } from "./browser.js";
 import { PeopleButton, PeoplePanel } from "./chat.js";
@@ -30,7 +30,14 @@ import {
     togglePeeks,
 } from "./peeks.js";
 import { closePip, openPip, PipHost, pipAvailable, togglePip } from "./pip.js";
-import { Drawer, RailNav, ResizeHandle, SessionList, workspaceOrder } from "./sessions.js";
+import {
+    Drawer,
+    RailNav,
+    ResizeHandle,
+    SessionList,
+    toSessions,
+    workspaceOrder,
+} from "./sessions.js";
 // Loaded for what it does: it gives replies' Markdown the component for pages, images, and diffs in code blocks.
 import "./rich.js";
 import { takeShare } from "./share.js";
@@ -58,12 +65,6 @@ import { prefs, setPrefs, startTheme } from "./theme.js";
 import { Transcript } from "./transcript.js";
 import { APPLE, Boot, html, Icon, iconPath, shortPath, useEdge, usePresence } from "./ui.js";
 import { toggleDictation } from "./voice.js";
-
-/**
- * Back to the session list, where it is not beside the conversation: back past the sessions opened from it, as a
- * phone's back would go, or to it in this session's place when history does not lead there.
- */
-const toSessions = () => goHome(() => navigate(null, { replace: true }));
 
 /** What changed in the session's folder: lines added and removed, and how many files. It opens Changes. */
 function ChangesButton() {
@@ -154,7 +155,6 @@ function Topbar() {
                               folder &&
                               html`<span class="title-folder" aria-hidden="true">${folder}</span>`
                           }
-                          ${branch && html`<span class="faint" aria-hidden="true">·</span>`}
                           ${
                               branch &&
                               (branchAvailable()
@@ -164,11 +164,15 @@ function Topbar() {
                                         title=${view.branch?.detached ? "No branch: switch to one" : "Switch or make a branch"}
                                         onClick=${() => openSheet({ type: "branch" })}
                                     >
-                                        ⎇ ${branch}
+                                        <${Icon} name="fork" size=${10} /><span class="title-branch-name">${branch}</span>
                                     </button>`
                                   : html`<span class="title-branch" title="The git branch">
-                                        ⎇ ${branch}
+                                        <${Icon} name="fork" size=${10} /><span class="title-branch-name">${branch}</span>
                                     </span>`)
+                          }
+                          ${
+                              conversation?.worktree &&
+                              html`<span class="title-worktree" aria-hidden="true">worktree</span>`
                           }`
                 }
             </span>

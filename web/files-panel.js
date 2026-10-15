@@ -723,13 +723,13 @@ export function FilesButton() {
         return null;
     }
 
-    // Quiet while closed: the menu's tiles, Alt+E, and a swipe left on a phone open it.
+    // Out of the top bar where its pane is narrow (a phone's): the menu's tiles, Alt+E, and a swipe left open it.
     return html`<button
-        class=${`icon-button ${filesOpen ? "on" : "quiet"}`}
+        class=${`icon-button top-toggle ${filesOpen ? "on" : ""}`}
         aria-label="Files"
         title="Files and changes (Alt+E)"
         onClick=${() => toggleFiles()}
     >
-        <${Icon} name="folder" />
+        <${Icon} name="folder" size=${18} />
     </button>`;
 }
