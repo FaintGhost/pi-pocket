@@ -1147,9 +1147,12 @@ kbd {
         transform 90ms var(--ease-out);
 }
 
-.icon-button:hover {
-    background: var(--hover);
-    color: var(--text);
+/* Not on touch screens, where a tapped button would keep the fill. */
+@media (hover: hover) {
+    .icon-button:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
 }
 
 .icon-button:active {
