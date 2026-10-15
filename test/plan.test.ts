@@ -209,6 +209,12 @@ const route: FauxResponseStep = (request) => {
         return call("write", { path: "helper.txt", content: "x" });
     }
 
+    if (text.endsWith("script")) {
+        return call("codemode", {
+            code: "text(await tools.peek({})); try { await tools.poke({}); } catch (error) { text(error.message); }",
+        });
+    }
+
     if (text.endsWith("peek") || text.endsWith("poke")) {
         return call(text.slice(-4), {});
     }
@@ -297,11 +303,16 @@ test("in plan mode a tool its extension marks read-only runs, and one it does no
     await app.commands.setPlan(id, owner(app), true);
     await say(app, id, "peek");
     await say(app, id, "poke");
+    await say(app, id, "script");
     const said = (await modelTexts(app, id)).join("\n");
 
     assert.match(said, /peek ran/);
     assert.doesNotMatch(said, /poke ran/);
     assert.match(said, /Plan mode is on: .*poke/);
+    assert.match(
+        said,
+        /Script completed[\s\S]*peek ran[\s\S]*Tool call blocked: Plan mode is on: .*poke/,
+    );
 });
 
 test("plan mode cannot be turned on while its extension is off", async () => {

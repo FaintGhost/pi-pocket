@@ -469,7 +469,8 @@ export class PocketApp {
                     .some(
                         ({ tool }) =>
                             tool.name === name &&
-                            (tool as { annotations?: ToolAnnotations }).annotations?.readOnlyHint === true,
+                            (tool as { annotations?: ToolAnnotations }).annotations
+                                ?.readOnlyHint === true,
                     ),
             requesterOf: (conversationId) => this.attribution.requesterOf(conversationId),
             notice: (level, message, conversationId) => this.notice(level, message, conversationId),
