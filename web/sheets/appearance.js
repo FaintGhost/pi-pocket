@@ -172,6 +172,19 @@ export function AppearanceSheet() {
                 </div>
             <//>
         </div>
+        <div class="label">Conversation</div>
+        <div>
+            <${SettingRow}
+                title="Show thinking"
+                detail="Adds a chevron before the live spinner. Tap it to read the current thought above the line as it comes. Also Alt+T"
+            >
+                <${Switch}
+                    on=${p.showThinking}
+                    label="Show thinking"
+                    onChange=${() => setPrefs({ showThinking: !p.showThinking })}
+                />
+            <//>
+        </div>
         <div class="label">Status line</div>
         <div>
             <${SettingRow}

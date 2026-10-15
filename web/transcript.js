@@ -1,7 +1,7 @@
 // The conversation, as a column of turns: a person's message, then what Pi did (its thinking and tool calls folded
 // into one line that opens into a timeline), then Pi's reply, any approval, and the live line while Pi works.
 import { Component } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { personColor } from "./avatar.js";
 import { browserAvailable, setBrowserOpen } from "./browser.js";
 import { describeCall } from "./calls.js";
@@ -22,6 +22,7 @@ import {
     TRANSCRIPT_ROWS,
 } from "./store.js";
 import { openSubagent, stateOf } from "./subagents.js";
+import { prefs } from "./theme.js";
 import {
     diffCounts,
     itemsOf,
@@ -1824,19 +1825,160 @@ function canAnswer(approvals) {
     );
 }
 
+/** The sessions whose live thinking is open, in this tab: open stays open from one run to the next. */
+const thinkingOpen = new Map();
+
+/**
+ * The active response is authoritative, even before it shares any thinking: never pass an old thought off as the new
+ * one. While tools work, use only the latest response in this turn, even if it shared no thinking. Keys follow
+ * responses and block positions, not text prefixes: two thoughts may start with the same words.
+ */
+function newestThought(generation, entries) {
+    if (generation !== undefined) {
+        const blocks = generation.message?.blocks ?? [];
+        const index = blocks.findLastIndex((block) => block.type === "thinking");
+
+        if (index === -1) {
+            return null;
+        }
+
+        const previous = entries.findLast((entry) => entry.kind === "assistant")?.id;
+
+        return {
+            block: blocks[index],
+            key: `live:${previous}:${generation.attempt}:${index}`,
+            handoff: `${previous}:${index}`,
+            writing: true,
+            streaming: index === blocks.length - 1,
+        };
+    }
+
+    for (let index = entries.length - 1; index >= 0; index--) {
+        const entry = entries[index];
+
+        if (entry.kind === "user") {
+            break;
+        }
+
+        if (entry.kind !== "assistant") {
+            continue;
+        }
+
+        const at = entry.blocks.findLastIndex((block) => block.type === "thinking");
+        const previous = entries.findLast(
+            (each, before) => before < index && each.kind === "assistant",
+        )?.id;
+
+        return at === -1
+            ? null
+            : {
+                  block: entry.blocks[at],
+                  key: `entry:${entry.id}:${at}`,
+                  handoff: `${previous}:${at}`,
+                  writing: false,
+                  streaming: false,
+              };
+    }
+
+    return null;
+}
+
+/**
+ * A quiet reading area above the live line, separate from the timeline's Thought steps. Follow new words until the
+ * reader scrolls up; follow again for a new thought, but not when the current response is saved for the tool phase.
+ * Mounted only when open, and memoized away from the live timer: no selection, text diff, or layout work while hidden.
+ */
+function LiveThought({ generation, entries, id }) {
+    const box = useRef(null);
+    const follow = useRef(true);
+    const previous = useRef(null);
+    const thought = newestThought(generation, entries);
+    const text = thought?.block.text ?? "";
+    // A coalesced update can skip whole responses. Only the same response/block keeps the reader's scroll.
+    const handedOff =
+        previous.current?.writing === true &&
+        thought?.writing === false &&
+        previous.current.handoff === thought.handoff;
+
+    if (thought?.key !== previous.current?.key && !handedOff) {
+        follow.current = true;
+    }
+
+    previous.current = thought;
+
+    useLayoutEffect(() => {
+        if (follow.current) {
+            box.current.scrollTop = box.current.scrollHeight;
+        }
+    }, [text, thought?.key]);
+
+    const onScroll = () => {
+        const element = box.current;
+
+        follow.current = element.scrollHeight - element.scrollTop - element.clientHeight < 8;
+    };
+
+    const empty = text === "";
+    const streaming = thought?.streaming && !empty;
+    const label = empty ? "Thinking" : thought.writing ? "Current thought" : "Latest thought";
+    const shown = !empty
+        ? text
+        : thought?.block.redacted
+          ? "The model has hidden its thinking."
+          : generation !== undefined && generation.message === undefined
+            ? "Waiting for thinking text…"
+            : "No thinking text shared for this response.";
+
+    return html`<section class="live-thought" id=${id} aria-label="Pi's thinking">
+        <div class="live-thought-label">${label}</div>
+        <div
+            class=${`live-thought-text ${empty ? "is-empty" : ""} ${streaming ? "streaming" : ""}`}
+            ref=${box}
+            onScroll=${onScroll}
+            tabindex="0"
+            role="region"
+            aria-label=${label}
+        >${shown}</div>
+    </section>`;
+}
+
 /**
  * The end of the live turn, in one line: what Pi does (thinks, works, waits for an approval, retries a failed request,
  * compacts its context), for how long, and how to stop it. Screen readers hear what it does when that changes, not the
- * seconds counting.
+ * seconds counting. With Appearance → Show thinking on, a chevron before the spinner opens Pi's newest thought above
+ * the line; closed, nothing of the thought is drawn or looked for.
  */
-function LiveLine({ live, approvals, start }) {
+function LiveLine({ live, approvals, start, entries, conversationId }) {
     const [, tick] = useState(0);
+    const line = useRef(null);
+    /** Where the line was on screen as the thought above it opened or closed, to keep it there. */
+    const was = useRef(null);
 
     useEffect(() => {
         const timer = setInterval(() => tick((n) => n + 1), 1000);
 
         return () => clearInterval(timer);
     }, []);
+
+    const thinking = prefs().showThinking === true;
+    const open = thinking && thinkingOpen.get(conversationId) === true;
+
+    // Only as the thought opens or closes: not on the line's every tick.
+    useLayoutEffect(() => {
+        if (was.current === null) {
+            return;
+        }
+
+        line.current.closest(".scroller").scrollTop +=
+            line.current.getBoundingClientRect().top - was.current;
+        was.current = null;
+    }, [open]);
+
+    const fold = () => {
+        was.current = line.current.getBoundingClientRect().top;
+        keep(thinkingOpen, conversationId, !open);
+        tick((n) => n + 1);
+    };
 
     const partial = live.generation?.message?.blocks ?? [];
     const retry = live.generation?.retry;
@@ -1857,7 +1999,26 @@ function LiveLine({ live, approvals, start }) {
         state = "Thinking";
     }
 
-    return html`<div class=${`live-line ${waiting ? "waiting" : ""}`}>
+    const thoughtId = `live-thought-${conversationId}`;
+
+    return html`${
+        open &&
+        html`<${Memo} deps=${[live.generation, entries, conversationId]}>
+            <${LiveThought} generation=${live.generation} entries=${entries} id=${thoughtId} />
+        <//>`
+    }
+        <div class=${`live-line ${waiting ? "waiting" : ""}`} ref=${line}>
+        ${
+            thinking &&
+            html`<button
+                class=${`live-fold ${open ? "open" : ""}`}
+                aria-expanded=${open}
+                aria-controls=${thoughtId}
+                aria-label=${open ? "Hide Pi's thinking" : "Show Pi's thinking"}
+                title=${open ? "Hide Pi's thinking" : "Show Pi's thinking"}
+                onClick=${fold}
+            ><${Icon} name="chevron" size=${14} class="chev" /></button>`
+        }
         ${
             waiting
                 ? html`<span class="live-wait" aria-hidden="true"></span>`
@@ -1906,7 +2067,11 @@ export function Transcript() {
     const counted = useRef(0);
     const [showJump, setShowJump] = useState(false);
 
-    const entries = view.order.map((id) => view.entries.get(id)).filter(Boolean);
+    // Keep the snapshot's rows stable across unrelated UI updates, including scrolling the thought reading area.
+    const entries = useMemo(
+        () => view.order.map((id) => view.entries.get(id)).filter(Boolean),
+        [view.order, view.entries],
+    );
     const rows = entries.filter(isRow);
     const start = windowStart(rows, transcriptFrom);
 
@@ -2176,7 +2341,13 @@ export function Transcript() {
             )}
             ${
                 (busy || compacting) &&
-                html`<${LiveLine} live=${view.live} approvals=${approvals} start=${started} />`
+                html`<${LiveLine}
+                    live=${view.live}
+                    approvals=${approvals}
+                    start=${started}
+                    entries=${entries}
+                    conversationId=${conversation.id}
+                />`
             }
         </div>
         ${
