@@ -225,7 +225,7 @@ class ChatLine extends Component {
 
         return html`<div
             data-chat=${message.id}
-            class=${`chat-msg ${grouped ? "grouped" : ""} ${open ? "open" : ""} ${message.mentions?.includes(me?.id) ? "mentions-me" : ""}`}
+            class=${`chat-msg ${mine ? "mine" : ""} ${grouped ? "grouped" : ""} ${open ? "open" : ""} ${message.mentions?.includes(me?.id) ? "mentions-me" : ""}`}
             style=${`--who:${personColor(message.userId)}`}
         >
             ${
@@ -294,7 +294,7 @@ function mentionQuery(value, caret) {
 
 /** The chat. `focus` puts the caret in its box on desktops: not when a reload brings back the People panel. */
 function ChatTab({ highlight, focus }) {
-    const { chat, presence, me, users, conversationId, chatQuote, view } = store.state;
+    const { chat, me, users, conversationId, chatQuote, view } = store.state;
     const draftKey = `chat-${conversationId}`;
     const [text, setText] = useState(() => drafts.get(draftKey));
     const [sending, setSending] = useState(false);
@@ -394,14 +394,8 @@ function ChatTab({ highlight, focus }) {
         }
     };
 
-    return html`<div class="chat-here">
-        ${presence.map(
-            (person) =>
-                html`<span class=${`chip ${person.away ? "away" : ""}`} key=${person.id}>
-                    <${Avatar} person=${person} size=${18} /> ${person.name}
-                    ${person.id === me?.id ? " (you)" : person.away ? " · away" : ""}
-                </span>`,
-        )}
+    return html`<div class="chat-label">
+        <${Icon} name="eye" size=${12} />Side chat · Pi does not see this chat.
     </div>
     <div class="chat-log" ref=${log}>
         ${
@@ -637,9 +631,82 @@ function NotesTab() {
     </div>`;
 }
 
+/** The session's people and the same take-turns shortcut as the menu, with its driver permissions. */
+function PeopleRoster() {
+    const { presence, users, me, view } = store.state;
+    const turns = view.turns;
+    const driver = users.find((person) => person.id === turns?.driver)?.name ?? "No one";
+    const canToggle =
+        canSteer() &&
+        (!turns?.on ||
+            turns.driver === me?.id ||
+            me?.role === "owner" ||
+            !turns.driver ||
+            !presence.some((person) => person.id === turns.driver));
+
+    return html`<div class="people-roster">
+        ${presence.map((person) => {
+            const role = users.find((user) => user.id === person.id)?.role;
+            const writing = person.typing && person.id !== me?.id;
+            const state = writing
+                ? person.typing === "pi"
+                    ? "writing to Pi…"
+                    : "typing…"
+                : person.away
+                  ? "away"
+                  : person.id === me?.id
+                    ? "here · you"
+                    : "here";
+            const roleLabel =
+                role === "owner" ? "owner" : role === "viewer" ? "view only" : "can steer";
+
+            return html`<div class="people-person" key=${person.id}>
+                <span class="people-here">
+                    <${Avatar} person=${person} size=${28} />
+                    <span
+                        class=${`online-mark ${person.away ? "away" : ""}`}
+                        aria-hidden="true"
+                    ></span>
+                </span>
+                <span class="people-person-info">
+                    <span class="people-person-name">${person.name}</span>
+                    <span class=${`people-person-state ${writing ? "typing" : ""}`}>
+                        ${state}
+                    </span>
+                </span>
+                <span class="people-role">${roleLabel}</span>
+            </div>`;
+        })}
+    </div>
+    ${
+        collab() &&
+        html`<div class="people-turns">
+            <span class="grow">
+                <span class="people-turns-title">
+                    ${turns?.on ? `${driver} is driving` : "Take turns"}
+                </span>
+                <span class="people-turns-hint">
+                    ${turns?.on ? "Only the driver can send to Pi" : "One person drives Pi at a time"}
+                </span>
+            </span>
+            ${
+                canToggle &&
+                html`<button
+                    class=${`button small ${turns?.on ? "" : "primary"}`}
+                    onClick=${() => attempt(() => actions.turns(turns?.on ? "off" : "on"))}
+                >
+                    ${turns?.on ? "Turn off" : "Start"}
+                </button>`
+            }
+        </div>`
+    }`;
+}
+
 /** Chat, pinned, and notes: the People sheet's on phones, the People panel's on wide screens. `ask` picks what shows first. */
 function PeopleTabs({ ask, focus }) {
-    const { view } = store.state;
+    const { view, users } = store.state;
+    const featured = view.pins?.at(-1);
+    const pinnedBy = users.find((user) => user.id === featured?.by)?.name ?? "someone";
     const [tab, setTab] = useState(ask.tab ?? "chat");
     const [highlight, setHighlight] = useState(ask.highlight ?? null);
     const pins = view.pins?.length ?? 0;
@@ -657,28 +724,47 @@ function PeopleTabs({ ask, focus }) {
         </div>`
         : null;
 
-    return html`${tabs}
-    ${
-        tab === "chat" &&
-        html`<${ChatTab} key=${highlight ?? "chat"} highlight=${highlight} focus=${focus} />`
-    }
-    ${
-        tab === "pins" &&
-        html`<${PinsTab}
-            onShowChat=${(chatId) => {
-                setHighlight(chatId);
-                setTab("chat");
-            }}
-        />`
-    }
-    ${tab === "notes" && html`<${NotesTab} />`}`;
+    return html`<div class="people-content">
+        <${PeopleRoster} />
+        ${tabs}
+        ${
+            tab === "chat" &&
+            featured &&
+            html`<button
+                class="people-pin"
+                onClick=${() => (featured.entryId !== undefined ? jumpToEntry(featured.entryId) : setHighlight(featured.chatId))}
+            >
+                <${Icon} name="pin" size=${13} />
+                <span><b>Pinned by ${pinnedBy}</b> · ${featured.text}</span>
+            </button>`
+        }
+        ${
+            tab === "chat" &&
+            html`<${ChatTab} key=${highlight ?? "chat"} highlight=${highlight} focus=${focus} />`
+        }
+        ${
+            tab === "pins" &&
+            html`<${PinsTab}
+                onShowChat=${(chatId) => {
+                    setHighlight(chatId);
+                    setTab("chat");
+                }}
+            />`
+        }
+        ${tab === "notes" && html`<${NotesTab} />`}
+    </div>`;
 }
 
 export function ChatSheet() {
     // While the sheet animates out, the store has no sheet any more.
     const sheet = store.state.sheet ?? {};
 
-    return html`<${Sheet} title="People" onClose=${closeSheet}>
+    return html`<${Sheet}
+        title="People"
+        className="people-sheet"
+        onClose=${closeSheet}
+        actions=${html`<span class="people-count">${store.state.presence.length}</span>`}
+    >
         <${PeopleTabs} ask=${sheet} focus=${true} />
     <//>`;
 }
@@ -718,8 +804,9 @@ export function PeoplePanel({ leaving = false }) {
         inert=${leaving}
         onKeyDown=${keepEscape}
     >
-        <header class="sheet-head">
+        <header class="people-head">
             <h2>People</h2>
+            <span class="people-count">${store.state.presence.length}</span>
             <button
                 class="icon-button"
                 aria-label="Close the People panel"

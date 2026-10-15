@@ -625,7 +625,7 @@ function StartScreen({ steer }) {
     }, []);
 
     return html`<div class="browser-start">
-        <${Icon} name="globe" size=${28} />
+        <h2>Browser</h2>
         <p>
             ${steer ? "Type an address above, such as localhost:5173, or ask Pi to open one." : "Nothing is open yet. Pi, or someone who can steer, opens pages here."}
         </p>
@@ -633,17 +633,20 @@ function StartScreen({ steer }) {
         ${
             servers?.length > 0 &&
             html`<div class="browser-servers">
-                <div class="muted small">Running on this machine</div>
-                ${servers.slice(0, 8).map(
-                    (server) => html`<button
-                        key=${server.port}
-                        class="chip"
-                        onClick=${() => openInBrowser(server.url)}
-                    >
-                        <span class="mono">localhost:${server.port}</span>
-                        ${server.title && html`<span class="muted"> · ${server.title}</span>`}
-                    </button>`,
-                )}
+                <div class="browser-servers-label">Running on this machine</div>
+                <div class="browser-server-list">
+                    ${servers.slice(0, 8).map(
+                        (server) => html`<button
+                            key=${server.port}
+                            class="browser-server"
+                            onClick=${() => openInBrowser(server.url)}
+                        >
+                            <span class="browser-live" aria-hidden="true"></span>
+                            <span class="mono">localhost:${server.port}</span>
+                            ${server.title && html`<span class="browser-server-title">${server.title}</span>`}
+                        </button>`,
+                    )}
+                </div>
             </div>`
         }
     </div>`;
@@ -893,6 +896,7 @@ export function BrowserPanel({ leaving = false }) {
                     </button>`
             }
             <form class="browser-address" onSubmit=${go}>
+                ${open && !blank && html`<span class="browser-live" aria-hidden="true"></span>`}
                 <input
                     value=${address ?? displayUrl(state?.url)}
                     placeholder=${steer ? "Address, such as localhost:5173" : ""}

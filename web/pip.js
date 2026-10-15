@@ -505,7 +505,7 @@ function Item({ item, last, busy, conversationId }) {
         const working = busy && last;
 
         return html`<div class=${`pip-steps ${working ? "working" : ""}`}>
-            ${working ? html`<${Spinner} hidden=${true} />` : html`<span class="pip-tick">·</span>`}
+            ${working ? html`<${Spinner} hidden=${true} />` : html`<span class="pip-tick"><${Icon} name="check" size=${10} /></span>`}
             <span>${summarize(item.steps, thinking)}</span>
         </div>`;
     }
@@ -921,20 +921,24 @@ function PipPanel({ leaving, scrim }) {
             <span class=${`pip-mark ${busy ? "working" : ""}`} aria-hidden="true">
                 <${Icon} name="pip" size=${18} />
             </span>
-            <h2>PiP</h2>
-            <button
-                class="model-chip pip-model"
-                disabled=${!ready || busy || compacting}
-                aria-label=${`PiP model: ${model}${thinking ? ` · ${thinking}` : ""}`}
-                title="Change PiP's model and thinking level"
-                onClick=${() => openSheet({ type: "model", pipId: id })}
-            >
-                <span class="model-name">
-                    ${model.replace(/^(?:anthropic:\s*)?claude\s+/i, "")}
-                </span>
-                ${thinking && html`<span class="model-level">${thinking}</span>`}
-            </button>
-            <span class="pip-status" aria-live="polite">${status}</span>
+            <div class="pip-heading">
+                <div class="pip-title-line">
+                    <h2>PiP</h2>
+                    <span class="pip-status" aria-live="polite">${status}</span>
+                </div>
+                <button
+                    class="model-chip pip-model"
+                    disabled=${!ready || busy || compacting}
+                    aria-label=${`PiP model: ${model}${thinking ? ` · ${thinking}` : ""}`}
+                    title="Change PiP's model and thinking level"
+                    onClick=${() => openSheet({ type: "model", pipId: id })}
+                >
+                    <span class="model-name">
+                        ${model.replace(/^(?:anthropic:\s*)?claude\s+/i, "")}
+                    </span>
+                    ${thinking && html`<span class="model-level">${thinking}</span>`}
+                </button>
+            </div>
             ${
                 ready &&
                 html`<${PipContext} stats=${view.stats} window=${view.agent?.contextWindow} />`
