@@ -2,9 +2,10 @@
 // sidebar, the drawer, and a phone's home screen; and the order and archiving of sessions.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Avatar, folderColor, initials } from "./avatar.js";
-import { useBack } from "./back.js";
+import { goHome, useBack } from "./back.js";
 import { ExtensionRailButtons } from "./extension-ui.js";
 import { useDragToClose } from "./gestures.js";
+import { PeeksRailButton } from "./peeks.js";
 import { PipRailButton } from "./pip.js";
 import {
     actions,
@@ -19,10 +20,21 @@ import {
     setUnread,
     stillMoving,
     store,
+    workspaceOrder,
 } from "./store.js";
 import { finishedUnseen } from "./seen.js";
 import { isPinned, prefs, setPrefs, togglePin } from "./theme.js";
 import { APPLE, html, Icon, shortPath, Slide, timeAgo, usePresence, useSlide } from "./ui.js";
+
+// Sessions in "workspace" order (Alt+1…9, the rail's numbers) live in the store, where peek tiles use them without
+// this module; the sidebar's other users still ask for them here.
+export { workspaceOrder };
+
+/**
+ * Back to the session list, where it is not beside the conversation: back past the sessions opened from it, as a
+ * phone's back would go, or to it in this session's place when history does not lead there.
+ */
+export const toSessions = () => goHome(() => navigate(null, { replace: true }));
 
 /** The session list on its way: rows shaped like sessions, lit in turn. */
 function LoadingSessions() {
@@ -38,19 +50,6 @@ function LoadingSessions() {
                 </div>`,
         )}
     </div>`;
-}
-
-/**
- * Sessions in "workspace" order, as Alt+1…9 and the rail number them: pinned ones first (in the order they were
- * pinned), then the rest, newest first. Archived sessions are left out.
- */
-export function workspaceOrder(state = store.state) {
-    const active = state.sessions.filter((session) => !session.archived);
-    const pinned = state.pinned
-        .map((id) => active.find((session) => session.id === id))
-        .filter(Boolean);
-
-    return [...pinned, ...active.filter((session) => !pinned.includes(session))];
 }
 
 /**
@@ -344,19 +343,21 @@ function SessionRow({
                         class=${`session-fork ${live > 0 ? "" : "failed"}`}
                         title=${subagentsTip(counts)}
                     >
-                        <${Icon} name="fork" size=${11} />${live > 0 ? live : failed}
+                        <${Icon} name="fork" size=${10} />${live > 0 ? live : failed}
                     </span>`
                 }
-                ${!fork && person && html`<${Avatar} person=${person} size=${16} />`}
+                ${!fork && person && html`<${Avatar} person=${person} size=${18} />`}
                 ${
                     session.busy &&
                     !session.waiting &&
                     !fork &&
-                    html`<span class="mini-sweep" title="Working"><i></i><i></i><i></i></span>`
+                    html`<span class="session-working" title="Working"></span>`
                 }
                 ${
                     session.waiting &&
-                    html`<span class="state-warn" title="Waiting for approval">!</span>`
+                    html`<span class="session-needs" title="Waiting for approval">
+                        ${canSteer() ? "needs you" : "waiting"}
+                    </span>`
                 }
                 ${
                     (unread || marked) &&
@@ -1135,9 +1136,9 @@ function RailTiles() {
 }
 
 /**
- * The rail beside the session list: Pi (which folds the sidebar), the sessions, then the tools (running now, the
- * subagents board, people, providers, the theme) and you. Folded, it holds the sessions too, numbered. In the drawer and
- * on a phone's home screen it does not fold.
+ * The rail beside the session list: Pi (home), the sessions (which fold the sidebar), then the tools (peek tiles, PiP,
+ * running now, the subagents board, people, providers, the theme) and you. Folded, it holds the sessions too, numbered.
+ * In the drawer and on a phone's home screen it does not fold, and Pi is a mark.
  */
 export function RailNav({ foldable = false, folded = false }) {
     const { sessions, board, me } = store.state;
@@ -1155,33 +1156,31 @@ export function RailNav({ foldable = false, folded = false }) {
             foldable
                 ? html`<button
                     class="rail-brand"
-                    title=${`${folded ? "Unfold" : "Fold"} the sidebar (${keys})`}
-                    aria-label=${folded ? "Unfold the sidebar" : "Fold the sidebar"}
-                    onClick=${fold}
+                    title="Home"
+                    aria-label="Home"
+                    onClick=${toSessions}
                 >
                     π
                 </button>`
                 : html`<span class="rail-brand" aria-hidden="true">π</span>`
         }
+        <span class="rail-gap"></span>
         ${
-            !folded &&
-            html`<span class="rail-gap"></span>
-                ${
-                    foldable
-                        ? html`<button
-                              class="rail-button on"
-                              title=${`Sessions · fold to numbers (${keys})`}
-                              aria-current="page"
-                              onClick=${fold}
-                          >
-                              <${Icon} name="chat" size=${18} />
-                          </button>`
-                        : html`<span class="rail-button on" title="Sessions" aria-current="page">
-                              <${Icon} name="chat" size=${18} />
-                          </span>`
-                }
-                <span class="rail-fill"></span>`
+            foldable
+                ? html`<button
+                    class=${`rail-button ${folded ? "" : "on"}`}
+                    title=${`Sessions (${keys} ${folded ? "unfolds" : "folds"} the list)`}
+                    aria-label=${folded ? "Unfold the sidebar" : "Fold the sidebar"}
+                    aria-pressed=${!folded}
+                    onClick=${fold}
+                >
+                    <${Icon} name="chat" size=${19} />
+                </button>`
+                : html`<span class="rail-button on" title="Sessions" aria-current="page">
+                    <${Icon} name="chat" size=${19} />
+                </span>`
         }
+        ${!folded && html`<span class="rail-fill"></span>`}
         ${
             folded &&
             canStart &&
@@ -1191,10 +1190,11 @@ export function RailNav({ foldable = false, folded = false }) {
                 aria-label="New session"
                 onClick=${() => openSheet({ type: "cwd", mode: "new" })}
             >
-                <${Icon} name="plus" size=${18} />
+                <${Icon} name="plus" size=${19} />
             </button>`
         }
         ${folded && html`<${RailTiles} />`}
+        ${foldable && html`<${PeeksRailButton} />`}
         <${PipRailButton} />
         <button
             class="rail-button rail-running"
@@ -1202,7 +1202,7 @@ export function RailNav({ foldable = false, folded = false }) {
             aria-label=${busy > 0 ? `Running now, ${busy}` : "Running now"}
             onClick=${() => openSheet({ type: "running" })}
         >
-            <${Icon} name="pulse" size=${18} />
+            <${Icon} name="pulse" size=${19} />
             ${busy > 0 && html`<span class="rail-count">${busy}</span>`}
         </button>
         <button
@@ -1219,7 +1219,7 @@ export function RailNav({ foldable = false, folded = false }) {
             aria-pressed=${board}
             onClick=${toggleBoard}
         >
-            <${Icon} name="fork" size=${18} />
+            <${Icon} name="fork" size=${19} />
             ${live > 0 && html`<span class="rail-count">${live}</span>`}
             ${
                 (failed > 0 || agents.waiting > 0) &&
@@ -1235,7 +1235,7 @@ export function RailNav({ foldable = false, folded = false }) {
                     aria-label="People"
                     onClick=${() => openSheet({ type: "people" })}
                 >
-                    <${Icon} name="users" size=${18} />
+                    <${Icon} name="users" size=${19} />
                 </button>`
                 : html`<button
                     class="rail-button"
@@ -1243,7 +1243,7 @@ export function RailNav({ foldable = false, folded = false }) {
                     aria-label="Devices"
                     onClick=${() => openSheet({ type: "invite" })}
                 >
-                    <${Icon} name="users" size=${18} />
+                    <${Icon} name="users" size=${19} />
                 </button>`
         }
         <button
@@ -1252,7 +1252,7 @@ export function RailNav({ foldable = false, folded = false }) {
             aria-label="Providers"
             onClick=${() => openSheet({ type: "providers" })}
         >
-            <${Icon} name="key" size=${18} />
+            <${Icon} name="key" size=${19} />
         </button>
         <button
             class="rail-button"
@@ -1260,7 +1260,7 @@ export function RailNav({ foldable = false, folded = false }) {
             aria-label="Theme"
             onClick=${() => openSheet({ type: "appearance" })}
         >
-            <${Icon} name="palette" size=${18} />
+            <${Icon} name="palette" size=${19} />
         </button>
         <button
             class="rail-button rail-me"
@@ -1268,7 +1268,7 @@ export function RailNav({ foldable = false, folded = false }) {
             aria-label="Your name"
             onClick=${() => openSheet({ type: "name" })}
         >
-            ${me && html`<${Avatar} person=${me} size=${26} />`}
+            ${me && html`<${Avatar} person=${me} size=${30} />`}
         </button>
     </nav>`;
 }

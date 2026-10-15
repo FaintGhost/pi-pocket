@@ -901,8 +901,10 @@ const marks = () =>
         return JSON.stringify({
             stored: JSON.parse(localStorage.getItem("pocket.unread") ?? "[]"),
             dots: rows.filter((each) => each.querySelector(".unread-dot")).map((each) => Number(each.dataset.id)),
+            // The open row's title is semibold too: only unread ones count.
             bold: rows
-                .filter((each) => getComputedStyle(each.querySelector(".session-title")).fontWeight === "700")
+                .filter((each) => !each.classList.contains("active"))
+                .filter((each) => getComputedStyle(each.querySelector(".session-title")).fontWeight === "600")
                 .map((each) => Number(each.dataset.id)),
         });
     `);
@@ -987,7 +989,7 @@ test("a session's square is solid once its run ends, and hollow once read", real
     await say(app, one, "hi");
     await shows("fresh", "its run ended while another was open: not read");
     assert.equal((await shape()).label, "Not read");
-    assert.equal((await shape()).height, 34, "rows keep their height");
+    assert.equal((await shape()).height, 36, "rows keep their height");
 
     await page.click({ selector: `${row(one)} > .session` });
     await shows("seen", "opened: read");

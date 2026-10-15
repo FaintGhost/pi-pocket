@@ -611,35 +611,10 @@ kbd {
     color: var(--muted);
 }
 
-/*
- * Three lit cells, still: a session where Pi works, in the session list. While Pi works, only the conversation
- * itself moves (thinking, the streaming cursor, a tool's spinner); everywhere else a working session is marked, not
- * animated, so several runs at once do not fill the screen with motion.
- */
-.mini-sweep {
-    display: inline-flex;
-    gap: 2px;
-}
-
-.mini-sweep i {
-    width: 4px;
-    height: 4px;
-    background: var(--lit);
-}
-
-.mini-sweep i:nth-child(1) {
-    --lit: var(--accent);
-}
-.mini-sweep i:nth-child(2) {
-    --lit: color-mix(in oklab, var(--accent) 50%, var(--spark));
-}
-.mini-sweep i:nth-child(3) {
-    --lit: var(--spark);
-}
-
 @media (prefers-reduced-motion: reduce) {
     :root:not([data-motion="full"]) .pulse,
     :root:not([data-motion="full"]) .agents-dot.working,
+    :root:not([data-motion="full"]) .session-working,
     :root:not([data-motion="full"]) .session-placeholder span {
         animation: none !important;
     }
@@ -673,7 +648,7 @@ kbd {
     width: var(--sidebar-w, 324px);
     flex: none;
     flex-direction: row;
-    border-right: 1px solid var(--line);
+    border-right: 1px solid var(--hair);
     background: var(--panel);
     transition: width var(--t-in) var(--ease-out);
 }
@@ -2913,11 +2888,10 @@ button.chip:hover {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     min-height: 0;
-    padding: calc(env(safe-area-inset-top) + 10px) 0 calc(env(safe-area-inset-bottom) + 10px);
-    background: var(--o-bg-dark);
-    border-right: 1px solid var(--line);
+    padding: calc(env(safe-area-inset-top) + 12px) 0 calc(env(safe-area-inset-bottom) + 12px);
+    border-right: 1px solid var(--hair);
     /* A short screen (a phone on its side) scrolls the rail rather than cut off its last buttons. */
     overflow-x: hidden;
     overflow-y: auto;
@@ -2928,22 +2902,32 @@ button.chip:hover {
 .rail-button {
     position: relative;
     flex: none;
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     display: grid;
     place-items: center;
+    border-radius: var(--r-control);
+}
+
+/* Phones and touch screens: a thumb's size. */
+@media (max-width: 959px), (pointer: coarse) {
+    .rail-brand,
+    .rail-button {
+        width: 44px;
+        height: 44px;
+    }
 }
 
 .rail-brand {
     font:
-        1.6rem/1 Georgia,
+        22px/1 Georgia,
         serif;
     color: var(--brand);
-    transition: transform var(--t-in) var(--ease-out);
+    transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.rail-brand:hover {
-    transform: rotate(-8deg) scale(1.08);
+button.rail-brand:hover {
+    background: var(--hover);
 }
 
 .rail-button {
@@ -2967,25 +2951,22 @@ button.chip:hover {
     flex: 1;
 }
 
-/* The sessions, always on while the list shows: a lit tile with the accent's bar at the rail's edge. */
+/* The sessions, while the list shows. */
 .rail-button.on {
     color: var(--text);
-    background: var(--hover);
+    background: var(--card-2);
 }
 
-.rail-button.on::before {
-    content: "";
-    position: absolute;
-    left: -5.5px;
-    top: 9px;
-    bottom: 9px;
-    width: 2px;
-    background: var(--accent);
+/* A tool whose window is open (peek tiles, PiP, the subagents board, an extension's page): the accent's soft fill. */
+.rail-button.open {
+    color: var(--accent);
+    background: var(--accent-soft);
 }
 
 .rail-new,
 .rail-running,
-.rail-agents.lit {
+.rail-agents.lit,
+.rail-pip.lit {
     color: var(--accent);
 }
 
@@ -2993,36 +2974,65 @@ button.chip:hover {
     stroke-width: 2.4;
 }
 
-.rail-agents.open {
-    color: var(--text);
-}
-
 /* How many: sessions where Pi works, or subagents that work or wait. */
 .rail-count {
     position: absolute;
-    top: 6px;
-    right: 6px;
-    min-width: 13px;
-    height: 13px;
-    padding: 0 2px;
+    top: 1px;
+    right: 0;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
     display: grid;
     place-items: center;
+    border-radius: var(--r-pill);
     background: var(--accent-fill);
     color: var(--accent-ink);
-    font-size: 0.56rem;
-    font-weight: 700;
-    line-height: 1;
+    box-shadow: 0 0 0 2px var(--o-bg);
+    font: 600 9.5px/1 var(--mono);
     animation: popin var(--t-in) var(--ease-out);
 }
 
-/* A subagent failed, or waits for an approval. */
-.rail-trouble {
+/* A dot at a button's corner: something new in PiP, or a subagent that failed or waits for an approval. */
+.rail-trouble,
+.rail-news {
     position: absolute;
-    right: 8px;
-    bottom: 8px;
+    right: 4px;
+    bottom: 4px;
     width: 6px;
     height: 6px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px var(--o-bg);
+}
+
+.rail-trouble {
     background: var(--err);
+}
+
+.rail-news {
+    right: 5px;
+    bottom: 5px;
+    background: var(--accent);
+}
+
+@media (max-width: 959px), (pointer: coarse) {
+    .rail-count {
+        top: 4px;
+        right: 3px;
+    }
+    .rail-trouble {
+        right: 8px;
+        bottom: 8px;
+    }
+    .rail-news {
+        right: 9px;
+        bottom: 9px;
+    }
+}
+
+/* You: a round avatar, a little apart from the tools. */
+.rail-me {
+    margin-top: 4px;
+    border-radius: 50%;
 }
 
 /* Folded: the sessions as numbered tiles, like Waybar's workspaces, between New and the tools. */
@@ -3037,9 +3047,9 @@ button.chip:hover {
     flex-direction: column;
     align-items: center;
     gap: 4px;
-    padding: 0.4rem 0;
-    border-top: 1px solid var(--line);
-    border-bottom: 1px solid var(--line);
+    padding: 6px 0;
+    border-top: 1px solid var(--hair);
+    border-bottom: 1px solid var(--hair);
     scrollbar-width: none;
 }
 
@@ -3047,28 +3057,32 @@ button.chip:hover {
     overflow-y: hidden;
 }
 
+/* The open session's tile is lit by a soft fill that slides from tile to tile, under the numbers. */
 .rail-items .slide-y {
-    left: 0;
-    width: 2px;
+    left: 50%;
+    width: 36px;
+    margin-left: -18px;
+    border-radius: var(--r-control);
+    background: var(--accent-soft);
+    z-index: 0;
 }
 
 .ws {
     position: relative;
+    z-index: 1;
     flex: none;
-    width: 40px;
-    height: 34px;
+    width: 36px;
+    height: 32px;
     display: grid;
     place-items: center;
-    font-size: 0.78rem;
-    font-weight: 700;
+    border-radius: var(--r-row);
+    font: 600 12.5px var(--mono);
     color: var(--muted);
-    border: 1px solid transparent;
     animation: rise-in 0.38s var(--ease-out) backwards;
     animation-delay: calc(min(var(--i, 0), 14) * 18ms);
     transition:
         color var(--t-hover) var(--ease-out),
-        background-color var(--t-hover) var(--ease-out),
-        border-color var(--t-hover) var(--ease-out);
+        background-color var(--t-hover) var(--ease-out);
 }
 
 .ws:hover {
@@ -3078,8 +3092,6 @@ button.chip:hover {
 
 .ws.active {
     color: var(--accent);
-    background: var(--hover);
-    border-color: var(--edge);
 }
 
 .ws.waiting {
@@ -3090,19 +3102,21 @@ button.chip:hover {
 .ws.busy::after {
     content: "";
     position: absolute;
-    left: 8px;
-    right: 8px;
+    left: 10px;
+    right: 10px;
     bottom: 3px;
     height: 2px;
+    border-radius: 1px;
     background: linear-gradient(90deg, var(--accent), var(--spark));
 }
 
 .ws .unread-dot {
     position: absolute;
-    top: 3px;
-    right: 3px;
+    top: 4px;
+    right: 4px;
     width: 5px;
     height: 5px;
+    border-radius: 50%;
 }
 
 /* ─── Sessions: the list beside the rail ───────────────────────── */
@@ -3114,41 +3128,41 @@ button.chip:hover {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    padding: calc(env(safe-area-inset-top) + 12px) 10px calc(env(safe-area-inset-bottom) + 8px);
+    padding: calc(env(safe-area-inset-top) + 14px) 12px calc(env(safe-area-inset-bottom) + 10px);
 }
 
 .sessions-head {
     display: flex;
     align-items: center;
-    gap: 6px;
-    height: 34px;
+    gap: 8px;
+    height: 32px;
     padding-left: 4px;
     flex: none;
 }
 
 .sessions-name {
-    font-weight: 700;
-    font-size: 0.95rem;
+    font-weight: 600;
+    font-size: 15px;
     color: var(--text);
 }
 
 .sessions-count {
     margin-right: auto;
-    font-size: 0.72rem;
+    font: 11px var(--mono);
     color: var(--faint);
-    font-variant-numeric: tabular-nums;
 }
 
 .new-button {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    height: 28px;
-    padding: 0 9px 0 7px;
+    height: 30px;
+    padding: 0 11px 0 9px;
+    border-radius: 8px;
     background: var(--accent-fill);
     color: var(--accent-ink);
-    font-weight: 700;
-    font-size: 0.76rem;
+    font-weight: 600;
+    font-size: 13px;
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
@@ -3201,28 +3215,33 @@ button.chip:hover {
 
 .sessions .search {
     flex: none;
-    margin: 10px 0 0;
+    margin: 12px 0 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 32px;
-    padding: 0 6px 0 9px;
+    height: 34px;
+    padding: 0 6px 0 10px;
     background: var(--card);
-    border: 1px solid transparent;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-control);
     color: var(--muted);
     transition:
         border-color var(--t-hover) var(--ease-out),
         color var(--t-hover) var(--ease-out);
 }
 
+.sessions .search:hover {
+    border-color: var(--hair-2);
+}
+
 .sessions .search:focus-within {
-    border-color: var(--accent);
+    border-color: var(--accent-line);
     background: var(--card);
     color: var(--muted);
 }
 
 .sessions .search.filled {
-    border-color: var(--accent);
+    border-color: var(--accent-line);
     color: var(--accent);
 }
 
@@ -3239,12 +3258,16 @@ button.chip:hover {
     padding: 0;
     border: 0;
     background: none;
-    font-size: 0.82rem;
+    font-size: 13px;
     color: var(--text);
 }
 
+/* "Ctrl K": a small tag at the field's end. */
 .sessions .search-keys {
-    font-size: 0.64rem;
+    padding: 4px 6px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-tag);
+    font: 10.5px / 1 var(--mono);
     color: var(--faint);
     white-space: nowrap;
     opacity: 1;
@@ -3290,43 +3313,49 @@ button.chip:hover {
     }
 }
 
-/* Recent, Folders, Archived: tabs with a bar that slides to the one chosen. */
+/* Recent, Folders, Archived: a segmented track, its raised segment sliding to the one chosen. */
 .session-tabs {
     position: relative;
     flex: none;
     margin-top: 10px;
-    display: flex;
-    gap: 16px;
-    padding: 0 4px;
-    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    padding: 3px;
+    border-radius: var(--r-control);
+    background: var(--card);
 }
 
 .session-tabs button {
     position: relative;
-    padding: 0 0 6px;
-    font-size: 0.72rem;
+    z-index: 1;
+    height: 26px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--r-seg);
+    font-size: 12.5px;
     color: var(--muted);
     transition: color var(--t-hover) var(--ease-out);
 }
 
-.session-tabs button:hover,
+.session-tabs button:hover {
+    color: var(--text);
+}
+
 .session-tabs button.on {
     color: var(--text);
+    font-weight: 500;
 }
 
 .slide-x {
     position: absolute;
     left: 0;
-    bottom: -1px;
-    height: 2px;
-    background: var(--active);
+    top: 3px;
+    bottom: 3px;
+    border-radius: var(--r-seg);
+    background: var(--raised);
     transition:
         transform var(--t-in) var(--ease-out),
         width var(--t-in) var(--ease-out);
-}
-
-.session-tabs .slide-x {
-    background: var(--accent);
 }
 
 .session-items {
@@ -3371,17 +3400,16 @@ button.chip:hover {
     align-items: center;
     gap: 6px;
     width: 100%;
-    padding: 12px 8px 4px;
-    font-size: 0.64rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: var(--faint);
+    padding: 14px 8px 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
     text-align: left;
     transition: color var(--t-hover) var(--ease-out);
 }
 
 .group-head:hover {
-    color: var(--muted);
+    color: var(--text);
 }
 
 .group-head:focus-visible {
@@ -3389,7 +3417,7 @@ button.chip:hover {
 }
 
 .group-name {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     white-space: nowrap;
     overflow: hidden;
@@ -3397,7 +3425,7 @@ button.chip:hover {
 }
 
 .group-name b {
-    font-weight: 700;
+    font-weight: inherit;
 }
 
 /* A folder's group: its path quiet, its last part bold, and the path cut short first when it is long. */
@@ -3419,15 +3447,19 @@ button.chip:hover {
 .group-name .last {
     flex: none;
     max-width: 100%;
-    color: var(--body);
+    color: var(--text);
+    font-weight: 600;
 }
 
+/* How many, in mono, beside the name; the fold's chevron at the end. */
 .group-count {
-    font-weight: 400;
-    font-variant-numeric: tabular-nums;
+    flex: 1;
+    font: 11px var(--mono);
+    color: var(--faint);
 }
 
 .group-head .icon {
+    color: var(--faint);
     transition: transform var(--t-in) var(--ease-out);
 }
 
@@ -3447,7 +3479,7 @@ button.chip:hover {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
 }
 
 .session-group.closed .group-body {
@@ -3463,12 +3495,13 @@ button.chip:hover {
 /* One line: the folder's color, the title, and what goes on there on the right. */
 .session {
     display: grid;
-    grid-template-columns: 9px minmax(0, 1fr) auto;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
     align-items: center;
-    gap: 0 10px;
+    gap: 0 11px;
     width: 100%;
-    height: 34px;
+    height: 36px;
     padding: 0 10px;
+    border-radius: var(--r-row);
     text-align: left;
     border: 1px solid transparent;
     -webkit-user-select: none;
@@ -3487,13 +3520,13 @@ button.chip:hover {
     outline-offset: -1px;
 }
 
-/* The open session: the accent's soft fill and an accent title. */
+/* The open session: the accent's soft fill, and its title in bold. */
 .session-row.active .session {
     background: var(--accent-soft);
 }
 
 .session-row.active .session-title {
-    color: var(--accent);
+    font-weight: 600;
 }
 
 /* Selected rows (Ctrl/⌘+click or drag, Shift+click): the soft fill, a border, and a check for the folder's mark. */
@@ -3510,23 +3543,24 @@ button.chip:hover {
 .session-mark {
     display: grid;
     place-items: center;
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
 }
 
 /*
- * A session's square: its folder's color (--folder), in the shape of its state. Solid: finished, not read yet. Hollow
- * and dim: read, or never run. Quadrants with one lit: working. Two bars: waiting for you. A cross: failed, cut out
- * of a solid square while not read, drawn once read.
+ * A session's square: its folder's color (--folder), 8px with softly rounded corners, in the shape of its state. Solid:
+ * finished, not read yet. Hollow and dim: read, or never run. Quadrants with one lit: working. Two bars: waiting for
+ * you. A cross: failed, cut out of a solid square while not read, drawn once read.
  */
 .state-mark {
     --line-w: 1.5px;
     --cut: 2px;
-    --q: 4px;
+    --q: 3.5px;
     position: relative;
     flex: none;
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
+    border-radius: 2.5px;
     color: var(--folder, var(--muted));
 }
 
@@ -3536,11 +3570,12 @@ button.chip:hover {
 
 .state-mark.seen {
     box-shadow: inset 0 0 0 var(--line-w) currentColor;
-    opacity: 0.5;
+    opacity: 0.55;
 }
 
 /* Pi Pocket's spinner, in the folder's color: one lit quadrant stepping around the four. */
 .state-mark.working {
+    overflow: hidden;
     --dim: color-mix(in oklab, currentColor 28%, transparent);
     background:
         linear-gradient(var(--dim), var(--dim)) 0 0 / var(--q) var(--q) no-repeat,
@@ -3577,7 +3612,7 @@ button.chip:hover {
 }
 
 .state-mark.waiting {
-    background: linear-gradient(90deg, currentColor 0 3px, transparent 0 6px, currentColor 0);
+    background: linear-gradient(90deg, currentColor 0 3px, transparent 0 5px, currentColor 0);
 }
 
 .state-mark.failed {
@@ -3644,6 +3679,7 @@ button.chip:hover {
     place-items: center;
     width: 11px;
     height: 11px;
+    border-radius: var(--r-mark);
     background: var(--accent-fill);
     color: var(--accent-ink);
     animation: popin 0.16s var(--ease-out);
@@ -3654,7 +3690,7 @@ button.chip:hover {
 }
 
 .session-title {
-    font-size: 0.84rem;
+    font-size: 13.5px;
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
@@ -3664,12 +3700,12 @@ button.chip:hover {
 
 /* New chat messages there, in a session not open. */
 .session.unread .session-title {
-    font-weight: 700;
+    font-weight: 600;
 }
 
 /* Marked unread (this browser): the title reads bold, like the dot beside the time says. */
 .session-row.marked-unread .session-title {
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .session-title mark,
@@ -3687,86 +3723,68 @@ button.chip:hover {
     align-items: center;
     justify-content: flex-end;
     gap: 7px;
-    font-size: 0.66rem;
+    font: 11px var(--mono);
     color: var(--faint);
     transition: opacity var(--t-hover) var(--ease-out);
 }
 
-/* Subagents at work there (or failed ones, in red): ⑂ and how many. */
+/* Subagents at work there (or failed ones, in red): ⑂ and how many, in a small pill. */
 .session-fork {
     display: inline-flex;
     align-items: center;
     gap: 3px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: var(--r-pill);
+    background: var(--accent-soft);
     font-weight: 600;
     color: var(--accent);
-    font-variant-numeric: tabular-nums;
 }
 
 .session-fork.failed {
+    background: var(--err-soft);
     color: var(--err);
 }
 
 .session-fork .icon {
-    stroke-width: 2.2;
+    stroke-width: 2.4;
+}
+
+/* A call waits for you there. */
+.session-needs {
+    display: grid;
+    place-items: center;
+    height: 18px;
+    padding: 0 7px;
+    border-radius: var(--r-pill);
+    background: var(--warn-soft);
+    color: var(--warn);
+    font: 500 11px var(--sans);
+}
+
+/* Pi works there. */
+.session-working {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.4s ease-in-out infinite;
 }
 
 .session-side .avatar {
-    font-size: 0.52rem;
-}
-
-.session-side .mini-sweep i {
-    width: 3px;
-    height: 3px;
+    font-size: 8px;
 }
 
 .session-side .unread-dot {
     width: 6px;
     height: 6px;
+    border-radius: 50%;
 }
 
 .session-time {
     min-width: 22px;
     text-align: right;
     font-variant-numeric: tabular-nums;
-}
-
-/* A session's state where a peek tile shows it: a square, three cells while Pi works, "!" while a call waits. */
-.session-state {
-    display: grid;
-    place-items: center;
-    width: 12px;
-    height: 12px;
-    align-self: start;
-    margin-top: 0.3rem;
-}
-
-.state-idle {
-    width: 6px;
-    height: 6px;
-    border: 1px solid var(--faint);
-    transition:
-        background-color var(--t-border) var(--ease-out),
-        border-color var(--t-border) var(--ease-out);
-}
-
-.state-warn {
-    display: grid;
-    place-items: center;
-    width: 12px;
-    height: 12px;
-    background: var(--warn);
-    color: var(--accent-ink);
-    font-size: 0.6rem;
-    font-weight: 800;
-    line-height: 1;
-    animation: attention 1.6s var(--ease-in-out) infinite;
-}
-
-@keyframes attention {
-    50% {
-        box-shadow: 0 0 0 3px var(--warn-soft);
-        opacity: 0.75;
-    }
 }
 
 /* Hold Alt: each of the first nine rows shows the number that jumps to it, in the time's place. */
@@ -3799,8 +3817,9 @@ button.chip:hover {
     display: grid;
     place-items: center;
     color: var(--muted);
-    background: var(--bg);
-    border: 1px solid var(--line);
+    background: var(--card-2);
+    border: 1px solid var(--hair);
+    border-radius: var(--r-seg);
     opacity: 0;
     transform: translateX(4px);
     transition:
@@ -3901,6 +3920,7 @@ button.chip:hover {
     min-width: 0;
     padding: 4px 4px 4px 9px;
     border: 1px solid var(--accent-line);
+    border-radius: var(--r-control);
     background: var(--accent-soft);
     animation: rise-in var(--t-in) var(--ease-out);
 }
@@ -3935,6 +3955,7 @@ button.chip:hover {
     flex: none;
     width: 24px;
     height: 24px;
+    border-radius: var(--r-seg);
     display: grid;
     place-items: center;
     color: var(--body);
@@ -3971,13 +3992,14 @@ button.chip:hover {
 .session-placeholder {
     display: flex;
     align-items: center;
-    height: 34px;
-    padding: 0 10px 0 28px;
+    height: 36px;
+    padding: 0 10px 0 29px;
 }
 
 .session-placeholder span {
     height: 0.6rem;
     width: var(--width);
+    border-radius: var(--r-mark);
     background: var(--line);
     animation: placeholder 1.4s ease-in-out var(--delay) infinite;
 }
@@ -10368,10 +10390,6 @@ textarea.notes {
     padding: 1rem 1rem calc(env(safe-area-inset-bottom) + 1rem);
 }
 
-.rail-ext.open {
-    color: var(--text);
-}
-
 /*
  * Extensions' rail buttons, together: four buttons' height at most, past which they scroll rather than push the app's
  * own buttons away. Beside the session list it keeps that height, and a short window scrolls the whole rail, as it does
@@ -10410,7 +10428,7 @@ textarea.notes {
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: center;
-    line-height: 13px;
+    line-height: 15px;
 }
 
 /* Safe mode, in the Extensions sheet: this tab loads no extension's browser part. */
@@ -11700,6 +11718,8 @@ textarea.notes {
 
     .pip-memory .button,
     .pip-attachment-remove {
+    top: 5px;
+    right: 5px;
         min-height: 44px;
     }
 
@@ -11737,33 +11757,11 @@ textarea.notes {
     animation: popout var(--t-out) linear forwards;
 }
 
-.pip-dot,
-.rail-news {
+.pip-dot {
     position: absolute;
     width: 7px;
     height: 7px;
     background: var(--accent);
-}
-
-.pip-dot {
-    top: 5px;
-    right: 5px;
-}
-
-.rail-news {
-    right: 8px;
-    bottom: 8px;
-    width: 6px;
-    height: 6px;
-}
-
-.rail-pip.lit {
-    color: var(--accent);
-}
-
-.rail-pip.open {
-    color: var(--text);
-    background: var(--hover);
 }
 
 @media (max-width: 699px) {
