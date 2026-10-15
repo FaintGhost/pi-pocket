@@ -6,7 +6,14 @@
  * Guard is. Programs that people configured to run on their own, such as a git diff driver or file system monitor, run
  * as they would for anyone.
  */
-import { defineExtension, hook, section, ToolTask } from "@earendil-works/pi-durable";
+import type { ToolAnnotations } from "@earendil-works/pi-coding-agent";
+import {
+    defineExtension,
+    hook,
+    section,
+    type ToolExecutionApi,
+    ToolTask,
+} from "@earendil-works/pi-durable";
 import { PlanDoc } from "../docs.ts";
 import type { PocketHost } from "../host.ts";
 
@@ -291,7 +298,7 @@ export function blockedInPlanMode(
     return `Plan mode is on: ${what}, so it is blocked. Keep exploring with read and read-only commands, then propose your plan; a person approves it before anything changes.`;
 }
 
-export default function createPlan(host: PocketHost) {
+export default function createPlan(_host: PocketHost) {
     return defineExtension({
         name: "pocket-plan",
         sections: [
@@ -308,10 +315,16 @@ export default function createPlan(host: PocketHost) {
                         return undefined;
                     }
 
+                    // HookApi omits agent, but ToolTask supplies its phase runtime and codemode preserves it.
+                    // Use that same resolved snapshot, not the live registry: wrappers and reloads can differ.
+                    const runtime = api as typeof api & Partial<Pick<ToolExecutionApi, "agent">>;
+                    const tool = (await runtime.agent?.(context))?.tools.find(
+                        (tool) => tool.name === call.name,
+                    ) as { annotations?: ToolAnnotations } | undefined;
                     const reason = blockedInPlanMode(
                         call.name,
                         call.arguments as Record<string, unknown>,
-                        host.readOnlyTool?.(call.name) === true,
+                        tool?.annotations?.readOnlyHint === true,
                     );
 
                     return reason === undefined ? undefined : { block: reason };

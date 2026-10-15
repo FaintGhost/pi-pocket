@@ -16,6 +16,7 @@ import {
 } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
@@ -145,9 +146,9 @@ test("in plan mode only reading tools pass", () => {
     );
 });
 
-/** A drop-in with one tool marked read-only and one not. */
+/** A wrapper-marked read-only tool, an unmarked tool, and a pause for the reload check. */
 const peek = `import { Type } from "@earendil-works/pi-ai";
-import { defineExtension, defineTool } from "@earendil-works/pi-durable";
+import { defineExtension, defineTool, wrapTool } from "@earendil-works/pi-durable";
 
 const tool = (name: string, annotations?: object) =>
 	defineTool({
@@ -158,7 +159,23 @@ const tool = (name: string, annotations?: object) =>
 		execute: async () => ({ content: [{ type: "text", text: name + " ran" }] }),
 	});
 
-export default () => defineExtension({ name: "peek", tools: [tool("peek", { readOnlyHint: true }), tool("poke")] });
+const peek = tool("peek");
+const pause = defineTool({
+    ...tool("pause", { readOnlyHint: true }),
+    execute: async () => {
+        await new Promise<void>((resolve) => {
+            process.once("plan-test-resume", resolve);
+            process.emit("plan-test-paused");
+        });
+        return { content: [{ type: "text", text: "resumed" }] };
+    },
+});
+
+export default () => defineExtension({
+    name: "peek",
+    tools: [peek, tool("poke"), pause],
+    wraps: [wrapTool(peek, (tool) => ({ ...tool, annotations: { readOnlyHint: true } }))],
+});
 `;
 
 /** Whether a request carried the plan mode section of the system prompt. */
@@ -207,6 +224,12 @@ const route: FauxResponseStep = (request) => {
 
     if (text.endsWith("helper, write")) {
         return call("write", { path: "helper.txt", content: "x" });
+    }
+
+    if (text.endsWith("retained script")) {
+        return call("codemode", {
+            code: "await tools.pause({}); try { text(await tools.poke({})); } catch (error) { text(error.message); }",
+        });
     }
 
     if (text.endsWith("script")) {
@@ -313,6 +336,34 @@ test("in plan mode a tool its extension marks read-only runs, and one it does no
         said,
         /Script completed[\s\S]*peek ran[\s\S]*Tool call blocked: Plan mode is on: .*poke/,
     );
+});
+
+test("a running codemode call keeps its tool's metadata across a reload", async () => {
+    const id = await newSession(app);
+
+    await app.commands.setPlan(id, owner(app), true);
+    const paused = once(process, "plan-test-paused", { signal: AbortSignal.timeout(10_000) });
+    const running = say(app, id, "retained script");
+
+    try {
+        await paused;
+        await app.setExtensionEnabled(owner(app), "peek.ts", false);
+        writeFileSync(
+            join(root, "data", "extensions", "peek.ts"),
+            peek.replace('tool("poke")', 'tool("poke", { readOnlyHint: true })'),
+        );
+        await app.setExtensionEnabled(owner(app), "peek.ts", true);
+    } finally {
+        process.emit("plan-test-resume");
+        await running;
+    }
+
+    const said = (await modelTexts(app, id)).join("\n");
+
+    assert.match(said, /Tool call blocked: Plan mode is on: .*poke/);
+    assert.doesNotMatch(said, /poke ran/);
+    await say(app, id, "poke");
+    assert.match((await modelTexts(app, id)).join("\n"), /poke ran/);
 });
 
 test("plan mode cannot be turned on while its extension is off", async () => {

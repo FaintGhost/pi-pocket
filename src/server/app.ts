@@ -16,7 +16,6 @@ import {
     ModelRuntime,
     SettingsManager,
     type Skill,
-    type ToolAnnotations,
 } from "@earendil-works/pi-coding-agent";
 import {
     AgentDoc,
@@ -462,16 +461,6 @@ export class PocketApp {
             resolveModel: (spec) => resolveModel(this.models, spec, this.signInNeeded),
             subagentModels: () => this.config.subagentModels,
             modelProblem: (ref, fresh) => this.providers.problem(ref, fresh),
-            readOnlyTool: (name) =>
-                registry
-                    .snapshot()
-                    .tools()
-                    .some(
-                        ({ tool }) =>
-                            tool.name === name &&
-                            (tool as { annotations?: ToolAnnotations }).annotations
-                                ?.readOnlyHint === true,
-                    ),
             requesterOf: (conversationId) => this.attribution.requesterOf(conversationId),
             notice: (level, message, conversationId) => this.notice(level, message, conversationId),
             heldBack: (conversationId) => this.spend.heldBack(conversationId),
