@@ -3479,6 +3479,7 @@ button.chip:hover {
 }
 
 .state-mark.failed.seen {
+    box-shadow: none;
     background:
         linear-gradient(
             45deg,

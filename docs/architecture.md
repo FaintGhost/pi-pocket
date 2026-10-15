@@ -14,7 +14,7 @@ Some state lives in this process alone, and a restart forgets it. For example:
 - who is connected, typing, or away;
 - which tool calls wait for approval;
 - the browser's pages;
-- when each run ended, which peek tiles use;
+- when each run ended, which peek tiles and session-list squares use, and whether its last run failed;
 - provider sign-ins in progress.
 
 ## Who owns what

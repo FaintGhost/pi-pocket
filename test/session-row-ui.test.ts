@@ -970,6 +970,7 @@ test("a session's square is solid once its run ends, and hollow once read", real
                 height: row.querySelector(".session").getBoundingClientRect().height,
             });
         `);
+
     const shows = async (want: string, what: string) => {
         let last = "";
 
@@ -999,6 +1000,19 @@ test("a session's square is solid once its run ends, and hollow once read", real
     await shows("fresh", "marked unread");
     await page.click({ selector: `${row(one)} > .session` });
     await shows("seen", "read again");
+
+    await page.evaluate(`
+        const { store } = await import("/store.js");
+        store.set({ sessions: store.state.sessions.map((s) => s.id === ${one} ? { ...s, failed: true } : s) });
+    `);
+    await shows("failed seen", "a read failure");
+    assert.equal(
+        await page.evaluate(
+            `getComputedStyle(document.querySelector(${JSON.stringify(`${row(one)} .state-mark`)})).boxShadow`,
+        ),
+        "none",
+        "a read failure draws only a cross, not the hollow square's border",
+    );
 });
 
 test("touch screens: a finger held on a row marks it unread, and read again", real, async () => {
