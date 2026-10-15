@@ -1827,6 +1827,12 @@ kbd {
     animation: unroll var(--t-in) var(--ease-out);
 }
 
+/* A group that is one thought alone: its words, under the line that names it. */
+.activity-thought {
+    padding: 10px 12px 12px;
+    animation: unroll var(--t-in) var(--ease-out);
+}
+
 .timeline::before {
     content: "";
     position: absolute;

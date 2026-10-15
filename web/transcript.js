@@ -1044,8 +1044,11 @@ function ActivityGroup({ item, live, newest, busy, results, slots, approvals, co
     }
 
     const chosen = openedGroups.get(id);
-    const open = chosen ?? (live || newest);
     const all = item.before.length === 0 ? item.steps : [...item.before, ...item.steps];
+    // A thought alone is the group's own line, not a step under a line that says the same: it opens to its words,
+    // which stay folded until asked for, as a thought on the timeline does.
+    const lone = all.length === 1 && all[0].block.type === "thinking" ? all[0] : null;
+    const open = chosen ?? (lone ? false : live || newest);
     const first = all[0];
     let start = first.entry?.at === undefined ? undefined : fromServer(first.entry.at);
 
@@ -1111,6 +1114,14 @@ function ActivityGroup({ item, live, newest, busy, results, slots, approvals, co
         </button>
         ${
             open &&
+            lone &&
+            html`<div class="activity-thought">
+                <div class="thought-body">${lone.block.text}</div>
+            </div>`
+        }
+        ${
+            open &&
+            !lone &&
             html`<div class="timeline">
                 ${item.steps.map(({ block, entry, streaming, canRun }, index) => {
                     // A call is named by its id, the same streamed and stored; a thought by the call before it. Not by
