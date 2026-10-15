@@ -2459,11 +2459,32 @@ test("Lancet Guard stays on until its inline confirmation is accepted", real, as
     await inPage(`(await import("/store.js")).openSheet({ type: "extensions" }); return "null";`);
     await until(() => has('.switch[aria-label="Lancet Guard: on"]'), "the guard switch");
     await settled();
-    await page.click({ selector: '.switch[aria-label="Lancet Guard: on"]' });
+    await inPage(
+        `document.querySelector('.switch[aria-label="Lancet Guard: on"]').focus(); return "null";`,
+    );
+    await page.press("Space");
     await until(() => has(".guard-confirm"), "the inline confirmation");
     assert.equal(await has('.switch[aria-label="Lancet Guard: on"]'), true);
-    await page.click({ selector: ".guard-confirm .primary" });
-    await until(() => has('.switch[aria-label="Lancet Guard: off"]'), "guard switched off");
+    assert.equal(await has(".guard-confirm button:not(.primary):focus"), true);
+    await page.press("Tab");
+    assert.equal(await has(".guard-confirm .primary:focus"), true);
+    await page.press("Escape");
+    await until(async () => !(await has(".guard-confirm")), "the confirmation cancelled");
+    assert.equal(await sheetType(), "extensions");
+    assert.equal(await has('.switch[aria-label="Lancet Guard: on"]:focus'), true);
+    await page.press("Space");
+    await until(() => has(".guard-confirm"), "the confirmation again");
+    await page.press("Enter");
+    await until(async () => !(await has(".guard-confirm")), "Keep it on cancels");
+    assert.equal(await has('.switch[aria-label="Lancet Guard: on"]:focus'), true);
+    await page.press("Space");
+    await until(() => has(".guard-confirm"), "the confirmation to accept");
+    await page.press("Tab");
+    await page.press("Enter");
+    await until(
+        () => has('.switch[aria-label="Lancet Guard: off"]:focus'),
+        "guard off and focus restored",
+    );
 });
 
 test("turning the module off takes away its button and closes its page", real, async () => {

@@ -1,6 +1,6 @@
 // Extensions: the modules the owner can turn on and off, Lancet Guard, who may allow risky calls, and when PiP compacts
 // its context.
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { browserModuleState, leaveSafeMode, safeMode } from "../extension-ui.js";
 import { api, attempt, closeSheet, store } from "../store.js";
 import { html, Loader, Sheet, shortPath, Switch } from "../ui.js";
@@ -141,6 +141,8 @@ export function ExtensionsSheet() {
     const [problem, setProblem] = useState(null);
     const [busy, setBusy] = useState(null);
     const [confirmGuard, setConfirmGuard] = useState(false);
+    const guardCancel = useRef(null);
+    const guardSwitch = useRef(null);
     const load = () =>
         api("extensions").then(
             (result) => {
@@ -158,6 +160,15 @@ export function ExtensionsSheet() {
     useEffect(() => {
         load();
     }, []);
+    useLayoutEffect(() => {
+        if (confirmGuard) {
+            guardCancel.current?.focus();
+        } else if (busy === null) {
+            // Accepting disables switches until the request ends; restore focus only once it can take it.
+            guardSwitch.current?.focus({ preventScroll: true });
+            guardSwitch.current = null;
+        }
+    }, [confirmGuard, busy]);
 
     const change = (module, path, body) => {
         setBusy(module.file);
@@ -169,8 +180,10 @@ export function ExtensionsSheet() {
         });
     };
 
-    const toggle = (module) => {
+    const toggle = (module, button) => {
         if (module.file === "guard.ts" && module.enabled) {
+            guardSwitch.current = button;
+            guardCancel.current?.focus();
             setConfirmGuard(true);
 
             return;
@@ -244,13 +257,26 @@ export function ExtensionsSheet() {
                                             confirmGuard &&
                                             html`<div
                                                 class="guard-confirm"
-                                                role="group"
+                                                role="alertdialog"
                                                 aria-label="Turn off Lancet Guard?"
+                                                aria-describedby="guard-confirm-warning"
+                                                onKeyDown=${(event) => {
+                                                    if (
+                                                        event.key === "Escape" &&
+                                                        !event.isComposing &&
+                                                        event.keyCode !== 229
+                                                    ) {
+                                                        event.preventDefault();
+                                                        event.stopPropagation();
+                                                        setConfirmGuard(false);
+                                                    }
+                                                }}
                                             >
-                                                <span>bash, write, and edit calls will run without checks in every session here. Pi's own setting stays as it is.</span>
+                                                <span id="guard-confirm-warning">bash, write, and edit calls will run without checks in every session here. Pi's own setting stays as it is.</span>
                                                 <div class="sheet-actions">
                                                     <button
                                                         class="button small"
+                                                        ref=${guardCancel}
                                                         onClick=${() => setConfirmGuard(false)}
                                                     >
                                                         Keep it on
@@ -281,7 +307,7 @@ export function ExtensionsSheet() {
                                             on=${module.enabled}
                                             disabled=${!owner || module.required || busy !== null}
                                             label=${`${module.title}: ${module.enabled ? "on" : "off"}`}
-                                            onChange=${() => toggle(module)}
+                                            onChange=${(event) => toggle(module, event.currentTarget)}
                                         />
                                         ${
                                             owner &&
