@@ -89,8 +89,14 @@ export function useDragToClose(ref, { dir, onClose, enabled = true, scrim: scrim
         };
 
         const springBack = () => {
-            element.style.transition = `transform ${SPRING_MS}ms var(--ease-out)`;
-            scrim.style.transition = `opacity ${SPRING_MS}ms var(--ease-out)`;
+            const spring = `${SPRING_MS}ms var(--ease-out)`;
+
+            // What fades as it goes may be the element itself (a notice): one transition for both.
+            scrim.style.transition = `opacity ${spring}`;
+            element.style.transition =
+                scrim === element
+                    ? `transform ${spring}, opacity ${spring}`
+                    : `transform ${spring}`;
             element.style.transform = "";
             scrim.style.opacity = "";
             setTimeout(() => {

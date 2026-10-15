@@ -6425,8 +6425,9 @@ button.rail-brand:hover {
 
 /* ─── Notices, sign-in, plain pages ────────────────────────── */
 
-/* Toasts: inverted (the bright text color as the ground), with a countdown line until the notice goes. A tap
- * dismisses one, or does what it offers (Undo). Top center, from above. */
+/* Notices: small tiles that hang from the top edge, a state square in their level's color (the accent, a warning's
+ * yellow, an error's red) and a countdown line until they go. A tap dismisses one, or does what it offers (a chevron
+ * says so); on a phone, a swipe up puts it away. */
 .notices {
     position: fixed;
     left: 50%;
@@ -6435,32 +6436,103 @@ button.rail-brand:hover {
     z-index: 40;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    width: min(92vw, 460px);
+    gap: 6px;
+    width: min(calc(100vw - 20px), 440px);
     pointer-events: none;
 }
 
 @media (min-width: 700px) {
     .notices {
-        width: min(92vw, 420px);
+        width: min(92vw, 400px);
     }
 }
 
 .notice {
+    --level: var(--accent);
     position: relative;
     overflow: hidden;
-    padding: 10px 16px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    min-height: 44px;
+    padding: 12px 12px 13px 14px;
     border-radius: var(--r-card);
-    background: var(--o-fg-bright);
+    background:
+        linear-gradient(100deg, color-mix(in srgb, var(--level) 9%, transparent), transparent 48%),
+        var(--panel);
     box-shadow: var(--pop);
-    color: var(--o-bg);
+    color: var(--text);
     text-align: left;
     font-size: 13.5px;
     font-weight: 500;
+    line-height: 1.4;
     pointer-events: auto;
-    animation: toast-in 0.25s var(--ease-out);
+    -webkit-tap-highlight-color: transparent;
+    animation: toast-in 0.28s var(--ease-out);
 }
 
+.notice.warning {
+    --level: var(--warn);
+}
+
+.notice.error {
+    --level: var(--err);
+}
+
+/* The level, as the session list's state squares say a session's: a lit square with a soft halo. */
+.notice-mark {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    margin: 6px 1px 0;
+    border-radius: 2.5px;
+    background: var(--level);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--level) 18%, transparent);
+}
+
+.notice-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.notice > .icon {
+    flex: none;
+    margin-top: 2px;
+    color: var(--faint);
+    transition: color var(--t-hover) var(--ease-out);
+}
+
+.notice.acts > .icon {
+    color: var(--muted);
+}
+
+@media (hover: hover) {
+    .notice:hover {
+        background:
+            linear-gradient(
+                100deg,
+                color-mix(in srgb, var(--level) 12%, transparent),
+                transparent 55%
+            ),
+            var(--card);
+    }
+
+    .notice:hover > .icon {
+        color: var(--text);
+    }
+}
+
+.notice:active {
+    scale: 0.985;
+}
+
+.notice:focus-visible {
+    outline: 2px solid var(--accent-line);
+    outline-offset: 2px;
+}
+
+/* How long until it goes: a hairline in its level's color, shrinking from the right. */
 .notice::after {
     content: "";
     position: absolute;
@@ -6468,7 +6540,7 @@ button.rail-brand:hover {
     right: 0;
     bottom: 0;
     height: 2px;
-    background: color-mix(in srgb, var(--o-bg) 40%, transparent);
+    background: color-mix(in srgb, var(--level) 55%, transparent);
     transform-origin: left;
     animation: countdown var(--life, 4.5s) linear forwards;
 }
@@ -6479,31 +6551,27 @@ button.rail-brand:hover {
     }
 }
 
-/* Like the popovers' pop, but from above: the toast hangs from the top edge. */
+/* Like the popovers' pop, but from above: the notice hangs from the top edge. `translate`, not `transform`, so one
+ * swiped away goes on up from where the finger left it. */
 @keyframes toast-in {
     from {
         opacity: 0;
-        transform: translateY(-6px) scale(0.98);
+        translate: 0 -8px;
+        scale: 0.97;
     }
 }
 
 @keyframes toast-out {
     to {
         opacity: 0;
-        transform: translateY(-6px) scale(0.98);
+        translate: 0 -8px;
+        scale: 0.97;
     }
 }
 
 .notice.leaving {
+    pointer-events: none;
     animation: toast-out var(--t-out) linear forwards;
-}
-
-.notice.error::after {
-    background: var(--err);
-}
-
-.notice.warning::after {
-    background: var(--warn);
 }
 
 .signin,

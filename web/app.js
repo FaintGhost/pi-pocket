@@ -16,7 +16,7 @@ import {
     toggleFiles,
 } from "./files-panel.js";
 import { ExtensionPage } from "./extension-ui.js";
-import { startEdgeBack, startSwipes } from "./gestures.js";
+import { startEdgeBack, startSwipes, useDragToClose } from "./gestures.js";
 import { Splash } from "./home.js";
 import { Launcher } from "./launcher.js";
 import { registerWorker, updateBadge } from "./notify.js";
@@ -63,7 +63,17 @@ import {
 } from "./store.js";
 import { prefs, setPrefs, startTheme } from "./theme.js";
 import { Transcript } from "./transcript.js";
-import { APPLE, Boot, html, Icon, iconPath, shortPath, useEdge, usePresence } from "./ui.js";
+import {
+    APPLE,
+    Boot,
+    BOTTOM_SHEETS,
+    html,
+    Icon,
+    iconPath,
+    shortPath,
+    useEdge,
+    usePresence,
+} from "./ui.js";
 import { toggleDictation } from "./voice.js";
 
 /** What changed in the session's folder: lines added and removed, and how many files. It opens Changes. */
@@ -213,7 +223,37 @@ function Topbar() {
     </header>`;
 }
 
-/** Notices, Omarchy's notification style: each slides in, counts down, and slides out when it goes. */
+/**
+ * A notice, as a small tile: a state square in its level's color, the message, and a countdown line until it goes. A
+ * tap dismisses it, or does what it offers (a chevron says so); on a phone, a swipe up puts it away.
+ */
+function Notice({ notice, leaving }) {
+    const ref = useRef(null);
+
+    useDragToClose(ref, {
+        dir: "up",
+        onClose: () => dismiss(notice.id),
+        enabled: BOTTOM_SHEETS.matches,
+        // It fades as it goes, not the stack behind it.
+        scrim: ref,
+    });
+
+    return html`<button
+        ref=${ref}
+        class=${`notice ${notice.level} ${notice.action ? "acts" : ""} ${leaving ? "leaving" : ""}`}
+        style=${`--life:${notice.level === "error" ? 9 : 4.5}s`}
+        onClick=${() => {
+            dismiss(notice.id);
+            notice.action?.();
+        }}
+    >
+        <span class="notice-mark" aria-hidden="true"></span>
+        <span class="notice-text">${notice.message}</span>
+        <${Icon} name=${notice.action ? "chevron" : "close"} size=${14} />
+    </button>`;
+}
+
+/** Notices: each slides in, counts down, and slides out when it goes. */
 function Notices() {
     const { notices } = store.state;
     const [gone, setGone] = useState([]);
@@ -246,21 +286,14 @@ function Notices() {
     }
 
     return html`<div class="notices" role="status" aria-live="polite">
-        ${all.map((notice) => {
-            const leaving = !notices.includes(notice);
-
-            return html`<button
-                key=${notice.id}
-                class=${`notice ${notice.level} ${leaving ? "leaving" : ""}`}
-                style=${`--life:${notice.level === "error" ? 9 : 4.5}s`}
-                onClick=${() => {
-                    dismiss(notice.id);
-                    notice.action?.();
-                }}
-            >
-                ${notice.message}
-            </button>`;
-        })}
+        ${all.map(
+            (notice) =>
+                html`<${Notice}
+                    key=${notice.id}
+                    notice=${notice}
+                    leaving=${!notices.includes(notice)}
+                />`,
+        )}
     </div>`;
 }
 
