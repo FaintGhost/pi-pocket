@@ -50,6 +50,7 @@ import { mentionedPaths, viewFile } from "./files.ts";
 import { isThinkingLevel, THINKING_LEVELS } from "./models.ts";
 import { writePiSession } from "./pi-sessions.ts";
 import { snippet } from "./projection.ts";
+import { globalModelSettings, projectModelDefault } from "./project-model.ts";
 import { expandPromptTemplate, expandSkillCommand, unwrapSkill } from "./prompts.ts";
 import { clientKey, ownRequest, requestFor } from "./requests.ts";
 import { type Resend, resendContent, resendRequest, ResendTask, userContent } from "./resend.ts";
@@ -342,6 +343,7 @@ export class Commands {
     async createSession(
         user: User,
         request: { cwd?: string; title?: string; worktree?: unknown },
+        { projectDefaults = true }: { projectDefaults?: boolean } = {},
     ): Promise<{ id: ConversationId }> {
         const app = this.#app;
 
@@ -356,7 +358,6 @@ export class Commands {
         const folder = app.workspace.checkDirectory(
             optionalText(request.cwd, "cwd") ?? app.defaultCwd,
         );
-        const initial = this.#defaultModel();
         const now = Date.now();
 
         return this.#inPlace(
@@ -364,6 +365,8 @@ export class Commands {
             request.worktree === true,
             title ?? basename(folder),
             async ({ cwd, worktree }) => {
+                // An internal caller about to apply a person's explicit model keeps its previous starting pair.
+                const initial = this.#defaultModel(undefined, projectDefaults ? cwd : undefined);
                 const conversation = await app.harness.createConversation(
                     {
                         ownership: { kind: "ownerless" },
@@ -551,13 +554,17 @@ export class Commands {
      * The model a new session starts with, always one a person chose: `prefer` (with its thinking level) when it is
      * signed in here, or else the owner's default, even when it is not signed in now: the session then shows that, and
      * its first message fails in sight, where another model would spend on what nobody chose for it. Without an owner's
-     * default, the one last picked, or Pi's default, when signed in. Never the first model there is: with none of
-     * these, the session starts without a model, and someone picks one.
+     * default, ordinary sessions consult trusted project defaults in their final cwd, then the last picked model,
+     * then Pi's global default. A no-cwd caller (imports and PiP itself) keeps the legacy default selection. Never
+     * the first model there is: with none chosen, the session starts without a model, and someone picks one.
      */
-    #defaultModel(prefer?: {
-        model: { provider: string; modelId: string } | null;
-        thinkingLevel: string;
-    }): {
+    #defaultModel(
+        prefer?: {
+            model: { provider: string; modelId: string } | null;
+            thinkingLevel: string;
+        },
+        cwd?: string,
+    ): {
         model?: ModelRef;
         thinkingLevel?: ModelThinkingLevel;
     } {
@@ -572,12 +579,27 @@ export class Commands {
         const chosen = config.defaultModel;
         const owners =
             chosen === undefined ? undefined : models.getModel(chosen.provider, chosen.modelId);
-        const lastPicked = chosen === undefined ? pick(last?.provider, last?.modelId) : undefined;
-        const pis =
-            chosen === undefined && lastPicked === undefined
-                ? pick(settings.getDefaultProvider(), settings.getDefaultModel())
+        const defaults =
+            chosen === undefined && cwd !== undefined ? globalModelSettings(cwd) : settings;
+        const project =
+            chosen === undefined && cwd !== undefined
+                ? projectModelDefault(cwd, defaults, models)
                 : undefined;
-        const model = preferred ?? owners ?? lastPicked ?? pis;
+        const lastPicked =
+            chosen === undefined && project === undefined
+                ? pick(last?.provider, last?.modelId)
+                : undefined;
+        // Ordinary sessions must not inherit a different project's settings from the server's starting folder.
+        // Imported sessions and PiP's own conversation keep their existing selection behavior.
+        const global = cwd === undefined ? undefined : defaults.getGlobalSettings();
+        const pis =
+            chosen === undefined && project === undefined && lastPicked === undefined
+                ? pick(
+                      cwd === undefined ? settings.getDefaultProvider() : global?.defaultProvider,
+                      cwd === undefined ? settings.getDefaultModel() : global?.defaultModel,
+                  )
+                : undefined;
+        const model = preferred ?? owners ?? project?.model ?? lastPicked ?? pis;
 
         if (model === undefined) {
             return {};
@@ -587,9 +609,13 @@ export class Commands {
             ? prefer?.thinkingLevel
             : owners !== undefined
               ? chosen?.thinkingLevel
-              : lastPicked !== undefined
-                ? last?.thinkingLevel
-                : settings.getDefaultThinkingLevel()) ?? "off") as ModelThinkingLevel;
+              : project !== undefined
+                ? project.thinkingLevel
+                : lastPicked !== undefined
+                  ? last?.thinkingLevel
+                  : cwd === undefined
+                    ? settings.getDefaultThinkingLevel()
+                    : global?.defaultThinkingLevel) ?? "off") as ModelThinkingLevel;
 
         return {
             model: { provider: model.provider, modelId: model.id },

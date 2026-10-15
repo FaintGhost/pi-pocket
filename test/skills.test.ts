@@ -317,6 +317,7 @@ test("an undecided project with skills of its own asks; one without, or with a d
             folders: [join(cwd, ".agents", "skills"), join(repo, ".agents", "skills")],
             skills: ["here", "repo-wide"],
             ownSkills: ["pi-project"],
+            settings: false,
             ask: true,
         },
     );
