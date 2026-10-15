@@ -1,6 +1,7 @@
 // Running now: everything Pi is doing, across sessions.
 import { useEffect, useState } from "preact/hooks";
-import { api, attempt, canSteer, closeSheet, navigate, notify } from "../store.js";
+import { folderColor } from "../avatar.js";
+import { api, attempt, canSteer, closeSheet, navigate, notify, store } from "../store.js";
 import { html, Loader, Sheet, Spinner } from "../ui.js";
 
 /** How often the Running now sheet asks again while it is open. */
@@ -39,6 +40,11 @@ export function RunningSheet() {
         ${sessions?.map(
             (session) => html`<div class="running" key=${session.id}>
                 <div class="running-head">
+                    <span
+                        class="folder-mark"
+                        style=${`--folder:${folderColor(store.state.sessions.find((entry) => entry.id === session.id)?.cwd)}`}
+                        aria-hidden="true"
+                    ></span>
                     <button class="link grow" onClick=${() => go(session.id)}>
                         ${session.title}
                     </button>

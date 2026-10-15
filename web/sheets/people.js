@@ -386,7 +386,10 @@ export function PeopleSheet() {
             </button>`
         }
         <${PeopleList} />
-        <button class="button wide" onClick=${() => openSheet({ type: "notifications" })}>
+        <button
+            class="button ghost wide sheet-footer"
+            onClick=${() => openSheet({ type: "notifications" })}
+        >
             Notifications on this device…
         </button>
     <//>`;

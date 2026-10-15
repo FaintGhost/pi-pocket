@@ -204,7 +204,10 @@ export function AppearanceSheet() {
                 />
             <//>
         </div>
-        <button class="button wide" onClick=${() => openSheet({ type: "shortcuts" })}>
+        <button
+            class="button ghost wide sheet-footer"
+            onClick=${() => openSheet({ type: "shortcuts" })}
+        >
             <${Icon} name="keyboard" size=${16} /> Keyboard shortcuts
         </button>
     <//>`;

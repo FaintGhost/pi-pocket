@@ -5321,6 +5321,53 @@ button.rail-brand:hover {
     }
 }
 
+/* Native checkbox semantics and label targets, drawn in the shared sheet palette. */
+.check input[type="checkbox"],
+.subagent-model input[type="checkbox"] {
+    appearance: none;
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    padding: 0;
+    border: 1.5px solid var(--hair-2);
+    border-radius: 4px;
+    background: var(--card);
+    color: var(--accent-ink);
+    cursor: pointer;
+}
+
+.check input[type="checkbox"]::before,
+.subagent-model input[type="checkbox"]::before {
+    content: "";
+    width: 4px;
+    height: 7px;
+    margin-top: -2px;
+    border: solid currentColor;
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+    opacity: 0;
+}
+
+.check input[type="checkbox"]:checked,
+.subagent-model input[type="checkbox"]:checked {
+    border-color: var(--accent-fill);
+    background: var(--accent-fill);
+}
+
+.check input[type="checkbox"]:checked::before,
+.subagent-model input[type="checkbox"]:checked::before {
+    opacity: 1;
+}
+
+.check input[type="checkbox"]:disabled,
+.subagent-model input[type="checkbox"]:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .row {
     display: flex;
     gap: 0.45rem;
@@ -5385,9 +5432,16 @@ button.rail-brand:hover {
     color: var(--muted);
 }
 
-.button.ghost:hover {
-    background: var(--hover);
-    color: var(--err);
+@media (hover: hover) {
+    .button.ghost:hover {
+        background: var(--hover);
+        color: var(--err);
+    }
+}
+
+.button.sheet-footer {
+    min-height: 40px;
+    border-radius: 11px;
 }
 
 .button.small {
@@ -5793,10 +5847,6 @@ button.rail-brand:hover {
     margin-bottom: 0.35rem;
 }
 
-.check input {
-    width: auto;
-}
-
 .provider {
     display: flex;
     justify-content: space-between;
@@ -5923,11 +5973,6 @@ button.rail-brand:hover {
     padding: 8px 12px;
     border-top: 1px solid var(--hair);
     cursor: pointer;
-}
-
-.subagent-model input {
-    width: auto;
-    flex: none;
 }
 
 .subagent-model > span {
@@ -7244,6 +7289,12 @@ textarea.notes {
     background: var(--card);
 }
 
+.running-head > .folder-mark {
+    width: 8px;
+    height: 8px;
+    border-radius: 2.5px;
+}
+
 .running-head .link {
     min-width: 0;
     text-align: left;
@@ -7958,7 +8009,7 @@ textarea.notes {
 }
 
 .theme-desktop .tc-note {
-    padding: 0 0.45rem 0.45rem;
+    padding: 0 0 0.45rem;
     font-size: 0.68rem;
     color: var(--o-fg);
     opacity: 0.75;
