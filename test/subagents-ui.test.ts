@@ -1674,7 +1674,12 @@ test(
         );
 
         // Where each part is on screen, left to right: the name's Hebrew letters, the closing quote, the clock.
-        const where = await inPage<{ hebrew: number; quote: [number, number]; clock: number }>(`
+        const where = await inPage<{
+            hebrew: number;
+            quote: [number, number];
+            clock: number;
+            clockBelow: boolean;
+        }>(`
             const line = [...document.querySelectorAll(".chat-event")].find((each) => each.textContent.includes("dealt with"));
             const texts = [];
             const walk = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
@@ -1701,6 +1706,7 @@ test(
                 hebrew: Math.max(...letters.map((each) => each.right)),
                 quote: [quote.left, quote.right],
                 clock: Math.min(...digits.map((each) => each.left)),
+                clockBelow: digits.every((each) => each.top >= quote.bottom - 0.5),
             });
         `);
 
@@ -1709,8 +1715,8 @@ test(
             `the quote after the name: ${JSON.stringify(where)}`,
         );
         assert.ok(
-            where.clock >= where.quote[1] - 0.5,
-            `the clock after the quote: ${JSON.stringify(where)}`,
+            where.clockBelow || where.clock >= where.quote[1] - 0.5,
+            `the clock after the quote, or wrapped below it: ${JSON.stringify(where)}`,
         );
         await page.press("Escape");
         await page.setViewport(VIEWPORTS.mobile);

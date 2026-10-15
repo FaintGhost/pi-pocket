@@ -246,6 +246,37 @@ test(
     },
 );
 
+test("People's take-turns shortcut uses the session's shared turn state", real, async () => {
+    app.config.addUser("Turns guest", "guest");
+    await page.setViewport(WIDE);
+    await page.navigate(`${base}/s/${Number(one)}`);
+    await opened(one);
+    await page.evaluate(`(await import("/store.js")).openSheet({ type: "chat" })`);
+    await until(
+        () =>
+            inPage<boolean>(
+                `return JSON.stringify(!!document.querySelector('.people-turns button'))`,
+            ),
+        "the take-turns shortcut",
+    );
+    await page.evaluate(`document.querySelector('.people-turns button').click()`);
+    await until(
+        () =>
+            inPage<boolean>(
+                `return JSON.stringify((await import('/store.js')).store.state.view.turns?.on === true)`,
+            ),
+        "take turns started",
+    );
+    await page.evaluate(`document.querySelector('.people-turns button').click()`);
+    await until(
+        () =>
+            inPage<boolean>(
+                `return JSON.stringify((await import('/store.js')).store.state.view.turns?.on === false)`,
+            ),
+        "take turns stopped",
+    );
+});
+
 test(
     "recall uses this session for arrows and search, and Down restores the draft",
     real,
