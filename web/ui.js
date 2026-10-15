@@ -3,8 +3,8 @@
 import DOMPurify from "dompurify";
 import htm from "htm";
 import { marked } from "marked";
-import { Component, h } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { Component, createContext, h } from "preact";
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useDragToClose } from "./gestures.js";
 import { highlight, langOf } from "./highlight.js";
 import { actions, filesShown, notify, openSheet, store } from "./store.js";
@@ -811,6 +811,7 @@ const ICONS = {
     file: "M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5",
     diff: "M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5M9 11.5h6M12 8.5v6M9 17.5h6",
     back: "M15 18l-6-6 6-6",
+    clock: "M12 21a9 9 0 100-18 9 9 0 000 18zM12 7v5l3 2",
     chevron: "M9 6l6 6-6 6",
     down: "M6 9l6 6 6-6",
     up: "M12 19V5M5 12l7-7 7 7",
@@ -1141,9 +1142,13 @@ export class Boundary extends Component {
 /** Sheets come up from the bottom edge below this width, and drag back down to close; above it they are popups. */
 const BOTTOM_SHEETS = matchMedia("(max-width: 699px)");
 
+/** The sheet host supplies a back action only when another sheet is under this one. */
+export const SheetBack = createContext(null);
+
 /** A bottom sheet on phones, a centered dialog on wide screens. */
 export function Sheet({ title, onClose, children, wide = false, actions = null, className = "" }) {
     const ref = useRef(null);
+    const onBack = useContext(SheetBack);
 
     useDragToClose(ref, { dir: "down", onClose, enabled: BOTTOM_SHEETS.matches });
 
@@ -1176,7 +1181,13 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
             tabindex="-1"
         >
             <header class="sheet-head">
-                <div class="grip"></div>
+                <div class="grip" aria-hidden="true"></div>
+                ${
+                    onBack &&
+                    html`<button class="icon-button sheet-back" onClick=${onBack} aria-label="Back">
+                        <${Icon} name="back" size=${18} />
+                    </button>`
+                }
                 <h2>${title}</h2>
                 ${actions}
                 <button class="icon-button" onClick=${onClose} aria-label="Close">
