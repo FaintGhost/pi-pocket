@@ -2,7 +2,7 @@
 // into one line that opens into a timeline), then Pi's reply, any approval, and the live line while Pi works.
 import { Component } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
-import { personColor } from "./avatar.js";
+import { initials, personColor } from "./avatar.js";
 import { browserAvailable, setBrowserOpen } from "./browser.js";
 import { describeCall } from "./calls.js";
 import { DiffBlock } from "./diff.js";
@@ -323,24 +323,15 @@ function UserEntry({ entry, view, users }) {
             title="Edit, send again, or copy"
             onClick=${(event) => openMessage(event, entry.id)}
         >
-            <span class="prompt-mark" style=${`color:${mark}`} aria-hidden="true">›</span>
-            ${
-                (name || entry.at || scheduled || via) &&
-                html`<span class="prompt-head">
-                    ${
-                        name &&
-                        html`<b
-                            class="prompt-author"
-                            style=${authorId ? `color:${personColor(authorId)}` : ""}
-                        >
-                            ${name}
-                        </b>`
-                    }
-                    ${entry.at && html`<span>${clock(entry.at)}</span>`}
-                    ${scheduled && html`<span>· scheduled</span>`}
-                    ${via && html`<span>· via ${via[1]}</span>`}
-                </span>`
-            }
+            <span class="prompt-head">
+                <span class="prompt-avatar" style=${`--who:${mark}`} aria-hidden="true">
+                    ${name ? initials(name) : "›"}
+                </span>
+                ${name && html`<b class="prompt-author">${name}</b>`}
+                ${entry.at && html`<span class="prompt-time">${clock(entry.at)}</span>`}
+                ${scheduled && html`<span class="prompt-time">· scheduled</span>`}
+                ${via && html`<span class="prompt-time">· via ${via[1]}</span>`}
+            </span>
             <div class="prompt-body">
                 ${
                     skill &&
@@ -418,8 +409,20 @@ function Collapsible({ text, limit = 600 }) {
 
 // ─── What Pi did: its thinking and tool calls, a line each on a timeline ───────────────
 
-/** The mark a call's line starts with; the rest take theirs from `describeCall`. */
-const GLYPHS = { read: "→", edit: "✎", write: "+", bash: "$", grep: "⌕", find: "⌕", subagent: "⑂" };
+/** What a step's mark says, by how the call went; a call still running shows a spinner instead. */
+const MARKS = { done: "✓", error: "×", denied: "×", stopped: "–", approval: "!" };
+
+/** A step's mark: a small circle that says how it went. A thought is ✦, and a subagent's call ⑂ unless it failed. */
+function StepMark({ status, kind }) {
+    const agent = kind === "agent" && (status === "done" || status === "running");
+    const spinning = kind !== "thought" && !agent && status === "running";
+    const look = kind === "thought" ? "thought" : agent ? "agent" : status;
+    const mark = kind === "thought" ? "✦" : agent ? "⑂" : MARKS[status];
+
+    return html`<span class=${`step-mark ${look}`} aria-hidden=${spinning ? undefined : "true"}>
+        ${spinning ? html`<${Spinner} />` : mark}
+    </span>`;
+}
 
 /** What Pi did with its memory tool, as a step's label. */
 const MEMORY_WORDS = {
@@ -494,7 +497,7 @@ function outcome({ call, result, details, status }) {
         case "edit": {
             const counts = diffCounts(details?.diff);
 
-            return counts && { text: `+${counts.added} −${counts.removed}`, tone: "ok" };
+            return counts && { text: `+${counts.added} −${counts.removed}`, tone: "ok", counts };
         }
 
         case "write":
@@ -631,10 +634,9 @@ function ThoughtStep({ block, streaming }) {
         class=${`step ${open ? "open" : ""}`}
         data-status=${streaming ? "running" : "done"}
     >
-        <span class="step-node" aria-hidden="true"></span>
         <div class="step-line">
             <button class="step-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-                <span class="step-glyph thought" aria-hidden="true">✦</span>
+                <${StepMark} status=${streaming ? "running" : "done"} kind="thought" />
                 <span class="step-label">
                     ${streaming ? "Thinking" : block.redacted ? "Thought (redacted)" : "Thought"}
                 </span>
@@ -849,7 +851,6 @@ function ToolStep({
             ? (details?.conversationId ??
               view.subagents.find((agent) => agent.name === args.name)?.conversationId)
             : undefined;
-    const glyph = GLYPHS[call.name] ?? describeCall(call).icon;
     const { label, subject } = stepWords(call);
     // Counted from everything once it is loaded: a long write's lines, a long edit's whole diff.
     const said = outcome({
@@ -873,19 +874,21 @@ function ToolStep({
         class=${`step ${open ? "open" : ""} ${settled ? "settled" : ""}`}
         data-status=${status}
     >
-        <span class="step-node" aria-hidden="true"></span>
         <div class="step-line">
             <button class="step-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-                <span
-                    class=${`step-glyph ${call.name === "subagent" ? "agent" : ""}`}
-                    aria-hidden="true"
-                >
-                    ${glyph}
-                </span>
+                <${StepMark} status=${status} kind=${call.name === "subagent" ? "agent" : ""} />
                 <span class="step-label">${label}</span>
                 <span class="step-subject">${subject}</span>
-                ${status === "running" && html`<${Spinner} />`}
-                ${said && html`<span class=${`step-meta ${said.tone}`}>${said.text}</span>`}
+                ${
+                    said &&
+                    html`<span class=${`step-meta ${said.tone}`}>
+                        ${
+                            said.counts
+                                ? html`<span class="ok">+${said.counts.added}</span>${" "}<span class="err">−${said.counts.removed}</span>`
+                                : said.text
+                        }
+                    </span>`
+                }
             </button>
             ${
                 child !== undefined &&
@@ -900,8 +903,11 @@ function ToolStep({
         </div>
         ${
             decision &&
-            html`<div class="step-decision" title=${new Date(decision.at).toLocaleString()}>
-                <${Icon} name="shield" size=${12} /> ${decision.allow ? "Allowed" : "Denied"} by ${decision.by}
+            html`<div
+                class=${`step-decision ${decision.allow ? "allowed" : "denied"}`}
+                title=${new Date(decision.at).toLocaleString()}
+            >
+                <${Icon} name="shield" size=${13} /> ${decision.allow ? "Allowed" : "Denied"} by ${decision.by}
             </div>`
         }
         ${
@@ -1201,10 +1207,13 @@ function ApprovalCard({ approval }) {
 
     return html`<div class="approval">
         <div class="approval-head">
-            <${Icon} name="shield" size=${16} /> Lancet Guard asks before this ${approval.tool} call
+            <span class="approval-shield" aria-hidden="true"><${Icon} name="shield" size=${16} /></span>
+            <div class="approval-title">
+                <span class="approval-ask">Lancet Guard asks before this ${approval.tool} call</span>
+                <span class="approval-reason">${approval.reason}</span>
+            </div>
         </div>
-        <div class="approval-reason">${approval.reason}</div>
-        <pre class="cmd">${approval.subject}</pre>
+        <pre class="cmd">${approval.tool === "bash" && html`<span class="cmd-sign">$ </span>`}${approval.subject}</pre>
         ${
             !canSteer()
                 ? html`<div class="muted small">Waiting for someone who can steer to answer.</div>`
@@ -2019,15 +2028,11 @@ function LiveLine({ live, approvals, start, entries, conversationId }) {
                 onClick=${fold}
             ><${Icon} name="chevron" size=${14} class="chev" /></button>`
         }
-        ${
-            waiting
-                ? html`<span class="live-wait" aria-hidden="true"></span>`
-                : html`<${Spinner} hidden=${true} />`
-        }
+        <span class="live-dot" aria-hidden="true"></span>
         <span class="live-state" role="status">
             ${state}${retry && !waiting && seconds > 0 && html`<span aria-hidden="true"> in ${seconds}s</span>`}
         </span>
-        ${start !== undefined && html`<span aria-hidden="true">${span(Date.now() - start)}</span>`}
+        ${start !== undefined && html`<span class="live-time" aria-hidden="true">${span(Date.now() - start)}</span>`}
         ${
             retry &&
             !waiting &&

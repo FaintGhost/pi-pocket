@@ -437,7 +437,6 @@ export function Composer() {
             element.setSelectionRange(element.value.length, element.value.length);
         });
     }, [insert?.n]);
-    // Again when the text size changes (Appearance), which changes the lines' height.
     useEffect(() => {
         const fit = () => fitBox(box.current);
 
@@ -445,7 +444,7 @@ export function Composer() {
         addEventListener("resize", fit);
 
         return () => removeEventListener("resize", fit);
-    }, [text, prefs().text]);
+    }, [text]);
 
     const update = (value, at = value.length) => {
         setText(value);
@@ -1282,12 +1281,13 @@ export function Composer() {
                             <${Icon} name="sparkle" size=${12} class="model-spark" />
                             <span class="model-name">${shortModel(agent)}</span>
                             ${level && html`<span class="model-level">${level}</span>`}
+                            <${Icon} name="chevron" size=${12} stroke=${2.2} class="model-caret" />
                         </button>
                         ${
                             planAvailable() &&
                             view.conversation?.kind !== "subagent" &&
                             html`<button
-                                class=${`chip toggle plan-chip ${view.plan?.on ? "on" : ""}`}
+                                class=${`plan-chip ${view.plan?.on ? "on" : ""}`}
                                 title="Plan mode: Pi reads and proposes, and changes nothing until you approve"
                                 onClick=${() => attempt(() => actions.setPlan(!view.plan?.on))}
                             >
@@ -1413,7 +1413,7 @@ function PlacesButton() {
  * first token.
  */
 const SHORTER = ["words", "here", "guard", "context", "cache", "wait"];
-/** What each status line was last fitted for: the text size and its text. Its width is the observer's to watch. */
+/** What each status line was last fitted for: its text. Its width is the observer's to watch. */
 const fitted = new WeakMap();
 
 /** Whether the items that show sit on one row: their middles line up. */
@@ -1427,15 +1427,15 @@ function oneRow(line) {
 }
 
 /**
- * The whole line where it fits on one row; otherwise each shorter form in turn, until one does. Only when its text or
- * the text size changed, or `again`: a render that changed neither measures nothing.
+ * The whole line where it fits on one row; otherwise each shorter form in turn, until one does. Only when its text
+ * changed, or `again`: a render that changed nothing measures nothing.
  */
 function fitStatus(line, again = false) {
     if (!line) {
         return;
     }
 
-    const key = `${prefs().text} ${line.textContent}`;
+    const key = line.textContent;
 
     // Hidden, it has no width to fit: the observer hears it show.
     if ((!again && fitted.get(line) === key) || line.clientWidth === 0) {
@@ -1517,7 +1517,7 @@ function SpeedPart({ stats }) {
         ${
             rate !== undefined &&
             html`<span class="rate">
-                ${rate < 9.95 ? rate.toFixed(1) : Math.round(rate)}${" "}
+                <span class="num">${rate < 9.95 ? rate.toFixed(1) : Math.round(rate)}</span>${" "}
                 <span class="long">tokens/s</span>
                 <span class="short">tok/s</span>
             </span>`
@@ -1526,7 +1526,7 @@ function SpeedPart({ stats }) {
             wait !== undefined &&
             html`<span class="wait">
                 <span class="word">first token${" "}</span>
-                ${seconds(wait)}
+                <span class="num">${seconds(wait)}</span>
             </span>`
         }
     </span>`;
@@ -1580,13 +1580,15 @@ function StatusLine() {
                 <span class=${`meter ${contextLevel(percent)}`} aria-hidden="true">
                     <span style=${`width:${percent}%`}></span>
                 </span>
-                ${about}${percent}%
+                <span class="num">${about}${percent}%</span>
             </span>`,
         );
     }
 
     if (stats.cacheRate !== undefined) {
-        parts.push(html`<span class="cache">cache ${Math.round(stats.cacheRate * 100)}%</span>`);
+        parts.push(html`<span class="cache">
+                cache <span class="num">${Math.round(stats.cacheRate * 100)}%</span>
+            </span>`);
     }
 
     // The session's spend, its subagents' included, and its limit when it has one.
@@ -1595,8 +1597,10 @@ function StatusLine() {
 
     parts.push(
         html`<span class=${spend?.budget !== undefined && spent >= spend.budget ? "warn" : ""}>
-            $${spent.toFixed(2)}
-            ${spend?.budget !== undefined ? `/$${spend.budget.toFixed(2)}` : ""}
+            <span class="num">
+                $${spent.toFixed(2)}
+                ${spend?.budget !== undefined ? `/$${spend.budget.toFixed(2)}` : ""}
+            </span>
         </span>`,
     );
 

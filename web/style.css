@@ -613,6 +613,7 @@ kbd {
 
 @media (prefers-reduced-motion: reduce) {
     :root:not([data-motion="full"]) .pulse,
+    :root:not([data-motion="full"]) .live-dot,
     :root:not([data-motion="full"]) .agents-dot.working,
     :root:not([data-motion="full"]) .session-working,
     :root:not([data-motion="full"]) .session-placeholder span {
@@ -1183,25 +1184,28 @@ kbd {
     position: relative;
 }
 
-/* A column of turns: a person's message, what Pi did, Pi's reply, an approval, the live line. */
+/* A column of turns: a person's message, what Pi did, Pi's reply, an approval, the live line. Its text size is
+ * Appearance's; the cards inside keep fixed sizes. */
 .transcript {
-    max-width: 744px;
+    max-width: 776px;
     margin: 0 auto;
-    padding: 28px 20px 32px;
+    padding: 28px 28px 24px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
+    font-size: var(--text-size, 15px);
+    line-height: 1.65;
     animation: rise-in 0.36s var(--ease-out);
 }
 
-/* Turns stand apart: 22px before each message or report (the gap's 14px and 8px more), 14px between the parts of one. */
+/* Turns stand apart: 10px more before each message or report. */
 .transcript > :is(.user-row, .report, .report-group):not(:first-child) {
-    margin-top: 8px;
+    margin-top: 10px;
 }
 
 @media (max-width: 699px) {
     .transcript {
-        padding: 20px 16px;
+        padding: 18px 16px 14px;
     }
 }
 
@@ -1228,7 +1232,7 @@ kbd {
     align-self: flex-start;
     text-align: left;
     color: var(--accent);
-    font-size: 0.85rem;
+    font-size: 13px;
     display: inline-flex;
     gap: 0.25rem;
     align-items: center;
@@ -1243,10 +1247,11 @@ kbd {
     min-height: 44px;
     padding: 8px 12px;
     margin-bottom: 6px;
-    border: 1px solid var(--line);
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
     background: var(--card);
     color: var(--accent);
-    font-size: 0.8rem;
+    font-size: 12.5px;
     text-align: left;
 }
 
@@ -1266,16 +1271,25 @@ kbd {
     color: var(--muted);
 }
 
-/* A person's message: a filled row with a prompt mark, who and when over what they wrote. Scoped to its row: the
- * launcher's input has a `.prompt` of its own. */
+/* A person's message: a card, with who and when over what they wrote. Scoped to its row: the launcher's input has a
+ * `.prompt` of its own. */
 .user-row > .prompt {
-    display: grid;
-    grid-template-columns: 14px minmax(0, 1fr);
-    gap: 4px 10px;
-    padding: 10px 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 16px 14px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-window);
     background: var(--card);
     color: var(--text);
     transition: background-color var(--t-hover) var(--ease-out);
+}
+
+@media (max-width: 699px) {
+    .user-row > .prompt {
+        padding: 12px 14px 13px;
+        border-radius: 16px;
+    }
 }
 
 .user-row > .prompt.tappable {
@@ -1286,33 +1300,43 @@ kbd {
     background: var(--card-2);
 }
 
-.prompt-mark {
-    grid-row: span 2;
-    font-weight: 700;
-    line-height: 1.55;
-}
-
-.user-row > .prompt:not(:has(> .prompt-head)) > .prompt-mark {
-    grid-row: auto;
-}
-
-.prompt-head,
-.prompt-body {
-    grid-column: 2;
-    min-width: 0;
-}
-
 .prompt-head {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 0 8px;
-    font-size: 0.74rem;
-    color: var(--muted);
+    min-width: 0;
+    font-size: 12.5px;
+    line-height: 22px;
+}
+
+/* Yours takes the accent, someone else's their color (`--who`), anyone else a quiet one. */
+.prompt-avatar {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--who) 20%, transparent);
+    color: var(--who);
+    font-size: 9.5px;
+    font-weight: 600;
+    line-height: 1;
 }
 
 .prompt-author {
     font-weight: 600;
     color: var(--text);
+}
+
+.prompt-time {
+    color: var(--faint);
+}
+
+.prompt-body {
+    min-width: 0;
+    padding-left: 30px;
 }
 
 .user-text {
@@ -1324,23 +1348,25 @@ kbd {
 /* What a PR watch or a webhook fenced for Pi (a check's log, a post): a block of its own, scrolling past a few lines. */
 .fenced-data {
     margin: 0.4rem 0;
-    border: 1px solid var(--line);
-    background: var(--bg);
+    border: 1px solid var(--hair);
+    border-radius: var(--r-control);
+    background: var(--code-bg);
+    overflow: hidden;
 }
 
 .fenced-label {
-    padding: 0.2rem 0.5rem;
-    border-bottom: 1px solid var(--line);
+    padding: 4px 12px;
+    border-bottom: 1px solid var(--hair);
     color: var(--muted);
-    font-size: 0.75rem;
+    font-size: 12px;
 }
 
 .fenced-data pre {
     margin: 0;
-    padding: 0.4rem 0.5rem;
+    padding: 8px 12px;
     max-height: 14rem;
     overflow: auto;
-    font-size: 0.78rem;
+    font: 12px / 1.55 var(--mono);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
@@ -1353,20 +1379,19 @@ kbd {
     margin-top: 0.35rem;
 }
 
-/* Pi's words: plain prose, a little apart. */
+/* Pi's words: plain prose, without a container. */
 .reply {
     display: flex;
     flex-direction: column;
     gap: 10px;
     min-width: 0;
     color: var(--body);
-    line-height: 1.65;
 }
 
 .reply > .md {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
 }
 
 .reply > .md > *,
@@ -1404,52 +1429,92 @@ kbd {
     margin: 0.45rem 0;
 }
 
+/* Real lists, with a 20px column for the marker (`1.` or `•`), quiet. */
 .md ul,
 .md ol {
-    padding-left: 1.4rem;
+    padding-left: 20px;
+}
+
+.md li::marker {
+    color: var(--muted);
+    font-size: 13px;
 }
 
 .md h1,
 .md h2,
-.md h3 {
-    font-size: 1rem;
-    color: var(--text);
+.md h3,
+.md h4 {
     margin: 0.9rem 0 0.4rem;
+    color: var(--text);
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.md h1 {
+    font-size: 1.2em;
+}
+
+.md h2 {
+    font-size: 1.1em;
+}
+
+.md h3,
+.md h4 {
+    font-size: 1em;
 }
 
 .md code {
-    font-family: var(--mono);
-    font-size: 0.92em;
+    padding: 2px 6px;
+    border-radius: var(--r-tag);
     background: var(--card-2);
     color: var(--text);
-    border-radius: var(--radius);
-    padding: 1px 5px;
+    font: 12.5px var(--mono);
 }
 
 .md strong {
     color: var(--text);
+    font-weight: 600;
 }
 
-/* A reply's own tables; a diff it shows draws its table itself. */
+/* A reply's own tables, in a card; a diff it shows draws its table itself. */
 .md table:not(.dv-table) {
-    border-collapse: collapse;
     display: block;
+    max-width: fit-content;
     overflow-x: auto;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.93em;
 }
 
 .md table:not(.dv-table) :is(td, th) {
-    border: 1px solid var(--line);
-    padding: 0.25rem 0.5rem;
+    padding: 6px 12px;
+    text-align: left;
     /* Words break only when longer than the cell can be, and a cell keeps room for a few words: a crowded table
      * scrolls sideways instead of crushing its columns. */
     overflow-wrap: break-word;
     min-width: 12ch;
 }
 
+.md table:not(.dv-table) th {
+    background: var(--card);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.md table:not(.dv-table) :is(td, th):not(:last-child) {
+    border-right: 1px solid var(--hair);
+}
+
+.md table:not(.dv-table) tr:not(:last-child) > :is(td, th) {
+    border-bottom: 1px solid var(--hair);
+}
+
 .md blockquote {
     margin: 0.5rem 0;
     padding-left: 0.8rem;
-    border-left: 2px solid var(--line-strong);
+    border-left: 2px solid var(--hair-2);
     color: var(--muted);
 }
 
@@ -1457,18 +1522,20 @@ kbd {
 .code {
     position: relative;
     margin: 0.5rem 0;
-    border: 1px solid var(--line);
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
     background: var(--code-bg);
+    overflow: hidden;
 }
 
 .code-head {
     display: flex;
     align-items: center;
     gap: 8px;
-    height: 30px;
-    padding: 0 6px 0 12px;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.74rem;
+    height: 34px;
+    padding: 0 6px 0 14px;
+    border-bottom: 1px solid var(--hair);
+    font-size: 12px;
     color: var(--muted);
 }
 
@@ -1482,32 +1549,35 @@ kbd {
 
 .code-head .copy {
     flex: none;
-    height: 22px;
+    height: 24px;
     margin-left: auto;
-    padding: 0 8px;
-    font-size: 0.72rem;
-    color: var(--body);
+    padding: 0 9px;
+    border-radius: var(--r-seg);
+    font-size: 12px;
+    color: var(--muted);
     transition:
         color var(--t-hover) var(--ease-out),
         background-color var(--t-hover) var(--ease-out);
 }
 
 .code-head .copy:hover {
-    color: var(--accent);
+    color: var(--text);
     background: var(--hover);
 }
 
 .md pre {
     margin: 0;
-    padding: 10px 12px;
+    padding: 12px 14px;
     overflow-x: auto;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
     background: var(--code-bg);
-    border-radius: var(--radius);
-    font-size: 0.8rem;
-    line-height: 1.55;
+    font: 12.5px / 1.6 var(--mono);
 }
 
 .code pre {
+    border: 0;
+    border-radius: 0;
     background: none;
 }
 
@@ -1533,7 +1603,7 @@ kbd {
 
 /* Chevrons turn instead of swapping: closed points right, open points down. */
 .chev {
-    transition: transform var(--t-in) var(--ease-out);
+    transition: transform 0.3s var(--ease-out);
 }
 
 .open > button > .chev,
@@ -1558,7 +1628,8 @@ kbd {
     flex-wrap: wrap;
     align-items: center;
     gap: 4px;
-    min-height: 28px;
+    min-height: 26px;
+    font-size: 12.5px;
     line-height: 1.6;
 }
 
@@ -1566,19 +1637,23 @@ kbd {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    height: 24px;
-    padding: 0 8px;
-    border: 1px solid var(--line);
-    font-size: 0.74rem;
-    color: var(--body);
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--hair-2);
+    border-radius: var(--r-pill);
+    color: var(--text);
+    white-space: nowrap;
     transition:
         border-color var(--t-hover) var(--ease-out),
-        background-color var(--t-hover) var(--ease-out),
-        color var(--t-hover) var(--ease-out);
+        background-color var(--t-hover) var(--ease-out);
+}
+
+.reaction > span {
+    font: 11.5px var(--mono);
 }
 
 .reaction:hover {
-    border-color: var(--line-strong);
+    border-color: var(--edge);
 }
 
 .reaction.mine {
@@ -1590,11 +1665,13 @@ kbd {
 .reaction.add {
     display: inline-flex;
     align-items: center;
-    height: 24px;
+    flex: none;
+    height: 26px;
     padding: 0 8px;
     border: 0;
-    font-size: 0.74rem;
+    border-radius: var(--r-seg);
     color: var(--muted);
+    white-space: nowrap;
     transition:
         color var(--t-hover) var(--ease-out),
         background-color var(--t-hover) var(--ease-out),
@@ -1625,34 +1702,42 @@ kbd {
     display: inline-flex;
 }
 
+/* The six emoji, in a popover over the button. */
 .reaction-picker {
     position: absolute;
-    bottom: calc(100% + 4px);
+    bottom: calc(100% + 6px);
     left: 0;
     z-index: 5;
     display: flex;
-    gap: 0.1rem;
+    gap: 2px;
+    padding: 4px;
+    border-radius: var(--r-card);
     background: var(--panel);
-    border: 1px solid var(--line-strong);
-    padding: 0.2rem;
+    box-shadow: var(--pop);
+    animation: pop 0.2s var(--ease-out);
 }
 
 .reaction-picker button {
-    font-size: 1.1rem;
-    padding: 0.15rem 0.3rem;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--r-row);
+    font-size: 17px;
+    line-height: 1;
 }
 
 .reaction-picker button:hover {
-    background: var(--card);
+    background: var(--hover);
 }
 
 /* ─── Tool cards ───────────────────────────────────────────── */
 
-/* What Pi did between its words: one line ("Read 2 files, ran 1 command · 18s") that opens into a timeline. */
+/* What Pi did between its words: a card with one line ("Read 2 files, ran 1 command · 18s") that opens into a
+ * timeline. */
 .activity {
-    display: flex;
-    flex-direction: column;
     min-width: 0;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
+    overflow: hidden;
 }
 
 .entry-anchor {
@@ -1662,26 +1747,37 @@ kbd {
 
 /* One between rows takes no room: the gap before it is taken back. */
 .entry-mark {
-    margin-top: -14px;
+    margin-top: -16px;
 }
 
 .activity-head {
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 30px;
-    padding: 2px 8px 2px 2px;
+    gap: 10px;
+    width: 100%;
+    min-height: 40px;
+    padding: 0 12px;
     text-align: left;
-    font-size: 0.8rem;
+    font-size: 13px;
+    line-height: 1.5;
     color: var(--muted);
     transition:
         color var(--t-hover) var(--ease-out),
         background-color var(--t-hover) var(--ease-out);
 }
 
+.activity.open > .activity-head {
+    border-bottom: 1px solid var(--hair);
+}
+
 .activity-head:hover {
     color: var(--text);
     background: var(--hover);
+}
+
+/* Inside a card that cuts off what is past it. */
+:is(.activity-head, .step-head):focus-visible {
+    outline-offset: -2px;
 }
 
 .activity-summary {
@@ -1694,54 +1790,35 @@ kbd {
 
 .activity-time {
     flex: none;
-    font-size: 0.74rem;
+    font: 11.5px var(--mono);
     font-variant-numeric: tabular-nums;
+    color: var(--faint);
 }
 
 .activity-time.live {
     color: var(--accent);
 }
 
-/* The timeline: a line per call, each with its node on a thin rule. */
+/* The timeline: a line per call, each with its mark on a thin rule. */
 .timeline {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    margin: 4px 0 0 8px;
-    border-left: 1px solid var(--line);
+    position: relative;
+    padding: 6px 0;
     animation: unroll var(--t-in) var(--ease-out);
+}
+
+.timeline::before {
+    content: "";
+    position: absolute;
+    left: 22px;
+    top: 20px;
+    bottom: 20px;
+    width: 1px;
+    background: var(--hair-2);
 }
 
 .step {
     position: relative;
     min-width: 0;
-    padding-left: 14px;
-}
-
-.step-node {
-    position: absolute;
-    left: -3px;
-    top: 13px;
-    width: 5px;
-    height: 5px;
-    background: color-mix(in srgb, var(--ok) 40%, var(--bg));
-    transition: background-color var(--t-border) var(--ease-out);
-}
-
-.step[data-status="running"] > .step-node {
-    background: var(--accent);
-}
-
-.step[data-status="approval"] > .step-node {
-    background: var(--warn);
-}
-
-.step[data-status="error"] > .step-node {
-    background: var(--err);
-}
-
-.step:is([data-status="denied"], [data-status="stopped"]) > .step-node {
-    background: var(--line-strong);
 }
 
 .step-line {
@@ -1755,9 +1832,9 @@ kbd {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 8px;
-    min-height: 30px;
-    padding: 3px 8px;
+    gap: 10px;
+    min-height: 34px;
+    padding: 0 14px 0 13px;
     text-align: left;
     transition: background-color var(--t-hover) var(--ease-out);
 }
@@ -1777,32 +1854,62 @@ kbd {
     }
 }
 
-.step-glyph {
+/* How the call went, in a circle on the rule: its tint over the window's color, so the rule does not show through. */
+.step-mark {
+    --tint: var(--card-2);
     flex: none;
-    width: 14px;
-    text-align: center;
-    font-size: 0.78rem;
+    display: grid;
+    place-items: center;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    background: linear-gradient(var(--tint), var(--tint)), var(--o-bg);
+    box-shadow: 0 0 0 3px var(--o-bg);
     color: var(--muted);
+    font: 600 10px / 1 var(--mono);
+    transition:
+        background-color var(--t-border) var(--ease-out),
+        color var(--t-border) var(--ease-out);
 }
 
-.step-glyph.thought {
+.step-mark.done {
+    --tint: var(--ok-soft);
+    color: var(--ok);
+}
+
+.step-mark.error {
+    --tint: var(--err-soft);
+    color: var(--err);
+}
+
+.step-mark.approval {
+    --tint: var(--warn-soft);
+    color: var(--warn);
+    box-shadow:
+        inset 0 0 0 1px var(--warn-line),
+        0 0 0 3px var(--o-bg);
+}
+
+.step-mark.running,
+.step-mark.agent {
+    --tint: var(--accent-soft);
+    color: var(--accent);
+}
+
+.step-mark.thought {
+    --tint: color-mix(in srgb, var(--spark) 16%, transparent);
     color: var(--spark);
 }
 
 /* Light themes' magenta can be faint as text on their ground: toward the foreground, as code's colors are. */
-:root[data-mode="light"] .step-glyph.thought {
+:root[data-mode="light"] .step-mark.thought {
     color: color-mix(in oklab, var(--spark) 60%, var(--o-fg));
-}
-
-.step-glyph.agent {
-    color: var(--accent);
 }
 
 .step-label {
     flex: none;
     max-width: 45%;
-    font-size: 0.8rem;
-    font-weight: 600;
+    font: 600 12.5px var(--mono);
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
@@ -1812,7 +1919,7 @@ kbd {
 .step-subject {
     flex: 1;
     min-width: 0;
-    font-size: 0.8rem;
+    font: 12.5px var(--mono);
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
@@ -1822,7 +1929,7 @@ kbd {
 .step-meta {
     flex: none;
     max-width: 40%;
-    font-size: 0.74rem;
+    font: 12px var(--mono);
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
@@ -1845,9 +1952,11 @@ kbd {
 /* A subagent's line goes to it. */
 .step-open {
     flex: none;
-    height: 30px;
+    height: 28px;
+    margin-right: 8px;
     padding: 0 8px;
-    font-size: 0.74rem;
+    border-radius: var(--r-seg);
+    font-size: 12px;
     color: var(--accent);
     transition: background-color var(--t-hover) var(--ease-out);
 }
@@ -1861,19 +1970,27 @@ kbd {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 0 8px 6px 30px;
-    font-size: 0.72rem;
+    padding: 0 14px 6px 42px;
+    font-size: 12px;
     color: var(--muted);
 }
 
-/* Under a line, past its glyph: what the call made, and once tapped, its input and output. */
+.step-decision.allowed .icon {
+    color: var(--ok);
+}
+
+.step-decision.denied .icon {
+    color: var(--err);
+}
+
+/* Under a line, in line with its words: what the call made, and once tapped, its input and output. */
 .step-extras,
 .step-body {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     min-width: 0;
-    margin: 2px 8px 8px 30px;
+    margin: 2px 14px 10px 42px;
 }
 
 .step-extras + .step-body {
@@ -1899,11 +2016,12 @@ kbd {
 .thought-body {
     max-height: 50vh;
     overflow: auto;
-    padding: 8px 10px;
-    border: 1px solid var(--line);
+    padding: 10px 12px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-control);
     background: var(--code-bg);
-    font-size: 0.76rem;
-    line-height: 1.5;
+    font-size: 13px;
+    line-height: 1.55;
     color: var(--muted);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1911,11 +2029,13 @@ kbd {
 
 .tool-note {
     white-space: pre-wrap;
-    font-size: 0.8rem;
+    font-size: 13px;
     color: var(--muted);
 }
 
 .step-body .dv-block {
+    border-radius: var(--r-control);
+    overflow: hidden;
     font-size: 0.76rem;
     line-height: 1.6;
 }
@@ -1924,16 +2044,16 @@ pre.output,
 pre.cmd,
 pre.diff {
     margin: 0;
-    font: 0.76rem/1.5 var(--mono);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    padding: 10px 12px;
     max-height: 45vh;
     overflow: auto;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-control);
     background: var(--code-bg);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 8px 10px;
     color: var(--body);
+    font: 12px / 1.55 var(--mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 pre.cmd {
@@ -1952,6 +2072,10 @@ pre.diff .del {
     color: var(--err);
 }
 
+.cmd-sign {
+    color: var(--faint);
+}
+
 /* An artifact a call made, or the browser it used: a way there. */
 .artifact-link {
     align-self: flex-start;
@@ -1959,8 +2083,9 @@ pre.diff .del {
     min-height: 30px;
     padding: 0 8px;
     margin-left: -8px;
+    border-radius: var(--r-seg);
     text-align: left;
-    font-size: 0.76rem;
+    font-size: 12.5px;
     color: var(--accent);
     overflow-wrap: anywhere;
     transition: background-color var(--t-hover) var(--ease-out);
@@ -1970,32 +2095,32 @@ pre.diff .del {
     background: var(--hover);
 }
 
+/* A subagent's report: a card. */
 .report {
-    border: 1px solid var(--line);
-    border-left: 2px solid var(--accent);
+    padding: 12px 14px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-window);
     background: var(--card);
-    border-radius: var(--radius);
-    padding: 0.5rem 0.75rem;
 }
 
 .report.failed {
-    border-left-color: var(--err);
+    border-color: var(--err-line);
 }
 
 /* Reports that arrived together, as one message to Pi: a card each. */
 .report-group {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 8px;
 }
 
 .report-head {
-    font-size: 0.85rem;
-    color: var(--muted);
     display: flex;
     gap: 0.4rem;
     align-items: center;
-    margin-bottom: 0.25rem;
+    margin-bottom: 4px;
+    font-size: 13px;
+    color: var(--muted);
 }
 
 .report-name {
@@ -2006,7 +2131,7 @@ pre.diff .del {
 
 .report-why {
     color: var(--err);
-    font-size: 0.85rem;
+    font-size: 13px;
     overflow-wrap: anywhere;
 }
 
@@ -2014,30 +2139,57 @@ pre.diff .del {
 .approval {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 12px 14px;
+    gap: 12px;
+    padding: 16px;
     border: 1px solid var(--warn-line);
-    border-left: 2px solid var(--warn);
+    border-radius: 16px;
     background: var(--warn-soft);
-    animation: popin var(--t-in) var(--ease-out);
+    animation: pop 0.35s var(--ease-out);
 }
 
 .approval-head {
     display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.86rem;
-    font-weight: 600;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.approval-shield {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: var(--r-row);
+    background: color-mix(in srgb, var(--o-yellow) 16%, transparent);
     color: var(--warn);
 }
 
+.approval-title {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.approval-ask {
+    font-size: 14.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--text);
+}
+
 .approval-reason {
-    font-size: 0.8rem;
-    color: var(--body);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--muted);
 }
 
 .approval pre.cmd {
-    font-size: 0.8rem;
+    padding: 10px 12px;
+    border: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
 }
 
 .approval-actions {
@@ -2047,43 +2199,93 @@ pre.diff .del {
 }
 
 .approval-actions .button {
-    height: 32px;
-    padding: 0 14px;
-    font-size: 0.84rem;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: var(--r-control);
+    font-size: 13.5px;
+}
+
+.approval-actions .button.deny {
+    border-color: transparent;
+    background: var(--card-2);
+    color: var(--text);
 }
 
 .approval-actions .button.deny:hover {
-    border-color: var(--err);
     color: var(--err);
+}
+
+/* On a phone: the answers share the width, thumb-tall. */
+@media (max-width: 699px) {
+    .approval {
+        padding: 14px;
+    }
+
+    .approval-shield {
+        width: 30px;
+        height: 30px;
+    }
+
+    .approval-ask {
+        font-size: 14px;
+    }
+
+    .approval-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .approval-actions .button {
+        height: 42px;
+        border-radius: 11px;
+        font-size: 14px;
+    }
 }
 
 /* The live turn's last line: what Pi does now, for how long, and how to stop it. */
 .live-line {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 9px;
     min-width: 0;
     padding: 2px 2px 0;
-    font-size: 0.78rem;
+    font-size: 13px;
+    line-height: 1.5;
     color: var(--muted);
-    font-variant-numeric: tabular-nums;
     animation: fade var(--t-fade) var(--ease-almost);
+}
+
+/* A dot with a soft ring, pulsing; the warning color while a call waits for an approval. */
+.live-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    margin-inline: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-soft);
+    animation: pulse 1.4s infinite;
+}
+
+.live-line.waiting .live-dot {
+    background: var(--warn);
+    box-shadow: 0 0 0 4px var(--warn-soft);
 }
 
 .live-state {
     flex: none;
-    color: var(--body);
+    color: var(--accent);
 }
 
 .live-line.waiting .live-state {
     color: var(--warn);
 }
 
-.live-wait {
+.live-time {
     flex: none;
-    width: 8px;
-    height: 8px;
-    background: var(--warn);
+    font: 11.5px var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--faint);
 }
 
 .live-why {
@@ -2096,12 +2298,13 @@ pre.diff .del {
 .live-esc {
     flex: none;
     margin-left: auto;
+    font: 11px var(--mono);
     color: var(--faint);
 }
 
 /*
- * Show thinking adds the timeline's bare chevron before the spinner. It turns up when open, toward the thought above
- * the line. Its hit area reaches past the glyph without drawing a box, and the gap after it stays the line's own.
+ * Show thinking adds the timeline's bare chevron before the dot. It turns up when open, toward the thought above the
+ * line. Its hit area reaches past the glyph without drawing a box, and the gap after it stays the line's own.
  */
 .live-fold {
     display: inline-flex;
@@ -2148,16 +2351,16 @@ pre.diff .del {
 /* A quiet reading area, not another timeline card. The existing Thought steps and their boxes are unchanged. */
 .live-thought {
     min-width: 0;
-    margin: 2px 0 -4px 6px;
-    padding: 2px 0 2px 14px;
-    border-left: 2px solid var(--accent-line);
+    padding: 10px 14px 12px;
+    border-radius: var(--r-card);
+    background: var(--card);
     animation: fade var(--t-fade) var(--ease-almost);
 }
 
 .live-thought-label {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     color: var(--faint);
-    font-size: 0.68rem;
+    font-size: 11.5px;
 }
 
 .live-thought-text {
@@ -2166,7 +2369,7 @@ pre.diff .del {
     overscroll-behavior: contain;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
-    font-size: 0.8rem;
+    font-size: 13px;
     line-height: 1.65;
     color: var(--muted);
 }
@@ -2187,13 +2390,12 @@ pre.diff .del {
 }
 
 .error-box {
+    padding: 10px 14px;
     border: 1px solid var(--err-line);
-    border-left: 2px solid var(--err);
+    border-radius: var(--r-card);
     background: var(--err-soft);
     color: var(--err);
-    border-radius: var(--radius);
-    padding: 0.5rem 0.7rem;
-    font-size: 0.87rem;
+    font-size: 13.5px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
@@ -2201,26 +2403,26 @@ pre.diff .del {
 .divider {
     text-align: center;
     color: var(--muted);
-    font-size: 0.82rem;
-    border-top: 1px dashed var(--line);
+    font-size: 13px;
+    border-top: 1px solid var(--hair);
     padding-top: 0.5rem;
 }
 
 .divider-body {
     text-align: left;
     margin-top: 0.5rem;
-    font-size: 0.86rem;
+    font-size: 13.5px;
 }
 
 .history {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     opacity: 0.75;
 }
 
 .history > :is(.user-row, .report, .report-group):not(:first-child) {
-    margin-top: 8px;
+    margin-top: 10px;
 }
 
 .pulse {
@@ -2238,6 +2440,7 @@ pre.diff .del {
     }
 }
 
+/* The way back to the newest message. */
 .jump {
     position: sticky;
     bottom: 0.8rem;
@@ -2245,9 +2448,10 @@ pre.diff .del {
     margin-right: 0.8rem;
     width: 40px;
     height: 40px;
-    border-radius: var(--radius);
+    border: 1px solid var(--hair-2);
+    border-radius: var(--r-pill);
     background: var(--bg);
-    border: 2px solid var(--line-strong);
+    box-shadow: var(--shadow);
     color: var(--body);
     display: grid;
     place-items: center;
@@ -2260,7 +2464,7 @@ pre.diff .del {
 }
 
 .jump:hover {
-    border-color: var(--accent);
+    border-color: var(--accent-line);
     color: var(--accent);
 }
 
@@ -2271,8 +2475,8 @@ pre.diff .del {
 /* ─── Composer ─────────────────────────────────────────────── */
 
 .composer-wrap {
-    padding: 6px 20px calc(env(safe-area-inset-bottom) + 10px);
-    max-width: 784px;
+    padding: 4px 24px calc(env(safe-area-inset-bottom) + 12px);
+    max-width: 768px;
     width: 100%;
     margin: 0 auto;
 }
@@ -2293,7 +2497,7 @@ pre.diff .del {
     line-height: 1.25rem;
     margin: 0 0 0.25rem 0.1rem;
     color: var(--muted);
-    font-size: 0.74rem;
+    font-size: 12px;
 }
 
 /* How many wait, when the queue does not show them all. */
@@ -2355,11 +2559,12 @@ pre.diff .del {
     display: flex;
     align-items: center;
     gap: 8px;
-    min-height: 32px;
-    padding: 0 4px 0 10px;
+    min-height: 34px;
+    padding: 0 4px 0 12px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-control);
     background: var(--card);
-    border-left: 2px solid var(--accent);
-    font-size: 0.82rem;
+    font-size: 13px;
 }
 
 .queued-mode {
@@ -2387,15 +2592,14 @@ pre.diff .del {
 .commands {
     display: flex;
     flex-direction: column;
-    margin-bottom: 0.35rem;
+    gap: 2px;
+    margin-bottom: 6px;
+    padding: 4px;
     background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
     max-height: 40vh;
     overflow-y: auto;
-}
-
-.commands {
     animation: rise-in 0.3s var(--ease-out);
 }
 
@@ -2405,21 +2609,15 @@ pre.diff .del {
     gap: 0.5rem;
     width: 100%;
     text-align: left;
-    padding: 0.45rem 0.6rem;
-    font-size: 0.85rem;
-    border-left: 2px solid transparent;
-    transition:
-        background-color var(--t-hover) var(--ease-out),
-        border-color var(--t-hover) var(--ease-out);
+    padding: 7px 10px;
+    border-radius: var(--r-row);
+    font-size: 13px;
+    transition: background-color var(--t-hover) var(--ease-out);
 }
 
-.command:hover {
-    background: var(--hover);
-}
-
+.command:hover,
 .command.on {
     background: var(--hover);
-    border-left-color: var(--accent);
 }
 
 .command-name {
@@ -2465,13 +2663,13 @@ pre.diff .del {
 .file-option mark {
     background: none;
     color: var(--accent);
-    font-weight: 800;
+    font-weight: 700;
 }
 
 .file-note {
-    font-size: 0.78rem;
+    font-size: 12.5px;
     color: var(--muted);
-    padding: 0.4rem 0.6rem;
+    padding: 7px 10px;
 }
 
 .command-hint.wraps {
@@ -2479,48 +2677,57 @@ pre.diff .del {
 }
 
 .command-hint {
-    font-size: 0.78rem;
-    padding: 0 0.4rem 0.3rem;
+    font-size: 12.5px;
+    padding: 0 10px 6px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* The message box: a quiet card whose border takes the accent while it has the focus. */
+/* The message box: a card that takes the accent's line while it has the focus. */
 .composer {
     position: relative;
     background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+    border: 1px solid var(--hair-2);
+    border-radius: var(--r-sheet);
+    box-shadow: var(--shadow);
     transition: border-color var(--t-border) var(--ease-out);
 }
 
 .composer:focus-within {
-    border-color: var(--accent);
+    border-color: var(--accent-line);
+}
+
+@media (max-width: 699px) {
+    .composer {
+        border-radius: var(--r-float);
+    }
 }
 
 .composer .files {
     margin: 0;
-    padding: 8px 12px 0;
+    padding: 10px 14px 0;
 }
 
 /* One line to start with, growing with the text (`fitBox`). */
 .composer textarea {
     display: block;
     border: 0;
+    border-radius: 0;
     outline: none;
     background: none;
     color: var(--text);
     resize: none;
-    padding: 10px 12px 2px;
+    padding: 14px 16px 2px;
     max-height: 40vh;
-    font-size: 0.9rem;
+    font-size: 15px;
     line-height: 1.5;
 }
 
 /* Touch screens keep 16px, below which iOS zooms into the field. */
 @media (pointer: coarse) {
     .composer textarea {
+        padding: 13px 15px 2px;
         font-size: 16px;
     }
     /* The status line's own room below it is enough. */
@@ -2532,13 +2739,21 @@ pre.diff .del {
 .composer-row {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 6px 6px;
+    gap: 6px;
+    padding: 6px 10px 10px;
+}
+
+@media (max-width: 699px) {
+    .composer-row {
+        gap: 4px;
+        padding: 6px 8px 8px;
+    }
 }
 
 .composer-row .attach-button {
     width: 32px;
     height: 32px;
+    border-radius: var(--r-control);
     color: var(--muted);
 }
 
@@ -2548,19 +2763,18 @@ pre.diff .del {
     align-items: center;
     gap: 6px;
     min-width: 0;
-    height: 28px;
-    padding: 0 9px;
-    font-size: 0.76rem;
-    color: var(--body);
+    height: 30px;
+    padding: 0 10px 0 11px;
+    border-radius: var(--r-pill);
+    background: var(--hover);
+    font-size: 13px;
+    color: var(--text);
     white-space: nowrap;
-    transition:
-        background-color var(--t-hover) var(--ease-out),
-        color var(--t-hover) var(--ease-out);
+    transition: background-color var(--t-hover) var(--ease-out);
 }
 
 .model-chip:hover {
-    background: var(--hover);
-    color: var(--text);
+    background: var(--card-2);
 }
 
 .model-chip .model-spark {
@@ -2575,6 +2789,12 @@ pre.diff .del {
 
 .model-chip .model-level {
     color: var(--muted);
+}
+
+/* The chevron points down: the menu opens up from it, over the conversation. */
+.model-chip .model-caret {
+    color: var(--faint);
+    transform: rotate(90deg);
 }
 
 .model-chip.warn {
@@ -2630,16 +2850,29 @@ button.chip:hover {
     background: var(--accent-soft);
 }
 
+/* Plan mode: an outlined pill, filled softly in the accent while it is on. */
 .composer-row .plan-chip {
     flex: none;
-    height: 26px;
-    padding: 0 9px;
-    font-size: 0.74rem;
-    background: none;
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid var(--hair-2);
+    border-radius: var(--r-pill);
+    font-size: 13px;
     color: var(--muted);
+    white-space: nowrap;
+    transition:
+        background-color var(--t-hover) var(--ease-out),
+        border-color var(--t-hover) var(--ease-out),
+        color var(--t-hover) var(--ease-out);
+}
+
+.composer-row .plan-chip:hover {
+    color: var(--text);
 }
 
 .composer-row .plan-chip.on {
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
     color: var(--accent);
 }
 
@@ -2647,13 +2880,17 @@ button.chip:hover {
 .mode-switch {
     flex: none;
     display: flex;
-    height: 26px;
-    border: 1px solid var(--line);
+    padding: 2px;
+    border-radius: var(--r-pill);
+    background: var(--hover);
 }
 
 .mode-switch button {
-    padding: 0 9px;
-    font-size: 0.74rem;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: var(--r-pill);
+    font-size: 12.5px;
+    font-weight: 500;
     color: var(--muted);
     transition:
         color var(--t-hover) var(--ease-out),
@@ -2665,20 +2902,20 @@ button.chip:hover {
 }
 
 .mode-switch button.on {
-    color: var(--accent);
-    background: var(--accent-soft);
+    color: var(--text);
+    background: var(--raised);
 }
 
 .stop-button,
 .send-button {
     flex: none;
-    width: 32px;
-    height: 32px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
     display: grid;
     place-items: center;
     transition:
         background-color var(--t-hover) var(--ease-out),
-        border-color var(--t-hover) var(--ease-out),
         color var(--t-hover) var(--ease-out),
         transform 90ms var(--ease-out);
 }
@@ -2688,18 +2925,19 @@ button.chip:hover {
     transform: scale(0.92);
 }
 
+/* Stop: a square in the failure color, on its soft tint. */
 .stop-button {
-    background: var(--card-2);
-    border: 1px solid var(--line-strong);
+    background: var(--err-soft);
 }
 
 .stop-button:hover {
-    border-color: var(--err);
+    background: color-mix(in srgb, var(--o-red) 22%, transparent);
 }
 
 .stop-square {
-    width: 12px;
-    height: 12px;
+    width: 11px;
+    height: 11px;
+    border-radius: var(--r-mark);
     background: var(--err);
 }
 
@@ -2736,6 +2974,7 @@ button.chip:hover {
 .composer-row .composer-mic {
     width: 32px;
     height: 32px;
+    border-radius: var(--r-control);
     color: var(--muted);
 }
 
@@ -2750,7 +2989,7 @@ button.chip:hover {
     position: absolute;
     inset: 0;
     border: 1px solid var(--accent);
-    border-radius: var(--radius);
+    border-radius: var(--r-control);
     pointer-events: none;
     animation: listening 1.6s var(--ease-out) infinite;
 }
@@ -2820,16 +3059,22 @@ button.chip:hover {
 }
 
 /* Under the message box: who is here, how fast the last answer came, the context, the cache, the spend, and Lancet
- * Guard. */
+ * Guard. Its numbers are in mono. */
 .status-line {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: center;
-    gap: 4px 12px;
-    padding-top: 6px;
-    font: 0.72rem var(--mono);
+    gap: 4px 14px;
+    padding-top: 8px;
+    font-size: 11.5px;
+    line-height: 16px;
     color: var(--muted);
+    white-space: nowrap;
+}
+
+.status-line .num {
+    font: 11px var(--mono);
     font-variant-numeric: tabular-nums;
 }
 
@@ -2843,15 +3088,20 @@ button.chip:hover {
     width: 36px;
 }
 
+/* Lancet Guard: a pill that opens Extensions, green while it guards and yellow while it does not. */
 .status-line .guard {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    padding: 2px 8px;
+    border-radius: var(--r-pill);
+    background: var(--ok-soft);
     color: var(--ok);
     font: inherit;
 }
 
 .status-line .guard.off {
+    background: var(--warn-soft);
     color: var(--warn);
 }
 
@@ -4667,34 +4917,105 @@ button.rail-brand:hover {
     color: var(--muted);
 }
 
-/* Thinking: one bar of levels, the chosen one outlined. Past the general segmented rules, which come later. */
-.segmented.model-levels {
-    flex-wrap: nowrap;
-    gap: 0;
-    padding: 2px;
-    border: 1px solid var(--line);
-    background: var(--bg);
-}
-
-.segmented.model-levels button {
-    flex: 1;
-    min-width: 0;
-    padding: 0.3rem 0.15rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    border-color: transparent;
-    background: none;
+/*
+ * The model picker, above the model chip: a header with the way to Providers, a row per model (its provider under its
+ * name, a check on the current one), and Thinking's levels in one track.
+ */
+.model-menu .pop-menu-head {
+    padding: 12px 14px 8px;
+    border-bottom: 0;
+    font-size: 12.5px;
+    font-weight: 500;
     color: var(--muted);
 }
 
-.segmented.model-levels button.on {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+.model-menu .pop-menu-link {
+    gap: 5px;
+    font-size: 12.5px;
     color: var(--accent);
 }
 
+.model-menu .pop-menu-list {
+    padding: 0 6px 6px;
+}
+
+.model-menu .pop-menu-row {
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 0;
+    border-radius: var(--r-row);
+}
+
+.model-menu .pop-menu-row.current {
+    background: var(--card);
+}
+
+.model-menu .pop-menu-row.on {
+    background: var(--hover);
+    box-shadow: none;
+}
+
+.model-menu .pop-menu-row-text {
+    line-height: 1.35;
+}
+
+.model-menu .pop-menu-row-name {
+    font-size: 13.5px;
+}
+
+.model-menu .pop-menu-row.current .pop-menu-row-name {
+    font-weight: 500;
+}
+
+.model-menu .pop-menu-row-sub {
+    font: 11px var(--mono);
+    color: var(--faint);
+}
+
+.model-menu .pop-menu-foot {
+    padding: 10px 14px 14px;
+    border-top: 1px solid var(--hair);
+}
+
+.model-menu .pop-menu-foot .label {
+    margin-bottom: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+/* Thinking: the levels in one track, the chosen one raised. Past the general segmented rules, which come later. */
+.segmented.model-levels {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: 0;
+    padding: 3px;
+    border: 0;
+    border-radius: var(--r-control);
+    background: var(--card);
+}
+
+.segmented.model-levels button {
+    height: 26px;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border: 0;
+    border-radius: var(--r-seg);
+    background: none;
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 500;
+}
+
+.segmented.model-levels button.on {
+    background: var(--raised);
+    color: var(--text);
+}
+
 .segmented.model-levels button:not(.on):hover {
-    border-color: transparent;
     color: var(--text);
 }
 
@@ -6144,30 +6465,47 @@ textarea.notes {
     line-height: 1.5;
 }
 
-/* Bars above the message box: who drives (take turns), plan mode, a goal, a PR watch, and project trust. The left edge
-   says which: the accent for plan mode, a goal, and a watch, the warning color for a question (who drives, whether to
+/* Bars above the message box: who drives (take turns), plan mode, a goal, a PR watch, and project trust. The dot says
+   which: the accent for plan mode, a goal, and a watch, the warning color for a question (who drives, whether to
    trust) and for a watch that had to stop. */
 .driver-bar,
 .plan-bar,
 .goal-bar,
 .watch-bar,
-.trust-bar {
+.trust-bar,
+.view-only {
+    --tone: var(--warn);
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.4rem 0.7rem;
+    gap: 6px 10px;
+    padding: 6px 10px 6px 14px;
+    margin-bottom: 5px;
     background: var(--card);
-    border: 1px solid var(--line);
-    border-left: 2px solid var(--warn);
-    padding: 0.4rem 0.6rem;
-    margin-bottom: 0.35rem;
-    font-size: 0.82rem;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.driver-bar::before,
+.plan-bar::before,
+.goal-bar::before,
+.watch-bar::before,
+.trust-bar::before,
+.view-only::before {
+    content: "";
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--tone);
 }
 
 .plan-bar,
 .goal-bar,
 .watch-bar:is(.watching, .merged, .closed) {
-    border-left-color: var(--accent);
+    --tone: var(--accent);
 }
 
 .watch-bar a {
@@ -6207,7 +6545,7 @@ textarea.notes {
 }
 
 .driver-bar.mine {
-    border-left-color: var(--ok);
+    --tone: var(--ok);
 }
 
 .driver-label {
@@ -6227,14 +6565,7 @@ textarea.notes {
 }
 
 .view-only {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-left: 2px solid var(--muted);
-    padding: 0.55rem 0.7rem;
-    font-size: 0.82rem;
+    --tone: var(--muted);
 }
 
 .view-only > span {
@@ -6447,11 +6778,11 @@ textarea.notes {
 
 /* Done when: a goal met, or one Pi gave up on. */
 .goal-bar.met {
-    border-left-color: var(--ok);
+    --tone: var(--ok);
 }
 
 .goal-bar.gave-up {
-    border-left-color: var(--warn);
+    --tone: var(--warn);
 }
 
 /* Running now: a session, then what is at work in it. */
@@ -9127,10 +9458,9 @@ textarea.notes {
 
 .shell-card {
     background: var(--card);
-    border: 1px solid var(--line);
-    border-left: 2px solid var(--ok);
-    border-radius: var(--radius);
-    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
+    padding: 10px 14px;
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
@@ -9141,11 +9471,7 @@ textarea.notes {
 }
 
 .shell-card.failed {
-    border-left-color: var(--err);
-}
-
-.shell-row.pending .shell-card {
-    border-left-color: var(--line-strong);
+    border-color: var(--err-line);
 }
 
 .shell-head {
@@ -9153,7 +9479,7 @@ textarea.notes {
     flex-wrap: wrap;
     align-items: center;
     gap: 0.3rem 0.6rem;
-    font-size: 0.84rem;
+    font-size: 13px;
 }
 
 .shell-command {
@@ -9171,8 +9497,8 @@ textarea.notes {
 
 .note-line {
     text-align: center;
-    font-size: 0.8rem;
-    color: var(--body);
+    font-size: 12.5px;
+    color: var(--muted);
 }
 
 /* Changes: open a file or undo it. */
@@ -9361,12 +9687,16 @@ textarea.notes {
 .rich-tabs {
     display: inline-flex;
     margin-left: 0.4rem;
-    border: 1px solid var(--line);
+    padding: 2px;
+    border-radius: var(--r-row);
+    background: var(--hover);
 }
 
 .rich-tabs button,
 .rich-run {
-    padding: 0.1rem 0.5rem;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: var(--r-seg);
     font: inherit;
     color: var(--muted);
     transition:
@@ -9374,27 +9704,27 @@ textarea.notes {
         background-color var(--t-hover) var(--ease-out);
 }
 
-.rich-tabs button + button {
-    border-left: 1px solid var(--line);
-}
-
 .rich-tabs button:hover,
 .rich-run:hover {
     color: var(--text);
-    background: var(--hover);
 }
 
 .rich-tabs button.on {
-    color: var(--accent);
-    background: var(--accent-soft);
+    color: var(--text);
+    background: var(--raised);
 }
 
 .rich-run {
-    border: 1px solid var(--line);
+    background: var(--ok-soft);
+    color: var(--ok);
+}
+
+.rich-run:hover {
     color: var(--ok);
 }
 
 .rich-run.on {
+    background: var(--err-soft);
     color: var(--err);
 }
 
@@ -9403,13 +9733,15 @@ textarea.notes {
 .run-frame {
     display: block;
     width: 100%;
-    border: 1px solid var(--line);
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
     background: #fff;
 }
 
 /* Inside a code block's frame, its own border is the frame's. */
 .code > :is(.html-preview, .run-frame, .rich-svg, .rich-note) {
     border: 0;
+    border-radius: 0;
 }
 
 .rich-svg {
@@ -9417,7 +9749,8 @@ textarea.notes {
     max-width: 100%;
     max-height: 70vh;
     padding: 0.6rem;
-    border: 1px solid var(--line);
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
     background: #fff;
     cursor: zoom-in;
 }
@@ -9429,7 +9762,8 @@ textarea.notes {
 .rich-note {
     margin: 0;
     padding: 0.6rem;
-    border: 1px solid var(--line);
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
 }
 
 /* A long code block, folded to its first lines until asked for the rest. */
@@ -9442,11 +9776,11 @@ textarea.notes {
 .code-more {
     display: block;
     width: 100%;
-    padding: 0.3rem;
-    border-top: 1px solid var(--line);
+    padding: 6px;
+    border-top: 1px solid var(--hair);
     background: var(--card);
     color: var(--accent);
-    font: 0.74rem var(--mono);
+    font: 12px var(--mono);
 }
 
 .code-more:hover {
@@ -9575,13 +9909,16 @@ textarea.notes {
 @media (max-width: 699px) {
     .composer-row .places-button {
         display: inline-grid;
-        width: 36px;
+        width: 32px;
         height: 36px;
         color: var(--muted);
     }
     .composer-row .places-button .browser-dot {
         top: 6px;
-        right: 6px;
+        right: 5px;
+        width: 7px;
+        height: 7px;
+        box-shadow: 0 0 0 2px var(--card);
     }
     /* Room for it: the model's name gives way first. */
     .composer-row .model-chip {
@@ -9589,8 +9926,12 @@ textarea.notes {
         padding-inline: 6px;
     }
     /* While Pi works, Steer and Queue take the plan chip's place (`/plan` still turns plan mode on or off). */
-    .composer.busy .plan-chip {
+    .composer.busy .plan-chip,
+    .composer.busy .model-caret {
         display: none;
+    }
+    .mode-switch button {
+        padding-inline: 8px;
     }
     /* While Pi works the row is full: the mic takes Send's place while there is nothing to send, and gives it back once
        there is (staying while it listens, to stop it). */
@@ -9874,24 +10215,42 @@ textarea.notes {
     .search .icon-button.small::before {
         content: none;
     }
-    .composer-row .chip,
-    .composer-row .model-chip,
-    .composer-row .mode-switch {
-        min-height: 36px;
+    .composer-row .attach-button {
+        width: 32px;
+        height: 36px;
     }
-    .composer-row .attach-button,
-    .composer-row .composer-mic,
+    .composer-row .composer-mic {
+        width: 32px;
+        height: 36px;
+    }
     .composer-row .stop-button,
     .composer-row .send-button {
         width: 36px;
         height: 36px;
     }
     /* Kept small to fit one line on a phone; a layer past each takes a tap about 40px wide and tall. */
-    .composer-row :is(.places-button, .attach-button, .composer-mic, .stop-button, .send-button) {
+    .composer-row
+        :is(
+            .places-button,
+            .attach-button,
+            .model-chip,
+            .plan-chip,
+            .composer-mic,
+            .stop-button,
+            .send-button
+        ) {
         position: relative;
     }
     .composer-row
-        :is(.places-button, .attach-button, .composer-mic, .stop-button, .send-button)::before {
+        :is(
+            .places-button,
+            .attach-button,
+            .model-chip,
+            .plan-chip,
+            .composer-mic,
+            .stop-button,
+            .send-button
+        )::before {
         content: "";
         position: absolute;
         inset: -4px -2px;
@@ -9905,13 +10264,9 @@ textarea.notes {
         position: absolute;
         inset: -4px 0;
     }
-    /* A group's line and a call's line, a little taller for a thumb. */
-    .activity-head,
+    /* A call's line, a little taller for a thumb. */
     .step-head {
         min-height: 36px;
-    }
-    .step-node {
-        top: 16px;
     }
     .browser-servers .chip,
     .dr-tools .chip {
@@ -10294,20 +10649,15 @@ textarea.notes {
 
 /*
  * The subagents bar, above the message box. Folded: a dot per subagent (pulsing while it works), the counts, and what the
- * newest one does. Unfolded: a row each, which opens it. The left edge is the accent while one works, then "done".
+ * newest one does. Unfolded: a row each, which opens it.
  */
 .agents-bar {
     background: var(--card);
-    border: 1px solid var(--line);
-    border-left: 2px solid var(--ok);
-    border-radius: var(--radius);
-    margin-bottom: 0.35rem;
-    font-size: 0.82rem;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
+    margin-bottom: 6px;
+    font-size: 13px;
     overflow: hidden;
-}
-
-.agents-bar.busy {
-    border-left-color: var(--accent);
 }
 
 .agents-top {
@@ -10319,11 +10669,11 @@ textarea.notes {
 .agents-summary {
     flex: 1;
     min-width: 0;
-    min-height: 2.4rem;
+    min-height: 36px;
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.4rem 0.6rem;
+    gap: 10px;
+    padding: 0 12px;
     background: none;
     border: 0;
     color: var(--text);
@@ -10379,7 +10729,7 @@ textarea.notes {
     min-width: 0;
     color: var(--muted);
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: 12px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -10405,9 +10755,9 @@ textarea.notes {
     align-items: baseline;
     gap: 0.25rem 0.6rem;
     padding: 0.35rem 0.75rem 0.45rem;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--hair);
     color: var(--warn);
-    font-size: 0.76rem;
+    font-size: 12.5px;
     line-height: 1.4;
 }
 
@@ -10416,20 +10766,20 @@ textarea.notes {
 }
 
 .agents-bar:has(.agents-held) {
-    border-left-color: var(--warn);
+    border-color: var(--warn-line);
 }
 
 .agents-list {
     max-height: min(40vh, 22rem);
     overflow-y: auto;
     overscroll-behavior: contain;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--hair);
 }
 
 .agent-row {
     display: flex;
     align-items: center;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--hair);
 }
 
 .agent-row:last-child {
@@ -10454,7 +10804,7 @@ textarea.notes {
 }
 
 .agent-open:hover {
-    background: var(--card-2);
+    background: var(--hover);
 }
 
 .agent-mark {
@@ -10524,7 +10874,7 @@ textarea.notes {
 
 .agent-now {
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: 12px;
 }
 
 .agent-asked {
