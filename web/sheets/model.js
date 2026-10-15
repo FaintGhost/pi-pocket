@@ -166,7 +166,7 @@ export function ModelPicker() {
 
     return html`<div
         class="overlay pop-overlay"
-        onClick=${(event) => event.target === event.currentTarget && closeSheet()}
+        onMouseDown=${(event) => event.target === event.currentTarget && closeSheet()}
     >
         <section
             class=${`pop-menu ${anchor ? (anchor.down ? "down" : "") : "free"}`}

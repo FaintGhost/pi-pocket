@@ -1314,7 +1314,7 @@ export function Drawer() {
     return html`<div class=${leaving ? "leaving" : ""} inert=${leaving}>
         <div
             class="overlay drawer-overlay"
-            onClick=${(event) => event.target === event.currentTarget && close()}
+            onMouseDown=${(event) => event.target === event.currentTarget && close()}
         >
             <aside class="drawer" ref=${ref}>
                 <${RailNav} />

@@ -1158,7 +1158,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null }
 
     return html`<div
         class="overlay"
-        onClick=${(event) => event.target === event.currentTarget && onClose()}
+        onMouseDown=${(event) => event.target === event.currentTarget && onClose()}
     >
         <section
             class=${`sheet ${wide ? "wide" : ""}`}
