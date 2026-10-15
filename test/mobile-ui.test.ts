@@ -1896,17 +1896,7 @@ test(
             assert.equal(head.overlaps, false, `${size}: nothing over anything else`);
             assert.deepEqual(
                 head.buttons.map((button) => button.label),
-                [
-                    "Compact",
-                    "Start fresh",
-                    "Open as a conversation",
-                    ...((await inPage<boolean>(
-                        `return JSON.stringify((await import('/pip-popout.js')).canPopOut())`,
-                    ))
-                        ? ["Pop out PiP"]
-                        : []),
-                    "Close PiP",
-                ],
+                ["Compact", "Start fresh", "Open as a conversation", "Close PiP"],
             );
 
             for (const button of head.buttons) {

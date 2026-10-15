@@ -565,28 +565,8 @@ export function openFile(path) {
     openSheet({ type: "file", id: target.path, line: target.line });
 }
 
-const markdownEvents = [];
-
-const markdownEvent = (type, listener, capture = false) => {
-    markdownEvents.push([type, listener, capture]);
-    document.addEventListener(type, listener, capture);
-};
-
-/** The same Markdown actions in another same-origin document, without another app or store. */
-export function bindMarkdownEvents(doc) {
-    for (const [type, listener, capture] of markdownEvents) {
-        doc.addEventListener(type, listener, capture);
-    }
-
-    return () => {
-        for (const [type, listener, capture] of markdownEvents) {
-            doc.removeEventListener(type, listener, capture);
-        }
-    };
-}
-
 /** File paths in rendered markdown open in the viewer. */
-markdownEvent("click", (event) => {
+document.addEventListener("click", (event) => {
     const target = event.target.closest?.(".md code[data-path], .md a[data-path]");
 
     if (!target) {
@@ -596,7 +576,7 @@ markdownEvent("click", (event) => {
     // A file link stays in the app even when selecting its text keeps it from opening: its href is a path, not a page.
     event.preventDefault();
 
-    const selection = target.ownerDocument.defaultView.getSelection();
+    const selection = getSelection();
 
     // Selecting a link's text does not change the selection elsewhere: only one in it holds the file back.
     if (selection?.toString() && selection.containsNode(target, true)) {
@@ -608,7 +588,7 @@ markdownEvent("click", (event) => {
 });
 
 /** Images in rendered markdown open full screen, unless they are links. */
-markdownEvent("click", (event) => {
+document.addEventListener("click", (event) => {
     const image = event.target.closest?.(".md img");
 
     if (!image || image.closest("a") || image.classList.contains("broken")) {
@@ -619,7 +599,7 @@ markdownEvent("click", (event) => {
 });
 
 /** A markdown image that cannot load says so instead of showing a broken icon. */
-markdownEvent(
+document.addEventListener(
     "error",
     (event) => {
         const image = event.target;
@@ -633,7 +613,7 @@ markdownEvent(
         }
 
         image.classList.add("broken");
-        const note = image.ownerDocument.createElement("span");
+        const note = document.createElement("span");
 
         note.className = "image-missing";
         note.textContent = `🖼 ${image.alt || "Image"} could not be loaded`;
@@ -643,7 +623,7 @@ markdownEvent(
 );
 
 /** Copy buttons inside rendered markdown, handled once for the whole page. */
-markdownEvent("click", (event) => {
+document.addEventListener("click", (event) => {
     const button = event.target.closest?.("[data-copy]");
 
     if (!button) {
@@ -662,7 +642,7 @@ markdownEvent("click", (event) => {
 });
 
 /** A long code block's button shows all of it, and folds it again. */
-markdownEvent("click", (event) => {
+document.addEventListener("click", (event) => {
     const button = event.target.closest?.("[data-more]");
     const block = button?.closest(".code");
 
@@ -1172,15 +1152,13 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
         const onKey = (event) =>
             event.key === "Escape" && !event.isComposing && event.keyCode !== 229 && onClose();
 
-        const win = ref.current.ownerDocument.defaultView;
+        addEventListener("keydown", onKey);
 
-        win.addEventListener("keydown", onKey);
-
-        return () => win.removeEventListener("keydown", onKey);
+        return () => removeEventListener("keydown", onKey);
     }, [onClose]);
     // Keys go to the sheet, not the message box behind it, unless something inside already took focus.
     useEffect(() => {
-        if (ref.current && !ref.current.contains(ref.current.ownerDocument.activeElement)) {
+        if (ref.current && !ref.current.contains(document.activeElement)) {
             ref.current.focus({ preventScroll: true });
         }
     }, []);

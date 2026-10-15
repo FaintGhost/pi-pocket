@@ -30,7 +30,6 @@ import {
     togglePeeks,
 } from "./peeks.js";
 import { closePip, openPip, PipHost, pipAvailable, togglePip } from "./pip.js";
-import { pipHost, pipKeyHandler, pipSheets, placePipSheets } from "./pip-popout.js";
 import { Drawer, RailNav, ResizeHandle, SessionList, workspaceOrder } from "./sessions.js";
 // Loaded for what it does: it gives replies' Markdown the component for pages, images, and diffs in code blocks.
 import "./rich.js";
@@ -417,9 +416,10 @@ function App() {
         <${PanelHost} key=${`files:${state.conversationId}`} shown=${filing} panel=${FilesPanel} />
         ${inConversation && html`<${PeopleHost} shown=${people} replaced=${browsing || filing} />`}
         <${Drawer} />
-        <div class="overlay-slot" ref=${pipHost.mount}></div>
-        <div class="overlay-slot" ref=${pipSheets.mount}></div>
+        <${PipHost} />
+        <${Sheets} />
         <${LauncherHost} />
+        <${Notices} />
     </div>`;
 }
 
@@ -472,7 +472,7 @@ function step(by) {
     navigate(next);
 }
 
-function onAppKey(event) {
+addEventListener("keydown", (event) => {
     if (event.isComposing) {
         return;
     }
@@ -637,10 +637,7 @@ function onAppKey(event) {
         event.preventDefault();
         openSheet({ type: "shortcuts" });
     }
-}
-
-addEventListener("keydown", onAppKey);
-pipKeyHandler(onAppKey);
+});
 /** When Esc was last pressed while Pi worked: a second press soon after stops it. */
 let escapedAt = 0;
 const ESCAPE_TWICE_MS = 1500;
@@ -713,13 +710,6 @@ startSwipes((where) => {
 const root = document.getElementById("app");
 let queued = false;
 
-function renderApp() {
-    render(html`<${App} />`, root);
-    render(store.state.me ? html`<${PipHost} /><${Notices} />` : null, pipHost.root);
-    placePipSheets();
-    render(store.state.me ? html`<${Sheets} />` : null, pipSheets.root);
-}
-
 store.subscribe(() => {
     if (queued) {
         return;
@@ -728,10 +718,10 @@ store.subscribe(() => {
     queued = true;
     queueMicrotask(() => {
         queued = false;
-        renderApp();
+        render(html`<${App} />`, root);
     });
 });
-renderApp();
+render(html`<${App} />`, root);
 
 // A notification's link can ask for the chat: `/s/12?chat=1`.
 if (new URLSearchParams(location.search).has("chat")) {

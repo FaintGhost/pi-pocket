@@ -7,7 +7,6 @@ import { useBack } from "./back.js";
 import { useDragToClose } from "./gestures.js";
 import { createPipDraft } from "./pip-attachments.js";
 import { usePipResize } from "./pip-window.js";
-import { canPopOut, pipHost, popOutPip } from "./pip-popout.js";
 import { api, attempt, isRow, navigate, notify, openSheet, store, uid } from "./store.js";
 import { memoryAvailable, useMemory } from "./sheets/memory.js";
 import { itemsOf, says, summarize } from "./turns.js";
@@ -43,11 +42,7 @@ const composerDraft = createPipDraft({
             localStorage.setItem(DRAFT_KEY, text);
         }
     },
-    upload: (id, file) =>
-        api(
-            `c/${id}/upload?name=${encodeURIComponent(file.name)}`,
-            new Blob([file], { type: file.type }),
-        ),
+    upload: (id, file) => api(`c/${id}/upload?name=${encodeURIComponent(file.name)}`, file),
     onError: (message) => notify("error", message),
 });
 const syncDraftScope = (state) =>
@@ -329,7 +324,7 @@ function PipContext({ stats, window }) {
 }
 
 function focusComposer() {
-    requestAnimationFrame(() => pipHost.root.querySelector(".pip-composer textarea")?.focus());
+    requestAnimationFrame(() => document.querySelector(".pip-composer textarea")?.focus());
 }
 
 /** A message in PiP's conversation without the "[from: Name]" a server with several people puts first. */
@@ -859,12 +854,12 @@ function PipPanel({ leaving, scrim }) {
         const panel = ref.current;
 
         return () => {
-            const active = panel?.ownerDocument.activeElement;
+            const active = document.activeElement;
 
             if (
                 before instanceof HTMLElement &&
                 before.isConnected &&
-                (active === panel?.ownerDocument.body || panel?.contains(active))
+                (active === document.body || panel?.contains(active))
             ) {
                 before.focus({ preventScroll: true });
             }
@@ -946,9 +941,8 @@ function PipPanel({ leaving, scrim }) {
                 title="Start fresh: PiP forgets this conversation"
                 disabled=${!ready || busy || rows.length === 0}
                 onClick=${() =>
-                    ref.current.ownerDocument.defaultView.confirm(
-                        "Start fresh? PiP forgets this conversation; you can still read it.",
-                    ) && attempt(() => api(`c/${id}/reset`, {}))}
+                    confirm("Start fresh? PiP forgets this conversation; you can still read it.") &&
+                    attempt(() => api(`c/${id}/reset`, {}))}
             >
                 <${Icon} name="reload" size=${18} />
             </button>
@@ -964,17 +958,6 @@ function PipPanel({ leaving, scrim }) {
             >
                 <${Icon} name="external" size=${18} />
             </button>
-            ${
-                canPopOut() &&
-                html`<button
-                    class="icon-button"
-                    aria-label="Pop out PiP"
-                    title="Pop out: always on top while this tab stays open"
-                    onClick=${() => attempt(popOutPip)}
-                >
-                    <${Icon} name="pip" size=${18} />
-                </button>`
-            }
             <button class="icon-button" aria-label="Close PiP" title="Close (Esc)" onClick=${closePip}>
                 <${Icon} name="close" size=${18} />
             </button>

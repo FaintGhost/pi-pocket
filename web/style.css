@@ -10972,33 +10972,6 @@ textarea.notes {
     animation: popout var(--t-out) linear forwards;
 }
 
-.overlay-slot {
-    display: contents;
-}
-
-:root[data-pip-window] .pip-panel {
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    max-width: none;
-    max-height: none;
-    padding: 0;
-    border: 0;
-    animation: none;
-}
-
-:root[data-pip-window] .pip-head {
-    display: flex;
-    flex-wrap: wrap;
-    padding: 0.45rem 0.3rem 0.4rem 0.8rem;
-}
-
-:root[data-pip-window] .pip-scrim,
-:root[data-pip-window] .pip-resize,
-:root[data-pip-window] .pip-head .grip {
-    display: none;
-}
-
 .pip-resize {
     display: none;
 }

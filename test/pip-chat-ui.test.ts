@@ -345,61 +345,6 @@ test(
     },
 );
 
-test(
-    "PiP pops out with one composer and returns the same draft and attachment",
-    real,
-    async (t) => {
-        await fresh();
-
-        if (
-            !(await inPage<boolean>(
-                `return JSON.stringify((await import('/pip-popout.js')).canPopOut())`,
-            ))
-        ) {
-            t.skip("Document Picture-in-Picture is not available");
-
-            return;
-        }
-
-        await text("keep my draft");
-        await attach("picker", [{ name: "floating.txt" }]);
-        await uploaded(1);
-        // The test browser closes new blank targets after five seconds: exercise the native round trip in one task.
-        const result = await inPage<{
-            single: boolean;
-            model: boolean;
-            same: boolean;
-            draft: string;
-            files: number;
-        }>(`
-        const original = document.querySelector(${JSON.stringify(BOX)});
-        await (await import('/pip-popout.js')).popOutPip();
-        const child = documentPictureInPicture.window;
-        const doc = child.document;
-        const wait = async (check) => {
-            for (let n = 0; n < 100 && !check(); n++) await new Promise(r => setTimeout(r, 10));
-        };
-        const single = !document.querySelector(${JSON.stringify(BOX)}) && doc.querySelector(${JSON.stringify(BOX)}) === original;
-        doc.querySelector('.pip-model').click();
-        await wait(() => doc.querySelector('[aria-label="Model"]')?.contains(doc.activeElement));
-        const model = doc.querySelector('[aria-label="Model"]')?.contains(doc.activeElement) === true;
-        child.dispatchEvent(new child.KeyboardEvent('keydown', { key: 'Escape' }));
-        child.close();
-        await wait(() => document.querySelector(${JSON.stringify(BOX)}) === original);
-        return JSON.stringify({ single, model, same: document.querySelector(${JSON.stringify(BOX)}) === original,
-            draft: original.value, files: document.querySelectorAll('.pip-attachment').length });
-    `);
-
-        assert.deepEqual(result, {
-            single: true,
-            model: true,
-            same: true,
-            draft: "keep my draft",
-            files: 1,
-        });
-    },
-);
-
 test("PiP's header picker saves to PiP and cannot change a running turn", real, async () => {
     await fresh(VIEWPORTS.mobile, true);
     assert.equal(
