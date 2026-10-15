@@ -258,23 +258,26 @@ export function ModelPicker() {
                     ? null
                     : forDefault
                       ? html`<div class="pop-menu-foot pop-menu-default">
+                          <span class="muted">
+                              The owner default wins over project settings. Clear it to use a trusted project's model and thinking defaults for later new sessions. Existing sessions do not change.
+                          </span>
                           ${
                               chosen
                                   ? html`<button
                                         class="pop-menu-link"
                                         onClick=${() => attempt(() => actions.setDefaultModel(null))}
                                     >
-                                        Start with the last model picked instead
+                                        Clear owner default: use project defaults, then last picked
                                     </button>`
                                   : html`<span class="muted">
-                                        None chosen: new sessions start with the last model picked.
+                                        No owner default: new sessions use trusted project defaults, then the last model picked, then Pi's global default.
                                     </span>`
                           }
                       </div>`
                       : html`<div class="pop-menu-foot pop-menu-default">
                           <span class="pop-menu-default-text">
                               <span class="muted">New sessions:</span>
-                              ${" "}${chosen ? defaultLabel(chosen, models) : "the last model picked"}
+                              ${" "}${chosen ? defaultLabel(chosen, models) : "trusted project defaults, then last picked, then Pi global"}
                           </span>
                           ${
                               owner &&

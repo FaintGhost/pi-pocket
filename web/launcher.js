@@ -160,7 +160,7 @@ function actionItems() {
         store.state.me?.role === "owner" &&
             store.state.server?.defaultModel !== undefined && {
                 label: "Default model",
-                detail: "the model and thinking new sessions start with",
+                detail: "owner default first; otherwise project, last picked, then Pi global",
                 icon: "sparkle",
                 run: () => openSheet({ type: "model", id: "default", forDefault: true }),
             },

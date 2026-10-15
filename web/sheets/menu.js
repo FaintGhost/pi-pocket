@@ -333,7 +333,8 @@ export function MenuSheet() {
                 item(
                     "Default model",
                     () => openSheet({ type: "model", id: "default", forDefault: true }),
-                    defaultLabel(server?.defaultModel, store.state.models) || "the last one picked",
+                    defaultLabel(server?.defaultModel, store.state.models) ||
+                        "project, last picked, then Pi global",
                 )
             }
             ${item("Your name", () => openSheet({ type: "name" }), me?.name)}
