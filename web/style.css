@@ -5250,6 +5250,11 @@ button.rail-brand:hover {
     margin: 0;
 }
 
+/* Rows that are controls themselves: the ring inside the list, which cuts off what is past its edges. */
+.sheet-list > :is(button, .list-item):focus-visible {
+    outline-offset: -2px;
+}
+
 .sheet-actions {
     display: flex;
     justify-content: flex-end;
@@ -8521,6 +8526,8 @@ textarea.notes {
     gap: 2px;
     min-width: 0;
     padding: 12px 14px 8px;
+    /* The tile's corners, inside its border: the hover fill and the focus ring follow them. */
+    border-radius: calc(var(--r-window) - 1px) calc(var(--r-window) - 1px) 0 0;
     text-align: left;
     transition: background-color var(--t-hover) var(--ease-out);
 }
@@ -8838,6 +8845,7 @@ textarea.notes {
 
 .peek-strip .peek-head {
     padding: 8px 12px 2px;
+    border-radius: calc(var(--r-card) - 1px) calc(var(--r-card) - 1px) 0 0;
 }
 
 .peek-strip .peek-cwd {
