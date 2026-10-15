@@ -3329,7 +3329,7 @@ button.chip:hover {
 /* One line: the folder's color, the title, and what goes on there on the right. */
 .session {
     display: grid;
-    grid-template-columns: 8px minmax(0, 1fr) auto;
+    grid-template-columns: 9px minmax(0, 1fr) auto;
     align-items: center;
     gap: 0 10px;
     width: 100%;
@@ -3376,8 +3376,125 @@ button.chip:hover {
 .session-mark {
     display: grid;
     place-items: center;
-    width: 8px;
-    height: 8px;
+    width: 9px;
+    height: 9px;
+}
+
+/*
+ * A session's square: its folder's color (--folder), in the shape of its state. Solid: finished, not read yet. Hollow
+ * and dim: read, or never run. Quadrants with one lit: working. Two bars: waiting for you. A cross: failed, cut out
+ * of a solid square while not read, drawn once read.
+ */
+.state-mark {
+    --line-w: 1.5px;
+    --cut: 2px;
+    --q: 4px;
+    position: relative;
+    flex: none;
+    width: 9px;
+    height: 9px;
+    color: var(--folder, var(--muted));
+}
+
+.state-mark.fresh {
+    background: currentColor;
+}
+
+.state-mark.seen {
+    box-shadow: inset 0 0 0 var(--line-w) currentColor;
+    opacity: 0.5;
+}
+
+/* Pi Pocket's spinner, in the folder's color: one lit quadrant stepping around the four. */
+.state-mark.working {
+    --dim: color-mix(in oklab, currentColor 28%, transparent);
+    background:
+        linear-gradient(var(--dim), var(--dim)) 0 0 / var(--q) var(--q) no-repeat,
+        linear-gradient(var(--dim), var(--dim)) 100% 0 / var(--q) var(--q) no-repeat,
+        linear-gradient(var(--dim), var(--dim)) 0 100% / var(--q) var(--q) no-repeat,
+        linear-gradient(var(--dim), var(--dim)) 100% 100% / var(--q) var(--q) no-repeat;
+}
+
+/* Still (reduced motion), the top left quadrant stays lit. */
+.state-mark.working::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--q);
+    height: var(--q);
+    background: currentColor;
+    animation: state-quadrant 1.6s steps(1, end) infinite;
+}
+
+@keyframes state-quadrant {
+    0% {
+        transform: translate(0, calc(var(--q) + 1px));
+    }
+    25% {
+        transform: translate(0, 0);
+    }
+    50% {
+        transform: translate(calc(var(--q) + 1px), 0);
+    }
+    75% {
+        transform: translate(calc(var(--q) + 1px), calc(var(--q) + 1px));
+    }
+}
+
+.state-mark.waiting {
+    background: linear-gradient(90deg, currentColor 0 3px, transparent 0 6px, currentColor 0);
+}
+
+.state-mark.failed {
+    background: currentColor;
+    -webkit-mask:
+        linear-gradient(
+            45deg,
+            #000 calc(50% - var(--cut) / 2),
+            transparent 0 calc(50% + var(--cut) / 2),
+            #000 0
+        ),
+        linear-gradient(
+            135deg,
+            #000 calc(50% - var(--cut) / 2),
+            transparent 0 calc(50% + var(--cut) / 2),
+            #000 0
+        );
+    -webkit-mask-composite: source-in;
+    mask:
+        linear-gradient(
+            45deg,
+            #000 calc(50% - var(--cut) / 2),
+            transparent 0 calc(50% + var(--cut) / 2),
+            #000 0
+        ),
+        linear-gradient(
+            135deg,
+            #000 calc(50% - var(--cut) / 2),
+            transparent 0 calc(50% + var(--cut) / 2),
+            #000 0
+        );
+    mask-composite: intersect;
+}
+
+.state-mark.failed.seen {
+    box-shadow: none;
+    background:
+        linear-gradient(
+            45deg,
+            transparent calc(50% - var(--line-w) / 2),
+            currentColor 0 calc(50% + var(--line-w) / 2),
+            transparent 0
+        ),
+        linear-gradient(
+            135deg,
+            transparent calc(50% - var(--line-w) / 2),
+            currentColor 0 calc(50% + var(--line-w) / 2),
+            transparent 0
+        );
+    -webkit-mask: none;
+    mask: none;
 }
 
 .folder-mark {

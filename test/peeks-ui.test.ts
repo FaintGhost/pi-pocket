@@ -504,7 +504,7 @@ test("a seen mark from another tab of this browser is kept, and shows at once", 
 
         localStorage.setItem(mark, String(Date.now() + 60_000));
         window.dispatchEvent(new StorageEvent("storage", { key: mark }));
-        (await import("/peeks.js")).markSeen(${Number(ids.idle)});
+        (await import("/seen.js")).markSeen(${Number(ids.idle)});
     `);
     await until(
         async () => (await tiles()).find((tile) => tile.id === id)?.label === "pinned",

@@ -6,7 +6,7 @@ import { personColor } from "./avatar.js";
 import { browserAvailable, setBrowserOpen } from "./browser.js";
 import { describeCall } from "./calls.js";
 import { DiffBlock } from "./diff.js";
-import { fromServer } from "./peeks.js";
+import { fromServer } from "./seen.js";
 import { Highlighted } from "./rich.js";
 import {
     actions,

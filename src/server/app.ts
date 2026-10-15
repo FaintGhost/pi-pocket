@@ -126,6 +126,11 @@ const MAX_SUBAGENT_MODELS = 50;
 
 /** The most peek tiles a tab gets live at once: the ones on its screen, which a tall screen fits a handful of. */
 export const MAX_PEEKS = 12;
+/**
+ * How a run that failed leaves its messages: the model or its provider answered with an error, no model was there to
+ * ask, or the run broke. Stopped (`aborted`), cleared (`reset`), and replaced (`stale`) runs did not fail.
+ */
+const FAILED_RUN = new Set(["model_error", "no_model", "faulted"]);
 
 /** A conversation's subagents document, as far as the app reads it. */
 type SubagentsValue = {
@@ -286,6 +291,11 @@ export class PocketApp {
     readonly #busy = new Set<ConversationId>();
     /** When each conversation's last run ended, since this server started: peek tiles show sessions done since a look. */
     readonly #endedAt = new Map<ConversationId, number>();
+    /**
+     * Conversations whose last run ended because the model or provider failed (not stopped by someone), since this
+     * server started: the session list marks them until their next run starts.
+     */
+    readonly #failed = new Set<ConversationId>();
     readonly #agents = new Map<ConversationId, AgentState>();
 
     /** The newest chat message (not activity) of each conversation, for unread dots in the session list. */
@@ -652,6 +662,17 @@ export class PocketApp {
                         this.providers.runAnswered(provider);
                     }
                 }
+
+                // Its run failed: the commit that settles it ends the run too, so the list hears of both at once.
+                if (
+                    change.value.status === "unanswered" &&
+                    FAILED_RUN.has(change.value.reason) &&
+                    this.#sessions[String(change.value.conversationId)] !== undefined &&
+                    !this.#failed.has(change.value.conversationId)
+                ) {
+                    this.#failed.add(change.value.conversationId);
+                    sessionsChanged = true;
+                }
             }
         }
 
@@ -672,6 +693,8 @@ export class PocketApp {
             if (busy !== this.#busy.has(id)) {
                 if (busy) {
                     this.#busy.add(id);
+                    // A new run starts over: whether it fails is its own to say.
+                    this.#failed.delete(id);
                 } else {
                     this.#busy.delete(id);
                 }
@@ -1690,6 +1713,9 @@ export class PocketApp {
                     busy,
                     waiting: waiting.has(id),
                     ...(endedAt === undefined ? {} : { endedAt }),
+                    ...(this.#failed.has(Number(id) as unknown as ConversationId)
+                        ? { failed: true }
+                        : {}),
                     ...(model === undefined ? {} : { model: model.modelId }),
                     ...(here.length === 0 ? {} : { people: here }),
                     ...(chat === undefined ? {} : { chatAt: chat.at, chatBy: chat.userId }),
