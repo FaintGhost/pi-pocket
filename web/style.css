@@ -11507,7 +11507,6 @@ button.dr-branch:hover {
         height: auto;
     }
     .answer-actions > button:not(.reaction),
-    .status-line .guard,
     .link.small,
     .running-head .link,
     .dr-branch {
@@ -11520,12 +11519,14 @@ button.dr-branch:hover {
         padding-inline: 6px;
         margin-inline: -6px;
     }
-    /* Narrow, the guard is its shield and a word: its hit area reaches past them, to the sides too. */
+    /* The guard keeps its small pill; an invisible layer past it takes a thumb's tap. */
     .status-line .guard {
-        min-width: 40px;
-        justify-content: center;
-        padding-inline: 8px;
-        margin-inline: -8px;
+        position: relative;
+    }
+    .status-line .guard::after {
+        content: "";
+        position: absolute;
+        inset: -9px -6px;
     }
     .answer-actions .reaction.add {
         min-width: 40px;

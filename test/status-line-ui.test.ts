@@ -379,17 +379,25 @@ test(
                     ),
                     "87 tok/s first token 1.2s context 77% cache 83% $12.34 on",
                 );
-                const guard = await inPage<{ w: number; h: number; label: string }>(`
+                // Taps a thumb's width across and most of its height down, around the pill's middle, reach it.
+                const guard = await inPage<{ missed: number[][]; h: number; label: string }>(`
                     const guard = document.querySelector(".status-line .guard");
                     const box = guard.getBoundingClientRect();
+                    const x = box.left + box.width / 2;
+                    const y = box.top + box.height / 2;
+                    const missed = [[x - 20, y], [x + 20, y], [x, y - 17], [x, y + 17]].filter(
+                        ([px, py]) => !guard.contains(document.elementFromPoint(px, py)),
+                    );
 
-                    return JSON.stringify({ w: box.width, h: box.height, label: guard.getAttribute("aria-label") });
+                    return JSON.stringify({ missed, h: box.height, label: guard.getAttribute("aria-label") });
                 `);
 
-                assert.ok(
-                    guard.w >= 40 && guard.h >= 34,
+                assert.deepEqual(
+                    guard.missed,
+                    [],
                     `the guard takes a thumb: ${JSON.stringify(guard)}`,
                 );
+                assert.ok(guard.h <= 22, `its pill stays small: ${JSON.stringify(guard)}`);
                 assert.equal(guard.label, "Lancet Guard on");
             }
         }
