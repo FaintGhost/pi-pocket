@@ -11241,6 +11241,11 @@ textarea.notes {
     font-size: 0.88rem;
 }
 
+.pip-welcome .button {
+    min-height: 40px;
+    white-space: normal;
+}
+
 .pip-chips {
     display: flex;
     flex-wrap: wrap;
@@ -11257,7 +11262,12 @@ textarea.notes {
     text-align: left;
 }
 
-.pip-chip:hover {
+.pip-chip:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.pip-chip:not(:disabled):hover {
     border-color: var(--accent);
     color: var(--text);
 }
