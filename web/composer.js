@@ -1294,6 +1294,7 @@ export function Composer() {
                                 Plan
                             </button>`
                         }
+                        <span class="grow"></span>
                         ${
                             busy &&
                             html`<div
@@ -1330,7 +1331,6 @@ export function Composer() {
                                 )}
                             </div>`
                         }
-                        <span class="grow"></span>
                         ${busy && html`<${StopButton} />`}
                         <${MicButton} dictation=${dictation} class="composer-mic" />
                         <button

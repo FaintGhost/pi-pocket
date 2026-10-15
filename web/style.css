@@ -1181,7 +1181,7 @@ kbd {
 /* A column of turns: a person's message, what Pi did, Pi's reply, an approval, the live line. Its text size is
  * Appearance's; the cards inside keep fixed sizes. */
 .transcript {
-    max-width: 776px;
+    max-width: 720px;
     margin: 0 auto;
     padding: 28px 28px 24px;
     display: flex;
@@ -2199,6 +2199,17 @@ pre.diff .del {
     font-size: 13.5px;
 }
 
+.approval-actions .button.primary {
+    padding: 0 18px;
+}
+
+/* The shared button's least height is 38px; touch screens keep their thumb height. */
+@media not (pointer: coarse) {
+    .approval-actions .button {
+        min-height: 0;
+    }
+}
+
 .approval-actions .button.deny {
     border-color: transparent;
     background: var(--card-2);
@@ -2430,7 +2441,7 @@ pre.diff .del {
 
 @keyframes pulse {
     50% {
-        opacity: 0.3;
+        opacity: 0.35;
     }
 }
 
@@ -2680,6 +2691,7 @@ pre.diff .del {
 
 /* The message box: a card that takes the accent's line while it has the focus. */
 .composer {
+    container: composer / inline-size;
     position: relative;
     background: var(--card);
     border: 1px solid var(--hair-2);
@@ -2776,7 +2788,7 @@ pre.diff .del {
 }
 
 .model-chip .model-name {
-    min-width: 0;
+    min-width: 4ch;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -2795,20 +2807,27 @@ pre.diff .del {
     color: var(--warn);
 }
 
-/* Below about 360px the model's short name alone; on a phone, while Steer and Queue take room, too. */
-@media (max-width: 359px) {
+/* A narrow message box (a narrow pane, or a phone) gives up the level first, then, while Pi works and Steer and Queue
+ * take room, Plan and the sparkle: the model's name stays. */
+@container composer (max-width: 340px) {
     .model-chip .model-level {
         display: none;
     }
 }
 
-@media (max-width: 439px) {
+@container composer (max-width: 540px) {
     .composer.busy .model-chip .model-level {
         display: none;
     }
 }
 
-@media (max-width: 379px) {
+@container composer (max-width: 400px) {
+    .composer.busy :is(.plan-chip, .model-caret) {
+        display: none;
+    }
+}
+
+@container composer (max-width: 355px) {
     .composer.busy .model-chip .model-spark {
         display: none;
     }
