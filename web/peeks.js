@@ -7,6 +7,7 @@
 import { Component } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { describeCall } from "./calls.js";
+import { finishedUnseen, markSeen, seenSince } from "./seen.js";
 import { workspaceOrder } from "./sessions.js";
 import { actions, api, attempt, canSteer, navigate, notify, store } from "./store.js";
 import { prefs, setPrefs } from "./theme.js";
@@ -22,78 +23,12 @@ const MAX_LIVE = 12;
 const ALLOW_LENGTH = 80;
 /** Waits before sending the list again after a send failed, growing with each failure. */
 const RETRY_MS = [1000, 3000, 10_000];
-/** Each session's seen mark is a key of its own, so tabs that mark different sessions at once keep both. */
-const SEEN_PREFIX = "pocket.peekSeen.";
-/** Marks older than this are forgotten: the run they saw is long over, and the server has likely restarted since. */
-const SEEN_KEEP_MS = 30 * 24 * 60 * 60_000;
-const SINCE_KEY = "pocket.peekSince";
 
 PEEK_WIDE.addEventListener("change", () => store.set({}));
 
 const hidden = () => document.visibilityState === "hidden";
 
-// ─── What this browser has seen, by the server's clock ───────────────────────────────
-
-/** How far the server's clock is ahead of this browser's, from its last hello: runs end by the server's clock. */
-let clockOffset = 0;
-const serverNow = () => Date.now() + clockOffset;
-
-/** A time the server took (its clock), on this device's clock: a phone set a few minutes off still counts right. */
-export const fromServer = (ms) => ms - clockOffset;
-
-function readSeen() {
-    const seen = {};
-
-    for (let index = 0; index < localStorage.length; index++) {
-        const key = localStorage.key(index);
-        const at = key?.startsWith(SEEN_PREFIX) ? Number(localStorage.getItem(key)) : 0;
-
-        if (at > 0) {
-            seen[key.slice(SEEN_PREFIX.length)] = at;
-        }
-    }
-
-    return seen;
-}
-
-for (const [id, at] of Object.entries(readSeen())) {
-    if (Date.now() - at > SEEN_KEEP_MS) {
-        localStorage.removeItem(SEEN_PREFIX + id);
-    }
-}
-
-/** Runs that ended before this browser first had peeks are old news. The server's time; null until it has said. */
-let since = Number(localStorage.getItem(SINCE_KEY)) || null;
-
-store.set({ peeks: {}, peekSeen: readSeen() });
-
-// Another tab of this browser marked a session seen (or cleared the storage).
-addEventListener("storage", (event) => {
-    if (event.key === null || event.key.startsWith(SEEN_PREFIX)) {
-        store.set({ peekSeen: readSeen() });
-    }
-});
-
-/** Remember that this browser looked at a session now: a run that ended before is no longer new. */
-export function markSeen(id) {
-    const key = SEEN_PREFIX + id;
-    const ended = store.state.sessions.find((session) => session.id === id)?.endedAt ?? 0;
-    // The latest look counts, whichever tab made it; the run's own end counts too, in case the clocks disagree.
-    const at = Math.max(Number(localStorage.getItem(key)) || 0, serverNow(), ended);
-
-    localStorage.setItem(key, String(at));
-    store.set({ peekSeen: { ...store.state.peekSeen, [id]: at } });
-}
-
-/** A session whose run ended since this browser last had it open. */
-function finishedUnseen(session, state = store.state) {
-    return (
-        since !== null &&
-        !session.busy &&
-        session.endedAt !== undefined &&
-        session.endedAt > Math.max(since, state.peekSeen?.[session.id] ?? 0)
-    );
-}
+store.set({ peeks: {} });
 
 // ─── Which sessions are tiles, in a steady order ─────────────────────────────────────
 
@@ -102,41 +37,14 @@ let slots = [];
 /** The session open before this one: it stays a tile, in the place of the one that was opened. */
 let lastLeft = null;
 let previous = store.state.conversationId;
-/** When the open session's last run ended, as this tab last marked it seen. */
-let openEnded;
-let lastServer;
 
-/** A run that ends while its session is open in sight is seen as it ends. */
-function seeOpen(state) {
-    const id = state.conversationId;
-    const ended = state.sessions.find((session) => session.id === id)?.endedAt;
-
-    if (id !== null && ended !== undefined && ended !== openEnded && !hidden()) {
-        openEnded = ended;
-        markSeen(id);
-    }
-}
-
+// The session left stays a tile, in the place of the one opened. `seen.js` marks both seen.
 store.subscribe((state) => {
-    if (state.server !== lastServer) {
-        lastServer = state.server;
-
-        if (typeof state.server?.now === "number") {
-            clockOffset = state.server.now - Date.now();
-
-            if (since === null) {
-                since = state.server.now;
-                localStorage.setItem(SINCE_KEY, String(since));
-            }
-        }
-    }
-
     if (state.conversationId !== previous) {
         const left = previous;
         const at = slots.indexOf(state.conversationId);
 
         previous = state.conversationId;
-        openEnded = undefined;
 
         if (left !== null) {
             lastLeft = left;
@@ -144,16 +52,8 @@ store.subscribe((state) => {
             if (at >= 0) {
                 slots[at] = left;
             }
-
-            markSeen(left);
-        }
-
-        if (state.conversationId !== null) {
-            markSeen(state.conversationId);
         }
     }
-
-    seeOpen(store.state);
 });
 
 const rank = (session, state, pinned) =>
@@ -178,7 +78,7 @@ export function peekTiles(state = store.state) {
         state.pinned,
         state.peekSeen,
         lastLeft,
-        since,
+        seenSince(),
     ];
 
     if (from.every((value, index) => value === chosen.from[index])) {
@@ -346,7 +246,6 @@ store.subscribe((state) => {
 
 document.addEventListener("visibilitychange", () => {
     settle(hidden() ? 0 : SETTLE_MS);
-    seeOpen(store.state);
 });
 
 /**

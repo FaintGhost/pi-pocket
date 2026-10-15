@@ -6,7 +6,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { folderColor } from "./avatar.js";
 import { useBack } from "./back.js";
-import { fromServer, useOnScreen } from "./peeks.js";
+import { useOnScreen } from "./peeks.js";
+import { fromServer } from "./seen.js";
 import { api, attempt, canSteer, navigate, notify, store } from "./store.js";
 import {
     dismiss,

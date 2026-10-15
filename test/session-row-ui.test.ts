@@ -6,6 +6,7 @@ import {
     openApp,
     owner,
     root,
+    say,
     scriptedModel,
     until,
 } from "./helpers.ts";
@@ -954,6 +955,50 @@ test("a session marked unread shows it until it is opened, however it opens", re
     await page.navigate(`${base}/s/${two}`);
     await until(async () => (await touched()).path === `/s/${two}`, "loaded with it open");
     await marked([], "a page load read it");
+});
+
+test("a session's square is solid once its run ends, and hollow once read", real, async () => {
+    const [one, two] = folderSessions as [ConversationId, ConversationId];
+    const shape = () =>
+        inPage<{ shape: string; label: string | null; height: number }>(`
+            const row = document.querySelector(${JSON.stringify(row(one))});
+            const mark = row.querySelector(".state-mark");
+
+            return JSON.stringify({
+                shape: [...mark.classList].filter((name) => name !== "state-mark").join(" "),
+                label: mark.getAttribute("aria-label"),
+                height: row.querySelector(".session").getBoundingClientRect().height,
+            });
+        `);
+    const shows = async (want: string, what: string) => {
+        let last = "";
+
+        try {
+            await until(async () => (last = (await shape()).shape) === want, what);
+        } catch {
+            assert.fail(`${what}: ${last}`);
+        }
+    };
+
+    await fresh();
+    await page.click({ selector: `${row(two)} > .session` });
+    await until(async () => (await touched()).path === `/s/${two}`, "another session open");
+    await say(app, one, "hi");
+    await shows("fresh", "its run ended while another was open: not read");
+    assert.equal((await shape()).label, "Not read");
+    assert.equal((await shape()).height, 34, "rows keep their height");
+
+    await page.click({ selector: `${row(one)} > .session` });
+    await shows("seen", "opened: read");
+    await page.click({ selector: `${row(two)} > .session` });
+    await shows("seen", "and still read after leaving it");
+
+    await page.evaluate(
+        `document.querySelector(${JSON.stringify(`${row(one)} [aria-label="Mark unread"]`)}).click()`,
+    );
+    await shows("fresh", "marked unread");
+    await page.click({ selector: `${row(one)} > .session` });
+    await shows("seen", "read again");
 });
 
 test("touch screens: a finger held on a row marks it unread, and read again", real, async () => {
