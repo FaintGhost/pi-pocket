@@ -15,7 +15,7 @@ const OPEN_KEY = "pocket.files";
 const TAB_KEY = "pocket.filesTab";
 const WIDTH_KEY = "pocket.filesWidth";
 /** Tree and viewer side by side from this width of the tile; one at a time below it. */
-const SIDE_BY_SIDE = 640;
+const SIDE_BY_SIDE = 600;
 
 /** The tile is for people who can steer: the viewer reads files as Pi would. */
 export const filesAvailable = () => canSteer() && store.state.conversationId !== null;
@@ -174,10 +174,9 @@ function TreeFolder({ path, depth, ctx }) {
             >
                 ${
                     entry.dir
-                        ? html`<${Icon} name="chevron" size=${12} class=${`chev ${open ? "open" : ""}`} />`
+                        ? html`<${Icon} name="chevron" size=${11} class=${`chev ${open ? "open" : ""}`} />`
                         : html`<span class="ft-spacer"></span>`
                 }
-                <${Icon} name=${entry.dir ? "folder" : "file"} size=${14} />
                 <span class="ft-name">${entry.name}</span>
                 ${inside && html`<span class="ft-dot" title="Has changes"></span>`}
                 ${change && html`<span class=${`ft-kind ${change}`}>${KIND_LETTERS[change]}</span>`}
@@ -554,7 +553,7 @@ function FilesTab({ changes, covering }) {
                     aria-label="Fold every folder"
                     onClick=${() => update(() => new Set())}
                 >
-                    <${Icon} name="down" size=${16} class="ft-fold-all" />
+                    <${Icon} name="down" size=${15} />
                 </button>
                 <button
                     class="icon-button"
@@ -567,10 +566,9 @@ function FilesTab({ changes, covering }) {
                         reloadChanges(id);
                     }}
                 >
-                    <${Icon} name="reload" size=${16} />
+                    <${Icon} name="reload" size=${15} />
                 </button>
             </div>
-            <div class="ft-root mono" title=${root}>${shortPath(root, server?.home)}</div>
             <div class="ft-tree" role="tree" aria-label="Files" onKeyDown=${onTreeKey}>
                 ${
                     query === ""
@@ -637,7 +635,8 @@ function FilesTab({ changes, covering }) {
 }
 
 export function FilesPanel({ leaving = false }) {
-    const { filesTab } = store.state;
+    const { filesTab, view, server } = store.state;
+    const root = view.agent?.cwd ?? view.conversation?.cwd ?? "";
     const { changes } = useChanges(true);
     // Pi's edits git does not list count too: outside a repository, they are all there is.
     const count = changes ? changes.files.length + changes.piOnly.length : 0;
@@ -674,7 +673,7 @@ export function FilesPanel({ leaving = false }) {
                     class=${filesTab === "files" ? "on" : ""}
                     onClick=${() => setTab("files")}
                 >
-                    <${Icon} name="folder" size=${15} /> Files
+                    Files
                 </button>
                 <button
                     type="button"
@@ -683,11 +682,11 @@ export function FilesPanel({ leaving = false }) {
                     class=${filesTab === "changes" ? "on" : ""}
                     onClick=${() => setTab("changes")}
                 >
-                    <${Icon} name="diff" size=${15} /> Changes
+                    Changes
                     ${count > 0 && html`<span class="files-count">${count}</span>`}
                 </button>
             </div>
-            <span class="grow"></span>
+            <span class="files-root" title=${root}>${shortPath(root, server?.home)}</span>
             ${
                 beside &&
                 html`<button
@@ -697,7 +696,7 @@ export function FilesPanel({ leaving = false }) {
                     title="Close (Alt+E)"
                     onClick=${() => setFilesOpen(false)}
                 >
-                    <${Icon} name="close" size=${18} />
+                    <${Icon} name="close" size=${17} />
                 </button>`
             }
         </header>

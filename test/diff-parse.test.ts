@@ -28,12 +28,11 @@ type Ranges = [number, number][];
 
 // A web module, loaded as the browser loads it; its path as a value keeps the type checker from looking for types.
 const MODULE: string = "../web/diff-parse.js";
-const { parseDiff, hunkRows, wordDiff, markRanges, changeCells } = (await import(MODULE)) as {
+const { parseDiff, hunkRows, wordDiff, markRanges } = (await import(MODULE)) as {
     parseDiff(text: string, path?: string): { files: File[] };
     hunkRows(hunk: { lines: Line[] }): Row[];
     wordDiff(before: string, after: string): { left: Ranges; right: Ranges } | null;
     markRanges(html: string, ranges: Ranges): string;
-    changeCells(added: number, removed: number): string[];
 };
 
 const GIT = `diff --git a/src/app.ts b/src/app.ts
@@ -201,13 +200,6 @@ test("marks go around text inside highlighted markup, never across its tags", ()
     );
     assert.equal(markRanges("a &lt; b", [[2, 3]]), "a <mark>&lt;</mark> b");
     assert.equal(markRanges("plain", []), "plain");
-});
-
-test("the change bar gives each side that changed a cell", () => {
-    assert.deepEqual(changeCells(0, 0), ["", "", "", "", ""]);
-    assert.deepEqual(changeCells(1, 0), ["add", "", "", "", ""]);
-    assert.deepEqual(changeCells(10, 3), ["add", "del", "", "", ""]);
-    assert.deepEqual(changeCells(500, 500), ["add", "add", "add", "del", "del"]);
 });
 
 test("a side with no lines (-U0) starts after the line its hunk names", () => {

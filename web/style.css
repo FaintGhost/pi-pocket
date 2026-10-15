@@ -6835,24 +6835,6 @@ textarea.notes {
     overflow-wrap: anywhere;
 }
 
-.change-kind {
-    width: 1.3rem;
-    text-align: center;
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-}
-
-.change-kind.added,
-.change-kind.new {
-    color: var(--ok);
-}
-
-.change-kind.deleted {
-    color: var(--err);
-}
-
 /* Spend: a person or a session, what Pi spent for it, and its limit. */
 .spend-row {
     display: flex;
@@ -8080,11 +8062,23 @@ textarea.notes {
 
 /* ─── Diff viewer ──────────────────────────────────────────── */
 
-/* One file's diff: a header that sticks while its lines scroll by, then the lines in a table, one or two sides. */
+/* One file's diff, a rounded card: a header that sticks while its lines scroll by, then the lines in a table, one or
+ * two sides. (`clip`, not `hidden`: the header must still stick to the scroller that holds the card.) */
 .dv {
-    border: 1px solid var(--line);
-    background: var(--code-bg);
+    --dv-n: 40px;
+    --dv-add: color-mix(in srgb, var(--ok) 11%, transparent);
+    --dv-del: color-mix(in srgb, var(--err) 11%, transparent);
     min-width: 0;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
+    background: var(--code-bg);
+    overflow: clip;
+}
+
+@media (max-width: 520px) {
+    .dv {
+        --dv-n: 34px;
+    }
 }
 
 .dv-head {
@@ -8093,20 +8087,16 @@ textarea.notes {
     z-index: 2;
     display: flex;
     align-items: center;
-    gap: 0.45rem;
-    min-height: 2.2rem;
-    padding: 0.25rem 0.45rem;
-    background: var(--card-2);
-    border-bottom: 1px solid var(--line);
-    font-size: 0.8rem;
+    gap: 9px;
+    min-height: 42px;
+    padding: 0 10px;
+    background: var(--card);
+    border-bottom: 1px solid var(--hair);
+    font-size: 12.5px;
 }
 
 .dv.folded .dv-head {
     border-bottom: 0;
-}
-
-.dv.viewed .dv-head {
-    background: var(--card);
 }
 
 .dv.viewed .dv-name {
@@ -8116,20 +8106,45 @@ textarea.notes {
 .dv-fold {
     display: inline-grid;
     place-items: center;
-    width: 22px;
-    height: 22px;
+    width: 24px;
+    height: 24px;
     flex: none;
+    border-radius: 6px;
     color: var(--muted);
 }
 
 .dv-fold:hover {
+    background: var(--hover);
     color: var(--text);
 }
 
-.dv-head .change-kind {
+/* What kind of change: M, A, D, R in a small tile. */
+.change-kind {
     flex: none;
-    width: 1.2rem;
-    font-size: 0.68rem;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    border-radius: var(--r-tag);
+    background: var(--warn-soft);
+    color: var(--warn);
+    font: 600 10px/1 var(--mono);
+}
+
+.change-kind.added,
+.change-kind.new {
+    background: var(--ok-soft);
+    color: var(--ok);
+}
+
+.change-kind.deleted {
+    background: var(--err-soft);
+    color: var(--err);
+}
+
+.change-kind.renamed {
+    background: var(--accent-soft);
+    color: var(--accent);
 }
 
 .dv-title {
@@ -8154,53 +8169,36 @@ textarea.notes {
 }
 
 .dv-dir {
-    color: var(--muted);
+    min-width: 1ch;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 1ch;
     white-space: nowrap;
+    color: var(--faint);
     font-family: var(--mono);
 }
 
 .dv-name {
-    color: var(--text);
     flex: none;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--text);
+    font-weight: 600;
 }
 
 .dv-counts {
     display: inline-flex;
-    gap: 0.35rem;
+    gap: 6px;
     flex: none;
-    font: 0.74rem var(--mono);
-}
-
-.dv-bar {
-    display: inline-flex;
-    gap: 1px;
-    flex: none;
-}
-
-.dv-bar i {
-    width: 7px;
-    height: 7px;
-    background: var(--line-strong);
-}
-
-.dv-bar i.add {
-    background: var(--ok);
-}
-
-.dv-bar i.del {
-    background: var(--err);
+    font: 11.5px var(--mono);
 }
 
 .dv-chip {
     flex: none;
-    padding: 0 0.35rem;
-    font-size: 0.68rem;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: var(--r-tag);
+    font-size: 11px;
 }
 
 .dv-chip.warn {
@@ -8211,7 +8209,8 @@ textarea.notes {
 .dv-tool.icon-button {
     width: 28px;
     height: 28px;
-    font-size: 0.8rem;
+    border-radius: 8px;
+    font-size: 13px;
     color: var(--muted);
 }
 
@@ -8221,41 +8220,75 @@ textarea.notes {
 
 .dv-tool.danger {
     width: auto;
-    padding: 0 0.4rem;
+    padding: 0 8px;
     color: var(--err);
 }
 
+/* Viewed: a checkbox in a small button. Checking it folds the file away. */
 .dv-viewed {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 6px;
     flex: none;
-    padding: 0.1rem 0.45rem;
-    border: 1px solid var(--line);
-    font-size: 0.72rem;
+    height: 26px;
+    padding: 0 9px 0 7px;
+    border: 1px solid var(--hair-2);
+    border-radius: var(--r-seg);
+    font-size: 12px;
+    font-weight: 500;
     color: var(--muted);
     cursor: pointer;
     user-select: none;
+    transition:
+        background-color var(--t-hover) var(--ease-out),
+        border-color var(--t-hover) var(--ease-out),
+        color var(--t-hover) var(--ease-out);
 }
 
 .dv-viewed:hover {
-    border-color: var(--edge);
     color: var(--text);
 }
 
 .dv-viewed.on {
-    color: var(--ok);
-    border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.dv-viewed:has(:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .dv-viewed input {
-    width: auto;
+    appearance: none;
+    position: relative;
+    flex: none;
+    width: 13px;
+    height: 13px;
     margin: 0;
-    accent-color: var(--ok);
+    padding: 0;
+    border: 1.5px solid currentColor;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+}
+
+.dv-viewed input:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.dv-viewed input:checked::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--accent-ink);
+    mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12l5 5L20 7'/%3E%3C/svg%3E")
+        center / 9px no-repeat;
 }
 
 @media (max-width: 520px) {
-    .dv-bar,
     .dv-viewed span {
         display: none;
     }
@@ -8263,13 +8296,14 @@ textarea.notes {
 
 .dv-scroll {
     overflow-x: auto;
+    padding: 4px 0 8px;
 }
 
 .dv-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font: 0.76rem/1.55 var(--mono);
+    font: 12px/1.7 var(--mono);
     color: var(--body);
     tab-size: 4;
 }
@@ -8289,23 +8323,12 @@ textarea.notes {
     min-width: var(--dv-n);
 }
 
-/* A number column's width, which notes under the lines count past too. */
-.dv {
-    --dv-n: 3.6em;
-}
-
-@media (max-width: 520px) {
-    .dv {
-        --dv-n: 2.9em;
-    }
-}
-
 .dv-col-n {
     width: var(--dv-n);
 }
 
 .dv-n {
-    padding: 0 0.55em 0 0.3em;
+    padding: 0 8px 0 0;
     text-align: right;
     vertical-align: top;
     color: var(--faint);
@@ -8327,9 +8350,10 @@ textarea.notes {
     text-decoration: underline;
 }
 
+/* The code, with the sign of an added or removed line in an 18px column of its own. */
 .dv-code {
     position: relative;
-    padding: 0 0.8em 0 1.5em;
+    padding: 0 12px 0 18px;
     vertical-align: top;
     white-space: pre;
 }
@@ -8342,7 +8366,9 @@ textarea.notes {
 .dv-code::before {
     content: attr(data-sign);
     position: absolute;
-    left: 0.45em;
+    left: 0;
+    width: 18px;
+    text-align: center;
     user-select: none;
 }
 
@@ -8351,21 +8377,21 @@ textarea.notes {
 }
 
 .dv-code.add,
-.dv-n.add {
-    background: color-mix(in srgb, var(--ok) 11%, transparent);
+.dv-n.add,
+.dv-row.add > .dv-n.none {
+    background: var(--dv-add);
 }
 
 .dv-code.del,
-.dv-n.del {
-    background: color-mix(in srgb, var(--err) 11%, transparent);
+.dv-n.del,
+.dv-row.del > .dv-n.none {
+    background: var(--dv-del);
 }
 
-.dv-n.add,
 .dv-code.add::before {
     color: var(--ok);
 }
 
-.dv-n.del,
 .dv-code.del::before {
     color: var(--err);
 }
@@ -8391,14 +8417,13 @@ textarea.notes {
 }
 
 .dv-table.split .dv-code + .dv-n {
-    border-left: 1px solid var(--line);
+    border-left: 1px solid var(--hair);
 }
 
 .dv-hunk td {
-    padding: 0.2rem 0.7rem;
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
-    color: var(--muted);
-    font-size: 0.72rem;
+    padding: 6px 12px;
+    color: var(--accent);
+    font-size: 11.5px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -8406,20 +8431,20 @@ textarea.notes {
 
 .dv-context {
     margin-left: 0.8em;
-    color: var(--body);
+    color: var(--muted);
 }
 
 .dv-gap td {
-    padding: 0.1rem 0.4rem;
-    background: color-mix(in srgb, var(--accent) 5%, transparent);
+    padding: 2px 8px;
+    background: var(--hover);
     text-align: center;
-    border-block: 1px solid var(--line);
 }
 
 .dv-gap button {
-    padding: 0.15rem 0.6rem;
+    padding: 2px 10px;
+    border-radius: 6px;
     color: var(--accent);
-    font: 0.72rem var(--mono);
+    font: 11.5px var(--mono);
 }
 
 .dv-gap button:hover {
@@ -8428,29 +8453,29 @@ textarea.notes {
 
 .dv-reading {
     color: var(--muted);
-    font: 0.72rem var(--mono);
+    font: 11.5px var(--mono);
 }
 
 /* A note under a line ("No newline at end of file") starts where the code does: past the numbers, and the sign. */
 .dv-note td {
-    padding: 0 0.8rem 0 calc(2 * var(--dv-n) + 1.5em);
+    padding: 0 12px 0 calc(2 * var(--dv-n) + 18px);
     color: var(--muted);
     font-style: italic;
 }
 
 .dv-table.split .dv-note td {
-    padding-left: calc(var(--dv-n) + 1.5em);
+    padding-left: calc(var(--dv-n) + 18px);
 }
 
 .dv-note span {
-    font-size: 0.7rem;
+    font-size: 11.5px;
 }
 
 .dv-empty {
     margin: 0;
-    padding: 0.7rem 0.8rem;
+    padding: 10px 14px;
     color: var(--muted);
-    font-size: 0.82rem;
+    font-size: 13px;
 }
 
 .dv-empty.err {
@@ -8462,21 +8487,14 @@ textarea.notes {
 }
 
 .dv-wait {
-    padding: 0.4rem 0.8rem;
-    border: 1px solid var(--line);
-    border-top: 0;
-}
-
-.dv-settings {
-    display: inline-flex;
-    gap: 0.3rem;
+    padding: 6px 14px;
 }
 
 /* A diff in a tool card or a reply: it scrolls inside a bound, like the card's other output. */
 .dv-block {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 10px;
     max-height: 60vh;
     overflow: auto;
 }
@@ -8490,86 +8508,113 @@ textarea.notes {
 .dr {
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
     outline: none;
     min-width: 0;
 }
 
+/* "N files", the counts, how many are viewed, then the layout and Look again. */
 .dr-summary {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.3rem 0.8rem;
-    font-size: 0.8rem;
+    gap: 8px 10px;
+    padding: 12px 14px;
+    font-size: 13px;
+    color: var(--muted);
 }
 
 /* The folder gives way when there is no room; the branch, a way to switch it, stays in sight. */
 .dr-where {
-    flex: 1 1 12rem;
+    flex: 0 1 auto;
     min-width: 0;
     display: flex;
-    align-items: baseline;
-    color: var(--muted);
-    font-size: 0.74rem;
-    white-space: pre;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
 }
 
 .dr-path {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--faint);
 }
 
-.dr-where > :not(.dr-path) {
+.dr-branch {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--muted);
+}
+
+button.dr-branch:hover {
+    background: var(--card-2);
+    color: var(--accent);
 }
 
 .dr-stats {
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-left: auto;
-    font-size: 0.78rem;
+    gap: 10px;
 }
 
 .dr-stats strong {
     color: var(--text);
+    font-weight: 500;
 }
 
-.dr-progress {
-    width: 64px;
-    height: 4px;
-    background: var(--line);
-    overflow: hidden;
+.dr-stats .dv-counts {
+    font-size: 12px;
 }
 
-.dr-progress i {
-    display: block;
-    height: 100%;
-    background: var(--ok);
-    transition: width var(--t-in) var(--ease-out);
+.dr-viewed {
+    font-size: 12.5px;
 }
 
 .dr-tools {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem;
+    gap: 6px;
+    padding: 0 12px 10px;
 }
 
 .dr-filter,
 .ft-filter {
     flex: 1;
     min-width: 7rem;
-    height: 32px;
-    padding: 0.3rem 0.55rem;
-    font-size: 0.8rem;
+    height: 30px;
+    padding: 0 10px;
+    border-color: var(--hair);
+    border-radius: 8px;
+}
+
+@media (pointer: fine) {
+    .dr-filter,
+    .ft-filter {
+        font-size: 12.5px;
+    }
+}
+
+.dr-tools .chip {
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 8px;
+    background: none;
+    font-size: 12px;
 }
 
 .dr-main {
     display: grid;
-    gap: 0.6rem;
+    gap: 10px;
     min-width: 0;
+    padding: 0 12px 14px;
 }
 
 .dr.wide .dr-main {
@@ -8578,10 +8623,10 @@ textarea.notes {
 }
 
 .dr-tree {
-    padding: 0.3rem 0;
-    border: 1px solid var(--line);
+    padding: 6px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
     background: var(--card);
-    font-size: 0.78rem;
     max-height: 40vh;
     overflow: auto;
 }
@@ -8592,22 +8637,20 @@ textarea.notes {
     max-height: calc(100dvh - 10rem);
 }
 
+/* A row of a tree of files, the changed ones and the folder's: a rounded 28px row in mono. */
 .dr-row,
 .ft-row {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 6px;
     width: 100%;
-    min-height: 1.7rem;
-    padding: 0.15rem 0.5rem 0.15rem calc(0.5rem + var(--depth, 0) * 0.85rem);
+    min-height: 28px;
+    padding: 0 8px 0 calc(8px + var(--depth, 0) * 14px);
+    border-radius: 7px;
     text-align: left;
     color: var(--body);
+    font: 12.5px var(--mono);
     white-space: nowrap;
-}
-
-/* The files tree steps in a little further than the changes tree: it nests deeper, with a chevron on each folder. */
-.ft-row {
-    padding-left: calc(0.4rem + var(--depth, 0) * 0.9rem);
 }
 
 .ft-row.muted {
@@ -8622,18 +8665,19 @@ textarea.notes {
 .dr-row.on,
 .ft-row.on {
     background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.dr-row.dir,
+.ft-row.dir {
     color: var(--text);
-    box-shadow: inset 2px 0 var(--accent);
 }
 
-.dr-row.dir {
-    color: var(--muted);
-}
-
-.dr-row .change-kind {
+.dr-row .chev,
+.ft-row .chev {
     flex: none;
-    width: 1.1rem;
-    font-size: 0.64rem;
+    width: 12px;
+    color: var(--faint);
 }
 
 .dr-row.seen .dr-name {
@@ -8649,24 +8693,23 @@ textarea.notes {
 
 .dr-pi {
     color: var(--spark);
-    font-size: 0.7rem;
+    font-size: 11px;
 }
 
 .dr-tail {
     margin-left: auto;
-    padding-left: 0.4rem;
+    padding-left: 6px;
     color: var(--ok);
-    font-size: 0.7rem;
 }
 
 .dr-tail .dv-counts {
-    font-size: 0.68rem;
+    font-size: 11px;
 }
 
 .dr-files {
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: 10px;
     min-width: 0;
 }
 
@@ -8693,6 +8736,10 @@ textarea.notes {
 .dr-clean p {
     margin: 0;
     color: var(--muted);
+}
+
+.dr-pionly {
+    padding: 0 12px 14px;
 }
 
 .dr-pionly .list-item {
@@ -8733,7 +8780,7 @@ textarea.notes {
         flex: 0 0 var(--files-w, 44%);
         max-width: calc(100% - 440px);
         height: 100dvh;
-        border-left: 1px solid var(--line);
+        border-left: 1px solid var(--hair);
         animation-delay: 90ms;
     }
     :root[data-tiling="on"] .layout.filing .files-tile {
@@ -8746,54 +8793,95 @@ textarea.notes {
     }
 }
 
+/* The bar: Files and Changes as a switch, the folder, and close. */
 .files-bar {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
-    padding: calc(env(safe-area-inset-top) + 0.3rem) 0.35rem 0;
-    border-bottom: 1px solid var(--line);
+    gap: 8px;
+    flex: none;
+    height: calc(58px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 10px 0 14px;
+    border-bottom: 1px solid var(--hair);
 }
 
 .files-bar .icon-button {
     width: 34px;
     height: 34px;
+    color: var(--muted);
 }
 
-.files-tabs {
+.files-bar .icon-button:hover {
+    color: var(--text);
+}
+
+.files-root {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--faint);
+    font: 11.5px var(--mono);
+}
+
+/* The switch between Files and Changes, and the review's layout: a track with the chosen one raised. */
+.files-tabs,
+.dr-layout {
     display: flex;
-    align-self: stretch;
+    flex: none;
+    padding: 3px;
+    border-radius: var(--r-control);
+    background: var(--card);
 }
 
-.files-tabs button {
+.files-tabs button,
+.dr-layout button {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
-    padding: 0.45rem 0.75rem;
-    font-size: 0.82rem;
+    gap: 6px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: var(--r-seg);
+    font-size: 13px;
+    font-weight: 500;
     color: var(--muted);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
     transition:
-        color var(--t-hover) var(--ease-out),
-        border-color var(--t-hover) var(--ease-out);
+        background-color var(--t-hover) var(--ease-out),
+        color var(--t-hover) var(--ease-out);
 }
 
-.files-tabs button:hover {
+.files-tabs button:hover,
+.dr-layout button:hover {
     color: var(--text);
 }
 
-.files-tabs button.on {
+.files-tabs button.on,
+.dr-layout button.on {
+    background: var(--raised);
     color: var(--text);
-    border-bottom-color: var(--accent);
+}
+
+.dr-layout {
+    padding: 2px;
+    border-radius: 9px;
+}
+
+.dr-layout button {
+    height: 26px;
+    padding: 0 10px;
+    font-size: 12px;
 }
 
 .files-count {
-    min-width: 1.3rem;
-    padding: 0 0.3rem;
+    display: grid;
+    place-items: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--r-pill);
     background: var(--accent-soft);
     color: var(--accent);
-    font-size: 0.68rem;
-    text-align: center;
+    font: 600 10px/1 var(--mono);
 }
 
 .files-body {
@@ -8813,10 +8901,6 @@ textarea.notes {
     display: none;
 }
 
-.files-body > .dr {
-    padding: 0.6rem 0.7rem 1.2rem;
-}
-
 /* Files: the tree, and the open file beside it when the tile is wide enough, or instead of it when not. */
 .ft {
     display: flex;
@@ -8833,20 +8917,21 @@ textarea.notes {
 }
 
 .ft.side .ft-pane {
-    flex: 0 0 clamp(210px, 34%, 300px);
-    border-right: 1px solid var(--line);
+    flex: 0 0 220px;
+    border-right: 1px solid var(--hair);
 }
 
 .ft-tools {
     display: flex;
     align-items: center;
-    gap: 0.15rem;
-    padding: 0.45rem 0.4rem 0.3rem 0.5rem;
+    gap: 4px;
+    padding: 10px 8px 6px 10px;
 }
 
 .ft-tools .icon-button {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
     color: var(--muted);
 }
 
@@ -8854,34 +8939,11 @@ textarea.notes {
     color: var(--text);
 }
 
-.ft-fold-all {
-    transform: rotate(180deg);
-}
-
-.ft-root {
-    padding: 0.1rem 0.7rem 0.35rem;
-    color: var(--muted);
-    font-size: 0.72rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .ft-tree {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding-bottom: 1rem;
-    font-size: 0.8rem;
-}
-
-.ft-row .icon {
-    flex: none;
-    color: var(--muted);
-}
-
-.ft-row.dir > .icon:not(.chev) {
-    color: var(--accent);
+    padding: 2px 6px 10px;
 }
 
 .ft-spacer {
@@ -8893,25 +8955,16 @@ textarea.notes {
     color: var(--muted);
 }
 
-.ft-row.changed.modified .ft-name,
-.ft-row.changed.renamed .ft-name {
-    color: var(--warn);
-}
-
-.ft-row.changed.new .ft-name,
-.ft-row.changed.added .ft-name {
-    color: var(--ok);
-}
-
 .ft-row.changed.deleted .ft-name {
     color: var(--err);
     text-decoration: line-through;
 }
 
+/* M, A, D: what changed in a file, at the row's end; a folder with changes inside has a dot. */
 .ft-kind {
     margin-left: auto;
-    padding-left: 0.4rem;
-    font: 0.66rem var(--mono);
+    padding-left: 6px;
+    font: 600 10px var(--mono);
 }
 
 .ft-kind.modified,
@@ -8929,15 +8982,22 @@ textarea.notes {
 }
 
 .ft-dot {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
     margin-left: auto;
+    border-radius: 50%;
     background: var(--warn);
     flex: none;
 }
 
+/* Matches for what was typed in Go to file: an icon, the name, then its folder. */
 .ft-row.match {
-    padding-left: 0.7rem;
+    padding-left: 8px;
+}
+
+.ft-row.match .icon {
+    flex: none;
+    color: var(--muted);
 }
 
 .ft-row mark {
@@ -8950,8 +9010,8 @@ textarea.notes {
     min-width: 0;
     margin-left: auto;
     padding-left: 0.6rem;
-    color: var(--muted);
-    font-size: 0.7rem;
+    color: var(--faint);
+    font-size: 11px;
     overflow: hidden;
     text-overflow: ellipsis;
     direction: rtl;
@@ -8976,16 +9036,19 @@ textarea.notes {
     z-index: 3;
     display: flex;
     align-items: center;
-    gap: 0.3rem;
+    gap: 8px;
+    flex: none;
     min-height: 42px;
-    padding: 0 0.35rem 0 0.7rem;
+    padding: 0 10px 0 14px;
     background: var(--bg);
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--hair);
 }
 
 .ft-view-head .icon-button {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    color: var(--muted);
 }
 
 .ft-view-name {
@@ -8994,12 +9057,28 @@ textarea.notes {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.84rem;
+    font: 600 12.5px var(--mono);
     color: var(--text);
 }
 
+/* In the tile, the file's code fills the view on the code's ground; the bar above it is the viewer's own buttons. */
 .ft-view .file-viewer {
-    padding: 0.5rem 0.6rem 1.2rem;
+    flex: 1;
+    gap: 0;
+}
+
+.ft-view .file-viewer > :not(.file-tools, .file-view) {
+    margin: 10px 14px;
+}
+
+.ft-view .file-tools {
+    padding: 6px 10px 6px 14px;
+}
+
+.ft-view .file-view {
+    flex: 1;
+    border: 0;
+    border-radius: 0;
 }
 
 .ft-empty {
@@ -9520,11 +9599,11 @@ textarea.notes {
 }
 
 .file-view {
-    font: 0.78rem/1.5 var(--mono);
+    font: 12px/1.7 var(--mono);
     background: var(--code-bg);
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    padding: 0.4rem 0;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
+    padding: 10px 0;
     overflow-x: auto;
 }
 
@@ -9535,12 +9614,11 @@ textarea.notes {
 
 .file-line .ln {
     flex: none;
-    width: 3.2rem;
-    padding-right: 0.7rem;
+    width: 42px;
+    padding-right: 14px;
     text-align: right;
-    color: var(--muted);
+    color: var(--faint);
     user-select: none;
-    opacity: 0.7;
 }
 
 .file-line .lt {
@@ -9548,7 +9626,7 @@ textarea.notes {
     overflow-wrap: anywhere;
     min-width: 0;
     color: var(--body);
-    padding-right: 0.6rem;
+    padding-right: 12px;
 }
 
 .file-line.on {
@@ -9557,12 +9635,11 @@ textarea.notes {
 
 .file-line.on .ln {
     color: var(--accent);
-    opacity: 1;
 }
 
 .file-image {
     max-width: 100%;
-    border: 1px solid var(--line);
+    border: 1px solid var(--hair);
     border-radius: var(--radius);
 }
 
@@ -9988,6 +10065,7 @@ textarea.notes {
 .files-bar .files-back {
     width: 44px;
     height: 44px;
+    margin-left: -8px;
     color: var(--text);
 }
 
@@ -10061,9 +10139,9 @@ textarea.notes {
 /* Touch: rows and controls a thumb tall. */
 @media (pointer: coarse) {
     .files-tabs button {
-        min-height: 44px;
-        padding: 0.45rem 0.9rem;
-        font-size: 0.88rem;
+        height: 40px;
+        padding: 0 14px;
+        font-size: 14px;
     }
     .ft-tools .icon-button,
     .ft-view-head .icon-button {
@@ -10072,21 +10150,19 @@ textarea.notes {
     }
     .ft-view-head {
         min-height: 48px;
-        padding-left: 0.2rem;
+        padding-left: 6px;
     }
     .ft-view-name {
-        font-size: 0.92rem;
+        font-size: 14px;
     }
     .ft-filter {
         min-height: 42px;
     }
-    .ft-tree {
-        font-size: 0.92rem;
-    }
     .ft-row {
         min-height: 44px;
-        gap: 0.5rem;
-        padding-left: calc(0.6rem + var(--depth, 0) * 1rem);
+        gap: 8px;
+        padding-left: calc(10px + var(--depth, 0) * 16px);
+        font-size: 14px;
     }
     .ft-row .icon {
         width: 16px;
@@ -10294,7 +10370,7 @@ textarea.notes {
         /* Its label hides on a phone: the checkbox alone, centered in a thumb's width. */
         min-width: 42px;
         justify-content: center;
-        padding-inline: 0.6rem;
+        padding-inline: 10px;
     }
     .check {
         min-height: 40px;
@@ -10411,8 +10487,6 @@ textarea.notes {
     }
     .dv-head > .dv-counts {
         margin-left: 2.4rem;
-    }
-    .dv-head > .dv-bar {
         margin-right: auto;
     }
     /* Going to a change (n, p) clears the header's two lines. */
