@@ -8,13 +8,14 @@ import {
     newSession,
     openApp,
     owner,
+    root,
     say,
     scriptedModel,
     until,
     work,
 } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
@@ -137,7 +138,28 @@ test("in plan mode only reading tools pass", () => {
         /blocked/,
         "tools it does not know are blocked too",
     );
+    assert.equal(
+        blockedInPlanMode("schedule", {}, true),
+        undefined,
+        "tools their extension marks read-only pass",
+    );
 });
+
+/** A drop-in with one tool marked read-only and one not. */
+const peek = `import { Type } from "@earendil-works/pi-ai";
+import { defineExtension, defineTool } from "@earendil-works/pi-durable";
+
+const tool = (name: string, annotations?: object) =>
+	defineTool({
+		name,
+		description: name,
+		parameters: Type.Object({}),
+		...(annotations === undefined ? {} : { annotations }),
+		execute: async () => ({ content: [{ type: "text", text: name + " ran" }] }),
+	});
+
+export default () => defineExtension({ name: "peek", tools: [tool("peek", { readOnlyHint: true }), tool("poke")] });
+`;
 
 /** Whether a request carried the plan mode section of the system prompt. */
 let toldPlanMode = false;
@@ -187,13 +209,22 @@ const route: FauxResponseStep = (request) => {
         return call("write", { path: "helper.txt", content: "x" });
     }
 
+    if (text.endsWith("peek") || text.endsWith("poke")) {
+        return call(text.slice(-4), {});
+    }
+
     return fauxAssistantMessage([fauxText(`echo: ${text}`)]);
 };
 
 let app: App;
 
 before(async () => {
+    const dropIns = join(root, "data", "extensions");
+
+    mkdirSync(dropIns, { recursive: true });
+    writeFileSync(join(dropIns, "peek.ts"), peek);
     app = await openApp(scriptedModel(route));
+    await app.setExtensionEnabled(owner(app), "peek.ts", true);
 });
 
 after(async () => {
@@ -258,6 +289,19 @@ test("plan mode reaches the subagents already at work, and is set only for the w
         false,
         "approving lets the helper work again",
     );
+});
+
+test("in plan mode a tool its extension marks read-only runs, and one it does not is blocked", async () => {
+    const id = await newSession(app);
+
+    await app.commands.setPlan(id, owner(app), true);
+    await say(app, id, "peek");
+    await say(app, id, "poke");
+    const said = (await modelTexts(app, id)).join("\n");
+
+    assert.match(said, /peek ran/);
+    assert.doesNotMatch(said, /poke ran/);
+    assert.match(said, /Plan mode is on: .*poke/);
 });
 
 test("plan mode cannot be turned on while its extension is off", async () => {

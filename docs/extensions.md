@@ -86,6 +86,7 @@ You cannot turn a drop-in on yourself: ask the owner to, in Menu → Extensions.
 
 - Return `{ content: [{ type: "text", text }] }`. Throw an `Error` to give the model an error result with its message.
 - `replay: "safe"` only when running the call twice is harmless (reading, or an action keyed so a repeat finds the first one's result). The default is unsafe: a call cut off by a restart comes back to the model as interrupted instead of running again.
+- `annotations: { readOnlyHint: true }`, as in Pi's tool definitions, says the tool changes nothing: plan mode lets it run. Mark only tools that do not write files, run commands, or reach outside the conversation.
 - `api.conversationId`, `api.taskId`, `api.callId` say which call this is. `${api.taskId}:${api.callId}` is a key that stays the same if the call runs again.
 - `api.env` is the session folder's files and shell; `(await api.agent(context)).cwd` is the folder.
 - `api.output(text)` streams running output, which becomes the result when `execute` returns no `content`.
@@ -120,6 +121,7 @@ What the default export receives first. Extensions reach the app only through it
 | `subagentModels()`               | The models the owner allows subagents besides their session's own (`provider/modelId`); empty by default                      |
 | `modelProblem(ref, fresh?)`      | Why a model may not be used now (not signed in, its sign-in expired), or `undefined`; `fresh` asks its provider again         |
 | `requesterOf(conversationId)`    | The id of the person Pi works for in a session now                                                                            |
+| `readOnlyTool(name)`             | Whether an installed tool is marked `annotations: { readOnlyHint: true }`                                                     |
 | `skillPaths()`                   | The extra skill folders in Pi's settings                                                                                      |
 | `skills(cwd)`                    | Pi's skills for a session working in `cwd`, from every place Pi looks                                                         |
 | `heldBack(conversationId)`       | Why work Pi would start there with nobody asking may not start now (a spend limit), or `undefined`                            |
