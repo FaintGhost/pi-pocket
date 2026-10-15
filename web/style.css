@@ -9004,6 +9004,15 @@ textarea.notes {
     color: var(--text);
 }
 
+/* On touch, the icons a size up. */
+@media (pointer: coarse) {
+    .dv-tool .icon,
+    .file-tools .icon-button .icon {
+        width: 18px;
+        height: 18px;
+    }
+}
+
 .dv-tool.danger {
     width: auto;
     padding: 0 8px;

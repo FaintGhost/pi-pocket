@@ -1199,7 +1199,7 @@ function ReviewFile({
             aria-label="Open the file"
             onClick=${() => openFile(`${root}/${file.path}`)}
         >
-            <${Icon} name="file" size=${15} />
+            <${Icon} name="file" size=${16} />
         </button>`
     }
     ${
@@ -1212,7 +1212,7 @@ function ReviewFile({
             aria-label="Undo changes"
             onClick=${undo}
         >
-            ${undoing ? (fresh ? "Delete?" : "Undo?") : "↺"}
+            ${undoing ? (fresh ? "Delete?" : "Undo?") : html`<${Icon} name="undo" size=${16} />`}
         </button>`
     }`;
 
