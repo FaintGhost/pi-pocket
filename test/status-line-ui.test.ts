@@ -484,3 +484,23 @@ test("with the speed off, a narrow phone's line keeps to one row too", real, asy
         }
     }
 });
+
+test("a text size saved before 0.14 moves up one step, once", real, async () => {
+    await page.evaluate(`
+        localStorage.removeItem("pocket.softTiles");
+        localStorage.setItem("pocket.appearance", JSON.stringify({ text: 14, sidebarWidth: 324 }));
+    `);
+
+    for (const load of ["first", "second"]) {
+        await open(VIEWPORTS.desktop);
+        assert.deepEqual(
+            await inPage(`
+                const { text, sidebarWidth } = JSON.parse(localStorage.getItem("pocket.appearance"));
+
+                return JSON.stringify({ text, sidebarWidth });
+            `),
+            { text: 15, sidebarWidth: 312 },
+            `after the ${load} load`,
+        );
+    }
+});
