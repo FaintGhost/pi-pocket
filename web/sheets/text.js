@@ -41,6 +41,9 @@ export function TextSheet({
                     />`
             }
         </div>
-        <button class="button primary wide" onClick=${save}>${button}</button>
+        <div class="sheet-actions">
+            <button class="button" onClick=${closeSheet}>Cancel</button>
+            <button class="button primary" onClick=${save}>${button}</button>
+        </div>
     <//>`;
 }

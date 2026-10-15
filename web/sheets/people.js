@@ -216,6 +216,7 @@ export function InviteSheet({ session = null }) {
                             This link only works on this device. To let other devices in, press <span class="mono">a</span> in the Pi Pocket terminal (or start it with <span class="mono">--access</span>) and pick Local network, Cloudflare Tunnel, or Tailscale. Then make a new invite.
                         </div>`
                     }
+                    <div class="invite-details">
                     <div class="qr" dangerouslySetInnerHTML=${{ __html: invite.svg }}></div>
                     <div class="invite-code">
                         <div class="invite-code-head">
@@ -241,6 +242,7 @@ export function InviteSheet({ session = null }) {
                         <div class="muted small">
                             Or enter it on the other device's sign-in screen.
                         </div>
+                    </div>
                     </div>
                     <div class="row">
                         <input
@@ -305,10 +307,11 @@ function PeopleList() {
 
     return html`<div class="group">
         <div class="group-title">People</div>
+        <div class="sheet-list">
         ${ordered.map(
             (person) => html`<div class="person-row" key=${person.id}>
                 <span class=${`online-dot ${person.online ? "on" : ""}`}></span>
-                <${Avatar} person=${person} size=${26} />
+                <${Avatar} person=${person} size=${32} />
                 <div class="person-main">
                     <div>
                         ${person.name}
@@ -363,6 +366,7 @@ function PeopleList() {
                 }
             </div>`,
         )}
+        </div>
     </div>`;
 }
 

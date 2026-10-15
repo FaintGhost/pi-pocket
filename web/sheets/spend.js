@@ -4,6 +4,7 @@ import { api, attempt, closeSheet, store } from "../store.js";
 import { html, Loader, Sheet } from "../ui.js";
 
 const money = (amount) => `$${amount.toFixed(2)}`;
+const largest = (rows) => rows.reduce((max, row) => Math.max(max, row.spent), 1);
 
 /** A spend limit, and (for the owner) a way to change it. */
 function SpendLimit({ budget, editable, save }) {
@@ -14,13 +15,14 @@ function SpendLimit({ budget, editable, save }) {
             ${budget === undefined ? "no limit" : `limit ${money(budget)}`}
         </span>
         ${
-            editable &&
-            html`<button
-                class="link small"
-                onClick=${() => setDraft(budget === undefined ? "" : String(budget))}
-            >
-                Change
-            </button>`
+            editable
+                ? html`<button
+                    class="link small spend-change"
+                    onClick=${() => setDraft(budget === undefined ? "" : String(budget))}
+                >
+                    Change
+                </button>`
+                : html`<span class="spend-change" aria-hidden="true"></span>`
         }`;
     }
 
@@ -46,6 +48,17 @@ function SpendLimit({ budget, editable, save }) {
     </span>`;
 }
 
+/** Usage against a limit, or the largest spend in the group when there is no limit. */
+function Usage({ row, max }) {
+    const percent = Math.min(100, Math.max(0, (row.spent / (row.budget ?? max)) * 100));
+
+    return html`<span
+        class=${`spend-usage ${row.budget !== undefined && percent >= 80 ? "warn" : ""}`}
+        style=${`--usage:${percent}%`}
+        aria-hidden="true"
+    ><span></span></span>`;
+}
+
 /** What Pi spent, by person and by session, with the owner's limits. */
 export function SpendSheet() {
     const owner = store.state.me?.role === "owner";
@@ -55,12 +68,16 @@ export function SpendSheet() {
         attempt(async () => setData(await api("spend")));
     }, []);
     const save = (target) => async (budget) => setData(await api("spend", { ...target, budget }));
+    const peopleMax = largest(data?.people ?? []);
+    const sessionsMax = largest(data?.sessions ?? []);
 
-    return html`<${Sheet} title="Spend" onClose=${closeSheet}>
+    return html`<${Sheet} title="Spend" onClose=${closeSheet} wide=${true}>
         ${data === null && html`<${Loader} label="Adding it up" />`}
         ${
             data?.total !== undefined &&
-            html`<p>Pi spent <strong>${money(data.total)}</strong> on this server so far.</p>`
+            html`<p class="spend-total">
+                <span>Pi spent</span> <strong>${money(data.total)}</strong> <span>on this server so far.</span>
+            </p>`
         }
         <p class="muted small">
             Spend goes to whoever asked for the work. Past a limit, Pi takes no new messages there, a run that crosses it stops, and subagents' reports wait until it is raised.
@@ -69,31 +86,37 @@ export function SpendSheet() {
             data &&
             html`<div class="group">
                 <div class="group-title">People</div>
-                ${data.people.map(
-                    (person) => html`<div class="spend-row" key=${person.id}>
-                        <span class="grow">${person.name}</span>
-                        <span class="mono">${money(person.spent)}</span>
-                        <${SpendLimit}
-                            budget=${person.budget}
-                            editable=${owner && person.id !== store.state.me?.id}
-                            save=${save({ person: person.id })}
-                        />
-                    </div>`,
-                )}
+                <div class="sheet-list">
+                    ${data.people.map(
+                        (person) => html`<div class="spend-row" key=${person.id}>
+                            <span class="grow">${person.name}</span>
+                            <${Usage} row=${person} max=${peopleMax} />
+                            <span class="mono">${money(person.spent)}</span>
+                            <${SpendLimit}
+                                budget=${person.budget}
+                                editable=${owner && person.id !== store.state.me?.id}
+                                save=${save({ person: person.id })}
+                            />
+                        </div>`,
+                    )}
+                </div>
             </div>
             <div class="group">
                 <div class="group-title">Sessions</div>
-                ${data.sessions.map(
-                    (session) => html`<div class="spend-row" key=${session.id}>
-                        <span class="grow">${session.title}</span>
-                        <span class="mono">${money(session.spent)}</span>
-                        <${SpendLimit}
-                            budget=${session.budget}
-                            editable=${owner}
-                            save=${save({ session: session.id })}
-                        />
-                    </div>`,
-                )}
+                <div class="sheet-list">
+                    ${data.sessions.map(
+                        (session) => html`<div class="spend-row" key=${session.id}>
+                            <span class="grow">${session.title}</span>
+                            <${Usage} row=${session} max=${sessionsMax} />
+                            <span class="mono">${money(session.spent)}</span>
+                            <${SpendLimit}
+                                budget=${session.budget}
+                                editable=${owner}
+                                save=${save({ session: session.id })}
+                            />
+                        </div>`,
+                    )}
+                </div>
             </div>`
         }
     <//>`;

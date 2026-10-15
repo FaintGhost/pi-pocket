@@ -287,15 +287,20 @@ function Group({ title, lessons, data, empty, conversationId, pendingOnly = fals
     return html`<div class="group">
         <div class="group-title">${title}</div>
         ${lessons.length === 0 && empty && html`<p class="muted small">${empty}</p>`}
-        ${lessons.map(
-            (lesson) => html`<${Lesson}
-                key=${lesson.id}
-                lesson=${lesson}
-                data=${data}
-                conversationId=${conversationId}
-                pendingOnly=${pendingOnly}
-            />`,
-        )}
+        ${
+            lessons.length > 0 &&
+            html`<div class="sheet-list">
+                ${lessons.map(
+                    (lesson) => html`<${Lesson}
+                        key=${lesson.id}
+                        lesson=${lesson}
+                        data=${data}
+                        conversationId=${conversationId}
+                        pendingOnly=${pendingOnly}
+                    />`,
+                )}
+            </div>`
+        }
     </div>`;
 }
 

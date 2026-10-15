@@ -1,6 +1,6 @@
 // Model providers: signing in and out, the models subagents may use besides their session's own, and the dialog a
 // sign-in uses to ask for a code or a key.
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, attempt, closeSheet, closeSignIn, signInAnswered, store } from "../store.js";
 import { html, Icon, Loader, Sheet } from "../ui.js";
 import { RefreshModels } from "../model-refresh.js";
@@ -183,6 +183,7 @@ export function ProvidersSheet() {
                 names=${Object.fromEntries((providers ?? []).map((each) => [each.id, each.name]))}
             />`
         }
+        ${store.state.auth && html`<${AuthDialog} inline=${true} />`}
         <label class="search">
             <${Icon} name="search" size=${16} />
             <input
@@ -192,64 +193,108 @@ export function ProvidersSheet() {
             />
         </label>
         ${providers === null && html`<${Loader} label="Loading providers" />`}
-        ${list.map(
-            (provider) => html`<div class="provider">
-                <div>
+        <div class="sheet-list">
+            ${list.map(
+                (provider) => html`<div class="provider">
                     <div>
-                        ${provider.name}
+                        <div>
+                            ${provider.name}
+                            ${
+                                provider.needsSignIn
+                                    ? html` <span class="warn provider-needs">needs sign-in</span>`
+                                    : provider.configured && html` <span class="ok">✓</span>`
+                            }
+                        </div>
+                        <div class="muted small">
+                            ${provider.needsSignIn ? "the sign-in expired and could not be renewed: sign in again. Until then, sessions on its models fail, and PiP and subagents on other models do not use them" : provider.configured ? `signed in${provider.label ? ` · ${provider.label}` : provider.source ? ` · ${provider.source}` : ""}` : "not configured"} · ${provider.models} models
+                        </div>
                         ${
-                            provider.needsSignIn
-                                ? html` <span class="warn">needs sign-in</span>`
-                                : provider.configured && html` <span class="ok">✓</span>`
+                            provider.needsSignIn &&
+                            html`<div class="muted small mono provider-why">${provider.needsSignIn}</div>`
                         }
-                    </div>
-                    <div class="muted small">
-                        ${provider.needsSignIn ? "the sign-in expired and could not be renewed: sign in again. Until then, sessions on its models fail, and PiP and subagents on other models do not use them" : provider.configured ? `signed in${provider.label ? ` · ${provider.label}` : provider.source ? ` · ${provider.source}` : ""}` : "not configured"} · ${provider.models} models
                     </div>
                     ${
-                        provider.needsSignIn &&
-                        html`<div class="muted small mono provider-why">${provider.needsSignIn}</div>`
+                        owner &&
+                        html`<div class="provider-actions">
+                            ${
+                                provider.oauth &&
+                                html`<button
+                                    class="button small"
+                                    onClick=${() => login(provider, "oauth")}
+                                >
+                                    ${provider.oauth}
+                                </button>`
+                            }
+                            ${
+                                provider.apiKey &&
+                                html`<button
+                                    class="button small"
+                                    onClick=${() => login(provider, "api_key")}
+                                >
+                                    API key
+                                </button>`
+                            }
+                            ${
+                                provider.configured &&
+                                provider.source === "stored" &&
+                                html`<button
+                                    class="button small ghost"
+                                    onClick=${() => logout(provider)}
+                                >
+                                    Log out
+                                </button>`
+                            }
+                        </div>`
                     }
-                </div>
-                ${
-                    owner &&
-                    html`<div class="provider-actions">
-                        ${
-                            provider.oauth &&
-                            html`<button
-                                class="button small"
-                                onClick=${() => login(provider, "oauth")}
-                            >
-                                ${provider.oauth}
-                            </button>`
-                        }
-                        ${
-                            provider.apiKey &&
-                            html`<button
-                                class="button small"
-                                onClick=${() => login(provider, "api_key")}
-                            >
-                                API key
-                            </button>`
-                        }
-                        ${
-                            provider.configured &&
-                            provider.source === "stored" &&
-                            html`<button
-                                class="button small ghost"
-                                onClick=${() => logout(provider)}
-                            >
-                                Log out
-                            </button>`
-                        }
-                    </div>`
-                }
-            </div>`,
-        )}
+                </div>`,
+            )}
+        </div>
     <//>`;
 }
 
-export function AuthDialog() {
+/** A provider signs in in place; sign-ins requested elsewhere still get their own dialog. */
+function AuthFrame({ title, onClose, inline, children }) {
+    const ref = useRef(null);
+    const close = useRef(onClose);
+
+    close.current = onClose;
+
+    useEffect(() => {
+        if (!inline) {
+            return undefined;
+        }
+
+        ref.current?.focus({ preventScroll: true });
+        ref.current?.scrollIntoView({ block: "nearest" });
+
+        const escape = (event) => {
+            if (event.key === "Escape" && !event.isComposing && event.keyCode !== 229) {
+                event.stopImmediatePropagation();
+                close.current();
+            }
+        };
+
+        addEventListener("keydown", escape, true);
+
+        return () => removeEventListener("keydown", escape, true);
+    }, [inline]);
+
+    const content = html`<div class="auth-card">${children}</div>`;
+
+    return inline
+        ? html`<section class="auth-inline" aria-label=${title} tabindex="-1" ref=${ref}>
+            <div class="auth-inline-head">
+                <strong>${title}</strong>
+                <button class="icon-button" aria-label="Close" onClick=${onClose}>
+                    <${Icon} name="close" size=${16} />
+                </button>
+            </div>
+            ${content}
+        </section>`
+        : html`<${Sheet} title=${title} onClose=${onClose}>${content}<//>`;
+}
+
+export function AuthDialog({ inline = false }) {
     const { auth } = store.state;
     const [value, setValue] = useState("");
 
@@ -280,7 +325,11 @@ export function AuthDialog() {
 
     const prompt = auth.prompt;
 
-    return html`<${Sheet} title=${`Sign in: ${auth.providerName}`} onClose=${close}>
+    return html`<${AuthFrame}
+        title=${`Sign in: ${auth.providerName}`}
+        onClose=${close}
+        inline=${inline}
+    >
         ${auth.events.map((event) => {
             if (event.type === "auth_url") {
                 return html`<div class="auth-event">

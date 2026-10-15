@@ -152,6 +152,7 @@ export function MessageSheet({ entryId }) {
     }
 
     return html`<${Sheet} title=${toPi ? "Message" : "Reply"} onClose=${closeSheet}>
+        <div class="message-preview">${text}</div>
         ${
             canBranch &&
             view.conversation.inRepository &&

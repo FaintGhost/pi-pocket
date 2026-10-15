@@ -149,7 +149,8 @@ export function TrustBar() {
 
 /** An answer in the sheet: what it does, the folder it is about when that is not this one, and whether it is saved. */
 function Choice({ label, detail, current, onClick }) {
-    return html`<button class="list-item trust-choice" onClick=${onClick}>
+    return html`<button class=${`list-item trust-choice ${current ? "active" : ""}`} onClick=${onClick}>
+        <span class="trust-radio" aria-hidden="true"></span>
         <span class="trust-choice-text">
             <span>${label}</span>
             ${detail && html`<span class="muted small mono">${detail}</span>`}

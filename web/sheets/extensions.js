@@ -110,8 +110,7 @@ const PIP_COMPACT = [
 
 function PipCompactAt({ owner }) {
     const at = store.state.server?.pipCompactAt ?? 60000;
-    const change = (event) =>
-        attempt(() => api("settings", { pipCompactAt: Number(event.currentTarget.value) }));
+    const change = (value) => attempt(() => api("settings", { pipCompactAt: value }));
 
     return html`<div class="setting wrap">
         <div class="grow">
@@ -120,16 +119,18 @@ function PipCompactAt({ owner }) {
                 Once PiP is idle above this, older messages become a short summary.
             </div>
         </div>
-        <select
-            aria-label="Compact PiP's context"
-            value=${String(at)}
-            disabled=${!owner}
-            onChange=${change}
-        >
+        <div class="segmented" role="group" aria-label="Compact PiP's context">
             ${PIP_COMPACT.map(
-                ([value, label]) => html`<option value=${String(value)}>${label}</option>`,
+                ([value, label]) => html`<button
+                    class=${at === value ? "on" : ""}
+                    aria-pressed=${at === value}
+                    disabled=${!owner}
+                    onClick=${() => change(value)}
+                >
+                    ${label}
+                </button>`,
             )}
-        </select>
+        </div>
     </div>`;
 }
 
@@ -139,6 +140,7 @@ export function ExtensionsSheet() {
     const [data, setData] = useState(null);
     const [problem, setProblem] = useState(null);
     const [busy, setBusy] = useState(null);
+    const [confirmGuard, setConfirmGuard] = useState(false);
     const load = () =>
         api("extensions").then(
             (result) => {
@@ -168,13 +170,9 @@ export function ExtensionsSheet() {
     };
 
     const toggle = (module) => {
-        if (
-            module.file === "guard.ts" &&
-            module.enabled &&
-            !confirm(
-                "Turn off Lancet Guard in Pi Pocket?\n\nbash, write, and edit calls will run without checks in every session here. Pi's own setting stays as it is.",
-            )
-        ) {
+        if (module.file === "guard.ts" && module.enabled) {
+            setConfirmGuard(true);
+
             return;
         }
 
@@ -188,70 +186,121 @@ export function ExtensionsSheet() {
             return;
         }
 
+        setConfirmGuard(false);
         change(module, "", { enabled: !module.enabled });
     };
 
-    return html`<${Sheet} title="Extensions" onClose=${closeSheet}>
+    return html`<${Sheet} title="Extensions" onClose=${closeSheet} wide=${true}>
         <p class="muted small">
             Extensions give Pi its tools and checks in Pi Pocket, and can add pages and buttons to the app. A change applies to every session right away and stays after restarts.${owner ? "" : " Only the owner can change them."}
         </p>
         <${SafeMode} />
         ${problem && html`<div class="error-box">${problem}</div>`}
         ${!data && !problem && html`<${Loader} label="Loading extensions" />`}
-        ${data?.modules.map((module) => {
-            const tools = module.extensions.flatMap((extension) => extension.tools);
-            const note = module.file === "guard.ts" ? guardNote(module, data.guard) : null;
+        ${
+            data &&
+            [
+                ["Built in", data.modules.filter((module) => module.source !== "drop-in")],
+                ["Yours", data.modules.filter((module) => module.source === "drop-in")],
+            ]
+                .filter(([, modules]) => modules.length > 0)
+                .map(
+                    ([title, modules]) => html`<div class="group">
+                        <div class="group-title">${title}</div>
+                        <div class="sheet-list">
+                            ${modules.map((module) => {
+                                const tools = module.extensions.flatMap(
+                                    (extension) => extension.tools,
+                                );
+                                const note =
+                                    module.file === "guard.ts"
+                                        ? guardNote(module, data.guard)
+                                        : null;
 
-            return html`<div class=${`extension ${module.enabled ? "" : "off"}`}>
-                <div class="extension-main">
-                    <div class="extension-title">
-                        ${module.title}
-                        ${module.error && html` <span class="warn small">· failed to load</span>`}
-                    </div>
-                    ${module.summary && html`<div class="muted small">${module.summary}</div>`}
-                    ${
-                        note &&
-                        html`<div class=${`small ${note.warn ? "warn" : "ok"}`}>${note.text}</div>`
-                    }
-                    ${
-                        module.file === "guard.ts" &&
-                        module.enabled &&
-                        html`<${ApprovalRule} owner=${owner} />`
-                    }
-                    ${
-                        module.file === "pip.ts" &&
-                        module.enabled &&
-                        html`<${PipCompactAt} owner=${owner} />`
-                    }
-                    ${module.error && html`<div class="error-box small">${module.error}</div>`}
-                    <${WebPart} module=${module} />
-                    <div class="muted small mono">
-                        ${module.source === "drop-in" ? `drop-in${module.path ? ` · ${shortPath(module.path, store.state.server?.home)}` : ""}` : module.file}
-                        ${tools.length > 0 ? ` · tools: ${tools.join(", ")}` : ""}
-                        ${module.required ? " · required" : ""}
-                    </div>
-                </div>
-                <div class="extension-actions">
-                    <${Switch}
-                        on=${module.enabled}
-                        disabled=${!owner || module.required || busy !== null}
-                        label=${`${module.title}: ${module.enabled ? "on" : "off"}`}
-                        onChange=${() => toggle(module)}
-                    />
-                    ${
-                        owner &&
-                        module.enabled &&
-                        html`<button
-                            class="link small"
-                            disabled=${busy !== null}
-                            onClick=${() => change(module, "/reload", {})}
-                        >
-                            Reload
-                        </button>`
-                    }
-                </div>
-            </div>`;
-        })}
+                                return html`<div class=${`extension ${module.enabled ? "" : "off"}`}>
+                                    <div class="extension-main">
+                                        <div class="extension-title">
+                                            ${module.title}
+                                            ${module.error && html` <span class="warn small">· failed to load</span>`}
+                                        </div>
+                                        ${module.summary && html`<div class="muted small">${module.summary}</div>`}
+                                        ${
+                                            note &&
+                                            html`<div class=${`small ${note.warn ? "warn" : "ok"}`}>${note.text}</div>`
+                                        }
+                                        ${
+                                            module.file === "guard.ts" &&
+                                            module.enabled &&
+                                            html`<${ApprovalRule} owner=${owner} />`
+                                        }
+                                        ${
+                                            module.file === "pip.ts" &&
+                                            module.enabled &&
+                                            html`<${PipCompactAt} owner=${owner} />`
+                                        }
+                                        ${
+                                            module.file === "guard.ts" &&
+                                            module.enabled &&
+                                            confirmGuard &&
+                                            html`<div
+                                                class="guard-confirm"
+                                                role="group"
+                                                aria-label="Turn off Lancet Guard?"
+                                            >
+                                                <span>bash, write, and edit calls will run without checks in every session here. Pi's own setting stays as it is.</span>
+                                                <div class="sheet-actions">
+                                                    <button
+                                                        class="button small"
+                                                        onClick=${() => setConfirmGuard(false)}
+                                                    >
+                                                        Keep it on
+                                                    </button>
+                                                    <button
+                                                        class="button small primary"
+                                                        disabled=${busy !== null}
+                                                        onClick=${() => {
+                                                            setConfirmGuard(false);
+                                                            change(module, "", { enabled: false });
+                                                        }}
+                                                    >
+                                                        Turn off
+                                                    </button>
+                                                </div>
+                                            </div>`
+                                        }
+                                        ${module.error && html`<div class="error-box small">${module.error}</div>`}
+                                        <${WebPart} module=${module} />
+                                        <div class="muted small mono">
+                                            ${module.source === "drop-in" ? `drop-in${module.path ? ` · ${shortPath(module.path, store.state.server?.home)}` : ""}` : module.file}
+                                            ${tools.length > 0 ? ` · tools: ${tools.join(", ")}` : ""}
+                                            ${module.required ? " · required" : ""}
+                                        </div>
+                                    </div>
+                                    <div class="extension-actions">
+                                        <${Switch}
+                                            on=${module.enabled}
+                                            disabled=${!owner || module.required || busy !== null}
+                                            label=${`${module.title}: ${module.enabled ? "on" : "off"}`}
+                                            onChange=${() => toggle(module)}
+                                        />
+                                        ${
+                                            owner &&
+                                            module.enabled &&
+                                            html`<button
+                                                class="link small"
+                                                disabled=${busy !== null}
+                                                onClick=${() => change(module, "/reload", {})}
+                                            >
+                                                Reload
+                                            </button>`
+                                        }
+                                    </div>
+                                </div>`;
+                            })}
+                        </div>
+                    </div>`,
+                )
+        }
         ${
             data?.dropIns &&
             html`<p class="muted small">

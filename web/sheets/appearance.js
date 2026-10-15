@@ -1,9 +1,11 @@
 // Appearance: themes, and how the app looks and moves.
+import { useEffect } from "preact/hooks";
 import { closeSheet, openSheet, store } from "../store.js";
 import {
     chooseTheme,
     paletteOf,
     prefs,
+    preview,
     setPrefs,
     themeIds,
     THEMES,
@@ -13,7 +15,7 @@ import {
 import { html, Icon, Sheet, Switch } from "../ui.js";
 
 /** A theme as a card: a tiny Hyprland desktop drawn in its own colors. */
-function ThemeCard({ id, index, desktop = false }) {
+function ThemeCard({ id, desktop = false }) {
     const palette = paletteOf(id);
     const vars = varsStyle(themeVars(palette));
     // "Desktop" on a server without an Omarchy desktop shows Tokyo Night.
@@ -32,8 +34,12 @@ function ThemeCard({ id, index, desktop = false }) {
 
     return html`<button
         class=${`theme-card ${on ? "on" : ""} ${desktop ? "theme-desktop" : ""}`}
-        style=${`${vars};--i:${index}`}
+        style=${vars}
         title=${desktop ? "Follow the Omarchy theme of the machine Pi Pocket runs on" : THEMES[id].name}
+        onMouseEnter=${() => matchMedia("(hover: hover)").matches && preview(id)}
+        onMouseLeave=${() => preview(null)}
+        onFocus=${() => preview(id)}
+        onBlur=${() => preview(null)}
         onClick=${(event) => chooseTheme(id, event)}
     >
         ${desk}
@@ -70,13 +76,13 @@ export function AppearanceSheet() {
     const p = prefs();
     const desktop = store.state.desktopTheme;
 
+    useEffect(() => () => preview(null), []);
+
     return html`<${Sheet} title="Appearance" onClose=${closeSheet} wide=${true}>
         <div class="label">Theme</div>
         <div class="theme-grid">
-            ${desktop && html`<${ThemeCard} id="desktop" index=${0} desktop=${true} />`}
-            ${themeIds().map(
-                (id, index) => html`<${ThemeCard} key=${id} id=${id} index=${index + 1} />`,
-            )}
+            ${desktop && html`<${ThemeCard} id="desktop" desktop=${true} />`}
+            ${themeIds().map((id) => html`<${ThemeCard} key=${id} id=${id} />`)}
         </div>
         ${
             !desktop &&
@@ -85,7 +91,7 @@ export function AppearanceSheet() {
             </p>`
         }
         <div class="label">Layout and motion</div>
-        <div>
+        <div class="sheet-list">
             <${SettingRow}
                 title="Tiled windows"
                 detail="Wide screens: the sidebar and the session as Hyprland windows, with gaps and the active border"
@@ -173,7 +179,7 @@ export function AppearanceSheet() {
             <//>
         </div>
         <div class="label">Conversation</div>
-        <div>
+        <div class="sheet-list">
             <${SettingRow}
                 title="Show thinking"
                 detail="Adds a chevron before the live spinner. Tap it to read the current thought above the line as it comes. Also Alt+T"
@@ -186,7 +192,7 @@ export function AppearanceSheet() {
             <//>
         </div>
         <div class="label">Status line</div>
-        <div>
+        <div class="sheet-list">
             <${SettingRow}
                 title="Reply speed"
                 detail="Under the message box: how fast the last answer came, in tokens a second, and how long its first token took"

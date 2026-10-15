@@ -2452,6 +2452,20 @@ test(
     },
 );
 
+test("Lancet Guard stays on until its inline confirmation is accepted", real, async () => {
+    await app.setExtensionEnabled(owner(app), "guard.ts", true);
+    await page.navigate(`${base}/s/${session}`);
+    await until(() => has(".composer"), "the conversation");
+    await inPage(`(await import("/store.js")).openSheet({ type: "extensions" }); return "null";`);
+    await until(() => has('.switch[aria-label="Lancet Guard: on"]'), "the guard switch");
+    await settled();
+    await page.click({ selector: '.switch[aria-label="Lancet Guard: on"]' });
+    await until(() => has(".guard-confirm"), "the inline confirmation");
+    assert.equal(await has('.switch[aria-label="Lancet Guard: on"]'), true);
+    await page.click({ selector: ".guard-confirm .primary" });
+    await until(() => has('.switch[aria-label="Lancet Guard: off"]'), "guard switched off");
+});
+
 test("turning the module off takes away its button and closes its page", real, async () => {
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(rail("Meter")), "the meter's rail button");

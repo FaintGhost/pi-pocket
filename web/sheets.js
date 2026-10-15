@@ -27,9 +27,9 @@ import { ArtifactsSheet, ArtifactViewer, ImageViewer } from "./sheets/viewers.js
 import { PiSessionSheet, PiSessionsSheet, piSessionsAvailable } from "./sheets/pi-sessions.js";
 import { WorktreeSheet } from "./sheets/worktree.js";
 import { TrustSheet } from "./trust.js";
-import { addLayer, removeLayer } from "./back.js";
+import { addLayer, goBack, removeLayer } from "./back.js";
 import { actions, api, store } from "./store.js";
-import { Boundary, html, usePresence } from "./ui.js";
+import { Boundary, html, SheetBack, usePresence } from "./ui.js";
 
 // ─── Back ─────────────────────────────────────────────────────────────────────────
 
@@ -102,7 +102,7 @@ onExtensionsGone((gone) => {
  */
 export function Sheets() {
     const [sheet, leaving] = usePresence(store.state.sheet, 200);
-    const auth = store.state.auth ? html`<${AuthDialog} />` : null;
+    const auth = store.state.auth && sheet?.type !== "providers" ? html`<${AuthDialog} />` : null;
 
     if (!sheet) {
         return auth;
@@ -111,7 +111,9 @@ export function Sheets() {
     const key = `${sheet.type}:${sheet.entryId ?? sheet.id ?? sheet.pipId ?? ""}`;
 
     return html`<div class=${`sheet-host ${leaving ? "leaving" : ""}`} inert=${leaving}>
-        <${Boundary} key=${key} reset=${sheet}>${sheetBody(sheet)}<//>
+        <${SheetBack.Provider} value=${trail.length > 1 ? goBack : null}>
+            <${Boundary} key=${key} reset=${sheet}>${sheetBody(sheet)}<//>
+        <//>
     </div>
     ${auth}`;
 }

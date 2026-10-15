@@ -258,7 +258,7 @@ export function BranchPicker() {
         onClick=${(event) => event.target === event.currentTarget && closeSheet()}
     >
         <section
-            class=${`pop-menu ${anchor ? (anchor.down ? "down" : "") : "free"}`}
+            class=${`pop-menu branch-picker ${anchor ? (anchor.down ? "down" : "") : "free"}`}
             style=${anchorStyle(anchor)}
             ref=${box}
             role="dialog"

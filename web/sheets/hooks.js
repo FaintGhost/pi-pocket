@@ -215,14 +215,15 @@ export function HooksSheet() {
         }).finally(load);
     };
 
-    return html`<${Sheet} title="Webhooks and watches" onClose=${closeSheet}>
+    return html`<${Sheet} title="Webhooks and watches" onClose=${closeSheet} wide=${true}>
         <p class="muted small">
             Other services (GitHub, a deploy, a monitor) post to a webhook's address, and each post becomes a message to Pi in a session, or to PiP: your instructions, then what came.
         </p>
         ${
             steer &&
             targets.length > 0 &&
-            html`<div class="field">
+            html`<div class="hook-form">
+                <div class="field">
                     <div class="label">Name</div>
                     <input
                         placeholder="Deploys"
@@ -294,7 +295,8 @@ export function HooksSheet() {
                     onClick=${make}
                 >
                     Make webhook
-                </button>`
+                </button>
+            </div>`
         }
         ${list === null && html`<p class="muted">Loading…</p>`}
         ${
