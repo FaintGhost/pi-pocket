@@ -2065,6 +2065,30 @@ test(
     },
 );
 
+test("the menu's arrows reach its places and Esc returns focus to its opener", real, async () => {
+    await fresh();
+    await page.setViewport(VIEWPORTS.desktop);
+    await goTo(first);
+    await tap('.topbar [aria-label="Menu"]');
+    await reach({ sheet: "menu" }, "the menu");
+    await page.press("ArrowDown");
+    assert.equal(
+        await inPage<string>(
+            `return JSON.stringify(document.activeElement?.getAttribute("data-place"))`,
+        ),
+        "files",
+    );
+    await page.press("Escape");
+    await reach({ sheet: null }, "the closed menu");
+    await until(
+        async () =>
+            await inPage<boolean>(
+                `return JSON.stringify(document.activeElement?.matches('.topbar [aria-label="Menu"]'))`,
+            ),
+        "focus returned to Menu",
+    );
+});
+
 test(
     "/pip with words that cannot be sent leaves them in PiP's box, after its draft",
     real,

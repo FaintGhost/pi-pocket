@@ -10218,13 +10218,129 @@ button.dr-branch:hover {
 
 /* ─── Phones: places, pushed screens, and going back ───────── */
 
-/* The menu's tiles: the session's places, a thumb wide each, four to a row. */
+/* The menu and the phone's places share a three-column grid of soft tiles. */
 .places {
     display: grid;
-    /* Four to a row, or three where larger text would cut their names short. */
-    grid-template-columns: repeat(auto-fill, minmax(max(4.6rem, 22%), 1fr));
-    gap: 0.4rem;
-    margin-bottom: 0.35rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px 12px 12px;
+}
+
+.nav-menu .sheet-body,
+.places-sheet .sheet-body {
+    padding: 0;
+    gap: 0;
+}
+
+.nav-menu :is(.menu-session, .group) {
+    margin: 0;
+    padding: 6px 6px 8px;
+    border-top: 1px solid var(--hair);
+}
+
+.nav-menu .menu-session:empty {
+    display: none;
+}
+
+.nav-menu .group-title {
+    margin: 0;
+    padding: 8px 10px 4px;
+    color: var(--faint);
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.nav-menu .list-item,
+.places-sheet .list-item {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-height: 36px;
+    margin: 0;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: var(--r-row);
+    background: none;
+    color: var(--text);
+    font-size: 13.5px;
+}
+
+.nav-menu .list-item:hover,
+.places-sheet .list-item:hover {
+    background: var(--hover);
+}
+
+.nav-menu .list-item:hover > span:first-child,
+.places-sheet .list-item:hover > span:first-child {
+    color: var(--text);
+}
+
+.nav-menu .list-item > :first-child,
+.places-sheet .list-item > :first-child {
+    flex: none;
+    white-space: nowrap;
+}
+
+.nav-menu .list-item > :last-child:not(:first-child),
+.places-sheet .list-item > :last-child:not(:first-child) {
+    flex: 1;
+    min-width: 0;
+    text-align: right;
+    font-size: 12px;
+    color: var(--faint);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.places-sheet .list-item {
+    margin: 0 6px 8px;
+}
+
+@media (min-width: 700px) {
+    /* Sheet still owns focus and Esc; its existing sheet trail owns Back, even from a child sheet. */
+    .nav-menu-host .overlay {
+        padding: 0;
+        background: none;
+    }
+    .nav-menu {
+        position: fixed;
+        left: var(--menu-left, calc(100vw - 368px));
+        top: var(--menu-top, 64px);
+        width: 360px;
+        max-height: var(--menu-height, calc(100dvh - 72px));
+        border-radius: 16px;
+        box-shadow: var(--pop);
+        animation: pop 0.25s var(--ease-out);
+    }
+    .nav-menu .sheet-head {
+        height: auto;
+        min-height: 0;
+        padding: 10px 12px 2px 16px;
+        border: 0;
+    }
+    .nav-menu .grip,
+    .nav-menu .sheet-head h2::before {
+        display: none;
+    }
+    .nav-menu .sheet-head h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .nav-menu .sheet-head .icon-button {
+        width: 28px;
+        height: 28px;
+    }
+}
+
+@media (pointer: coarse) {
+    .nav-menu .list-item,
+    .places-sheet .list-item {
+        min-height: 44px;
+    }
 }
 
 .place {
@@ -10232,13 +10348,14 @@ button.dr-branch:hover {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.35rem;
-    min-height: 68px;
-    padding: 0.55rem 0.25rem 0.45rem;
+    position: relative;
+    gap: 5px;
+    height: 66px;
+    padding: 8px 4px;
+    border-radius: var(--r-card);
     background: var(--card);
-    border: 1px solid var(--line);
+    border: 1px solid var(--hair);
     color: var(--body);
-    animation: rise-in 0.34s var(--ease-out) backwards;
     transition:
         background-color var(--t-hover) var(--ease-out),
         border-color var(--t-hover) var(--ease-out),
@@ -10247,7 +10364,7 @@ button.dr-branch:hover {
 }
 
 .place:hover {
-    border-color: var(--edge);
+    border-color: var(--hair-2);
     background: var(--card-2);
     color: var(--text);
 }
@@ -10259,30 +10376,40 @@ button.dr-branch:hover {
 
 .place.on {
     color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    background: var(--accent-soft);
+    border-color: var(--accent-line);
 }
 
 .place-icon {
-    position: relative;
     display: grid;
     place-items: center;
-    width: 30px;
-    height: 26px;
+    width: 20px;
+    height: 20px;
+    position: static;
 }
 
 .place-icon .badge {
-    top: -6px;
-    right: -10px;
+    top: 7px;
+    right: 8px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--r-pill);
+    background: var(--accent-fill);
+    color: var(--accent-ink);
+    font: 600 9.5px/1 var(--mono);
+    box-shadow: none;
 }
 
 .place-icon .browser-dot {
-    top: -2px;
-    right: -4px;
+    top: 10px;
+    right: 10px;
 }
 
 .place-label {
     max-width: 100%;
-    font-size: 0.74rem;
+    font-size: 12px;
+    font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

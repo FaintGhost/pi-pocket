@@ -1,4 +1,5 @@
 // The menu: what can be done in this session and in the app.
+import { useLayoutEffect, useRef } from "preact/hooks";
 import { browserAvailable, displayUrl, setBrowserOpen } from "../browser.js";
 import { chatUnread } from "../chat.js";
 import { schedulesAvailable, triggersOn, watchAvailable, watchPr } from "../commands.js";
@@ -47,7 +48,7 @@ function extensionsHint() {
  * thumb's width each.
  */
 function Places() {
-    const { view, browser, browserOpen, server } = store.state;
+    const { view, browser, browserOpen, server, filesOpen, filesTab } = store.state;
     const conversation = view.conversation;
 
     if (!conversation) {
@@ -61,12 +62,14 @@ function Places() {
             id: "files",
             icon: "folder",
             label: "Files",
+            on: filesOpen && filesTab === "files",
             run: () => setFilesOpen(true, "files"),
         },
         filesAvailable() && {
             id: "changes",
             icon: "diff",
             label: "Changes",
+            on: filesOpen && filesTab === "changes",
             run: () => setFilesOpen(true, "changes"),
         },
         browserAvailable() && {
@@ -137,7 +140,7 @@ function Places() {
                 onClick=${place.run}
             >
                 <span class="place-icon badge-host">
-                    <${Icon} name=${place.icon} size=${22} />
+                    <${Icon} name=${place.icon} size=${20} />
                     ${place.count > 0 && html`<span class="badge">${place.count}</span>`}
                     ${place.dot && html`<span class="browser-dot" aria-hidden="true"></span>`}
                 </span>
@@ -154,10 +157,106 @@ function Places() {
 export function PlacesSheet() {
     const conversation = store.state.view.conversation;
 
-    return html`<${Sheet} title=${conversation?.title ?? "Open"} onClose=${closeSheet}>
+    return html`<${Sheet}
+        title=${conversation?.title ?? "Open"}
+        onClose=${closeSheet}
+        className="places-sheet"
+    >
         <${Places} />
         ${item("Session menu", () => openSheet({ type: "menu" }), "rename, context, settings")}
     <//>`;
+}
+
+/** Keep Sheet's Esc, drag, and focus handling; the sheet trail already owns its back-stack layer. */
+function MenuFrame({ title, children }) {
+    const host = useRef(null);
+
+    useLayoutEffect(() => {
+        const element = host.current;
+        const button = document.querySelector('.topbar [aria-label="Menu"]');
+        const active = document.activeElement;
+        const opener = active === document.body ? button : active;
+
+        const place = () => {
+            const rect = button?.getBoundingClientRect();
+            const top = (rect?.bottom ?? 58) + 6;
+            const bottom =
+                (visualViewport?.offsetTop ?? 0) + (visualViewport?.height ?? innerHeight);
+            const left = Math.max(
+                8,
+                Math.min((rect?.right ?? innerWidth - 8) - 360, innerWidth - 368),
+            );
+
+            element.style.setProperty("--menu-left", `${left}px`);
+            element.style.setProperty("--menu-top", `${top}px`);
+            element.style.setProperty("--menu-height", `${Math.max(100, bottom - top - 8)}px`);
+        };
+
+        place();
+        addEventListener("resize", place);
+        visualViewport?.addEventListener("resize", place);
+
+        return () => {
+            removeEventListener("resize", place);
+            visualViewport?.removeEventListener("resize", place);
+
+            const focused = document.activeElement;
+            const back = opener?.isConnected ? opener : button;
+
+            if ((focused === document.body || element.contains(focused)) && back?.isConnected) {
+                back.focus({ preventScroll: true });
+            }
+        };
+    }, []);
+
+    const onKey = (event) => {
+        if (
+            event.defaultPrevented ||
+            event.isComposing ||
+            event.keyCode === 229 ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey
+        ) {
+            return;
+        }
+
+        const controls = [
+            ...host.current.querySelectorAll(".place, .list-item"),
+            ...host.current.querySelectorAll(".sheet-head button"),
+        ];
+        const index = controls.indexOf(document.activeElement);
+        let next;
+
+        if (event.key === "ArrowDown" || event.key === "ArrowRight") {
+            next = (index + 1) % controls.length;
+        } else if (event.key === "ArrowUp" || event.key === "ArrowLeft") {
+            next =
+                index < 0 ? controls.length - 1 : (index - 1 + controls.length) % controls.length;
+        } else if (event.key === "Home") {
+            next = 0;
+        } else if (event.key === "End") {
+            next = controls.length - 1;
+        } else if (event.key === "Tab") {
+            next =
+                index < 0
+                    ? event.shiftKey
+                        ? controls.length - 1
+                        : 0
+                    : (index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+        }
+
+        if (next !== undefined && controls.length > 0) {
+            event.preventDefault();
+            controls[next].focus();
+        }
+    };
+
+    return html`<div class="nav-menu-host" ref=${host} onKeyDown=${onKey}>
+        <${Sheet} title=${title} onClose=${closeSheet} className="nav-menu">
+            ${children}
+        <//>
+    </div>`;
 }
 
 /** The project's trust in a word, once the server said. */
@@ -197,120 +296,124 @@ export function MenuSheet() {
     const instructions = view.agent?.instructions;
     const memory = useMemory();
 
-    return html`<${Sheet} title=${conversation?.title ?? "Menu"} onClose=${closeSheet}>
+    return html`<${MenuFrame} title=${conversation?.title ?? "Menu"}>
         <${Places} />
-        ${
-            conversation &&
-            collab() &&
-            steer &&
-            (!turns?.on || canStopTurns) &&
-            item(
-                turns?.on ? "Turn off take turns" : "Take turns",
-                () =>
-                    attempt(async () => {
-                        await actions.turns(turns?.on ? "off" : "on");
+        <div class="menu-session">
+            ${
+                conversation &&
+                collab() &&
+                steer &&
+                (!turns?.on || canStopTurns) &&
+                item(
+                    turns?.on ? "Turn off take turns" : "Take turns",
+                    () =>
+                        attempt(async () => {
+                            await actions.turns(turns?.on ? "off" : "on");
+                            closeSheet();
+                        }),
+                    turns?.on
+                        ? "anyone here can send to Pi again"
+                        : "one person drives Pi at a time",
+                )
+            }
+            ${session && steer && item("Rename", () => openSheet({ type: "rename" }))}
+            ${
+                session &&
+                item(
+                    isPinned(conversation.id) ? "Unpin from the top" : "Pin to the top",
+                    () => {
+                        togglePin(conversation.id);
                         closeSheet();
-                    }),
-                turns?.on ? "anyone here can send to Pi again" : "one person drives Pi at a time",
-            )
-        }
-        ${session && steer && item("Rename", () => openSheet({ type: "rename" }))}
-        ${
-            session &&
-            item(
-                isPinned(conversation.id) ? "Unpin from the top" : "Pin to the top",
-                () => {
-                    togglePin(conversation.id);
+                    },
+                    "this browser",
+                )
+            }
+            ${
+                session &&
+                item(
+                    "Mark unread",
+                    () => {
+                        setUnread(conversation.id, true);
+                        closeSheet();
+                        navigate(null);
+                    },
+                    "this browser; opening it again clears it",
+                )
+            }
+            ${
+                conversation?.worktree && steer
+                    ? item(
+                          "Worktree",
+                          () => openSheet({ type: "worktree" }),
+                          conversation.worktree.branch,
+                      )
+                    : conversation &&
+                      steer &&
+                      driving &&
+                      !scoped() &&
+                      item(
+                          "Working directory",
+                          () => openSheet({ type: "cwd", mode: "change" }),
+                          shortPath(view.agent?.cwd, server?.home),
+                      )
+            }
+            ${
+                conversation &&
+                browserAvailable() &&
+                store.state.browserOpen &&
+                item(
+                    "Close the browser",
+                    () => {
+                        setBrowserOpen(false);
+                        closeSheet();
+                    },
+                    store.state.browser?.open && displayUrl(store.state.browser.url),
+                )
+            }
+            ${conversation && trustAvailable() && item("Project trust", () => openSheet({ type: "trust" }), trustHint())}
+            ${session && steer && driving && item("Instructions for Pi", () => openSheet({ type: "instructions" }), instructions ? "on" : "none")}
+            ${conversation && steer && driving && item("Compact context", () => openSheet({ type: "compact" }), "summarize older messages")}
+            ${conversation && steer && driving && item("New context", () => openSheet({ type: "reset" }), "Pi starts fresh; history stays")}
+            ${conversation && memoryAvailable() && item("Memory", () => openSheet({ type: "memory" }), memoryHint(memory))}
+            ${schedulesAvailable() && item("Scheduled messages", () => openSheet({ type: "schedules" }), view.schedules.length === 0 ? "none" : `${view.schedules.length} coming`)}
+            ${
+                watchAvailable() &&
+                steer &&
+                view.watch?.status !== "watching" &&
+                item(
+                    "Watch pull request",
+                    () => {
+                        closeSheet();
+                        attempt(() => watchPr());
+                    },
+                    "fix CI, answer reviews",
+                )
+            }
+            ${
+                conversation &&
+                item("Copy link", () =>
+                    copyText(location.href).then(
+                        () => notify("info", "Link copied. Other signed-in devices can open it."),
+                        () => notify("error", "Could not copy."),
+                    ),
+                )
+            }
+            ${
+                conversation &&
+                html`<a class="list-item" href=${`/api/c/${conversation.id}/export`} download>
+                    <span>Export as Markdown</span>
+                    <span class="muted small">the whole history</span>
+                </a>`
+            }
+            ${
+                session &&
+                steer &&
+                item(conversation.archived ? "Unarchive" : "Archive", () => {
                     closeSheet();
-                },
-                "this browser",
-            )
-        }
-        ${
-            session &&
-            item(
-                "Mark unread",
-                () => {
-                    setUnread(conversation.id, true);
-                    closeSheet();
-                    navigate(null);
-                },
-                "this browser; opening it again clears it",
-            )
-        }
-        ${
-            conversation?.worktree && steer
-                ? item(
-                      "Worktree",
-                      () => openSheet({ type: "worktree" }),
-                      conversation.worktree.branch,
-                  )
-                : conversation &&
-                  steer &&
-                  driving &&
-                  !scoped() &&
-                  item(
-                      "Working directory",
-                      () => openSheet({ type: "cwd", mode: "change" }),
-                      shortPath(view.agent?.cwd, server?.home),
-                  )
-        }
-        ${
-            conversation &&
-            browserAvailable() &&
-            store.state.browserOpen &&
-            item(
-                "Close the browser",
-                () => {
-                    setBrowserOpen(false);
-                    closeSheet();
-                },
-                store.state.browser?.open && displayUrl(store.state.browser.url),
-            )
-        }
-        ${conversation && trustAvailable() && item("Project trust", () => openSheet({ type: "trust" }), trustHint())}
-        ${session && steer && driving && item("Instructions for Pi", () => openSheet({ type: "instructions" }), instructions ? "on" : "none")}
-        ${conversation && steer && driving && item("Compact context", () => openSheet({ type: "compact" }), "summarize older messages")}
-        ${conversation && steer && driving && item("New context", () => openSheet({ type: "reset" }), "Pi starts fresh; history stays")}
-        ${conversation && memoryAvailable() && item("Memory", () => openSheet({ type: "memory" }), memoryHint(memory))}
-        ${schedulesAvailable() && item("Scheduled messages", () => openSheet({ type: "schedules" }), view.schedules.length === 0 ? "none" : `${view.schedules.length} coming`)}
-        ${
-            watchAvailable() &&
-            steer &&
-            view.watch?.status !== "watching" &&
-            item(
-                "Watch pull request",
-                () => {
-                    closeSheet();
-                    attempt(() => watchPr());
-                },
-                "fix CI, answer reviews",
-            )
-        }
-        ${
-            conversation &&
-            item("Copy link", () =>
-                copyText(location.href).then(
-                    () => notify("info", "Link copied. Other signed-in devices can open it."),
-                    () => notify("error", "Could not copy."),
-                ),
-            )
-        }
-        ${
-            conversation &&
-            html`<a class="list-item" href=${`/api/c/${conversation.id}/export`} download>
-                <span>Export as Markdown</span>
-                <span class="muted small">the whole history</span>
-            </a>`
-        }
-        ${
-            session &&
-            steer &&
-            item(conversation.archived ? "Unarchive" : "Archive", () => {
-                closeSheet();
-                setArchived([conversation.id], !conversation.archived);
-            })
-        }
+                    setArchived([conversation.id], !conversation.archived);
+                })
+            }
+        </div>
         ${
             view.subagents.length > 0 &&
             html`<div class="group">
@@ -327,6 +430,7 @@ export function MenuSheet() {
         <div class="group">
             <div class="group-title">App</div>
             ${item("Appearance", () => openSheet({ type: "appearance" }), paletteOf().name)}
+            ${item("Keyboard shortcuts", () => openSheet({ type: "shortcuts" }), "?")}
             ${
                 me?.role === "owner" &&
                 defaultsKept() &&
