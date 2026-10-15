@@ -192,6 +192,9 @@
 
 * {
     box-sizing: border-box;
+    /* No ligatures, as in a terminal: code shows the characters it has (=== stays three). Important, because each
+     * `font` shorthand would reset it. */
+    font-variant-ligatures: none !important;
 }
 
 html,
@@ -201,7 +204,6 @@ body {
     background: var(--desk);
     color: var(--body);
     font: 14px / 1.55 var(--sans);
-    font-variant-ligatures: none;
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
 }
