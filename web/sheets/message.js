@@ -70,12 +70,12 @@ function SendAgain({ prompt, worktree }) {
                 `${model.provider}/${model.id} ${model.name}`.toLowerCase().includes(needle)),
     );
 
-    return html`<div class="group">
-        <div class="group-title">Send again in a new session</div>
-        ${item(`With ${modelLabel(view.agent)}`, () => openBranch(() => actions.resend(prompt.id, { worktree })), "same model")}
-        ${
-            choosing
-                ? html`<label class="search">
+    return html`<div class="group-title">Send again in a new session</div>
+    ${item(`With ${modelLabel(view.agent)}`, () => openBranch(() => actions.resend(prompt.id, { worktree })), "same model")}
+    ${
+        choosing
+            ? html`<div class="message-model-search">
+                <label class="search">
                     <${Icon} name="search" size=${16} />
                     <input
                         autofocus
@@ -84,22 +84,22 @@ function SendAgain({ prompt, worktree }) {
                         onInput=${(event) => setQuery(event.currentTarget.value)}
                     />
                 </label>
-                ${others.map((model) =>
-                    item(
-                        model.name,
-                        () =>
-                            openBranch(() =>
-                                actions.resend(prompt.id, {
-                                    model: { provider: model.provider, modelId: model.id },
-                                    worktree,
-                                }),
-                            ),
-                        html`<span class="mono">${model.provider}</span>`,
-                    ),
-                )}`
-                : item("With another model…", () => setChoosing(true))
-        }
-    </div>`;
+            </div>
+            ${others.map((model) =>
+                item(
+                    model.name,
+                    () =>
+                        openBranch(() =>
+                            actions.resend(prompt.id, {
+                                model: { provider: model.provider, modelId: model.id },
+                                worktree,
+                            }),
+                        ),
+                    html`<span class="mono">${model.provider}</span>`,
+                ),
+            )}`
+            : item("With another model…", () => setChoosing(true))
+    }`;
 }
 
 /** What can be done with one message: fork from it, edit it, send it again, or copy it. */
@@ -160,18 +160,20 @@ export function MessageSheet({ entryId }) {
                 <input type="checkbox" checked=${worktree} onChange=${(event) => setWorktree(event.currentTarget.checked)} /> New sessions get a git worktree of their own
             </label>`
         }
-        ${canBranch && !toPi && item("Fork from here", () => openBranch(() => actions.fork(entry.id, { worktree })), "everything up to this reply")}
-        ${canBranch && toPi && item("Edit and send again…", () => setDraft(text))}
-        ${canBranch && prompt && html`<${SendAgain} prompt=${prompt} worktree=${worktree} />`}
-        ${
-            memoryAvailable() &&
-            canSteer() &&
-            item(
-                "Remember…",
-                () => openSheet({ type: "memory", draft: lessonFrom(text) }),
-                "keep it as a lesson for Pi",
-            )
-        }
-        ${item("Copy text", copy)}
+        <div class="sheet-list message-actions">
+            ${canBranch && !toPi && item("Fork from here", () => openBranch(() => actions.fork(entry.id, { worktree })), "everything up to this reply")}
+            ${canBranch && toPi && item("Edit and send again…", () => setDraft(text))}
+            ${canBranch && prompt && html`<${SendAgain} prompt=${prompt} worktree=${worktree} />`}
+            ${
+                memoryAvailable() &&
+                canSteer() &&
+                item(
+                    "Remember…",
+                    () => openSheet({ type: "memory", draft: lessonFrom(text) }),
+                    "keep it as a lesson for Pi",
+                )
+            }
+            ${item("Copy text", copy)}
+        </div>
     <//>`;
 }

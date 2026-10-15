@@ -1,6 +1,6 @@
 // Model providers: signing in and out, the models subagents may use besides their session's own, and the dialog a
 // sign-in uses to ask for a code or a key.
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, attempt, closeSheet, closeSignIn, signInAnswered, store } from "../store.js";
 import { html, Icon, Loader, Sheet } from "../ui.js";
 import { RefreshModels } from "../model-refresh.js";
@@ -253,19 +253,28 @@ export function ProvidersSheet() {
 }
 
 /** A provider signs in in place; sign-ins requested elsewhere still get their own dialog. */
-function AuthFrame({ title, onClose, inline, children }) {
+function AuthFrame({ title, onClose, inline, focusKey, children }) {
     const ref = useRef(null);
     const close = useRef(onClose);
 
     close.current = onClose;
 
+    // The first question may arrive after the card mounts. Focus it then, not on every redraw while typing.
+    useLayoutEffect(() => {
+        if (inline) {
+            const card = ref.current?.querySelector(".auth-card");
+            const control =
+                card?.querySelector(".field input:not(:disabled), .field button:not(:disabled)") ??
+                card?.querySelector("a[href], button:not(:disabled)");
+
+            (control ?? ref.current)?.focus({ preventScroll: true });
+            ref.current?.scrollIntoView({ block: "nearest" });
+        }
+    }, [inline, focusKey]);
     useEffect(() => {
         if (!inline) {
             return undefined;
         }
-
-        ref.current?.focus({ preventScroll: true });
-        ref.current?.scrollIntoView({ block: "nearest" });
 
         const escape = (event) => {
             if (event.key === "Escape" && !event.isComposing && event.keyCode !== 229) {
@@ -329,6 +338,7 @@ export function AuthDialog({ inline = false }) {
         title=${`Sign in: ${auth.providerName}`}
         onClose=${close}
         inline=${inline}
+        focusKey=${`${auth.flowId}:${prompt?.id ?? auth.events.length}`}
     >
         ${auth.events.map((event) => {
             if (event.type === "auth_url") {

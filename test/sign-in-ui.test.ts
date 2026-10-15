@@ -184,6 +184,13 @@ async function answer(name: string, value: string): Promise<void> {
         `return JSON.stringify(document.querySelector('${dialog(name)} .field input') !== null)`,
         "the question",
     );
+    assert.equal(
+        await inPage<boolean>(
+            `return JSON.stringify(document.querySelector('${dialog(name)} .field input:focus') !== null)`,
+        ),
+        true,
+        "the sign-in question takes keyboard focus",
+    );
     await page.type({ selector: `${dialog(name)} .field input` }, value);
     await page.click({ label: "Continue" });
 }
@@ -302,6 +309,13 @@ test(
         await see(
             `return JSON.stringify(document.querySelector('${dialog("Stepped")}')?.textContent.includes("With a code") === true)`,
             "the first question",
+        );
+        assert.equal(
+            await inPage<boolean>(
+                `return JSON.stringify(document.querySelector('${dialog("Stepped")} .field button:focus') !== null)`,
+            ),
+            true,
+            "the first sign-in method takes keyboard focus",
         );
         await page.click({ label: "With a code" });
         await answer("Stepped", "the-code");

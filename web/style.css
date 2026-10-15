@@ -3197,6 +3197,10 @@ button.chip:hover {
     background: var(--o-bg);
 }
 
+.notifications-sheet .extension {
+    align-items: center;
+}
+
 .guard-confirm {
     display: flex;
     flex-direction: column;
@@ -5237,7 +5241,7 @@ button.rail-brand:hover {
     background: var(--o-bg);
 }
 
-.sheet-list > * + * {
+.sheet-list > :not(:first-child) {
     border-top: 1px solid var(--hair);
 }
 
@@ -6182,6 +6186,16 @@ button.rail-brand:hover {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.message-actions > .group-title {
+    margin: 0;
+    padding: 8px 14px;
+    background: var(--card);
+}
+
+.message-model-search {
+    padding: 8px 14px;
 }
 
 .message-preview {
@@ -7276,6 +7290,7 @@ textarea.notes {
 }
 
 .lesson-add .segmented button {
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;

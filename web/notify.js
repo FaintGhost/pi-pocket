@@ -183,7 +183,11 @@ export function NotificationsSheet() {
 
     const on = Boolean(subscription);
 
-    return html`<${Sheet} title="Notifications" onClose=${closeSheet}>
+    return html`<${Sheet}
+        title="Notifications"
+        onClose=${closeSheet}
+        className="notifications-sheet"
+    >
         <p class="muted small">
             Get a notification on this device when you are not looking at the session: Pi finished, Pi needs approval, or someone wrote to you.
         </p>
