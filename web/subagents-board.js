@@ -196,7 +196,7 @@ function Cell({ agent, state, dim, selected, onPick, onHover }) {
         onMouseEnter=${() => onHover(agent.conversationId)}
         onMouseLeave=${() => onHover(null)}
     >
-        ${needsYou(agent) && "!"}
+        <span class="board-cell-core" aria-hidden="true">${needsYou(agent) && "!"}</span>
     </button>`;
 }
 
@@ -642,7 +642,7 @@ export function SubagentsBoard() {
 
         return html`<div
             key=${id}
-            class=${`board-row ${list.some(matches) ? "" : "dim"}`}
+            class="board-row"
         >
             <button
                 class="board-session"

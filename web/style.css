@@ -11522,13 +11522,12 @@ button.dr-branch:hover {
  * that filters by one, what needs you, and the one selected. Phones: one column, and a bar at the bottom.
  */
 .board {
-    --done-cell: color-mix(in srgb, var(--ok) 40%, var(--bg));
     position: relative;
     flex: 1;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: var(--bg);
+    background: var(--o-bg);
     animation: fade var(--t-fade) var(--ease-almost);
 }
 
@@ -11536,9 +11535,10 @@ button.dr-branch:hover {
     flex: none;
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: calc(env(safe-area-inset-top) + 0.35rem) 0.4rem 0.35rem 1rem;
-    border-bottom: 1px solid var(--line);
+    gap: 12px;
+    min-height: 62px;
+    padding: env(safe-area-inset-top) 12px 0 22px;
+    border-bottom: 1px solid var(--hair);
 }
 
 .board-title {
@@ -11548,19 +11548,14 @@ button.dr-branch:hover {
 
 .board-title h2 {
     margin: 0;
-    font-size: 1rem;
-    font-weight: 700;
-    line-height: 1.6;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.3;
     color: var(--text);
 }
 
-.board-title h2::before {
-    content: "▪ ";
-    color: var(--accent);
-}
-
 .board-sub {
-    font-size: 0.72rem;
+    font-size: 12px;
     color: var(--muted);
 }
 
@@ -11569,18 +11564,19 @@ button.dr-branch:hover {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 220px;
-    height: 32px;
-    padding: 0 8px;
+    width: 240px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: var(--r-control);
     background: var(--card);
-    border: 1px solid transparent;
+    border: 1px solid var(--hair);
     color: var(--muted);
     transition: border-color var(--t-hover) var(--ease-out);
 }
 
 .board-search.filled,
 .board-search:focus-within {
-    border-color: var(--accent);
+    border-color: var(--accent-line);
 }
 
 .board-search input {
@@ -11590,7 +11586,7 @@ button.dr-branch:hover {
     padding: 0;
     border: 0;
     background: none;
-    font-size: 0.8rem;
+    font-size: 13px;
     color: var(--text);
 }
 
@@ -11603,48 +11599,36 @@ button.dr-branch:hover {
     width: 100%;
 }
 
-/* A state's mark: its fill and edge, with "!" for what needs you. */
+/* A state's color drives the mark, cell, and detail pill. */
+.board-mark,
+.board-cell,
+.board-detail-state {
+    --state: var(--muted);
+}
+
+:is(.board-mark, .board-cell, .board-detail-state).waiting {
+    --state: var(--warn);
+}
+:is(.board-mark, .board-cell, .board-detail-state).failed {
+    --state: var(--err);
+}
+:is(.board-mark, .board-cell, .board-detail-state).working {
+    --state: var(--accent);
+}
+:is(.board-mark, .board-cell, .board-detail-state).done {
+    --state: var(--ok);
+}
+
 .board-mark {
     flex: none;
-    width: 12px;
-    height: 12px;
+    width: 10px;
+    height: 10px;
     display: grid;
     place-items: center;
-    border: 1px solid transparent;
+    border-radius: 3px;
+    background: var(--state);
     color: var(--accent-ink);
-    font-size: 0.56rem;
-    font-weight: 800;
-    line-height: 1;
-}
-
-.board-mark.waiting,
-.board-cell.waiting {
-    background: var(--warn);
-    border-color: var(--warn);
-}
-
-.board-mark.failed,
-.board-cell.failed {
-    background: var(--err);
-    border-color: var(--err);
-}
-
-.board-mark.working,
-.board-cell.working {
-    background: var(--accent);
-    border-color: var(--accent);
-}
-
-.board-mark.stopped,
-.board-cell.stopped {
-    background: transparent;
-    border-color: var(--muted);
-}
-
-.board-mark.done,
-.board-cell.done {
-    background: var(--done-cell);
-    border-color: var(--done-cell);
+    font: 600 8px/1 var(--mono);
 }
 
 /* How many are in each state, as one bar, and a legend that filters by one. */
@@ -11652,15 +11636,16 @@ button.dr-branch:hover {
     flex: none;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 14px 16px 10px;
-    border-bottom: 1px solid var(--line);
+    gap: 12px;
+    padding: 16px 22px 0;
 }
 
 .board-states {
     display: flex;
-    gap: 2px;
-    height: 10px;
+    gap: 3px;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
 }
 
 .board-state {
@@ -11685,7 +11670,7 @@ button.dr-branch:hover {
 }
 
 .board-state.done {
-    background: var(--done-cell);
+    background: var(--ok);
 }
 
 .board-state.dim {
@@ -11695,7 +11680,7 @@ button.dr-branch:hover {
 .board-legend {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 18px;
+    gap: 6px;
 }
 
 .board-filter {
@@ -11703,62 +11688,40 @@ button.dr-branch:hover {
     display: flex;
     align-items: center;
     gap: 7px;
-    padding: 2px 0 5px;
-    font-size: 0.76rem;
-    color: var(--muted);
-    transition: color var(--t-hover) var(--ease-out);
+    height: 30px;
+    padding: 0 11px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-pill);
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+    transition: background-color var(--t-hover) var(--ease-out);
 }
 
 .board-filter:hover,
 .board-filter.on {
-    color: var(--text);
-}
-
-.board-filter.on::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 2px;
-    background: var(--accent);
+    background: var(--card-2);
+    border-color: var(--hair-2);
 }
 
 .board-filter .board-mark {
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
+    border-radius: 2.5px;
 }
 
 .board-filter-count {
-    font-weight: 700;
+    font: 400 11px var(--mono);
     font-variant-numeric: tabular-nums;
-    color: var(--text);
-}
-
-.board-filter.waiting .board-filter-count {
-    color: var(--warn);
-}
-
-.board-filter.failed .board-filter-count {
-    color: var(--err);
-}
-
-.board-filter.working .board-filter-count {
-    color: var(--accent);
-}
-
-.board-filter.stopped .board-filter-count {
     color: var(--muted);
-}
-
-.board-filter.done .board-filter-count {
-    color: var(--ok);
 }
 
 .board-body {
     flex: 1;
     min-height: 0;
     display: flex;
+    gap: 16px;
+    padding: 16px 22px 22px;
 }
 
 .board-main {
@@ -11772,7 +11735,8 @@ button.dr-branch:hover {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 4px 16px 12px;
+    padding: 4px;
+    scroll-padding: 4px;
 }
 
 .board-empty {
@@ -11783,23 +11747,22 @@ button.dr-branch:hover {
 
 /* A session: its title and how its subagents are, then a square for each. */
 .board-row {
-    display: grid;
-    grid-template-columns: 200px minmax(0, 1fr);
-    gap: 14px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+    padding: 12px 14px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
     transition: opacity var(--t-fade) var(--ease-almost);
 }
 
-.board-row.dim {
-    opacity: 0.4;
-}
-
 .board-session {
-    min-width: 0;
+    flex: 1;
+    min-width: 100px;
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
     text-align: left;
 }
 
@@ -11807,12 +11770,13 @@ button.dr-branch:hover {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 9px;
 }
 
 .board-session-name {
     min-width: 0;
-    font-size: 0.8rem;
+    font-size: 13.5px;
+    font-weight: 500;
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
@@ -11825,8 +11789,9 @@ button.dr-branch:hover {
 }
 
 .board-summary {
-    padding-left: 14px;
-    font-size: 0.66rem;
+    max-width: 100%;
+    padding-left: 17px;
+    font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
@@ -11846,11 +11811,13 @@ button.dr-branch:hover {
 }
 
 .board-cells {
+    flex: 0 1 auto;
+    max-width: 60%;
     display: flex;
     flex-wrap: wrap;
     align-content: flex-start;
-    gap: 3px;
-    padding-top: 2px;
+    justify-content: flex-end;
+    gap: 6px;
 }
 
 /* A session's finished subagents left off the board, counted: "+12". */
@@ -11858,34 +11825,47 @@ button.dr-branch:hover {
     align-self: center;
     margin-left: 3px;
     color: var(--muted);
-    font-size: 0.7rem;
+    font: 11px var(--mono);
 }
 
 .board-cell {
-    width: 18px;
-    height: 18px;
+    flex: none;
+    width: 30px;
+    height: 30px;
     display: grid;
     place-items: center;
-    border: 1px solid transparent;
-    color: var(--accent-ink);
-    font-size: 0.58rem;
-    font-weight: 800;
-    line-height: 1;
-    outline-offset: 1px;
+    border: 1px solid color-mix(in srgb, var(--state) 40%, transparent);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--state) 14%, transparent);
+    outline-offset: 2px;
     transition: opacity var(--t-fade) var(--ease-almost);
 }
 
 .board-cell:hover {
-    outline: 1px solid var(--body);
+    border-color: var(--state);
 }
 
 .board-cell.on {
-    outline: 2px solid var(--text);
-    outline-offset: 1px;
+    outline: 2px solid var(--state);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--state) 14%, transparent);
 }
 
 .board-cell.dim {
-    opacity: 0.15;
+    opacity: 0.25;
+}
+
+.board-cell-core {
+    width: 8px;
+    height: 8px;
+    border-radius: 2.5px;
+    background: var(--state);
+    color: var(--accent-ink);
+    font: 600 8px/1 var(--mono);
+}
+
+.board-cell.working .board-cell-core {
+    animation: pulse 1.4s ease-in-out infinite;
 }
 
 /* What the square under the mouse does, or the selected one's. */
@@ -11895,10 +11875,8 @@ button.dr-branch:hover {
     align-items: center;
     gap: 10px;
     height: 30px;
-    padding: 0 16px;
-    border-top: 1px solid var(--line);
-    background: var(--o-bg-dark);
-    font-size: 0.72rem;
+    padding: 0 4px;
+    font-size: 11.5px;
     white-space: nowrap;
     overflow: hidden;
 }
@@ -11909,7 +11887,7 @@ button.dr-branch:hover {
 }
 
 .board-status-name {
-    font-weight: 600;
+    font: 600 11.5px var(--mono);
     color: var(--text);
 }
 
@@ -11947,12 +11925,10 @@ button.dr-branch:hover {
 /* The side: what needs you, then the one selected. */
 .board-side {
     flex: none;
-    width: 310px;
+    width: 300px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    padding: 14px 16px;
-    border-left: 1px solid var(--line);
+    gap: 14px;
     overflow-y: auto;
 }
 
@@ -11964,9 +11940,14 @@ button.dr-branch:hover {
 
 .board-needs .label {
     margin: 0 0 2px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: normal;
+    text-transform: none;
 }
 
 .board-needs-count {
+    font-family: var(--mono);
     color: var(--warn);
 }
 
@@ -11975,7 +11956,8 @@ button.dr-branch:hover {
     grid-template-columns: 14px minmax(0, 1fr);
     align-items: center;
     gap: 0 8px;
-    padding: 6px 8px;
+    padding: 8px;
+    border-radius: var(--r-row);
     text-align: left;
     border: 1px solid transparent;
     transition: background-color var(--t-hover) var(--ease-out);
@@ -11997,7 +11979,7 @@ button.dr-branch:hover {
 }
 
 .board-need-head {
-    font-size: 0.8rem;
+    font-size: 13px;
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
@@ -12017,7 +11999,7 @@ button.dr-branch:hover {
 }
 
 .board-need-session {
-    font-size: 0.66rem;
+    font-size: 12px;
     color: var(--muted);
     white-space: nowrap;
     overflow: hidden;
@@ -12027,22 +12009,24 @@ button.dr-branch:hover {
 .board-detail {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding-top: 14px;
-    border-top: 1px solid var(--line);
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-window);
+    background: var(--card);
 }
 
 .board-detail-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
     min-width: 0;
 }
 
 .board-detail-name {
     min-width: 0;
-    font-weight: 700;
-    font-size: 0.95rem;
+    font: 600 14px var(--mono);
     color: var(--text);
     white-space: nowrap;
     overflow: hidden;
@@ -12052,34 +12036,19 @@ button.dr-branch:hover {
 .board-detail-state {
     flex: none;
     margin-left: auto;
-    font-size: 0.72rem;
-}
-
-.board-detail-state.waiting {
-    color: var(--warn);
-}
-
-.board-detail-state.failed {
-    color: var(--err);
-}
-
-.board-detail-state.working {
-    color: var(--accent);
-}
-
-.board-detail-state.stopped {
-    color: var(--muted);
-}
-
-.board-detail-state.done {
-    color: var(--ok);
+    padding: 2px 9px;
+    border-radius: var(--r-pill);
+    background: color-mix(in srgb, var(--state) 14%, transparent);
+    color: var(--state);
+    font-size: 12px;
+    font-weight: 500;
 }
 
 .board-facts {
     display: grid;
-    grid-template-columns: 62px minmax(0, 1fr);
-    gap: 7px 10px;
-    font-size: 0.78rem;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 8px 12px;
+    font-size: 13px;
 }
 
 .board-facts > span:not([class]) {
@@ -12101,6 +12070,7 @@ button.dr-branch:hover {
 }
 
 .board-when {
+    font-family: var(--mono);
     color: var(--text);
     font-variant-numeric: tabular-nums;
 }
@@ -12121,6 +12091,7 @@ button.dr-branch:hover {
 }
 
 .board-error {
+    font: 12px/1.5 var(--mono);
     color: var(--err);
     overflow-wrap: anywhere;
 }
@@ -12131,12 +12102,14 @@ button.dr-branch:hover {
 
 .board-actions {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .board-actions .button {
-    padding: 0.3rem 0.65rem;
-    font-size: 0.82rem;
+    min-height: 36px;
+    padding: 0 14px;
+    font-size: 13px;
 }
 
 .board-stop:hover {
@@ -12144,12 +12117,16 @@ button.dr-branch:hover {
     color: var(--err);
 }
 
+.board-actions .button.primary {
+    flex: 1;
+}
+
 /* Phones: one column, what needs you first, thumb-sized squares, and the one selected in a bar at the bottom. */
 .board-list {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 0 12px 16px;
+    padding: 12px 12px 16px;
 }
 
 /* Room under the last row for the bar over it. */
@@ -12160,7 +12137,7 @@ button.dr-branch:hover {
 .board.phone .board-needs {
     gap: 2px;
     padding: 12px 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--hair);
 }
 
 .board.phone .board-needs .label {
@@ -12184,8 +12161,9 @@ button.dr-branch:hover {
 .board.phone .board-row {
     display: flex;
     flex-direction: column;
+    align-items: stretch;
     gap: 8px;
-    padding: 12px 0;
+    padding: 12px;
 }
 
 .board.phone .board-session {
@@ -12209,30 +12187,31 @@ button.dr-branch:hover {
 }
 
 .board.phone .board-cells {
-    gap: 4px;
-    padding-top: 0;
+    max-width: none;
+    justify-content: flex-start;
+    gap: 6px;
 }
 
 .board.phone .board-cell {
-    width: 36px;
-    height: 36px;
-    font-size: 0.72rem;
+    width: 40px;
+    height: 40px;
 }
 
 .board-bar {
     position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
     z-index: 3;
     display: flex;
     flex-direction: column;
     gap: 8px;
     padding: 12px 12px calc(env(safe-area-inset-bottom) + 14px);
-    background: var(--bg);
-    border-top: 2px solid transparent;
-    border-image: var(--active) 1;
-    animation: rise-in var(--t-in) var(--ease-out);
+    border: 1px solid var(--hair-2);
+    border-radius: var(--r-sheet);
+    background: var(--o-bg);
+    box-shadow: var(--pop);
+    animation: pop var(--t-in) var(--ease-out);
 }
 
 .board-bar-head {
@@ -12243,11 +12222,12 @@ button.dr-branch:hover {
 }
 
 .board-bar .board-detail-name {
-    font-size: 1rem;
+    font-size: 14px;
 }
 
 .board-bar .board-detail-state {
     margin-left: 0;
+    font-size: 11px;
 }
 
 .board-bar-when {
@@ -12264,6 +12244,7 @@ button.dr-branch:hover {
     height: 32px;
     display: grid;
     place-items: center;
+    border-radius: var(--r-row);
     margin: -6px -6px -6px 0;
     color: var(--body);
 }
@@ -12281,7 +12262,7 @@ button.dr-branch:hover {
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    font-size: 0.8rem;
+    font-size: 13px;
     color: var(--body);
     overflow-wrap: anywhere;
 }
