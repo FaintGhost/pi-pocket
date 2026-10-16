@@ -1,6 +1,11 @@
 # Theming (design for 0.14.0)
 
-Status: a design for the owner to review. Nothing here is built yet.
+Status: built for 0.14.0 (phases 1 and 2, except what is deferred below); the gallery's theme entries (phase 3) are built separately. [extensions/themes.md](../extensions/themes.md) and [extensions/reference/theme-surface.md](../extensions/reference/theme-surface.md) describe what was built. It differs from this design in these ways:
+
+- The in-house theme's findings added about 50 parts, more states, and tokens for windows, the timeline, a gutter, a second accent, and ligatures; and `colors-light.toml` for a pair of palettes.
+- Most corners became tokens with their old values kept (a calc offset where a size sat between steps), and the default look did not change, except muted text, raised to WCAG AA.
+- Theme files under their current version are cached as immutable, and the page preloads a theme's own fonts.
+- Deferred: the type scale (about 300 font sizes), heading tokens, `extends`, contrast warnings in Appearance, and themes in the gallery (separate work).
 
 The goal, from issue #90, point 3: "A theme should be a folder. Copy the main theme into another folder, customise that copy, and select it in settings. This should allow changes to appearance **and layout** without editing the main theme or maintaining a separate fork of the app."
 
