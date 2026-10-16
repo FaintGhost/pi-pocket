@@ -6,6 +6,9 @@ import { api, attempt, closeSheet, openSheet, store } from "../store.js";
 import { html, Icon, Loader, Sheet, shortPath, Switch } from "../ui.js";
 import { galleryApi, galleryAvailable } from "./gallery.js";
 
+/** The guide for people who write extensions: its first page, on the docs site, which describes the latest release. */
+const GUIDE = "https://tannermidd.github.io/pi-pocket/docs/extensions/first-extension/";
+
 /** What Lancet Guard does here, given the module's switch and Pi's own setting. */
 function guardNote(module, guard) {
     if (!guard.available) {
@@ -97,7 +100,7 @@ function SafeMode() {
     }
 
     return html`<div class="setting wrap safe-mode">
-        <div class="grow small">Extensions' browser parts are off in this tab.</div>
+        <div class="grow small">Extensions' browser parts are off in this tab, and so is the theme.</div>
         <button class="button" onClick=${leaveSafeMode}>Turn them back on</button>
     </div>`;
 }
@@ -270,12 +273,19 @@ export function ExtensionsSheet() {
         </p>
         <${SafeMode} />
         ${
-            galleryAvailable() &&
+            owner &&
             html`<div class="sheet-list">
-                <button class="list-item" onClick=${() => openSheet({ type: "gallery" })}>
-                    <span><${Icon} name="search" size=${16} /> Find extensions</span>
-                    <span class="muted small">drop-ins other people wrote</span>
-                </button>
+                ${
+                    galleryAvailable() &&
+                    html`<button class="list-item" onClick=${() => openSheet({ type: "gallery" })}>
+                        <span><${Icon} name="search" size=${16} /> Find extensions</span>
+                        <span class="muted small">extensions and themes other people made</span>
+                    </button>`
+                }
+                <a class="list-item" href=${GUIDE} target="_blank" rel="noopener noreferrer">
+                    <span><${Icon} name="external" size=${16} /> How to write one</span>
+                    <span class="muted small">the guide (latest release)</span>
+                </a>
             </div>`
         }
         ${problem && html`<div class="error-box">${problem}</div>`}

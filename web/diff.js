@@ -717,7 +717,7 @@ export function DiffBlock({ text, path = "", bare = false }) {
         return html`<pre class="diff" dangerouslySetInnerHTML=${{ __html: highlight(text, "diff") }}></pre>`;
     }
 
-    return html`<div class="dv-block">
+    return html`<div class="dv-block" data-part="diff">
         ${files.map(
             (file) => html`<${DiffFile}
                 file=${file}

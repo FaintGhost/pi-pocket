@@ -545,6 +545,8 @@ const handlers = {
             models: data.models,
             guard: data.guard,
             server: data.server,
+            // Every theme folder (`theme.js`): an older server lists none.
+            themeList: Array.isArray(data.themes) ? data.themes : [],
             // This connection's id, which peek lists name (`peeks.js`). `GET /api/me` answers without one.
             ...(data.connection === undefined ? {} : { streamId: data.connection }),
         }),
@@ -556,6 +558,8 @@ const handlers = {
         })),
     "folder-favorites": (folderFavorites) => store.set({ folderFavorites }),
     models: (models) => store.set({ models }),
+    // A theme folder came, went, or changed (`theme.js` loads its new version).
+    themes: (themeList) => store.set({ themeList }),
     // Every subagent in every session, while this tab shows the subagents board (`subagents-board.js`).
     subagents: (agents) => store.state.board && store.set({ boardAgents: agents }),
     view: applyView,
@@ -968,6 +972,7 @@ export async function start() {
             models: hello.models,
             guard: hello.guard,
             server: hello.server,
+            themeList: Array.isArray(hello.themes) ? hello.themes : [],
         });
         connect();
     } catch (error) {
@@ -1169,7 +1174,7 @@ export function closePeople() {
     sessionStorage.removeItem(PEOPLE_KEY);
 
     // Its active border goes to the conversation, not nowhere.
-    if (document.documentElement.dataset.focus === "people") {
+    if (document.documentElement.dataset.focus === "people-panel") {
         document.documentElement.dataset.focus = "pane";
     }
 

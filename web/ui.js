@@ -109,7 +109,8 @@ marked.use({
 
 /**
  * Replies are untrusted: a file or page Pi read can steer what it writes. No forms or controls, no media that loads by
- * itself, and no style, class, or id hooks that could lay a fake screen over the app.
+ * itself, and no style, class, id, or data hooks that could lay a fake screen over the app: a theme styles
+ * `[data-part="approval"]`, and a reply must not wear it. A code block's language is the one data attribute kept.
  */
 const PURIFY = {
     FORBID_TAGS: [
@@ -126,6 +127,8 @@ const PURIFY = {
         "track",
         "picture",
     ],
+    ALLOW_DATA_ATTR: false,
+    ADD_ATTR: ["data-lang"],
     // `data-path` is the app's own mark for file paths (`sanitize`): a reply may not set it.
     FORBID_ATTR: [
         "style",
@@ -200,6 +203,7 @@ function codeBlock(pre, fold) {
     }
 
     wrap.className = "code";
+    wrap.dataset.part = "code-block";
     copy.className = "copy";
     copy.type = "button";
     copy.dataset.copy = "";
@@ -215,6 +219,7 @@ function codeBlock(pre, fold) {
     const label = document.createElement("span");
 
     head.className = "code-head";
+    head.dataset.part = "code-head";
     label.className = "code-lang";
     label.textContent = name || "text";
     head.append(label, copy);
@@ -244,6 +249,11 @@ function sanitize(html, fold) {
 
     // `src/app.ts` in a reply opens the file: inline code that is a path, not code blocks.
     for (const code of fragment.querySelectorAll("code")) {
+        // Code in a line of words, for themes; a code block is `code-block`.
+        if (!code.closest("pre")) {
+            code.dataset.part = "inline-code";
+        }
+
         if (!code.closest("pre, a") && looksLikePath(code.textContent ?? "")) {
             code.dataset.path = code.textContent;
             // Keys open it too (`openFile` below).
@@ -940,9 +950,10 @@ export function Marked({ text, hits }) {
 }
 
 /** One of the app's icons by `name`, or any 24×24 stroked path as `path` (extensions' own icons). */
-export function Icon({ name, path, size = 20, class: className = "", stroke = 2 }) {
+export function Icon({ name, path, size = 20, class: className = "", stroke = 2, part }) {
     return html`<svg
         class=${`icon ${className}`}
+        data-part=${part}
         width=${size}
         height=${size}
         viewBox="0 0 24 24"
@@ -978,8 +989,13 @@ export function Loader({ label = "Loading" }) {
 
 /** The full-screen loader: π over Omarchy's boot bar, and what is happening under it. */
 export function Boot({ caption = "starting", detail = "", inline = false }) {
-    return html`<div class=${`boot ${inline ? "inline" : ""}`} role="status" aria-live="polite">
-        <div class="boot-mark" aria-hidden="true">π</div>
+    return html`<div
+        class=${`boot ${inline ? "inline" : ""}`}
+        data-part="boot"
+        role="status"
+        aria-live="polite"
+    >
+        <div class="boot-mark" data-part="brand-mark" aria-hidden="true">π</div>
         <div class="boot-bar" aria-hidden="true"><span></span></div>
         <div class="boot-caption">${caption}</div>
         ${detail && html`<div class="boot-detail">${detail}</div>`}
@@ -1155,10 +1171,53 @@ export function Slide({ box, axis = "y" }) {
 
     return html`<span
         class=${`slide-${axis} ${box.instant ? "instant" : ""}`}
+        data-part="segment-thumb"
         style=${style}
         aria-hidden="true"
     ></span>`;
 }
+
+/**
+ * Which side of the screen an element stands on, `left` or `right`, as it is laid out now: a theme may move the sidebar
+ * or the drawer to the right, and what is dragged by its edge must follow. Looked at again as the window resizes and
+ * when a theme's stylesheets load (`pocket:theme`, from `theme.js`). `of` gives the element from the ref's.
+ */
+export function useSide(ref, of = (element) => element) {
+    const [side, setSide] = useState("left");
+    const look = useRef(null);
+
+    look.current = () => {
+        const element = ref.current && of(ref.current);
+        const box = element?.getBoundingClientRect();
+
+        if (box && box.width > 0) {
+            setSide(box.left + box.width / 2 > innerWidth / 2 ? "right" : "left");
+        }
+    };
+
+    // After each draw (the element may have only now come), and when the window or the theme changes.
+    useLayoutEffect(() => look.current());
+    useLayoutEffect(() => {
+        const again = () => look.current();
+
+        addEventListener("resize", again);
+        document.addEventListener("pocket:theme", again);
+
+        return () => {
+            removeEventListener("resize", again);
+            document.removeEventListener("pocket:theme", again);
+        };
+    }, []);
+
+    return side;
+}
+
+/**
+ * A rail button's state for themes (`data-state`): `open` while what it opens shows, `busy` while it counts work that
+ * goes on; both, or neither (undefined).
+ */
+export const railState = (open, busy = false) =>
+    [open && "open", busy && "busy"].filter(Boolean).join(" ") || undefined;
 
 /** Keys as they are on this device: ⌘ on Apple keyboards, Ctrl elsewhere. */
 export const APPLE = /Mac|iPhone|iPad/.test(navigator.platform ?? "");
@@ -1200,10 +1259,17 @@ export const BOTTOM_SHEETS = matchMedia("(max-width: 699px)");
 /** The sheet host supplies a back action only when another sheet is under this one. */
 export const SheetBack = createContext(null);
 
+/**
+ * The open sheet's type and whether it is closing (`sheets.js`), which `Sheet` puts on itself for themes: `data-sheet`,
+ * and `data-state="closing"`.
+ */
+export const SheetInfo = createContext(null);
+
 /** A bottom sheet on phones, a centered dialog on wide screens. */
 export function Sheet({ title, onClose, children, wide = false, actions = null, className = "" }) {
     const ref = useRef(null);
     const onBack = useContext(SheetBack);
+    const info = useContext(SheetInfo);
 
     useDragToClose(ref, { dir: "down", onClose, enabled: BOTTOM_SHEETS.matches });
 
@@ -1233,10 +1299,16 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
 
     return html`<div
         class="overlay"
+        data-part="scrim"
+        data-for="sheet"
         onMouseDown=${(event) => event.target === event.currentTarget && onClose()}
     >
         <section
             class=${`sheet ${wide ? "wide" : ""} ${className}`}
+            data-part="sheet"
+            data-sheet=${info?.type ?? undefined}
+            data-size=${wide ? "wide" : undefined}
+            data-state=${info?.closing ? "closing" : undefined}
             ref=${ref}
             role="dialog"
             aria-modal="true"
@@ -1244,7 +1316,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
             tabindex="-1"
             onKeyDown=${scrollFromKeys}
         >
-            <header class="sheet-head">
+            <header class="sheet-head" data-part="sheet-head">
                 <div class="grip" aria-hidden="true"></div>
                 ${
                     onBack &&
@@ -1258,7 +1330,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
                     <${Icon} name="close" />
                 </button>
             </header>
-            <div class="sheet-body">${children}</div>
+            <div class="sheet-body" data-part="sheet-body">${children}</div>
         </section>
     </div>`;
 }

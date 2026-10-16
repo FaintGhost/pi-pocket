@@ -855,6 +855,8 @@ export function PeoplePanel({ leaving = false }) {
 
     return html`<section
         class=${`people window ${leaving ? "leaving" : ""}`}
+        data-part="people-panel"
+        data-state=${leaving ? "closing" : undefined}
         aria-label="People"
         inert=${leaving}
         onKeyDown=${keepEscape}

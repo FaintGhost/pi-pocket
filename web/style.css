@@ -80,31 +80,36 @@
     /* Surfaces, after omarchy-shell's control states: the foreground laid over the background. */
     --desk: var(--o-bg-darker);
     --bg: var(--o-bg);
-    --panel: var(--o-bg);
-    --card: color-mix(in srgb, var(--o-fg) 4%, var(--o-bg));
-    --card-2: color-mix(in srgb, var(--o-fg) 8%, var(--o-bg));
+    --panel: var(--bg);
+    --card: color-mix(in srgb, var(--body) 4%, var(--bg));
+    --card-2: color-mix(in srgb, var(--body) 8%, var(--bg));
     /* A selected segment, raised from its track. */
-    --raised: color-mix(in srgb, var(--o-fg) 12%, var(--o-bg));
-    --hover: color-mix(in srgb, var(--o-fg) 7%, transparent);
-    --pressed: color-mix(in srgb, var(--o-fg) 18%, transparent);
-    --line: color-mix(in srgb, var(--o-fg) 13%, var(--o-bg));
-    --line-strong: color-mix(in srgb, var(--o-fg) 26%, var(--o-bg));
-    --edge: color-mix(in srgb, var(--o-fg) 25%, transparent);
+    --raised: color-mix(in srgb, var(--body) 12%, var(--bg));
+    --hover: color-mix(in srgb, var(--body) 7%, transparent);
+    --pressed: color-mix(in srgb, var(--body) 18%, transparent);
+    --line: color-mix(in srgb, var(--body) 13%, var(--bg));
+    --line-strong: color-mix(in srgb, var(--body) 26%, var(--bg));
+    --edge: color-mix(in srgb, var(--body) 25%, transparent);
     /* Hairlines: the usual 1px line, and a stronger one (fields, a switch's track while off). */
-    --hair: color-mix(in srgb, var(--o-fg) 10%, transparent);
-    --hair-2: color-mix(in srgb, var(--o-fg) 17%, transparent);
+    --hair: color-mix(in srgb, var(--body) 10%, transparent);
+    --hair-2: color-mix(in srgb, var(--body) 17%, transparent);
     --text: var(--o-fg-bright);
     --body: var(--o-fg);
-    --muted: color-mix(in oklab, var(--o-fg) 64%, var(--o-bg));
-    --faint: color-mix(in oklab, var(--o-fg) 42%, var(--o-bg));
+    /* Quieter text at 4.5:1 or more on the ground (WCAG AA) with every palette that comes with the app. */
+    --muted: color-mix(in oklab, var(--body) 76%, var(--bg));
+    --faint: color-mix(in oklab, var(--body) 42%, var(--bg));
     --accent: var(--o-accent);
-    --accent-ink: var(--o-bg);
+    --accent-ink: var(--bg);
     /* The accent as a fill under text (buttons, badges): darker in light themes, so text on it stays readable. */
     --accent-fill: var(--accent);
-    --accent-soft: color-mix(in srgb, var(--o-accent) 14%, transparent);
-    --accent-line: color-mix(in srgb, var(--o-accent) 50%, transparent);
+    --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+    --accent-line: color-mix(in srgb, var(--accent) 50%, transparent);
+    /* The keyboard's focus ring: keep it visible (a theme may change its color, never take it away). */
+    --focus-ring: var(--accent);
     /* The second color of loaders and thoughts. */
     --spark: var(--o-magenta);
+    /* A second accent, for what a theme draws in two colors (Hyprland's active border is a gradient): the app uses none. */
+    --accent-2: var(--spark);
     --brand: var(--o-orange);
     --ok: var(--o-green);
     --ok-soft: color-mix(in srgb, var(--o-green) 14%, transparent);
@@ -123,7 +128,7 @@
     --hl-type: var(--o-yellow);
     --hl-op: var(--o-cyan);
     --hl-tag: var(--o-red);
-    --scrim: color-mix(in srgb, var(--o-bg-darker) 55%, transparent);
+    --scrim: color-mix(in srgb, var(--desk) 55%, transparent);
     /* Shadows: a soft lift (the message box), and what floats over the page (popovers, sheets, the launcher, PiP). */
     --sh: rgba(0, 0, 0, 0.5);
     --shadow: 0 18px 40px -18px var(--sh), 0 2px 6px -2px var(--sh);
@@ -149,6 +154,21 @@
     --gap-out: 8px;
     --gap-in: 4px;
     --border: 1px;
+    /* The conversation's column, and the message box under it, at their widest; room before the conversation's turns. */
+    --transcript-width: 720px;
+    --composer-width: 768px;
+    --transcript-gutter: 0px;
+    /* The timeline in an activity group: where its rule and the centers of its marks are, the marks' size, and the gap
+     * from a mark to its words (and to what a step shows under them). */
+    --timeline-x: 22.5px;
+    --step-mark-size: 19px;
+    --step-gap: 10px;
+    /* Tiled windows' border, the one in focus, and the ring around that one. */
+    --window-border: var(--hair);
+    --window-border-active: var(--accent-line);
+    --window-ring: 0 0 0 3px var(--accent-soft);
+    /* What shows in the gaps between tiled windows: the desktop's wallpaper when Appearance asks for it (inline), else this. */
+    --wallpaper: none;
     /*
      * Density, from Appearance (`data-density`): how much room the spacing takes. Padding and gaps from top to bottom
      * scale by --space-y, and from side to side by --space-x; --leading is the conversation's line height. Rows that
@@ -168,6 +188,8 @@
     --t-border: 540ms; /* border */
     --t-hover: 140ms;
 
+    /* Ligatures: none, as in a terminal. A theme may turn on a font's own (`contextual`, `normal`). */
+    --ligatures: none;
     --mono:
         "Pocket Mono", "JetBrains Mono", "JetBrainsMono Nerd Font", ui-monospace, "SF Mono", Menlo,
         Consolas, monospace;
@@ -192,14 +214,14 @@
     color-scheme: light;
     --sh: rgba(40, 40, 70, 0.14);
     --accent-ink: #fff;
-    --scrim: color-mix(in srgb, var(--o-bg-darker) 55%, transparent);
-    --line: color-mix(in srgb, var(--o-fg) 15%, var(--o-bg));
-    --muted: color-mix(in oklab, var(--o-fg) 78%, var(--o-bg));
-    --faint: color-mix(in oklab, var(--o-fg) 58%, var(--o-bg));
+    --scrim: color-mix(in srgb, var(--desk) 55%, transparent);
+    --line: color-mix(in srgb, var(--body) 15%, var(--bg));
+    --muted: color-mix(in oklab, var(--body) 87%, var(--bg));
+    --faint: color-mix(in oklab, var(--body) 58%, var(--bg));
     --warn: color-mix(in oklab, var(--o-yellow) 62%, var(--o-fg));
     --ok: color-mix(in oklab, var(--o-green) 78%, var(--o-fg));
     --err: color-mix(in oklab, var(--o-red) 85%, var(--o-fg));
-    --accent-fill: color-mix(in oklab, var(--o-accent) 76%, var(--o-fg));
+    --accent-fill: color-mix(in oklab, var(--accent) 76%, var(--body));
     /* Code's colors further still: halfway, yellow (the lightest) more, so each reads at 3:1 or better. */
     --hl-kw: color-mix(in oklab, var(--o-magenta) 50%, var(--o-fg));
     --hl-str: color-mix(in oklab, var(--o-green) 50%, var(--o-fg));
@@ -213,8 +235,8 @@
 * {
     box-sizing: border-box;
     /* No ligatures, as in a terminal: code shows the characters it has (=== stays three). Important, because each
-     * `font` shorthand would reset it. */
-    font-variant-ligatures: none !important;
+     * `font` shorthand would reset it; a theme changes it through --ligatures (`contextual` for a font's `calt`). */
+    font-variant-ligatures: var(--ligatures) !important;
 }
 
 html,
@@ -247,12 +269,13 @@ button {
     cursor: pointer;
 }
 
-/* iOS zooms into any text field smaller than 16px when it takes focus. */
+/* iOS zooms into any text field smaller than 16px when it takes focus. Important, so a theme's size for a field (in a
+ * later layer, which beats this one) does not bring the zoom back on touch screens. */
 @media (pointer: coarse) {
     input,
     textarea,
     select {
-        font-size: 16px;
+        font-size: 16px !important;
     }
 }
 
@@ -291,12 +314,12 @@ select:focus {
 }
 
 ::selection {
-    background: color-mix(in srgb, var(--o-accent) 35%, transparent);
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
     color: var(--text);
 }
 
 :focus-visible {
-    outline: 1px solid var(--accent);
+    outline: 1px solid var(--focus-ring);
     outline-offset: 1px;
 }
 
@@ -353,7 +376,7 @@ kbd {
     background: var(--card);
     border: 1px solid var(--hair-2);
     border-bottom-width: 2px;
-    border-radius: 6px;
+    border-radius: calc(var(--r-tag) + 1px);
     vertical-align: middle;
 }
 
@@ -380,7 +403,7 @@ kbd {
 .meter {
     display: inline-flex;
     height: 4px;
-    border-radius: 2px;
+    border-radius: calc(var(--r-mark) - 1px);
     overflow: hidden;
     background: var(--hair-2);
 }
@@ -788,7 +811,7 @@ kbd {
     }
     /* Rounded, so what they hold is cut to their corners; the edges to drag sit inside them. */
     :root[data-tiling="on"] .window {
-        border: var(--border) solid var(--hair);
+        border: var(--border) solid var(--window-border);
         border-radius: var(--r-window);
         overflow: hidden;
         height: auto;
@@ -801,15 +824,15 @@ kbd {
         animation-delay: 60ms;
     }
     :root[data-tiling="on"][data-focus="sidebar"] .sidebar,
-    :root[data-tiling="on"][data-focus="browser"] .browser,
-    :root[data-tiling="on"][data-focus="files-tile"] .files-tile,
-    :root[data-tiling="on"][data-focus="people"] .people,
-    :root[data-tiling="on"]:not([data-focus="sidebar"]):not([data-focus="browser"]):not(
-            [data-focus="files-tile"]
-        ):not([data-focus="people"]):not([data-focus="peeks"])
+    :root[data-tiling="on"][data-focus="browser-panel"] .browser,
+    :root[data-tiling="on"][data-focus="files-panel"] .files-tile,
+    :root[data-tiling="on"][data-focus="people-panel"] .people,
+    :root[data-tiling="on"]:not([data-focus="sidebar"]):not([data-focus="browser-panel"]):not(
+            [data-focus="files-panel"]
+        ):not([data-focus="people-panel"]):not([data-focus="peeks"])
         .pane {
-        border-color: var(--accent-line);
-        box-shadow: 0 0 0 3px var(--accent-soft);
+        border-color: var(--window-border-active);
+        box-shadow: var(--window-ring);
     }
 }
 
@@ -823,6 +846,12 @@ kbd {
     cursor: col-resize;
     z-index: 7;
     touch-action: none;
+}
+
+/* A sidebar a theme put on the right: its handle is on its left edge (`useSide`). */
+.resize-handle.at-left {
+    left: 0;
+    right: auto;
 }
 
 .resize-handle::before {
@@ -1088,7 +1117,7 @@ kbd {
     min-width: 0;
     height: 20px;
     padding: 0 7px;
-    border-radius: 6px;
+    border-radius: calc(var(--r-tag) + 1px);
     background: var(--card);
     font: 11px / 1 var(--mono);
     color: var(--muted);
@@ -1285,9 +1314,10 @@ kbd {
 /* A column of turns: a person's message, what Pi did, Pi's reply, an approval, the live line. Its text size is
  * Appearance's; the cards inside keep fixed sizes. */
 .transcript {
-    max-width: 720px;
+    max-width: var(--transcript-width);
     margin: 0 auto;
     padding: calc(28px * var(--space-y)) calc(28px * var(--space-x)) calc(24px * var(--space-y));
+    padding-inline-start: calc(28px * var(--space-x) + var(--transcript-gutter));
     display: flex;
     flex-direction: column;
     gap: calc(16px * var(--space-y));
@@ -1304,6 +1334,7 @@ kbd {
 @media (max-width: 699px) {
     .transcript {
         padding: calc(18px * var(--space-y)) calc(16px * var(--space-x)) calc(14px * var(--space-y));
+        padding-inline-start: calc(16px * var(--space-x) + var(--transcript-gutter));
     }
 }
 
@@ -1401,7 +1432,7 @@ kbd {
 @media (max-width: 699px) {
     .user-row > .prompt {
         padding: calc(12px * var(--space-y)) calc(14px * var(--space-x)) calc(13px * var(--space-y));
-        border-radius: 16px;
+        border-radius: calc(var(--r-window) + 2px);
     }
 }
 
@@ -1964,7 +1995,7 @@ kbd {
 .timeline::before {
     content: "";
     position: absolute;
-    left: 22px;
+    left: calc(var(--timeline-x) - 0.5px);
     top: 20px;
     bottom: 20px;
     width: 1px;
@@ -1987,9 +2018,9 @@ kbd {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--step-gap);
     min-height: 34px;
-    padding: 0 14px 0 13px;
+    padding: 0 14px 0 calc(var(--timeline-x) - var(--step-mark-size) / 2);
     text-align: left;
     transition: background-color var(--t-hover) var(--ease-out);
 }
@@ -2017,11 +2048,11 @@ kbd {
     flex: none;
     display: grid;
     place-items: center;
-    width: 19px;
-    height: 19px;
+    width: var(--step-mark-size);
+    height: var(--step-mark-size);
     border-radius: 50%;
-    background: linear-gradient(var(--tint), var(--tint)), var(--o-bg);
-    box-shadow: 0 0 0 3px var(--o-bg);
+    background: linear-gradient(var(--tint), var(--tint)), var(--bg);
+    box-shadow: 0 0 0 3px var(--bg);
     color: var(--muted);
     font: 600 10px / 1 var(--mono);
     transition:
@@ -2044,7 +2075,7 @@ kbd {
     color: var(--warn);
     box-shadow:
         inset 0 0 0 1px var(--warn-line),
-        0 0 0 3px var(--o-bg);
+        0 0 0 3px var(--bg);
 }
 
 .step-mark.running,
@@ -2060,7 +2091,7 @@ kbd {
 
 /* Light themes' magenta can be faint as text on their ground: toward the foreground, as code's colors are. */
 :root[data-mode="light"] .step-mark.thought {
-    color: color-mix(in oklab, var(--spark) 60%, var(--o-fg));
+    color: color-mix(in oklab, var(--spark) 60%, var(--body));
 }
 
 .step-label {
@@ -2129,7 +2160,7 @@ kbd {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 0 14px 6px 42px;
+    padding: 0 14px 6px calc(var(--timeline-x) + var(--step-mark-size) / 2 + var(--step-gap));
     font-size: 12px;
     color: var(--muted);
 }
@@ -2149,7 +2180,7 @@ kbd {
     flex-direction: column;
     gap: 8px;
     min-width: 0;
-    margin: 2px 14px 10px 42px;
+    margin: 2px 14px 10px calc(var(--timeline-x) + var(--step-mark-size) / 2 + var(--step-gap));
 }
 
 .step-extras + .step-body {
@@ -2303,7 +2334,7 @@ pre.diff .del {
     gap: 12px;
     padding: 16px;
     border: 1px solid var(--warn-line);
-    border-radius: 16px;
+    border-radius: calc(var(--r-window) + 2px);
     background: var(--warn-soft);
     animation: pop 0.35s var(--ease-out);
 }
@@ -2411,7 +2442,7 @@ pre.diff .del {
 
     .approval-actions .button {
         height: 42px;
-        border-radius: 11px;
+        border-radius: calc(var(--r-control) + 1px);
         font-size: 14px;
     }
 }
@@ -2653,7 +2684,7 @@ pre.diff .del {
 .composer-wrap {
     padding: 4px calc(24px * var(--space-x))
         calc(env(safe-area-inset-bottom) + 12px * var(--space-y));
-    max-width: 768px;
+    max-width: var(--composer-width);
     width: 100%;
     margin: 0 auto;
 }
@@ -3209,7 +3240,7 @@ pre.diff .del {
 
 @media (hover: hover) {
     .send-button.ready:hover {
-        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--text));
     }
 }
 
@@ -3295,7 +3326,7 @@ pre.diff .del {
 
 @media (hover: hover) {
     .round.send:not(:disabled):hover {
-        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--text));
     }
 }
 
@@ -3418,7 +3449,7 @@ pre.diff .del {
     display: flex;
     gap: 14px;
     padding: 12px 14px;
-    background: var(--o-bg);
+    background: var(--bg);
 }
 
 .notifications-sheet .extension,
@@ -3491,7 +3522,7 @@ pre.diff .del {
     width: 16px;
     height: 16px;
     border-radius: var(--r-pill);
-    background: var(--o-fg-bright);
+    background: var(--text);
     box-shadow: 0 1px 2px var(--sh);
     transition:
         transform var(--t-in) var(--ease-out),
@@ -3631,7 +3662,7 @@ pre.diff .del {
     border-radius: var(--r-pill);
     background: var(--accent-fill);
     color: var(--accent-ink);
-    box-shadow: 0 0 0 2px var(--o-bg);
+    box-shadow: 0 0 0 2px var(--bg);
     font: 600 9.5px/1 var(--mono);
     animation: popin var(--t-in) var(--ease-out);
 }
@@ -3645,7 +3676,7 @@ pre.diff .del {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    box-shadow: 0 0 0 2px var(--o-bg);
+    box-shadow: 0 0 0 2px var(--bg);
 }
 
 .rail-trouble {
@@ -3805,7 +3836,7 @@ pre.diff .del {
     gap: 5px;
     height: 30px;
     padding: 0 11px 0 9px;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     background: var(--accent-fill);
     color: var(--accent-ink);
     font-weight: 600;
@@ -3815,7 +3846,7 @@ pre.diff .del {
 
 @media (hover: hover) {
     .new-button:hover {
-        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--text));
     }
 }
 
@@ -4221,7 +4252,7 @@ pre.diff .del {
     width: 8px;
     border-bottom: 1.5px solid currentColor;
     border-left: 1.5px solid currentColor;
-    border-bottom-left-radius: 6px;
+    border-bottom-left-radius: calc(var(--r-tag) + 1px);
 }
 
 /* The last child: only the corner, no line on down. */
@@ -4300,7 +4331,7 @@ pre.diff .del {
     flex: none;
     width: 8px;
     height: 8px;
-    border-radius: 2.5px;
+    border-radius: calc(var(--r-mark) - 0.5px);
     color: var(--folder, var(--muted));
 }
 
@@ -4916,7 +4947,7 @@ pre.diff .del {
 @media (hover: hover) {
     .splash-actions .button.primary:hover {
         border-color: transparent;
-        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--text));
     }
 }
 
@@ -4976,7 +5007,7 @@ pre.diff .del {
     display: grid;
     place-items: center;
     border: 1px solid var(--hair-2);
-    border-radius: 6px;
+    border-radius: calc(var(--r-tag) + 1px);
     font: 11px / 1 var(--mono);
     color: var(--muted);
 }
@@ -5017,7 +5048,7 @@ pre.diff .del {
     width: 100%;
     max-width: 560px;
     max-height: 86dvh;
-    border-radius: 26px 26px 0 0;
+    border-radius: calc(var(--r-sheet) + 8px) calc(var(--r-sheet) + 8px) 0 0;
     box-shadow:
         0 -1px 0 var(--hair-2),
         0 -20px 40px -20px var(--sh);
@@ -5073,10 +5104,10 @@ pre.diff .del {
     }
 }
 
-/* The drawer: the session list sliding in from the left on narrow screens. */
-.drawer-overlay {
-    align-items: stretch !important;
-    justify-content: flex-start !important;
+/* The drawer: the session list sliding in from the left on narrow screens. Over `.overlay`'s place for sheets. */
+.overlay.drawer-overlay {
+    align-items: stretch;
+    justify-content: flex-start;
 }
 
 .drawer {
@@ -5309,7 +5340,7 @@ pre.diff .del {
 
 /* The branch picker: what is checked out beside its title, and how far each branch is from its remote one. */
 .branch-picker {
-    background: var(--o-bg);
+    background: var(--bg);
 }
 
 .branch-picker.down {
@@ -5356,7 +5387,7 @@ pre.diff .del {
 .branch-head {
     display: inline-flex;
     padding: 2px 8px;
-    border-radius: 6px;
+    border-radius: calc(var(--r-tag) + 1px);
     background: var(--card);
     font-size: 12px;
     align-items: center;
@@ -5544,7 +5575,7 @@ pre.diff .del {
     width: 36px;
     height: 5px;
     margin-left: -18px;
-    border-radius: 3px;
+    border-radius: var(--r-mark);
     background: var(--hair-2);
 }
 
@@ -5605,7 +5636,7 @@ pre.diff .del {
     overflow: hidden;
     border: 1px solid var(--hair);
     border-radius: var(--r-card);
-    background: var(--o-bg);
+    background: var(--bg);
 }
 
 .sheet-list > :not(:first-child) {
@@ -5640,7 +5671,7 @@ pre.diff .del {
     text-align: left;
     padding: calc(12px * var(--space-y)) calc(14px * var(--space-x));
     border-radius: var(--r-row);
-    background: var(--o-bg);
+    background: var(--bg);
     border: 0;
     font-size: 13.5px;
     color: var(--text);
@@ -5698,7 +5729,7 @@ pre.diff .del {
 .field input,
 .field textarea {
     font-size: 14.5px;
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
 }
 
 @media (pointer: coarse) {
@@ -5720,7 +5751,7 @@ pre.diff .del {
     margin: 0;
     padding: 0;
     border: 1.5px solid var(--hair-2);
-    border-radius: 4px;
+    border-radius: calc(var(--r-tag) - 1px);
     background: var(--card);
     color: var(--accent-ink);
     cursor: pointer;
@@ -5806,7 +5837,7 @@ pre.diff .del {
 
 @media (hover: hover) {
     .button.primary:hover {
-        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--text));
     }
 }
 
@@ -5832,7 +5863,7 @@ pre.diff .del {
 
 .button.sheet-footer {
     min-height: 40px;
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
 }
 
 /* Away from Save, in the color of what cannot be undone here. */
@@ -5844,7 +5875,7 @@ pre.diff .del {
 .button.small {
     min-height: 30px;
     padding: 4px 11px;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     font-size: 12.5px;
 }
 
@@ -5922,7 +5953,7 @@ pre.diff .del {
 .fp-bar > .icon-button,
 .fp-new {
     background: var(--card);
-    border-radius: 9px;
+    border-radius: var(--r-row);
 }
 
 .fp-bar > .icon-button:disabled {
@@ -5945,7 +5976,7 @@ pre.diff .del {
     white-space: nowrap;
     min-height: 34px;
     padding: 0 6px;
-    border-radius: 9px;
+    border-radius: var(--r-row);
     background: var(--card);
     font: 13px var(--mono);
 }
@@ -6080,7 +6111,7 @@ pre.diff .del {
     padding: 0.3rem;
     overflow-y: auto;
     overscroll-behavior: contain;
-    background: var(--o-bg);
+    background: var(--bg);
 }
 
 .fp-place {
@@ -6153,7 +6184,7 @@ pre.diff .del {
     border-radius: var(--r-card);
     overflow-y: auto;
     overscroll-behavior: contain;
-    background: var(--o-bg);
+    background: var(--bg);
 }
 
 .fp-list:focus-visible {
@@ -6167,7 +6198,7 @@ pre.diff .del {
     width: 100%;
     min-height: 34px;
     padding: 6px 10px;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     text-align: left;
     font: 13px var(--mono);
     color: var(--body);
@@ -6316,7 +6347,7 @@ pre.diff .del {
     align-items: center;
     gap: 12px;
     padding: 12px 14px;
-    background: var(--o-bg);
+    background: var(--bg);
 }
 
 .provider > :first-child {
@@ -6477,7 +6508,7 @@ pre.diff .del {
 .invite-details .qr {
     flex: none;
     width: 150px;
-    border-radius: 14px;
+    border-radius: var(--r-window);
 }
 
 .invite-code {
@@ -6522,7 +6553,7 @@ pre.diff .del {
     text-align: center;
     padding: 6px;
     border-radius: var(--r-control);
-    background: var(--o-bg);
+    background: var(--bg);
 }
 
 .auth-card {
@@ -6530,14 +6561,14 @@ pre.diff .del {
     flex-direction: column;
     gap: 12px;
     padding: 16px;
-    border-radius: 14px;
+    border-radius: var(--r-window);
     border: 1px solid var(--accent-line);
     background: var(--accent-soft);
 }
 
 .auth-inline {
     padding: 16px;
-    border-radius: 14px;
+    border-radius: var(--r-window);
     border: 1px solid var(--accent-line);
     background: var(--accent-soft);
 }
@@ -6600,7 +6631,7 @@ pre.diff .del {
     min-width: 0;
     overflow: hidden;
     border: 1px solid var(--hair);
-    border-radius: 14px;
+    border-radius: var(--r-window);
     text-align: left;
 }
 
@@ -6801,7 +6832,7 @@ pre.diff .del {
     position: fixed;
     inset: 0;
     z-index: 35;
-    background: color-mix(in srgb, var(--o-bg-darker) 95%, transparent);
+    background: color-mix(in srgb, var(--desk) 95%, transparent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -6832,10 +6863,7 @@ pre.diff .del {
     align-items: center;
     gap: 0.4rem;
     padding: calc(env(safe-area-inset-top) + 0.4rem) 0.4rem 0.4rem 0.9rem;
-    background: linear-gradient(
-        color-mix(in srgb, var(--o-bg-darker) 80%, transparent),
-        transparent
-    );
+    background: linear-gradient(color-mix(in srgb, var(--desk) 80%, transparent), transparent);
     cursor: default;
 }
 
@@ -6911,7 +6939,7 @@ pre.diff .del {
     width: 8px;
     height: 8px;
     margin: 6px 1px 0;
-    border-radius: 2.5px;
+    border-radius: calc(var(--r-mark) - 0.5px);
     background: var(--level);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--level) 18%, transparent);
 }
@@ -7044,7 +7072,7 @@ pre.diff .del {
     background: var(--accent-fill);
     color: var(--accent-ink);
     font-weight: 600;
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
     padding: 10px 16px;
 }
 
@@ -7072,7 +7100,7 @@ body.plain-page {
     position: relative;
     flex: none;
     color: var(--body);
-    border-radius: 10px;
+    border-radius: var(--r-control);
     transition: background-color var(--t-hover) var(--ease-out);
 }
 
@@ -7096,7 +7124,7 @@ body.plain-page {
     height: 9px;
     border-radius: 50%;
     background: var(--ok);
-    box-shadow: 0 0 0 2px var(--o-bg);
+    box-shadow: 0 0 0 2px var(--bg);
 }
 
 .online-mark.away {
@@ -7238,7 +7266,8 @@ body.plain-page {
 .chat-text {
     max-width: 85%;
     padding: 8px 12px;
-    border-radius: 16px 16px 16px 5px;
+    border-radius: calc(var(--r-window) + 2px) calc(var(--r-window) + 2px)
+        calc(var(--r-window) + 2px) var(--r-tag);
     background: var(--card-2);
     color: var(--text);
     font-size: 13.5px;
@@ -7247,7 +7276,8 @@ body.plain-page {
 }
 
 .chat-msg.mine .chat-text {
-    border-radius: 16px 16px 5px 16px;
+    border-radius: calc(var(--r-window) + 2px) calc(var(--r-window) + 2px) var(--r-tag)
+        calc(var(--r-window) + 2px);
     background: var(--accent-soft);
 }
 
@@ -7257,7 +7287,7 @@ body.plain-page {
     align-items: flex-end;
     background: var(--card);
     border: 1px solid var(--hair-2);
-    border-radius: 18px;
+    border-radius: var(--r-sheet);
     padding: 4px 4px 4px 14px;
 }
 
@@ -7384,7 +7414,7 @@ body.plain-page {
     max-width: 85%;
     text-align: left;
     border: 1px solid var(--hair);
-    border-radius: 9px;
+    border-radius: var(--r-row);
     background: var(--card);
     color: var(--muted);
     font-size: 12px;
@@ -7400,7 +7430,7 @@ body.plain-page {
     align-items: center;
     gap: 8px;
     padding: 6px 10px;
-    border-radius: 9px;
+    border-radius: var(--r-row);
     background: var(--card);
     color: var(--muted);
     font-size: 12px;
@@ -7450,7 +7480,7 @@ body.plain-page {
     gap: 6px;
     background: var(--card);
     border: 1px solid var(--hair);
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
     padding: 9px 8px 9px 12px;
 }
 
@@ -7728,7 +7758,7 @@ textarea.notes {
     flex: none;
     box-sizing: content-box;
     padding: 8px;
-    border-radius: 9px;
+    border-radius: var(--r-row);
     background: var(--accent-soft);
     color: var(--accent);
 }
@@ -7815,7 +7845,7 @@ textarea.notes {
     flex-direction: column;
     gap: 8px;
     padding: 12px;
-    border-radius: 14px;
+    border-radius: var(--r-window);
     border: 1px solid var(--hair);
     background: var(--card);
 }
@@ -7832,7 +7862,7 @@ textarea.notes {
 }
 
 .lesson-add .segmented {
-    background: var(--o-bg);
+    background: var(--bg);
     flex: 1 0 auto;
     flex-wrap: nowrap;
 }
@@ -7873,7 +7903,7 @@ textarea.notes {
 .running-head > .folder-mark {
     width: 8px;
     height: 8px;
-    border-radius: 2.5px;
+    border-radius: calc(var(--r-mark) - 0.5px);
 }
 
 .running-head .link {
@@ -7968,7 +7998,7 @@ textarea.notes {
     height: 5px;
     flex: none;
     overflow: hidden;
-    border-radius: 3px;
+    border-radius: var(--r-mark);
     background: var(--hair-2);
     color: var(--accent);
 }
@@ -8007,7 +8037,7 @@ textarea.notes {
     width: 72px;
     min-height: 30px;
     padding: 4px 8px;
-    border-radius: 7px;
+    border-radius: var(--r-seg);
     font-family: var(--mono);
 }
 
@@ -8030,7 +8060,7 @@ textarea.notes {
     max-height: 74dvh;
     display: flex;
     flex-direction: column;
-    background: var(--o-bg);
+    background: var(--bg);
     border-radius: var(--r-sheet);
     box-shadow: var(--pop);
     overflow: hidden;
@@ -8050,7 +8080,7 @@ textarea.notes {
 .launcher kbd {
     padding: 4px 6px;
     border: 1px solid var(--hair);
-    border-radius: 5px;
+    border-radius: var(--r-tag);
     background: none;
     font-size: 10.5px;
     color: var(--faint);
@@ -8230,7 +8260,7 @@ textarea.notes {
     flex: none;
     display: grid;
     place-items: center;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     background: var(--card);
     color: var(--muted);
 }
@@ -8300,7 +8330,7 @@ textarea.notes {
 .launcher-folder {
     width: 9px;
     height: 9px;
-    border-radius: 3px;
+    border-radius: var(--r-mark);
     background: var(--folder);
 }
 
@@ -8336,7 +8366,7 @@ textarea.notes {
     width: 28px;
     height: 28px;
     flex: none;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     overflow: hidden;
     box-shadow: 0 0 0 1px var(--hair-2);
 }
@@ -8472,7 +8502,7 @@ textarea.notes {
     text-align: left;
     gap: 8px;
     padding: 8px 8px 10px;
-    border-radius: 14px;
+    border-radius: var(--r-window);
     background: var(--o-bg);
     color: var(--o-fg);
     border: 1px solid color-mix(in srgb, var(--o-fg) 17%, transparent);
@@ -8667,6 +8697,82 @@ textarea.notes {
     color: var(--body);
 }
 
+/* The theme: a card for each theme folder, in the app's own colors (a theme cannot be drawn small, as colors can). */
+.look-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+}
+
+.look-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-height: 64px;
+    padding: 10px 12px;
+    text-align: left;
+    border-radius: var(--r-card);
+    background: var(--card);
+    border: 1px solid var(--hair-2);
+    transition: border-color var(--t-hover) var(--ease-out);
+}
+
+@media (hover: hover) {
+    .look-card:not(:disabled):hover {
+        border-color: var(--accent-line);
+    }
+}
+
+.look-card.on {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.look-card.broken {
+    cursor: default;
+    opacity: 0.8;
+}
+
+.look-name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.look-name small {
+    font: 10.5px var(--mono);
+    color: var(--faint);
+}
+
+.look-detail {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.look-problem {
+    font-size: 12px;
+    color: var(--err);
+}
+
+.look-tools,
+.look-duplicate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 4px;
+}
+
+.look-duplicate input {
+    flex: 1;
+    min-width: 160px;
+}
+
 /* ─── Sign in: the app's screen (the server's pages are under Notices) ─── */
 
 .signin {
@@ -8676,7 +8782,7 @@ textarea.notes {
 .signin .row {
     padding: 6px;
     border: 1px solid var(--hair-2);
-    border-radius: 14px;
+    border-radius: var(--r-window);
     background: var(--card);
     box-shadow: var(--shadow);
 }
@@ -8817,7 +8923,7 @@ textarea.notes {
 .people-head .icon-button {
     width: 32px;
     height: 32px;
-    border-radius: 9px;
+    border-radius: var(--r-row);
 }
 
 .people .sheet-body,
@@ -8860,7 +8966,7 @@ textarea.notes {
     align-items: center;
     gap: 10px;
     padding: 6px;
-    border-radius: 9px;
+    border-radius: var(--r-row);
 }
 
 .people-person-info {
@@ -8899,7 +9005,7 @@ textarea.notes {
     gap: 10px;
     margin: 0 2px 2px;
     padding: 10px 12px;
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
     background: var(--card);
 }
 
@@ -8921,7 +9027,7 @@ textarea.notes {
 
 .people-turns .button {
     min-height: 28px;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     padding: 0 11px;
     font-size: 12px;
     flex: none;
@@ -8934,7 +9040,7 @@ textarea.notes {
     margin: 0 2px;
     padding: 9px 12px;
     border: 1px solid var(--hair);
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
     text-align: left;
     font-size: 12.5px;
     color: var(--body);
@@ -8961,7 +9067,7 @@ textarea.notes {
 
 .people-content .mention-list {
     border: 1px solid var(--hair-2);
-    border-radius: 12px;
+    border-radius: var(--r-card);
     overflow: hidden;
     background: var(--bg);
     box-shadow: var(--shadow);
@@ -8971,7 +9077,7 @@ textarea.notes {
     flex: 1;
     min-height: 160px;
     resize: none;
-    border-radius: 12px;
+    border-radius: var(--r-card);
     font-size: 13.5px;
 }
 
@@ -9323,7 +9429,7 @@ textarea.notes {
     min-height: 30px;
     padding: 0 12px;
     border: 0;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     background: var(--card-2);
     color: var(--text);
     font-size: 12.5px;
@@ -9345,7 +9451,7 @@ textarea.notes {
 
 @media (hover: hover) {
     .peek-actions .button.small.primary:hover:not(:disabled) {
-        background: color-mix(in oklab, var(--accent-fill) 85%, var(--o-fg-bright));
+        background: color-mix(in oklab, var(--accent-fill) 85%, var(--text));
         color: var(--accent-ink);
     }
 }
@@ -9443,7 +9549,7 @@ textarea.notes {
         background: none;
     }
     :root[data-tiling="on"][data-focus="peeks"] .peeks.window {
-        outline: 1px solid var(--accent-line);
+        outline: 1px solid var(--window-border-active);
         outline-offset: 2px;
     }
     :root[data-tiling="on"] .peeks-list {
@@ -9503,7 +9609,7 @@ textarea.notes {
     width: 24px;
     height: 24px;
     flex: none;
-    border-radius: 6px;
+    border-radius: calc(var(--r-tag) + 1px);
     color: var(--muted);
 }
 
@@ -9605,7 +9711,7 @@ textarea.notes {
 .dv-tool.icon-button {
     width: 28px;
     height: 28px;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     font-size: 13px;
     color: var(--muted);
 }
@@ -9678,7 +9784,7 @@ textarea.notes {
     margin: 0;
     padding: 0;
     border: 1.5px solid currentColor;
-    border-radius: 4px;
+    border-radius: calc(var(--r-tag) - 1px);
     background: none;
     cursor: pointer;
 }
@@ -9817,13 +9923,19 @@ textarea.notes {
     color: inherit;
 }
 
+/* A comment's words that changed: the comment's faint color is too weak on the change's highlight. */
+.dv-code .hl-com mark,
+.dv-code mark .hl-com {
+    color: var(--muted);
+}
+
 /* The side of a split row with no line: hatched, as an absence rather than an empty line. */
 .dv-code.none,
 .dv-n.none {
     background: repeating-linear-gradient(
         -45deg,
         transparent 0 5px,
-        color-mix(in srgb, var(--o-fg) 4%, transparent) 5px 6px
+        color-mix(in srgb, var(--body) 4%, transparent) 5px 6px
     );
 }
 
@@ -9853,7 +9965,7 @@ textarea.notes {
 
 .dv-gap button {
     padding: 2px 10px;
-    border-radius: 6px;
+    border-radius: calc(var(--r-tag) + 1px);
     color: var(--accent);
     font: 11.5px var(--mono);
 }
@@ -9961,7 +10073,7 @@ textarea.notes {
     gap: 5px;
     height: 20px;
     padding: 0 7px;
-    border-radius: 6px;
+    border-radius: calc(var(--r-tag) + 1px);
     background: var(--card);
     color: var(--muted);
 }
@@ -10016,7 +10128,7 @@ textarea.notes {
     height: 30px;
     padding: 0 10px;
     border-color: var(--hair);
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
 }
 
 @media (pointer: fine) {
@@ -10029,7 +10141,7 @@ textarea.notes {
 .dr-tools .chip {
     height: 30px;
     padding: 0 10px;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     background: none;
     font-size: 12px;
 }
@@ -10070,7 +10182,7 @@ textarea.notes {
     width: 100%;
     min-height: 28px;
     padding: 0 8px 0 calc(8px + var(--depth, 0) * 14px);
-    border-radius: 7px;
+    border-radius: var(--r-seg);
     text-align: left;
     color: var(--body);
     font: 12.5px var(--mono);
@@ -10293,7 +10405,7 @@ textarea.notes {
 
 .dr-layout {
     padding: 2px;
-    border-radius: 9px;
+    border-radius: var(--r-row);
 }
 
 .dr-layout button {
@@ -10361,7 +10473,7 @@ textarea.notes {
 .ft-tools .icon-button {
     width: 28px;
     height: 28px;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     color: var(--muted);
 }
 
@@ -10479,7 +10591,7 @@ textarea.notes {
 .ft-view-head .icon-button {
     width: 28px;
     height: 28px;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     color: var(--muted);
 }
 
@@ -10611,7 +10723,7 @@ textarea.notes {
     width: 30px;
     height: 30px;
     flex: none;
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     color: var(--muted);
 }
 
@@ -10647,7 +10759,7 @@ textarea.notes {
     margin: 0 4px;
     padding: 0 12px;
     border: 1px solid var(--hair);
-    border-radius: 10px;
+    border-radius: var(--r-control);
     background: var(--card);
 }
 
@@ -10873,7 +10985,7 @@ textarea.notes {
     flex-direction: column;
     gap: 1px;
     border: 1px solid var(--hair);
-    border-radius: 12px;
+    border-radius: var(--r-card);
     overflow: hidden;
     background: var(--hair);
 }
@@ -11188,7 +11300,7 @@ textarea.notes {
 .find-input {
     width: 100%;
     min-height: 42px;
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
 }
 
 .find-search .find-input {
@@ -11243,7 +11355,7 @@ textarea.notes {
 
 .find-snippet mark {
     padding: 0 2px;
-    border-radius: 3px;
+    border-radius: var(--r-mark);
     background: var(--accent-soft);
     color: var(--accent);
 }
@@ -11538,7 +11650,7 @@ textarea.notes {
         top: var(--menu-top, 64px);
         width: 360px;
         max-height: var(--menu-height, calc(100dvh - 72px));
-        border-radius: 16px;
+        border-radius: calc(var(--r-window) + 2px);
         box-shadow: var(--pop);
         animation: pop 0.25s var(--ease-out);
     }
@@ -12296,7 +12408,7 @@ textarea.notes {
 .pi-folder-list {
     display: flex;
     flex-direction: column;
-    background: var(--o-bg);
+    background: var(--bg);
     border: 1px solid var(--hair);
     border-radius: var(--r-card);
     overflow: hidden;
@@ -12363,7 +12475,7 @@ textarea.notes {
 .pi-tag {
     color: var(--accent);
     background: var(--accent-soft);
-    border-radius: 999px;
+    border-radius: var(--r-pill);
     padding: 0.05rem 0.5rem;
     font-size: 0.72rem;
     white-space: nowrap;
@@ -12452,7 +12564,8 @@ textarea.notes {
     max-width: 85%;
     background: var(--card-2);
     border: 1px solid var(--line);
-    border-radius: 16px 16px 5px 16px;
+    border-radius: calc(var(--r-window) + 2px) calc(var(--r-window) + 2px) var(--r-tag)
+        calc(var(--r-window) + 2px);
     padding: 10px 14px;
 }
 
@@ -12469,7 +12582,7 @@ textarea.notes {
     gap: 6px;
     margin: 0 -20px -20px;
     padding: 14px 20px 20px;
-    background: var(--o-bg);
+    background: var(--bg);
     border-top: 1px solid var(--hair);
 }
 
@@ -12691,7 +12804,7 @@ textarea.notes {
 .agent-chip {
     color: var(--accent);
     background: var(--accent-soft);
-    border-radius: 999px;
+    border-radius: var(--r-pill);
     padding: 0 0.45rem;
     font-size: 0.72rem;
     white-space: nowrap;
@@ -12802,7 +12915,7 @@ textarea.notes {
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: var(--o-bg);
+    background: var(--bg);
     animation: fade var(--t-fade) var(--ease-almost);
 }
 
@@ -12900,7 +13013,7 @@ textarea.notes {
     height: 10px;
     display: grid;
     place-items: center;
-    border-radius: 3px;
+    border-radius: var(--r-mark);
     background: var(--state);
     color: var(--accent-ink);
     font: 600 8px/1 var(--mono);
@@ -12919,7 +13032,7 @@ textarea.notes {
     display: flex;
     gap: 3px;
     height: 8px;
-    border-radius: 4px;
+    border-radius: calc(var(--r-tag) - 1px);
     overflow: hidden;
 }
 
@@ -12988,7 +13101,7 @@ textarea.notes {
 .board-filter .board-mark {
     width: 8px;
     height: 8px;
-    border-radius: 2.5px;
+    border-radius: calc(var(--r-mark) - 0.5px);
 }
 
 .board-filter-count {
@@ -13118,7 +13231,7 @@ textarea.notes {
     display: grid;
     place-items: center;
     border: 1px solid color-mix(in srgb, var(--state) 40%, transparent);
-    border-radius: 8px;
+    border-radius: calc(var(--r-row) - 1px);
     background: color-mix(in srgb, var(--state) 14%, transparent);
     outline-offset: 2px;
     transition: opacity var(--t-fade) var(--ease-almost);
@@ -13143,7 +13256,7 @@ textarea.notes {
 .board-cell-core {
     width: 8px;
     height: 8px;
-    border-radius: 2.5px;
+    border-radius: calc(var(--r-mark) - 0.5px);
     background: var(--state);
     color: var(--accent-ink);
     font: 600 8px/1 var(--mono);
@@ -13500,7 +13613,7 @@ textarea.notes {
     padding: 12px 12px calc(env(safe-area-inset-bottom) + 14px);
     border: 1px solid var(--hair-2);
     border-radius: var(--r-sheet);
-    background: var(--o-bg);
+    background: var(--bg);
     box-shadow: var(--pop);
     animation: pop var(--t-in) var(--ease-out);
 }
@@ -13609,7 +13722,7 @@ textarea.notes {
     flex-direction: column;
     background: var(--o-bg-dark);
     border: 1px solid var(--hair);
-    border-radius: 20px;
+    border-radius: var(--r-float);
     box-shadow: var(--pop);
     font: 14.5px/1.6 var(--sans);
     transform-origin: bottom right;
@@ -13740,7 +13853,7 @@ textarea.notes {
     padding: 0;
     position: relative;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--r-tag);
     background: transparent;
     font: 12px var(--sans);
     color: var(--muted);
@@ -13769,7 +13882,7 @@ textarea.notes {
     width: 40px;
     height: 40px;
     min-width: 0;
-    border-radius: 9px;
+    border-radius: var(--r-row);
     color: var(--muted);
 }
 
@@ -13856,7 +13969,7 @@ textarea.notes {
     max-width: 84%;
     padding: 10px 14px;
     background: var(--accent-soft);
-    border-radius: 18px 18px 6px 18px;
+    border-radius: var(--r-sheet) var(--r-sheet) calc(var(--r-tag) + 1px) var(--r-sheet);
     color: var(--text);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -13910,7 +14023,7 @@ textarea.notes {
     padding: 12px 14px;
     background: var(--card);
     border: 1px solid var(--hair);
-    border-radius: 14px;
+    border-radius: var(--r-window);
     color: var(--body);
 }
 
@@ -13961,7 +14074,7 @@ textarea.notes {
     overflow: auto;
     background: var(--code-bg);
     border: 1px solid var(--hair);
-    border-radius: 9px;
+    border-radius: var(--r-row);
     font: 12px var(--mono);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -14016,7 +14129,7 @@ textarea.notes {
     min-height: 40px;
     padding: 8px 12px;
     border: 1px solid var(--hair-2);
-    border-radius: 12px;
+    border-radius: var(--r-card);
     color: var(--text);
     font-size: 13px;
     text-align: left;
@@ -14046,7 +14159,7 @@ textarea.notes {
     margin: 0 12px 6px;
     padding: 8px 12px;
     border: 1px solid var(--warn-line);
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
     background: var(--warn-soft);
     color: var(--warn);
     font-size: 12.5px;
@@ -14071,7 +14184,7 @@ textarea.notes {
     min-height: 44px;
     padding: 8px 12px;
     border: 0;
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
     background: var(--card);
     color: var(--body);
     font-size: 12.5px;
@@ -14118,7 +14231,7 @@ textarea.notes {
     min-width: 0;
     padding: 4px 6px;
     border: 1px solid var(--hair);
-    border-radius: 11px;
+    border-radius: calc(var(--r-control) + 1px);
     background: var(--card);
     font-size: 12px;
 }
@@ -14171,7 +14284,7 @@ textarea.notes {
     gap: 4px;
     padding: 1px 5px;
     border: 1px solid var(--hair-2);
-    border-radius: 24px;
+    border-radius: calc(var(--r-float) + 4px);
     background: var(--card);
 }
 
@@ -14273,7 +14386,7 @@ textarea.notes {
         height: 86dvh;
         max-height: calc(100dvh - env(safe-area-inset-top));
         border: 0;
-        border-radius: 26px 26px 0 0;
+        border-radius: calc(var(--r-sheet) + 8px) calc(var(--r-sheet) + 8px) 0 0;
         background: var(--bg);
         box-shadow:
             0 -1px 0 var(--hair-2),
@@ -14353,7 +14466,7 @@ textarea.notes {
     padding: 12px 14px;
     margin-top: 10px;
     border-radius: var(--r-card);
-    background: var(--o-bg);
+    background: var(--bg);
     border: 1px solid var(--hair);
 }
 
@@ -14362,7 +14475,7 @@ textarea.notes {
     flex-direction: column;
     gap: 12px;
     padding: 14px;
-    border-radius: 14px;
+    border-radius: var(--r-window);
     border: 1px solid var(--hair);
     background: var(--card);
 }
@@ -14370,7 +14483,7 @@ textarea.notes {
 .hook-form input,
 .hook-form textarea,
 .hook-form .segmented {
-    background: var(--o-bg);
+    background: var(--bg);
 }
 
 .hook.fresh {

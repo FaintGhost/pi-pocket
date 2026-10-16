@@ -1,5 +1,6 @@
 // The extension gallery: what comes from its index is untrusted, and what it installs never runs on its own.
 import { cleanUp, openApp, owner, root, scriptedModel } from "./helpers.ts";
+import type { Installed } from "../src/server/gallery.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
@@ -139,7 +140,7 @@ test("an installed extension arrives off, even under a name that was turned on b
     const installed = await app.gallery.install("stale", await pin("stale"));
 
     assert.ok(existsSync(join(dropIns, "stale.ts")));
-    assert.equal(installed.enabled, false);
+    assert.equal((installed as Installed).enabled, false);
     assert.equal(app.loader.enabled("stale.ts"), false);
     assert.ok(!app.loader.extensionNames().includes("test-clock"));
 });
@@ -249,4 +250,41 @@ test("a revoked version is flagged where it is installed, and is never installed
     await assert.rejects(app.gallery.install("withdrawn", await pin("withdrawn")), {
         status: 409,
     });
+});
+
+test("a theme installs into the themes folder only as pinned, and only when its CSS passes the theme check", async () => {
+    const themes = join(dataDir, "themes");
+
+    const theme = (name: string, css: string, commit: string) => {
+        const files = {
+            [`${name}/theme.json`]: '{ "themeApi": 1, "name": "Test theme" }\n',
+            [`${name}/theme.css`]: css,
+            // A light palette beside the theme: part of the format, so part of an entry.
+            [`${name}/colors-light.toml`]: 'background = "#fafafa"\nforeground = "#222222"\n',
+        };
+        const { pocketApi: _api, declares: _declares, ...rest } = entry(name, files, commit);
+
+        return { ...rest, kind: "theme", themeApi: 1 };
+    };
+
+    const good = ":root { --accent: #c2410c; }\n";
+
+    await index(
+        theme("paper", good, "a".repeat(40)),
+        // It would load the app's own address with the person's cookie: the check refuses it.
+        theme("leaky", ':root { --wallpaper: url("/api/state"); }\n', "b".repeat(40)),
+        theme("swapped", good, "c".repeat(40)),
+    );
+    served.set(
+        `https://raw.githubusercontent.com/someone/pocket-swapped/${"c".repeat(40)}/swapped/theme.css`,
+        good.replace("c2410c", "000000"),
+    );
+
+    await assert.rejects(app.gallery.install("leaky", await pin("leaky")), { status: 422 });
+    await assert.rejects(app.gallery.install("swapped", await pin("swapped")), /SHA-256/);
+    await app.gallery.install("paper", await pin("paper"));
+
+    assert.deepEqual(readdirSync(themes), ["paper"]);
+    assert.equal(readFileSync(join(themes, "paper", "theme.css"), "utf8"), good);
+    assert.equal(app.themes.list().find((each) => each.id === "paper")?.usable, true);
 });
