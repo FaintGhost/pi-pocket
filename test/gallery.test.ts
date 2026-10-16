@@ -130,12 +130,17 @@ test("a file that does not match its pinned SHA-256 installs nothing", async () 
     );
 });
 
-test("a code file that is not plain text, which the source view could not show, installs nothing", async () => {
-    // Node runs it, NUL and all; the gallery would show it only as "binary".
-    await index(entry("hidden", { "hidden.ts": `${clock}// \0\n` }, "4".repeat(40)));
-
-    await assert.rejects(app.gallery.install("hidden", await pin("hidden")), { status: 502 });
-    assert.ok(!existsSync(join(dropIns, "hidden.ts")));
+test("a code file the source view could not show as it runs installs nothing", async () => {
+    // Node runs it, NUL and all, which the gallery would show only as "binary"; text in the other direction shows
+    // reordered.
+    for (const [name, end] of [
+        ["hidden", "// \0\n"],
+        ["turned", "// \u202e }\n"],
+    ]) {
+        await index(entry(name!, { [`${name}.ts`]: `${clock}${end}` }, "4".repeat(40)));
+        await assert.rejects(app.gallery.install(name!, await pin(name!)), { status: 502 });
+        assert.ok(!existsSync(join(dropIns, `${name}.ts`)));
+    }
 });
 
 test("an installed extension arrives off, even under a name that was turned on before", async () => {
