@@ -43,7 +43,7 @@ Do slow work after the module loads, not while it loads.
 
 ## Deprecated members
 
-A member of the API that will go is marked **Deprecated** in the reference, with what to use instead, and when it goes. When a module uses one, its row in Menu → Extensions shows a warning to the owner: for the server part's uses, and for the browser module's uses in that tab. [API stability](policies/api-stability.md) gives the rules: what is public, what is a breaking change, and how long a deprecated member stays.
+A member of the API that will go is marked **Deprecated** in the reference and in `types/pocket.d.ts`, with what to use instead, and when it goes. Nothing is deprecated now. The first release that deprecates a public member also adds a warning that the owner sees when a module uses it. [API stability](policies/api-stability.md) gives the rules: what is public, what is a breaking change, and how long a deprecated member stays.
 
 ## Restarts
 

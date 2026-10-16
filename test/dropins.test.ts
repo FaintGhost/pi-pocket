@@ -19,7 +19,6 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import { DEPRECATED } from "../src/server/deprecations.ts";
 
 const dataDir = join(root, "data");
 const dropIns = join(dataDir, "extensions");
@@ -190,32 +189,4 @@ test("a drop-in cannot take a name Pi Pocket keeps: it is refused", async () => 
     // turned off would remove the guard.
     await refused("guard-twin.ts", named("pocket-guard"), /pocket-guard is Pi Pocket's own/);
     await refused("my-bash.ts", named("my-bash", "bash"), /bash is a built-in tool's/);
-});
-
-test("a drop-in that uses a deprecated member shows the owner a warning", async (t) => {
-    // Nothing is deprecated yet: the test marks two members.
-    DEPRECATED.push(
-        {
-            member: "host.thinkingLevels",
-            since: "0.15.0",
-            removal: "0.17.0",
-            use: "the docs' list",
-        },
-        { member: "web.module", since: "0.15.0", removal: "0.17.0", use: "the file's name" },
-    );
-    t.after(() => DEPRECATED.splice(0));
-    writeFileSync(
-        join(dropIns, "old-ways.ts"),
-        "export default (host, web) => { void host.thinkingLevels; void web.module; web.onDispose(() => {}); };",
-    );
-    await app.setExtensionEnabled(owner(app), "old-ways.ts", true);
-
-    const listed = (await app.extensions(owner(app))).modules.find(
-        (each) => each.file === "old-ways.ts",
-    );
-
-    assert.deepEqual(
-        listed?.deprecated?.map((each) => each.member),
-        ["host.thinkingLevels", "web.module"],
-    );
 });

@@ -222,10 +222,9 @@ These can change in any release: the words of errors and notices, timing that th
 ### How a member is deprecated
 
 1. The replacement ships first, or in the same release. If the feature goes with no replacement, the notes say so.
-2. extensions.md marks the member: "**Deprecated in 0.15.0.** Use `web.example`. It goes in 0.17.0 or later, and not before 2027-02-01."
-3. In `host.ts`, the member's comment gets `@deprecated` with the same words. Editors then show it.
-4. The member gets a row in the table of deprecated members: `DEPRECATED` in `src/server/deprecations.ts` for `host` and `web`, or in `web/extension-ui.js` for `pocket`. The Extensions sheet then warns of each module that uses it ([How the warnings work](#how-the-warnings-work)).
-5. The release notes list it under "Deprecated", in "For extension authors".
+2. In `types/pocket.d.ts`, the member gets `@deprecated` with what to use instead and when it goes: "Deprecated in 0.15.0. Use `web.example`. It goes in 0.17.0 or later, and not before 2027-02-01." Editors then show it.
+3. Its page in the reference gets the line "Since 0.14.0 · Deprecated", with the same words under it. The docs build checks that the reference and the types file agree.
+4. The release notes list it under "Deprecated", in "For extension authors".
 
 ### Minimum time
 
@@ -243,7 +242,7 @@ These can change in any release: the words of errors and notices, timing that th
 - **A19. The notes of each release have a section "For extension authors".** The 0.14 betas already have it. It uses these headings, in this order, with one line and a link for each item:
     - **Added**
     - **Changed:** changes to experimental members, and fixes that authors can see.
-    - **Deprecated:** each with its replacement and its earliest removal.
+    - **Deprecated:** each with its replacement and its earliest removal. The first release with a deprecated member also tells how the owner sees the warning ([Warnings](#warnings)).
     - **Removed:** and the new `pocketApi`.
     - **Reserved names**
     - **Security:** changes with no deprecation period (A13).
@@ -252,10 +251,7 @@ These can change in any release: the words of errors and notices, timing that th
     When nothing changed, the section says "No changes."\
     _Reason:_ authors read one place, and "No changes" is also information.
 
-## How the warnings work
+## Warnings
 
-- **The tables.** `DEPRECATED` in `src/server/deprecations.ts` lists the deprecated members of `host` and `web`. `DEPRECATED` in `web/extension-ui.js` lists those of `pocket`. Each row is `{ member, since, removal, use }`, such as `{ member: "web.example", since: "0.15.0", removal: "0.17.0, and not before 2027-02-01", use: "web.other" }`. Both tables are empty now.
-- **On the server.** Each version of a module gets its own view of `host` and `web`. The view has the same members, but it notes each deprecated member the first time that version reads it. While nothing is deprecated, the module gets `host` and `web` themselves. The Extensions sheet shows the owner one line for each member that the version in force used: "Uses web.example, deprecated in 0.15.0. It goes in 0.17.0: use web.other." The server log gets one line for each version and member. A new version starts with no warnings.
-- **In the browser.** Each version of a browser module gets a `pocket` with the same view. The first use of a deprecated member logs a warning in the browser's console, and the Extensions sheet in that tab shows "In this browser: uses pocket.example, …".
-- **Limits.** A use shows only when the code runs. A member that a module uses only in a rare path shows late.
+- Nothing is deprecated now, and Pi Pocket shows no deprecation warnings. The first release that deprecates a public member adds a warning that the owner sees when a module uses it. Its notes say so under "Deprecated".
 - The check for the oldest supported `pocketApi` (A9) comes with `pocketApi` 2. Until then, every version is supported.

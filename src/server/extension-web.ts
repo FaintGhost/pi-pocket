@@ -17,7 +17,6 @@ import {
 } from "node:fs";
 import { extname, join } from "node:path";
 import type { User } from "./config.ts";
-import type { Deprecation } from "./deprecations.ts";
 import { describe } from "./errors.ts";
 import type {
     CommandInfo,
@@ -193,8 +192,6 @@ export class WebPart {
     disposed = false;
     /** What `web.send` already logged for this version, so a module in a loop does not fill the log. */
     readonly warned = new Set<string>();
-    /** The deprecated members of `host` and `web` this version used, by member: the Extensions sheet warns of them. */
-    readonly deprecated = new Map<string, Deprecation>();
     /** This second's sending, for the limit on events. */
     sending = { second: 0, events: 0, bytes: 0 };
 
@@ -508,27 +505,6 @@ export class ExtensionWebs {
 
         part.warned.add(key);
         this.#options.log?.(`${part.file}: ${message}`);
-    }
-
-    /** A version of a module used a deprecated member: kept for the Extensions sheet, and logged once. */
-    used(part: WebPart, deprecation: Deprecation): void {
-        if (part.deprecated.has(deprecation.member)) {
-            return;
-        }
-
-        part.deprecated.set(deprecation.member, deprecation);
-        this.#warn(
-            part,
-            `deprecated ${deprecation.member}`,
-            `uses ${deprecation.member}, deprecated in ${deprecation.since}, which goes in ${deprecation.removal}: use ${deprecation.use}`,
-        );
-    }
-
-    /** The deprecated members that the version of a module in force used. */
-    deprecated(file: string): Deprecation[] {
-        const part = this.#parts.get(moduleName(file));
-
-        return part === undefined || part.file !== file ? [] : [...part.deprecated.values()];
     }
 
     /** The module installed: what it registered replaces what its previous version had. */
