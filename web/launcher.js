@@ -27,11 +27,14 @@ import {
     store,
 } from "./store.js";
 import {
+    BASE_LOOK,
+    chooseLook,
+    folderPaletteIds,
+    lookIds,
     paletteOf,
     prefs,
     preview,
     setPrefs,
-    THEMES,
     themeIds,
     themeVars,
     varsStyle,
@@ -355,29 +358,54 @@ function sessionItems() {
     });
 }
 
+/** Theme folders that change the look, as launcher items: no preview (their stylesheets load when chosen). */
+function lookItems() {
+    const vars = themeVars(paletteOf());
+
+    return lookIds()
+        .map(
+            (id) =>
+                store.state.themeList?.find((each) => each.id === id && each.usable) ??
+                (id === BASE_LOOK ? { id, name: "Pocket", builtIn: true } : null),
+        )
+        .filter(Boolean)
+        .map((look) => ({
+            kind: "theme",
+            key: `look:${look.id}`,
+            label: look.name,
+            detail: look.builtIn ? "theme, built in" : "theme",
+            text: `theme ${look.name} ${look.id}`,
+            look: look.id,
+            vars,
+        }));
+}
+
 function themeItems() {
     const desktop = store.state.desktopTheme;
-    const ids = [...(desktop ? ["desktop"] : []), ...themeIds()];
+    const ids = [...(desktop ? ["desktop"] : []), ...themeIds(), ...folderPaletteIds()];
 
-    return ids.map((id) => {
-        const palette = paletteOf(id);
-        const name = id === "desktop" ? `Desktop · ${palette.name}` : THEMES[id].name;
+    return [
+        ...lookItems(),
+        ...ids.map((id) => {
+            const palette = paletteOf(id);
+            const name = id === "desktop" ? `Desktop · ${palette.name}` : palette.name;
 
-        return {
-            kind: "theme",
-            key: `theme:${id}`,
-            label: name,
-            detail:
-                id === "desktop"
-                    ? "follows your Omarchy theme"
-                    : palette.colors.mode === "light"
-                      ? "light"
-                      : "dark",
-            text: `theme ${name} ${id}`,
-            theme: id,
-            vars: themeVars(palette),
-        };
-    });
+            return {
+                kind: "theme",
+                key: `theme:${id}`,
+                label: name,
+                detail:
+                    id === "desktop"
+                        ? "follows your Omarchy theme"
+                        : palette.colors.mode === "light"
+                          ? "light"
+                          : "dark",
+                text: `theme ${name} ${id}`,
+                theme: id,
+                vars: themeVars(palette),
+            };
+        }),
+    ];
 }
 
 const GROUP_NAMES = { session: "Sessions", action: "Actions", theme: "Themes" };
@@ -650,7 +678,7 @@ export function Launcher({ leaving, returnTo }) {
             return;
         }
 
-        preview(selected?.kind === "theme" ? selected.theme : null);
+        preview(selected?.kind === "theme" && selected.theme ? selected.theme : null);
     }, [selected?.key, leaving]);
     useLayoutEffect(() => {
         if (!leaving) {
@@ -696,6 +724,12 @@ export function Launcher({ leaving, returnTo }) {
 
         if (item.kind === "theme") {
             preview(null);
+
+            if (item.look) {
+                chooseLook(item.look, event);
+
+                return;
+            }
 
             if (item.theme !== prefs().theme) {
                 setPrefs({ theme: item.theme });
@@ -959,7 +993,9 @@ export function Launcher({ leaving, returnTo }) {
                                     }
                                     ${
                                         item.kind === "theme" &&
-                                        item.theme === prefs().theme &&
+                                        (item.look
+                                            ? item.look === prefs().look
+                                            : item.theme === prefs().theme) &&
                                         html`<span class="hint">current</span>`
                                     }
                                     ${
