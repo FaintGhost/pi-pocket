@@ -75,6 +75,8 @@ export function usePipResize(ref, account) {
                 return;
             }
 
+            drag.moved = true;
+
             const width = drag.edge === "top" ? drag.width : drag.width + drag.x - event.clientX;
             const height =
                 drag.edge === "left" ? drag.height : drag.height + drag.y - event.clientY;
@@ -90,15 +92,18 @@ export function usePipResize(ref, account) {
                 return;
             }
 
-            const rect = panel.getBoundingClientRect();
+            // Only a size someone chose: a tap on an edge keeps the default, which follows the window's height.
+            if (drag.moved) {
+                const rect = panel.getBoundingClientRect();
 
-            try {
-                localStorage.setItem(
-                    key,
-                    JSON.stringify({ width: rect.width, height: rect.height }),
-                );
-            } catch {
-                // Resizing still works when browser storage is unavailable.
+                try {
+                    localStorage.setItem(
+                        key,
+                        JSON.stringify({ width: rect.width, height: rect.height }),
+                    );
+                } catch {
+                    // Resizing still works when browser storage is unavailable.
+                }
             }
 
             stop();
