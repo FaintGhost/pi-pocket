@@ -75,4 +75,4 @@ See [features.md](features.md) for each.
 
 ## When this is not enough
 
-To give Pi a new tool, add a rule to its prompt that depends on the session's state, or check its tool calls, write an extension: [extensions.md](extensions.md). An extension can also add a page, a rail button, or a route to the app ([Adding to the app](extensions.md#adding-to-the-app)).
+To give Pi a new tool, add a rule to its prompt that depends on the session's state, or check its tool calls, write an extension: [extensions.md](extensions.md). An extension can also add a page, a rail button, or a route to the app ([Adding to the app](extensions/app.md)).

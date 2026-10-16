@@ -1,0 +1,5 @@
+# API versions
+
+How a module says which version of the extension API it needs.
+
+`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet. `web.command` is newer than the rest of `web`: a module that should also load on Pi Pocket before 0.14.0 checks `typeof web.command === "function"` first.

@@ -13,7 +13,7 @@ Before you start, read [map.md](map.md) for where the code you need is, and the 
 | Any other file in `src/server/`      | Nothing, until the server restarts.                                                                                                                  |
 | `docs/`, `test/`                     | Nothing runs it, except `npm test`.                                                                                                                  |
 
-So a change to an extension module and to other server code goes live in halves: the module at once, against the server as it was started. A module that calls something the rest of the change adds (a new member of the host, a new function in `src/server/`) breaks until the restart. Have it check that the new part is there, and do as before when it is not (`docs/extensions.md`, the host).
+So a change to an extension module and to other server code goes live in halves: the module at once, against the server as it was started. A module that calls something the rest of the change adds (a new member of the host, a new function in `src/server/`) breaks until the restart. Have it check that the new part is there, and do as before when it is not ([extensions/host.md](extensions/host.md)).
 
 ## After every save
 
