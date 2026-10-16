@@ -1,7 +1,7 @@
 // Spend: what each session and person cost, and their limits.
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, attempt, closeSheet, store } from "../store.js";
-import { html, Loader, Sheet } from "../ui.js";
+import { html, Icon, Loader, Sheet } from "../ui.js";
 
 const money = (amount) => `$${amount.toFixed(2)}`;
 const largest = (rows) => rows.reduce((max, row) => Math.max(max, row.spent), 1);
@@ -9,6 +9,12 @@ const largest = (rows) => rows.reduce((max, row) => Math.max(max, row.spent), 1)
 /** A spend limit, and (for the owner) a way to change it. */
 function SpendLimit({ budget, editable, save }) {
     const [draft, setDraft] = useState(null);
+    const field = useRef(null);
+    const editing = draft !== null;
+
+    useEffect(() => {
+        field.current?.focus();
+    }, [editing]);
 
     if (draft === null) {
         return html`<span class="muted small">
@@ -33,7 +39,15 @@ function SpendLimit({ budget, editable, save }) {
         });
 
     return html`<span class="limit-edit">
-        $<input type="number" inputmode="decimal" min="0.01" step="0.01" autofocus value=${draft} onInput=${(event) => setDraft(event.currentTarget.value)} />
+        $<input type="number" inputmode="decimal" min="0.01" step="0.01" ref=${field} value=${draft} onInput=${(event) => setDraft(event.currentTarget.value)} onKeyDown=${(
+            event,
+        ) => {
+            // Esc lets go of the limit, not the whole sheet.
+            if (event.key === "Escape") {
+                event.stopPropagation();
+                setDraft(null);
+            }
+        }} />
         <button
             class="button small primary"
             disabled=${!(Number(draft) > 0)}
@@ -45,6 +59,9 @@ function SpendLimit({ budget, editable, save }) {
             budget !== undefined &&
             html`<button class="button small ghost" onClick=${() => done(null)}>No limit</button>`
         }
+        <button class="icon-button" aria-label="Cancel" onClick=${() => setDraft(null)}>
+            <${Icon} name="close" size=${16} />
+        </button>
     </span>`;
 }
 

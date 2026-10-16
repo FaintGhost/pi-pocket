@@ -22,6 +22,7 @@ import {
     openSheet,
     scoped,
     setUnread,
+    signOut,
     store,
 } from "../store.js";
 import { isPinned, paletteOf, togglePin } from "../theme.js";
@@ -30,6 +31,9 @@ import { branchAvailable } from "./branch.js";
 import { memoryAvailable, memoryHint, useMemory } from "./memory.js";
 import { defaultLabel, defaultsKept } from "./model.js";
 import { copyText, html, Icon, item, Sheet, shortPath } from "../ui.js";
+
+// Key hints are for people with a keyboard: a touch screen has none.
+const touch = matchMedia("(pointer: coarse)").matches;
 
 /** The Extensions row's hint: that this tab loads none of their browser parts (safe mode), and Lancet Guard. */
 function extensionsHint() {
@@ -179,7 +183,7 @@ export function PlacesSheet() {
         className="places-sheet"
     >
         <${Places} />
-        ${item("Session menu", () => openSheet({ type: "menu" }), "rename, context, settings")}
+        ${item("Session menu", () => openSheet({ type: "menu", fromPlaces: true }), "rename, context, settings")}
     <//>`;
 }
 
@@ -208,6 +212,13 @@ function MenuFrame({ title, children }) {
             element.style.setProperty("--menu-height", `${Math.max(100, bottom - top - 8)}px`);
         };
 
+        const body = element.querySelector(".sheet-body");
+
+        if (menuScroll !== null) {
+            body.scrollTop = menuScroll;
+            menuScroll = null;
+        }
+
         place();
         addEventListener("resize", place);
         visualViewport?.addEventListener("resize", place);
@@ -215,6 +226,11 @@ function MenuFrame({ title, children }) {
         return () => {
             removeEventListener("resize", place);
             visualViewport?.removeEventListener("resize", place);
+
+            // Another sheet open now: the menu is going back under it, not closing.
+            if (store.state.sheet) {
+                menuScroll = body.scrollTop;
+            }
 
             const focused = document.activeElement;
             const back = opener?.isConnected ? opener : button;
@@ -286,6 +302,15 @@ function MenuFrame({ title, children }) {
     </div>`;
 }
 
+/** The menu's scroll, kept while a sheet it opened shows, so back finds the menu where it was left. */
+let menuScroll = null;
+
+store.subscribe(({ sheet }) => {
+    if (!sheet) {
+        menuScroll = null;
+    }
+});
+
 /** The project's trust in a word, once the server said. */
 function trustHint() {
     const info = currentTrust();
@@ -306,7 +331,8 @@ function trustHint() {
     return info.trusted ? "trusted" : "not trusted";
 }
 
-export function MenuSheet() {
+/** The menu; `places` is false when it opens from the places sheet, which just showed the tiles. */
+export function MenuSheet({ places = true }) {
     const { view, me, server } = store.state;
     const conversation = view.conversation;
     const steer = canSteer();
@@ -324,7 +350,7 @@ export function MenuSheet() {
     const memory = useMemory();
 
     return html`<${MenuFrame} title=${conversation?.title ?? "Menu"}>
-        <${Places} />
+        ${places && html`<${Places} />`}
         <div class="menu-session">
             ${
                 conversation &&
@@ -457,7 +483,7 @@ export function MenuSheet() {
         <div class="group">
             <div class="group-title">App</div>
             ${item("Appearance", () => openSheet({ type: "appearance" }), paletteOf().name)}
-            ${item("Keyboard shortcuts", () => openSheet({ type: "shortcuts" }), "?")}
+            ${!touch && item("Keyboard shortcuts", () => openSheet({ type: "shortcuts" }), "?")}
             ${
                 me?.role === "owner" &&
                 defaultsKept() &&
@@ -474,7 +500,7 @@ export function MenuSheet() {
             ${item("Running now", () => openSheet({ type: "running" }), "everything Pi is doing")}
             ${item("Spend", () => openSheet({ type: "spend" }), me?.role === "owner" ? "by person and session, limits" : "yours")}
             ${triggersOn() && me?.role !== "viewer" && item("Webhooks and watches", () => openSheet({ type: "hooks" }), "GitHub, other services")}
-            ${item("Providers", () => openSheet({ type: "providers" }))}
+            ${me?.role === "owner" && item("Providers", () => openSheet({ type: "providers" }))}
             ${extensionMenuItems().map((each) => item(each.label, each.run, each.hint))}
             ${item("Extensions", () => openSheet({ type: "extensions" }), extensionsHint())}
             ${
@@ -491,12 +517,7 @@ export function MenuSheet() {
                     "running work resumes",
                 )
             }
-            ${item(html`<span class="menu-signout">Sign out</span>`, () =>
-                attempt(async () => {
-                    await api("logout", {});
-                    location.href = "/";
-                }),
-            )}
+            ${item(html`<span class="menu-signout">Sign out</span>`, signOut)}
         </div>
     <//>`;
 }

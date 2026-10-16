@@ -435,6 +435,12 @@ test(
             (await options("Sessions")).includes("Alpha notes"),
             "subsequence matching is preserved",
         );
+        await search("@ bexp");
+        assert.deepEqual(
+            await options("Sessions"),
+            [],
+            "letters far apart in the text are not a match",
+        );
         await search("appearance");
         assert.equal(
             await inPage<string>(`${GROUPS} return JSON.stringify(groupName(groups[0]))`),

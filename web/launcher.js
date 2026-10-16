@@ -22,6 +22,7 @@ import {
     notify,
     openSheet,
     scoped,
+    signOut,
     store,
 } from "./store.js";
 import {
@@ -36,9 +37,13 @@ import {
 } from "./theme.js";
 import { APPLE, copyText, html, Icon, Keys, Marked, shortPath, timeAgo } from "./ui.js";
 
+/** How far a letter that does not begin a word may be from the one before it, in a match that is not contiguous. */
+const MAX_GAP = 3;
+
 /**
  * How well `query` matches `text` as a subsequence: null for no match, else a score (higher is better) and the matched
- * places. Runs of letters, letters at word starts, and an early first letter count for more.
+ * places. Runs of letters, letters at word starts, and an early first letter count for more. Letters scattered through a
+ * text must stay close (within a few characters) or begin a word, so "files" does not match "fix the login loop".
  */
 function fuzzy(text, query) {
     if (query === "") {
@@ -74,6 +79,10 @@ function fuzzy(text, query) {
 
         const run = hits.length > 0 && hits[hits.length - 1] === at - 1;
         const start = at === 0 || /[\s/._-]/.test(hay[at - 1]);
+
+        if (hits.length > 0 && !start && at - from > MAX_GAP) {
+            return null;
+        }
 
         score += 1 + (run ? 5 : 0) + (start ? 8 : 0) - Math.min(at - from, 10) * 0.3;
         hits.push(at);
@@ -189,6 +198,7 @@ function actionItems() {
             filesAvailable() && {
                 label: "Changes",
                 detail: "review what changed, file by file",
+                keywords: "diff",
                 icon: "fork",
                 run: () => toggleFiles("changes"),
             },
@@ -253,7 +263,7 @@ function actionItems() {
             icon: "pulse",
             run: () => openSheet({ type: "running" }),
         },
-        {
+        me?.role === "owner" && {
             label: "Providers",
             detail: "sign in to model providers",
             icon: "key",
@@ -292,6 +302,7 @@ function actionItems() {
             icon: "users",
             run: () => openSheet({ type: "name" }),
         },
+        { label: "Sign out", detail: "this browser", icon: "logout", run: signOut },
         // What extensions' browser modules added (`extension-ui.js`).
         ...extensionLauncherItems(),
     ];

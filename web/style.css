@@ -3751,7 +3751,7 @@ pre.diff .del {
     }
 }
 
-.search:focus-within {
+.search:has(input:focus) {
     border-color: var(--accent-line);
     color: var(--muted);
 }
@@ -3809,7 +3809,7 @@ pre.diff .del {
     }
 }
 
-.sessions .search:focus-within {
+.sessions .search:has(input:focus) {
     border-color: var(--accent-line);
     background: var(--card);
     color: var(--muted);
@@ -4037,6 +4037,19 @@ pre.diff .del {
     flex: 1;
     font: 11px var(--mono);
     color: var(--faint);
+}
+
+/* A dot on a folded group: a session inside needs you, or failed. */
+.group-trouble {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--warn);
+}
+
+.group-trouble.failed {
+    background: var(--err);
 }
 
 .group-head .icon {
@@ -8037,7 +8050,7 @@ textarea.notes {
 
 .launcher-state {
     flex: none;
-    max-width: 32%;
+    max-width: 50%;
     height: 20px;
     padding: 0 8px;
     line-height: 20px;
@@ -8413,7 +8426,7 @@ textarea.notes {
 
 .shortcuts {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 9.5rem 1fr;
     gap: 8px 18px;
     margin: 0;
     font-size: 13.5px;
@@ -8489,7 +8502,7 @@ textarea.notes {
     }
 }
 
-.search:focus-within .search-keys {
+.search:has(input:focus) .search-keys {
     opacity: 0;
 }
 
@@ -14011,7 +14024,7 @@ textarea.notes {
     }
 
     .pip-head {
-        padding: 23px 6px 10px 14px;
+        padding: 23px 10px 10px 14px;
         grid-template-columns: 32px minmax(0, 1fr) repeat(4, 40px);
     }
 

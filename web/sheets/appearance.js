@@ -14,6 +14,9 @@ import {
 } from "../theme.js";
 import { html, Icon, Sheet, Switch } from "../ui.js";
 
+// Key hints are for people with a keyboard: a touch screen has none.
+const touch = matchMedia("(pointer: coarse)").matches;
+
 /** A theme as a card: a tiny Hyprland desktop drawn in its own colors. */
 function ThemeCard({ id, desktop = false }) {
     const palette = paletteOf(id);
@@ -104,7 +107,7 @@ export function AppearanceSheet() {
             <//>
             <${SettingRow}
                 title="Peek tiles"
-                detail="Other sessions beside this one, live while on screen: working, waiting for you, done since you looked, and pinned. Also the tiles button in the top bar, or Alt+P"
+                detail=${`Other sessions beside this one, live while on screen: working, waiting for you, done since you looked, and pinned. Also the tiles button in the top bar${touch ? "" : ", or Alt+P"}`}
             >
                 <${Switch}
                     on=${p.peeks}
@@ -182,7 +185,7 @@ export function AppearanceSheet() {
         <div class="sheet-list">
             <${SettingRow}
                 title="Show thinking"
-                detail="Adds a chevron before the live spinner. Tap it to read the current thought above the line as it comes. Also Alt+T"
+                detail=${`Adds a chevron before the live spinner. Tap it to read the current thought above the line as it comes${touch ? "" : ". Also Alt+T"}`}
             >
                 <${Switch}
                     on=${p.showThinking}
@@ -204,11 +207,14 @@ export function AppearanceSheet() {
                 />
             <//>
         </div>
-        <button
-            class="button ghost wide sheet-footer"
-            onClick=${() => openSheet({ type: "shortcuts" })}
-        >
-            <${Icon} name="keyboard" size=${16} /> Keyboard shortcuts
-        </button>
+        ${
+            !touch &&
+            html`<button
+                class="button ghost wide sheet-footer"
+                onClick=${() => openSheet({ type: "shortcuts" })}
+            >
+                <${Icon} name="keyboard" size=${16} /> Keyboard shortcuts
+            </button>`
+        }
     <//>`;
 }

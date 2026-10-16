@@ -428,6 +428,14 @@ export async function attempt(action) {
     }
 }
 
+/** End this browser's sign-in, and go to the sign-in page. */
+export function signOut() {
+    return attempt(async () => {
+        await api("logout", {});
+        location.href = "/";
+    });
+}
+
 let source;
 
 function applyView(data) {

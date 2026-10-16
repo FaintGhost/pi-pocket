@@ -12,6 +12,7 @@ export function TextSheet({
     submit,
     multiline = false,
     button = "Save",
+    footer = null,
 }) {
     const [value, setValue] = useState(initial);
     const save = () =>
@@ -45,5 +46,6 @@ export function TextSheet({
             <button class="button" onClick=${closeSheet}>Cancel</button>
             <button class="button primary" onClick=${save}>${button}</button>
         </div>
+        ${footer}
     <//>`;
 }

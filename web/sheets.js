@@ -28,8 +28,8 @@ import { PiSessionSheet, PiSessionsSheet, piSessionsAvailable } from "./sheets/p
 import { WorktreeSheet } from "./sheets/worktree.js";
 import { TrustSheet } from "./trust.js";
 import { addLayer, goBack, removeLayer } from "./back.js";
-import { actions, api, store } from "./store.js";
-import { Boundary, html, SheetBack, usePresence } from "./ui.js";
+import { actions, api, signOut, store } from "./store.js";
+import { Boundary, html, Icon, SheetBack, usePresence } from "./ui.js";
 
 // ─── Back ─────────────────────────────────────────────────────────────────────────
 
@@ -169,7 +169,7 @@ function sheetBody(sheet) {
             body = html`<${NotificationsSheet} />`;
             break;
         case "menu":
-            body = html`<${MenuSheet} />`;
+            body = html`<${MenuSheet} places=${!sheet.fromPlaces} />`;
             break;
         case "session":
             body = store.state.sessions.some((each) => each.id === sheet.id)
@@ -281,6 +281,9 @@ function sheetBody(sheet) {
                 title="Your name"
                 label="Shown on your messages to others"
                 initial=${me?.name ?? ""}
+                footer=${html`<button class="button ghost wide sheet-footer" onClick=${signOut}>
+                    <${Icon} name="logout" size=${16} /> Sign out
+                </button>`}
                 submit=${async (value) => {
                     await api("me", { name: value });
                     const hello = await api("me");

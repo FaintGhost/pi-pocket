@@ -1026,6 +1026,12 @@ export function SessionList({ compact = false }) {
             }
             ${groups.map((group) => {
                 const isClosed = closed.has(group.key) && group.key !== "flat";
+                // A folded group hides its rows' marks: say when one waits for you or its run failed.
+                const trouble = isClosed
+                    ? group.rows
+                          .map((row) => sessionMark(row).shape)
+                          .find((shape) => shape === "waiting" || shape === "failed")
+                    : undefined;
 
                 return html`<section
                     class=${`session-group ${isClosed ? "closed" : ""}`}
@@ -1045,6 +1051,15 @@ export function SessionList({ compact = false }) {
                                             : group.label
                                     }
                                 </span>
+                                ${
+                                    trouble &&
+                                    html`<span
+                                        class=${`group-trouble ${trouble}`}
+                                        role="img"
+                                        aria-label=${trouble === "waiting" ? "A session needs you" : "A session failed"}
+                                        title=${trouble === "waiting" ? "A session here needs you" : "A session here failed"}
+                                    ></span>`
+                                }
                                 <span class="group-count">${group.rows.length}</span>
                                 ${group.key !== "flat" && html`<${Icon} name="down" size=${11} />`}
                             </button>`
@@ -1273,14 +1288,17 @@ export function RailNav({ foldable = false, folded = false }) {
                     <${Icon} name="users" size=${19} />
                 </button>`
         }
-        <button
-            class="rail-button"
-            title="Model providers"
-            aria-label="Providers"
-            onClick=${() => openSheet({ type: "providers" })}
-        >
-            <${Icon} name="key" size=${19} />
-        </button>
+        ${
+            me?.role === "owner" &&
+            html`<button
+                class="rail-button"
+                title="Model providers"
+                aria-label="Providers"
+                onClick=${() => openSheet({ type: "providers" })}
+            >
+                <${Icon} name="key" size=${19} />
+            </button>`
+        }
         <button
             class="rail-button"
             title="Theme, tiling, motion"
