@@ -1,4 +1,4 @@
-/** Agent Teams starts normal linked chats whose agents can exchange tasks, questions, updates and findings. */
+/** Agent Teams lets Pi start linked sessions, each an ordinary session of its own, and send them tasks, questions, and findings. */
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool, section } from "@earendil-works/pi-durable";
 // Types only: at run time this module uses nothing of Pi Pocket's but the host and web, as a drop-in would.
