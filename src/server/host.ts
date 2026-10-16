@@ -229,6 +229,8 @@ export interface PocketHost {
     /**
      * Sessions that a session starts and messages (`linked-sessions.ts`): each one is an ordinary session, linked to the
      * one that started it. The checks of the person Pi works for apply, and a call repeated with its key acts once.
+     *
+     * @experimental In 0.14: it can change in a minor release (docs/extensions/policies/api-stability.md).
      */
     readonly linkedSessions: LinkedSessionsApi;
     /** Messages to Pi for later: the schedule tool sets up Pi's own. */
