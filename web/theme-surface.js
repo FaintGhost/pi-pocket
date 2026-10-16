@@ -3,7 +3,7 @@
 // subset); test/theme-surface.test.ts checks that style.css defines every token and that every part is on an element.
 // Add to these lists freely. A rename or removal follows docs/extensions/policies/api-stability.md: the old name stays
 // as an alias (`--old: var(--new)`, or `data-part="new old"`) for at least one minor release and 90 days, and its
-// removal raises `THEME_API` (and `THEME_API` in src/server/themes/format.ts) by one.
+// removal raises `THEME_API` by one (the server reads it from here: src/server/themes/format.ts).
 
 export const THEME_API = 1;
 

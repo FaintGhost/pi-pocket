@@ -6,9 +6,10 @@ import { extname } from "node:path";
 import { INVISIBLE_CLASS } from "../fence.ts";
 import { parseColors } from "../omarchy.ts";
 import { atLeast } from "../versions.ts";
+import { THEME_API } from "../../../web/theme-surface.js";
 
-/** The version of the theme surface (tokens, parts, states) this Pi Pocket offers: `web/theme-surface.js`. */
-export const THEME_API = 1;
+/** The version of the theme surface (tokens, parts, states) this Pi Pocket offers, from `web/theme-surface.js`. */
+export { THEME_API };
 
 /** A theme's id: its folder's name. */
 export const THEME_ID = /^[a-z0-9][a-z0-9-]{1,47}$/;

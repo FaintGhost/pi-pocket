@@ -224,7 +224,7 @@ const themesListed = () => Array.isArray(store.state.themeList);
 // ─── Theme folders ──────────────────────────────────────────────────────────────
 
 /** The theme folder this browser uses: the one it chose, if the server offers it; else the app's own look. */
-export function lookOf(id = prefs().look) {
+function lookOf(id = prefs().look) {
     if (safeMode() || id === BASE_LOOK) {
         return null;
     }

@@ -16,11 +16,9 @@
  * the data folder's `themes/` (`gallery/themes.ts`) with the same pinned files, checked as every theme folder is before
  * it is in place, and the person chooses it in Appearance: installing it applies nothing.
  */
-import { readFileSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { PocketApp } from "./app.ts";
-import { APP_ROOT } from "./config.ts";
 import { describe, HttpError } from "./errors.ts";
 import { POCKET_API } from "./extension-web.ts";
 import { fileDiff } from "./gallery/diff.ts";
@@ -62,6 +60,7 @@ import {
     themeProvenance,
     themeProvenances,
 } from "./gallery/themes.ts";
+import { pocketPackage } from "./versions.ts";
 
 /** The index Pi Pocket reads unless the owner picks another: the curated one. */
 export const DEFAULT_INDEX = "TannerMidd/pi-pocket-extensions";
@@ -72,16 +71,7 @@ const SIDECAR = ".gallery.json";
 const SIDECAR_FILE = /^([a-z0-9][a-z0-9_-]{1,63})\.gallery\.json$/;
 
 /** Pi Pocket's own package: its version, and the packages a drop-in can import by name. */
-const PACKAGE = (() => {
-    try {
-        return JSON.parse(readFileSync(join(APP_ROOT, "package.json"), "utf8")) as {
-            version?: string;
-            dependencies?: Record<string, string>;
-        };
-    } catch {
-        return {};
-    }
-})();
+const PACKAGE = pocketPackage;
 const HERE = { api: POCKET_API, version: PACKAGE.version ?? "0.0.0" };
 
 /** Where an installed extension came from: the index, and its entry as installed. */

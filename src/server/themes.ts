@@ -29,6 +29,7 @@ import { desktopTheme } from "./omarchy.ts";
 import { watchTree } from "./reload.ts";
 import { cssReferences, themeFile } from "./themes/css.ts";
 import { reservedThemeIds } from "./themes/reserved.ts";
+import { pocketVersion } from "./versions.ts";
 import {
     assetType,
     colorsToml,
@@ -92,21 +93,6 @@ interface Version {
     /** Its fonts and images, by their path in the folder. */
     assets: Map<string, FileStat & { type: string }>;
     rev: string;
-}
-
-/** Pi Pocket's version, from its package. */
-function pocketVersion(): string {
-    try {
-        return (
-            (
-                JSON.parse(readFileSync(join(APP_ROOT, "package.json"), "utf8")) as {
-                    version?: string;
-                }
-            ).version ?? "0.0.0"
-        );
-    } catch {
-        return "0.0.0";
-    }
 }
 
 /** A theme's file's address: its path in the folder, each part escaped, under the theme's id and version. */
@@ -295,6 +281,29 @@ export class Themes {
         const file = css === undefined ? good.assets.get(key) : { css };
 
         return file === undefined ? undefined : { file, current: rev === good.rev };
+    }
+
+    /**
+     * Whether colors are here to use: the desktop's (on a machine with Omarchy), a palette that comes with the app, or a
+     * theme folder's that can be used (`<id>`, or a half of a pair: `<id>@dark`, `<id>@light`).
+     */
+    async hasColors(id: string): Promise<boolean> {
+        if (id === "desktop") {
+            return (await desktopTheme()) !== null;
+        }
+
+        if (this.#palettes[id] !== undefined) {
+            return true;
+        }
+
+        const [base, half] = id.split("@");
+        const good = base === undefined ? undefined : this.#good.get(base);
+
+        return half === "light"
+            ? good?.colorsLight !== undefined
+            : half === "dark"
+              ? good?.colorsLight !== undefined && good.colors !== undefined
+              : good?.colors !== undefined;
     }
 
     /** Whether a theme is the owner's, and so may be changed or removed here. */
