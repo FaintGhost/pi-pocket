@@ -73,7 +73,7 @@ Pi Pocket's own tests show more:
 - `test/docs-examples.test.ts` loads the examples of these docs as drop-ins, and uses them.
 - `test/extension-commands.test.ts` runs a module's commands as different people, across a restart and a reload.
 - `test/extension-web.test.ts` calls routes over HTTP as different people.
-- `test/extension-ui.test.ts` loads the app in a real Chromium, and uses a module's rail button, page, menu row, and sheet.
+- `test/extension-ui.test.ts` loads the app in a real Chromium, and uses a module's rail button and page.
 
 ## Check it on a copy
 

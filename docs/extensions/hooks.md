@@ -44,7 +44,7 @@ The calls of codemode scripts also go through `beforeTool`.
 
 A hook can run again after a restart. Keep work that must occur one time in `api.memo`. Lancet Guard does this with an approval ([guard.ts](../../src/server/extensions/guard.ts)).
 
-A hook that guards something returns `{ block: … }` to stop a call, with the reason Pi gets. A `beforeTool` hook that throws an error also stops the call (Pi gets `Tool call blocked:` and the error's words), but other hooks that throw do not stop anything: Pi Durable reports the error and goes on.
+A hook that guards something returns `{ block: … }` to stop a call, with the reason Pi gets. A `beforeTool` hook that throws an error also stops the call (Pi gets `Tool call blocked:` and the error's words), but other hooks that throw do not stop anything: Pi Durable reports the error and goes on. Inside a codemode script, an `afterTool` hook that throws fails that one call of the script.
 
 ## See also
 
