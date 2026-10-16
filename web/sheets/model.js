@@ -47,14 +47,15 @@ export function defaultLabel(chosen, models) {
     return `${model.name}${model.reasoning ? ` · ${chosen.thinkingLevel ?? "off"}` : ""}${model.signIn ? " (needs sign-in)" : ""}`;
 }
 
-/** Whether a model is one the picker's search finds. */
+/** Whether a model is one the picker's search finds: each word in its id or name, as `/model` finds them. */
 const matches = (model, query) => {
-    const needle = query.trim().toLowerCase();
+    const haystack = `${model.provider}/${model.id} ${model.name}`.toLowerCase();
 
-    return (
-        needle === "" ||
-        `${model.provider}/${model.id} ${model.name}`.toLowerCase().includes(needle)
-    );
+    return query
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .every((word) => haystack.includes(word));
 };
 
 /**
