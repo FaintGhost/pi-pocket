@@ -170,7 +170,25 @@ function moduleFiles(directory: string): string[] {
  */
 export function prepareDropInFolder(directory: string, appModules: string): void {
     mkdirSync(directory, { recursive: true });
-    const link = join(directory, "node_modules");
+    // A junction on Windows: no administrator rights needed.
+    keepLink(
+        join(directory, "node_modules"),
+        appModules,
+        process.platform === "win32" ? "junction" : "dir",
+    );
+}
+
+/**
+ * Link `_pocket.d.ts` in the drop-in folder to Pi Pocket's public types (`types/pocket.d.ts`), so a drop-in imports them
+ * from beside it on any machine. Its leading `_` keeps it from loading as a module. A file of that name the owner made
+ * stays as it is; a link to another place (an older install's) is replaced.
+ */
+export function linkTypes(directory: string, types: string): void {
+    keepLink(join(directory, "_pocket.d.ts"), types, "file");
+}
+
+/** Make `link` lead to `target`, unless it does already, or is a file or folder of its own. */
+function keepLink(link: string, target: string, type: "dir" | "file" | "junction"): void {
     let current: string | undefined;
 
     try {
@@ -183,13 +201,12 @@ export function prepareDropInFolder(directory: string, appModules: string): void
         // Missing, or a link to nowhere: made below.
     }
 
-    if (current === realpathSync(appModules)) {
+    if (current === realpathSync(target)) {
         return;
     }
 
     rmSync(link, { force: true });
-    // A junction on Windows: no administrator rights needed.
-    symlinkSync(appModules, link, process.platform === "win32" ? "junction" : "dir");
+    symlinkSync(target, link, type);
 }
 
 export class ExtensionLoader {

@@ -1,81 +1,113 @@
 # Limits
 
-Pi Pocket puts limits on what a module can do, so that one module cannot stop the app for everyone. This page lists each limit. The guide in the last column tells what happens at the limit, and why.
-
-When you change a limit in Pi Pocket's code, change it here and in its guide in the same commit.
+All the numbers that limit a module, in one place. Each group links to the guide that tells you why the limit is there and what happens past it. Only this page and the guides give these numbers.
 
 ## Loading
 
-| What                                                              | Limit                                                | Guide                           |
-| ----------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------- |
-| Time from a save to the reload                                    | About 300 ms                                         | [Modules](../modules.md)        |
-| Time that a file can be gone before Pi Pocket removes its module  | 300 ms                                               | [Modules](../modules.md)        |
-| Time to load a module (the import, and an `async` default export) | 30 s                                                 | [Modules](../modules.md)        |
-| Time to load the modules when the server starts                   | 30 s for all of them, then 2 s for each module after | [Modules](../modules.md)        |
-| Time that a stopping server waits for cleanups                    | 3 s                                                  | [Cleanups](../cleanups.md)      |
-| The version of the extension API                                  | 1                                                    | [API versions](api-versions.md) |
+[Modules, loading, and errors](../modules.md)
+
+- **Reload after an edit:** about 300 ms after you save a module that is on.
+- **A file that goes:** Pi Pocket removes a module only when its file is still gone 300 ms later.
+- **Time to load:** 30 s at most for one load: the import, and an async default export.
+- **Time to load at the server's start:** all the modules share 30 s. After that, each module that is left has 2 s.
 
 ## Names
 
-| What                                                        | Limit                                                                                    | Guide                                    |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------- |
-| The name of a module that adds to the app (its file's)      | Up to 64 letters, digits, `-`, and `_`; it starts with a letter or a digit               | [Names](names.md)                        |
-| The `id` of a rail button, menu row, action, page, or sheet | Up to 64 letters, digits, `.`, `_`, `:`, and `-`; it starts with a letter or a digit     | [Browser modules](../browser-modules.md) |
-| The name of a command                                       | Up to 64 lowercase letters, digits, `-`, and `_`; it starts with a letter, and has a `-` | [Slash commands](../commands.md)         |
-| The name of a drop-in in the gallery                        | 2 to 64 lowercase letters, digits, `-`, and `_`; it starts with a letter or a digit      | [Publishing](../publishing.md)           |
+[Names](names.md)
 
-## Routes and the browser module
+- **A module that adds to the app:** a name of 64 characters at most. [Modules, loading, and errors](../modules.md)
+- **An id of a rail button, menu row, launcher action, page, or sheet:** 64 characters at most. [Browser modules](../browser-modules.md)
+- **A command's name:** 64 characters at most. [Slash commands](../commands.md)
+- **An event's name:** 1 to 64 characters. [Events](../events.md)
+- **A gallery entry's name:** 2 to 64 characters. [Publishing to the gallery](../publishing.md)
 
-| What                                                   | Limit                                                      | Guide                                    |
-| ------------------------------------------------------ | ---------------------------------------------------------- | ---------------------------------------- |
-| The status of an error that a route throws             | 400 to 599                                                 | [Routes](../routes.md)                   |
-| The time that a route can take                         | No limit: it stops when the browser stops waiting          | [Routes](../routes.md)                   |
-| The size of one file that a browser module serves      | 8 MB                                                       | [Browser modules](../browser-modules.md) |
-| Files that count for a new version of a browser module | The first 2000, in up to 500 folders                       | [Browser modules](../browser-modules.md) |
-| Folders that Pi Pocket watches for changes             | The first 64                                               | [Browser modules](../browser-modules.md) |
-| Rail buttons that show without a scroll                | 4                                                          | [Browser modules](../browser-modules.md) |
-| A rail button's badge                                  | A count above 99 shows "99+"; text is cut to 24 characters | [Browser modules](../browser-modules.md) |
-| Notices from a module                                  | 5 in each 5 s                                              | [Browser modules](../browser-modules.md) |
-| Calls to `pocket` in one task                          | 1000, over more than 1 s; then the module stops            | [Browser modules](../browser-modules.md) |
-| Pages or sheets opened and closed                      | 300 in 1 s; then the module stops                          | [Browser modules](../browser-modules.md) |
-| The width of a screen with the swipe back              | Up to 699 px                                               | [Browser modules](../browser-modules.md) |
+## Host
 
-## Events
+[Using the host](../host.md)
 
-| What                                    | Limit                                      | Guide                  |
-| --------------------------------------- | ------------------------------------------ | ---------------------- |
-| The size of one event's data            | 256 KB of JSON                             | [Events](../events.md) |
-| Events that a version of a module sends | 100, and 1 MB, in each second              | [Events](../events.md) |
-| A tab that takes nothing for 30 s       | Cut off when it is more than 8 MB behind   | [Events](../events.md) |
-| Any tab                                 | Cut off when it is more than 128 MB behind | [Events](../events.md) |
-
-## Commands
-
-| What                                              | Limit                                         | Guide                            |
-| ------------------------------------------------- | --------------------------------------------- | -------------------------------- |
-| Commands in a module                              | 50                                            | [Slash commands](../commands.md) |
-| A command's `description`, and its `args` hint    | 200 characters each                           | [Slash commands](../commands.md) |
-| The text after the command's name                 | 4000 characters                               | [Slash commands](../commands.md) |
-| The message of a notice that a command gives      | 500 characters                                | [Slash commands](../commands.md) |
-| The text of a card that a command gives           | The last 30,000 characters are kept           | [Slash commands](../commands.md) |
-| Runs of commands at the same time, for one person | 4                                             | [Slash commands](../commands.md) |
-| The time that a command can take                  | No limit: the handler must watch `ctx.signal` | [Slash commands](../commands.md) |
+- **`host.text.quoted`:** cuts the line to 120 characters when you give no `max`.
 
 ## Linked sessions
 
-| What                                                | Limit                    | Guide                                                    |
-| --------------------------------------------------- | ------------------------ | -------------------------------------------------------- |
-| Sessions that one session can start                 | 10                       | [Starting and messaging sessions](../linked-sessions.md) |
-| Messages in a team, after a person last wrote in it | 20                       | [Starting and messaging sessions](../linked-sessions.md) |
-| The length of one message                           | 20,000 characters        | [Starting and messaging sessions](../linked-sessions.md) |
-| The title of a session                              | One line, 120 characters | [Starting and messaging sessions](../linked-sessions.md) |
-| The time that Pi Pocket keeps a call's `key`        | 30 days                  | [Starting and messaging sessions](../linked-sessions.md) |
+[Starting and messaging sessions](../linked-sessions.md)
 
-## The gallery
+- **Sessions that one session starts:** 10 at most. A linked session cannot start sessions.
+- **Messages between the sessions of a team:** 20 at most since a person last wrote in one of them. Then a person must write.
+- **A message:** 20,000 characters at most.
+- **A title:** one line of 120 characters at most.
+- **A call's key:** Pi Pocket keeps the record of a `key` for 30 days.
 
-| What                                             | Limit                                                        | Guide                          |
-| ------------------------------------------------ | ------------------------------------------------------------ | ------------------------------ |
-| The size of an index                             | 4 MB                                                         | [Publishing](../publishing.md) |
-| Files in an entry                                | 50, of 512 KB each, and 2 MB together                        | [Publishing](../publishing.md) |
-| Folders in a drop-in's own folder                | 4 deep                                                       | [Publishing](../publishing.md) |
-| How often the gallery looks for revoked versions | 2 times a day, while extensions from the index are installed | [Publishing](../publishing.md) |
+## Routes
+
+[Routes](../routes.md)
+
+- **The status of an error that a route throws:** 400 to 599.
+- **Time for a route:** no limit. A route ends when it answers, or when the browser stops waiting.
+
+## Browser modules
+
+[Browser modules](../browser-modules.md)
+
+- **A file that a browser module serves:** 8 MB at most.
+- **Files that count for a new version:** the first 2000 served files, in 500 folders at most. An edit past these does not load the module again.
+- **Folders that Pi Pocket watches for edits:** the first 64. It sees an edit deeper at its next look.
+- **Calls to `pocket` in one task:** past 1000, over more than 1 s, the module stops in that browser.
+- **Pages and sheets that a module opens or closes:** past 300 in 1 s, the module stops. With no task between them, it stops past 1000, or at 5 or more over more than 1 s.
+- **Redraws in a hidden tab:** by a timer of 100 ms, which the browser can make slower.
+- **Notices from `pocket.notify`:** 5 every 5 s for a module, for all its versions together. The app drops the rest.
+- **Rail buttons of modules:** together, the height of 4 buttons. Past that, they scroll.
+- **A count on a rail button:** a count past 99, and `Infinity`, shows "99+".
+- **Text on a rail button:** past 24 characters, it is cut to 23 characters and "…".
+- **Swipe back on a page:** on touch screens up to 699 px wide.
+
+## Tool calls
+
+[How tool calls show](../tool-calls.md)
+
+- **A call's label:** one line, cut to 80 characters.
+- **A call's subject:** one line, cut to 160 characters.
+- **The words of a summary:** `verb`, `noun`, and `by` are 60 characters at most each. A longer one gives the default display.
+
+## Events
+
+[Events](../events.md)
+
+- **The data of one event:** 256 KB of JSON at most.
+- **Events that a version of a module sends:** 100 each second at most, and 1 MB of them. The rest of that second's events are dropped.
+- **A tab that falls behind:** Pi Pocket cuts it off when it is more than 8 MB behind and takes nothing for 30 s. It also cuts off a tab that is more than 128 MB behind. The tab then connects again, with no old events.
+
+## Commands
+
+[Slash commands](../commands.md)
+
+- **Commands of one module:** 50 at most.
+- **A command's `description` and `args`:** 200 characters at most each.
+- **The arguments that a person types:** 4000 characters at most.
+- **A toast's message:** cut to 500 characters.
+- **A card:** Pi Pocket keeps the last 30,000 characters.
+- **Runs of one person:** 4 at the same time, in all sessions together. Pi Pocket refuses a fifth run until one ends.
+- **Time for a command:** no limit. The handler must watch `ctx.signal`, and end when it aborts.
+
+## Cleanups
+
+[Cleanups](../cleanups.md)
+
+- **A cleanup when the server stops:** Pi Pocket waits 3 s at most for the cleanups that return a promise.
+
+## Gallery
+
+[Publishing to the gallery](../publishing.md), [Gallery entry](gallery-entry.md)
+
+- **The index:** 4 MB at most, with 2000 entries at most.
+- **The index's `name`:** 80 characters at most. Its `repo`: 160 characters at most.
+- **An extension's files:** 50 at most, of 512 KB each at most, and 2 MB together at most.
+- **A file's name:** 200 characters at most, and four folders deep at most, with `<name>/` as the first folder. Each part of it is 100 characters at most.
+- **`title`:** 60 characters at most. **`description`:** 600 characters at most.
+- **`tags`:** 10 at most, of 24 characters each at most.
+- **`author.name`:** 60 characters at most. **`author.github`:** 39 characters at most.
+- **`version`:** 32 characters at most.
+- **`minPocket`:** three numbers of 4 digits at most each, such as `0.14.0`.
+- **`source.repo`:** an owner of 39 characters at most, and a repository name of 100 characters at most. **`source.path`:** 200 characters at most, and four folders deep at most.
+- **Each list in `declares`:** 100 names at most. An extension, tool, hook, or section name is 64 characters at most. A route's path is 200 characters at most. A command, with its scope, is 80 characters at most.
+- **`revoked`:** 50 commits at most, each with a reason of 300 characters at most.
+- **Looks for revoked versions:** two times a day, while extensions from the index are installed.

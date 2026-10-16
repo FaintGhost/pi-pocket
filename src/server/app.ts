@@ -88,7 +88,7 @@ import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./p
 import { measureModelStreams } from "./timing.ts";
 import { Providers } from "./providers.ts";
 import { PushStore } from "./push.ts";
-import { type ExtensionInfo, ExtensionLoader, prepareDropInFolder } from "./reload.ts";
+import { type ExtensionInfo, ExtensionLoader, linkTypes, prepareDropInFolder } from "./reload.ts";
 import { ResendTask } from "./resend.ts";
 import { type Client, reportingOf, Room, ROOM_DOCS, subagentView } from "./room.ts";
 import { Schedules } from "./schedules.ts";
@@ -525,6 +525,12 @@ export class PocketApp {
             prepareDropInFolder(dropIn, join(APP_ROOT, "node_modules"));
         } catch (error) {
             this.#log(`Drop-in extensions cannot import Pi Pocket's packages: ${describe(error)}`);
+        }
+
+        try {
+            linkTypes(dropIn, join(APP_ROOT, "types", "pocket.d.ts"));
+        } catch (error) {
+            this.#log(`The drop-in folder has no _pocket.d.ts: ${describe(error)}`);
         }
 
         this.loader = new ExtensionLoader(

@@ -201,6 +201,7 @@ The menu in `sheets/menu.js` keeps `Sheet`'s focus, Escape, drag-to-close, and t
 - **A sheet:** a component in `web/sheets/`, a case in `sheetBody` (`web/sheets.js`), and `openSheet({ type })` where it opens.
 - **Something back should close** (a screen over the conversation, a view that takes another's place on a phone): `useBack(open, close)` from `web/back.js` in the component that shows it. Sheets already have it.
 - **A built-in extension:** a file in `extensions/` (its extension named `pocket-…`), its place in `ORDER`, its title in `TITLES`, and its tools in `BUILT_IN_TOOLS` (`reload.ts`), and the order asserted in `test/app.test.ts`.
+- **A member of the extension API** (on the host, `web`, `pocket`, or a command's context): add it to `types/pocket.d.ts` with `@since`, and to its page in `docs/extensions/reference/`. `test/public-types.ts` (in `npm run check`) and `extension-ui.test.ts` fail until the code and the types agree. A host member for built-ins only goes in `Internal` in `public-types.ts` instead.
 - **A built-in slash command:** `web/commands.js`, with its name kept from modules' commands in `BUILT_IN_COMMANDS` (`extension-web.ts`).
 - **A command of the owner's own:** a drop-in with `web.command`, not a change here ([extensions/commands.md](extensions/commands.md)).
 - **A page, rail button, or route that is the owner's own:** a drop-in with a web part, not a change here ([extensions/app.md](extensions/app.md)).
