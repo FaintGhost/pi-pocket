@@ -1,7 +1,6 @@
 /** Sessions started by another session: lasting links, independent agents, and messages between them that go once. */
 import { createHash, randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { AgentDoc, type ConversationId } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
@@ -37,7 +36,7 @@ export class LinkedSessions implements LinkedSessionsApi {
         const user = requester === undefined ? undefined : app.config.userById(requester);
 
         if (meta === undefined || meta.pip !== undefined || user === undefined) {
-            throw new HttpError(403, "Linked sessions need a session with someone Pi works for.");
+            throw new HttpError(403, "Linked sessions need a session where Pi works for someone.");
         }
 
         app.requireSee(user, source);
@@ -51,10 +50,7 @@ export class LinkedSessions implements LinkedSessionsApi {
         await app.requireDriver(source, user);
 
         if ((await app.harness.snapshot(PlanDoc, source, context))?.on) {
-            throw new HttpError(
-                409,
-                "Approve this session's plan before starting or messaging linked sessions.",
-            );
+            throw new HttpError(409, "This session is in plan mode.");
         }
 
         app.spend.check(user, source);
@@ -169,7 +165,7 @@ export class LinkedSessions implements LinkedSessionsApi {
         const app = this.#app;
 
         if (!request.message.trim()) {
-            throw new HttpError(400, "Starting a linked session needs a title and a message.");
+            throw new HttpError(400, "A linked session needs a first message.");
         }
 
         const title =
@@ -225,7 +221,7 @@ export class LinkedSessions implements LinkedSessionsApi {
         if (!spec || spec.indexOf("/") <= 0) {
             throw new HttpError(
                 400,
-                "Starting a linked session needs a model: this session has none, so name one as provider/modelId.",
+                "This session has no model, and none was named as provider/modelId.",
             );
         }
 
@@ -245,26 +241,19 @@ export class LinkedSessions implements LinkedSessionsApi {
         }
 
         const selected = app.models.getModel(model.provider, model.modelId)!;
-        const supported = getSupportedThinkingLevels(selected);
 
         // Never above the source's level, as a subagent's: then the highest the model has at or below that.
         const cap = THINKING_LEVELS.indexOf(asked) > THINKING_LEVELS.indexOf(own) ? own : asked;
         const thinking = levelAtMost(selected, cap);
 
         if (thinking === undefined) {
-            throw new HttpError(
-                400,
-                `Model ${spec} has no thinking level at or below ${cap}. Supported levels: ${supported.join(", ")}. Do not substitute another route.`,
-            );
+            throw new HttpError(400, `The model ${spec} has no thinking level at or below ${cap}.`);
         }
 
         const problem = await app.providers.problem(model, true);
 
         if (problem !== undefined) {
-            throw new HttpError(
-                400,
-                `Model ${spec} is not available: ${problem}. Stop and report this; do not substitute another route.`,
-            );
+            throw new HttpError(400, `The model ${spec} cannot be used now: ${problem}.`);
         }
 
         const cwd = agent.cwd ?? app.cwdOf(source);
@@ -322,8 +311,12 @@ export class LinkedSessions implements LinkedSessionsApi {
             (await app.harness.snapshot(LinkedSessionPeersDoc, source, context))?.peers ?? {};
         const target = Object.hasOwn(peers, request.to) ? peers[request.to] : undefined;
 
-        if (target === undefined || target === Number(source) || !request.message.trim()) {
-            throw new HttpError(400, "Send needs another linked session's address and a message.");
+        if (!request.message.trim()) {
+            throw new HttpError(400, "A message cannot be empty.");
+        }
+
+        if (target === undefined || target === Number(source)) {
+            throw new HttpError(404, "No linked session has that address here.");
         }
 
         const token = callKey(source, key);
@@ -335,7 +328,7 @@ export class LinkedSessions implements LinkedSessionsApi {
         if (!this.#family(source, user).some((each) => each.id === target)) {
             throw new HttpError(
                 404,
-                "That session is not linked or is not shared with you. List linked sessions first.",
+                "That session is not linked here, or not shared with the person Pi works for.",
             );
         }
 

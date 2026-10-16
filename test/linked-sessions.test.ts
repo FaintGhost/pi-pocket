@@ -122,7 +122,7 @@ test("a start or send is refused in plan mode, past a spend limit, or without th
     };
 
     await app.commands.setPlan(id, owner(app), true);
-    await refused(/Approve/);
+    await refused(/plan mode/);
     await app.commands.setPlan(id, owner(app), false);
 
     await recordCost(app, id, 0.02);

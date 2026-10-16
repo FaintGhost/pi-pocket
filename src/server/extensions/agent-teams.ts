@@ -100,16 +100,25 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
             }
 
             if (args.action === "start") {
-                const { address } = await chats.start(
-                    api.conversationId,
-                    {
-                        title: args.title,
-                        message: args.message,
-                        model: args.model,
-                        thinking: args.thinking,
-                    },
-                    key,
-                );
+                let address: string;
+
+                try {
+                    ({ address } = await chats.start(
+                        api.conversationId,
+                        {
+                            title: args.title,
+                            message: args.message,
+                            model: args.model,
+                            thinking: args.thinking,
+                        },
+                        key,
+                    ));
+                } catch (error) {
+                    // Core says what went wrong; what Pi should do about it is this tool's to say.
+                    throw new Error(
+                        `${error instanceof Error ? error.message : String(error)} Do not try another model or a way around it: stop and tell the person.`,
+                    );
+                }
 
                 return reply(
                     `Started linked peer ${address} and sent the task. It is a normal independent chat in the sidebar. Use agent_chat send to this address for further messages; ask it to send its findings back.`,
