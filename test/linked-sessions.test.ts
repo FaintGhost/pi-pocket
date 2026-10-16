@@ -98,6 +98,7 @@ test("a start or send is refused in plan mode, past a spend limit, or without th
     const count = app.sessions().length;
 
     await until(async () => (await sent(target)) === 1, "the first message");
+    await assert.rejects(start(target), /cannot start/);
 
     const refused = async (why: RegExp) => {
         await assert.rejects(start(id), why);
