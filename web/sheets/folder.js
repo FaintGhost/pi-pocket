@@ -131,6 +131,8 @@ export function CwdSheet({ mode }) {
     const [naming, setNaming] = useState(false);
     const [editing, setEditing] = useState(null);
     const [missing, setMissing] = useState(null);
+    // Why a favorite in `missing` does not open, when it is there but is no folder to open (a link to nothing, a file).
+    const [missingWhy, setMissingWhy] = useState(null);
     const [busy, setBusy] = useState(false);
     // Set at once, unlike busy: a second shortcut in the same moment does not start a second session.
     const starting = useRef(false);
@@ -169,8 +171,10 @@ export function CwdSheet({ mode }) {
                     return;
                 }
 
-                if (notThere(error, path)) {
+                // A favorite that does not open, however, gets the banner, which can remove it.
+                if (notThere(error, path) || store.state.folderFavorites.includes(path)) {
                     setMissing(path);
+                    setMissingWhy(notThere(error, path) ? null : error.message);
                     setEditing(null);
                 } else if (listing) {
                     notify("error", error.message);
@@ -264,6 +268,8 @@ export function CwdSheet({ mode }) {
 
             try {
                 await api("folder-favorites", { path, starred: on });
+
+                return true;
             } finally {
                 setSaving(false);
             }
@@ -489,9 +495,16 @@ export function CwdSheet({ mode }) {
         ${
             missing !== null &&
             html`<div class="folder-missing">
-                <span><span class="mono">${shortPath(missing, home)}</span> isn't there.</span>
+                <span>
+                    ${missingWhy ?? html`<span class="mono">${shortPath(missing, home)}</span> isn't there.`}
+                </span>
                 <span class="fp-missing-actions">
-                    <button class="button small" onClick=${() => make(missing)}>Create it</button>
+                    ${
+                        missingWhy === null &&
+                        html`<button class="button small" onClick=${() => make(missing)}>
+                            Create it
+                        </button>`
+                    }
                     ${
                         // A favorite that is gone is unstarred here: the star acts only on a folder that opens.
                         mayStar &&
@@ -499,7 +512,10 @@ export function CwdSheet({ mode }) {
                         html`<button
                             class="button small"
                             disabled=${saving}
-                            onClick=${() => setFavorite(missing, false).then(() => setMissing(null))}
+                            onClick=${() =>
+                                setFavorite(missing, false).then(
+                                    (done) => done && setMissing(null),
+                                )}
                         >
                             Remove from favorites
                         </button>`
