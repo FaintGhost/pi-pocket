@@ -12,6 +12,7 @@ import { modelRefreshAvailable, refreshModels } from "./model-refresh.js";
 import { openPip, pipAvailable } from "./pip.js";
 import { setArchived, workspaceOrder } from "./sessions.js";
 import { branchAvailable, headLabel } from "./sheets/branch.js";
+import { recentLabels } from "./sheets/folder.js";
 import { galleryAvailable } from "./sheets/gallery.js";
 import { piSessionsAvailable } from "./sheets/pi-sessions.js";
 import {
@@ -98,11 +99,13 @@ function fuzzy(text, query) {
 
 /** The actions that make sense here, as launcher items. */
 function actionItems() {
-    const { view, conversationId, me } = store.state;
+    const { view, conversationId, me, folderFavorites, server } = store.state;
     const conversation = conversationId !== null ? view.conversation : null;
     const session = conversation?.kind === "session";
     const steer = canSteer();
     const canStart = steer && !scoped();
+    // As the folder picker names them: folders of one name get their parent's too.
+    const favoriteNames = recentLabels(folderFavorites, server?.home);
     const wide = matchMedia("(min-width: 960px)").matches;
     const list = [
         canStart && {
@@ -316,6 +319,21 @@ function actionItems() {
         { label: "Sign out", detail: "this browser", icon: "logout", run: signOut },
         // What extensions' browser modules added (`extension-ui.js`).
         ...extensionLauncherItems(),
+        // Last: a list that is cut keeps the actions above, however many favorites there are (up to 100).
+        ...(canStart
+            ? folderFavorites.map((path, index) => ({
+                  key: `action:new-favorite:${path}`,
+                  label: `New session in ${favoriteNames[index]}`,
+                  detail: shortPath(path, server?.home),
+                  icon: "star",
+                  run: () =>
+                      attempt(async () => {
+                          const created = await actions.createSession(path);
+
+                          navigate(created.id);
+                      }),
+              }))
+            : []),
     ];
 
     return list.filter(Boolean).map((item) => ({
@@ -540,6 +558,7 @@ export function Launcher({ leaving, returnTo }) {
         store.state.appearance,
         store.state.me,
         store.state.server,
+        store.state.folderFavorites,
         store.state.extensionsRev,
     ]);
 

@@ -55,7 +55,7 @@ function crumbsOf(path, home) {
 }
 
 /** Recent folders' labels: each one's name, with its parent's where two have the same name. */
-function recentLabels(paths, home) {
+export function recentLabels(paths, home) {
     const names = paths.map((path) => nameOf(path, home));
 
     return paths.map((path, index) =>
