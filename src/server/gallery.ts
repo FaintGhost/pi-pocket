@@ -69,6 +69,8 @@ const FRESH_MS = 60 * 60 * 1000;
 /** The provenance file's ending: `<name>.gallery.json`, beside the module. */
 const SIDECAR = ".gallery.json";
 const SIDECAR_FILE = /^([a-z0-9][a-z0-9_-]{1,63})\.gallery\.json$/;
+/** Files that run or that the app reads as text, which must be text the owner can read before turning them on. */
+const CODE_FILE = /\.(?:[cm]?[jt]s|json|css)$/;
 
 /** Pi Pocket's own package: its version, and the packages a drop-in can import by name. */
 const PACKAGE = pocketPackage;
@@ -408,6 +410,15 @@ export class Gallery {
 
             if (bytes.byteLength !== file.size || sha256(bytes) !== file.sha256) {
                 throw mismatch();
+            }
+
+            // Code the owner could not read here: the source view and an update's diff show such a file only as
+            // binary, while Node would still run it.
+            if (CODE_FILE.test(file.name) && textOf(bytes) === undefined) {
+                throw new HttpError(
+                    502,
+                    `${file.name} is not plain UTF-8 text, so it could not be shown to read, and nothing was written. Tell the index's maintainers.`,
+                );
             }
 
             files.push({ name: file.name, bytes });

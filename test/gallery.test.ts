@@ -130,6 +130,14 @@ test("a file that does not match its pinned SHA-256 installs nothing", async () 
     );
 });
 
+test("a code file that is not plain text, which the source view could not show, installs nothing", async () => {
+    // Node runs it, NUL and all; the gallery would show it only as "binary".
+    await index(entry("hidden", { "hidden.ts": `${clock}// \0\n` }, "4".repeat(40)));
+
+    await assert.rejects(app.gallery.install("hidden", await pin("hidden")), { status: 502 });
+    assert.ok(!existsSync(join(dropIns, "hidden.ts")));
+});
+
 test("an installed extension arrives off, even under a name that was turned on before", async () => {
     const commit = "3".repeat(40);
 
