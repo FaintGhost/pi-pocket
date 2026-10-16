@@ -1011,7 +1011,7 @@ export class Gallery {
             const kept = new Set(entry.files.map((file) => file.name));
             const helpers = files.some(
                 (file) =>
-                    /\.(ts|js|mjs)$/.test(file.name) &&
+                    /\.(?:[cm]?[jt]s|json)$/i.test(file.name) &&
                     file.name.includes("/") &&
                     before.find((each) => each.name === file.name)?.sha256 !== sha256(file.bytes),
             );
