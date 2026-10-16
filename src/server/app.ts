@@ -1587,7 +1587,11 @@ export class PocketApp {
 
     /** All signed-in models, with Pi's enabledModels scope marked for the picker. */
     async modelList() {
-        const patterns = this.settings.getEnabledModels();
+        // Pi settings are read from JSON; the SDK expects an array of strings.
+        const configured = this.settings.getEnabledModels();
+        const patterns = Array.isArray(configured)
+            ? configured.filter((pattern): pattern is string => typeof pattern === "string")
+            : [];
         const { scopedModels } =
             patterns && patterns.length > 0
                 ? await resolveModelScopeWithDiagnostics(patterns, this.models)

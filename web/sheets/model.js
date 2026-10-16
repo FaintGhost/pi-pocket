@@ -223,7 +223,7 @@ export function ModelPicker() {
             </header>
             ${
                 scopedModels.length > 0 &&
-                html`<div class="pop-menu-foot">
+                html`<div class="model-scope-wrap">
                     <div class="segmented model-scope" role="group" aria-label="Model scope">
                         <button
                             class=${!showAll ? "on" : ""}

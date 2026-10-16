@@ -58,6 +58,8 @@ export class ModelRefresh {
     }
 
     async #refresh(): Promise<ModelRefreshResult> {
+        // Scope belongs to Pi settings, not models.json. Read it before publishing refreshed choices.
+        await this.#app.settings.reload();
         const models = this.#app.models;
         const keys = () =>
             new Set(models.getAvailableSnapshot().map((model) => `${model.provider}/${model.id}`));
