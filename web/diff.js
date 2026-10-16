@@ -601,6 +601,7 @@ function DiffFile({
 
     let body;
 
+    // A failure shows folded too: a folded file that could not be read must not look like one that could.
     if (error) {
         body = html`<p class="dv-empty err">${error}</p>`;
     } else if (loading) {
@@ -640,7 +641,7 @@ function DiffFile({
         ref=${ref}
     >
         ${head && html`<${FileHead} file=${file} tools=${tools} viewed=${viewed} onViewed=${onViewed} open=${open} onToggle=${onToggle} note=${note} />`}
-        ${open && body}
+        ${open ? body : error && html`<p class="dv-empty err">${error}</p>`}
     </section>`;
 }
 
