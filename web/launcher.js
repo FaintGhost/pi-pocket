@@ -114,20 +114,6 @@ function actionItems() {
             keys: "Alt N",
             run: () => openSheet({ type: "cwd", mode: "new" }),
         },
-        ...(canStart
-            ? folderFavorites.map((path, index) => ({
-                  key: `action:new-favorite:${path}`,
-                  label: `New session in ${favoriteNames[index]}`,
-                  detail: shortPath(path, server?.home),
-                  icon: "star",
-                  run: () =>
-                      attempt(async () => {
-                          const created = await actions.createSession(path);
-
-                          navigate(created.id);
-                      }),
-              }))
-            : []),
         piSessionsAvailable() && {
             label: "Continue a Pi session",
             detail: "from Pi in the terminal",
@@ -333,6 +319,21 @@ function actionItems() {
         { label: "Sign out", detail: "this browser", icon: "logout", run: signOut },
         // What extensions' browser modules added (`extension-ui.js`).
         ...extensionLauncherItems(),
+        // Last: a list that is cut keeps the actions above, however many favorites there are (up to 100).
+        ...(canStart
+            ? folderFavorites.map((path, index) => ({
+                  key: `action:new-favorite:${path}`,
+                  label: `New session in ${favoriteNames[index]}`,
+                  detail: shortPath(path, server?.home),
+                  icon: "star",
+                  run: () =>
+                      attempt(async () => {
+                          const created = await actions.createSession(path);
+
+                          navigate(created.id);
+                      }),
+              }))
+            : []),
     ];
 
     return list.filter(Boolean).map((item) => ({
