@@ -14342,3 +14342,294 @@ textarea.notes {
     user-select: all;
     color: var(--accent);
 }
+
+/* ─── Extension gallery ────────────────────────────────────── */
+
+/* A row of the Browse list: what it is, its tags, and how it stands here. */
+.gallery-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    min-height: 3.2rem;
+    padding: 0.7rem 0.6rem 0.7rem 0.85rem;
+    background: none;
+    border: 0;
+    color: var(--text);
+    font: inherit;
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--t-hover) var(--ease-out);
+}
+
+@media (hover: hover) {
+    .gallery-row:hover {
+        background: var(--card-2);
+    }
+    .gallery-row:hover .gallery-row-title {
+        color: var(--accent);
+    }
+}
+
+.gallery-row > .icon {
+    color: var(--muted);
+}
+
+.gallery-row-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.gallery-row-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.15rem 0.5rem;
+    min-width: 0;
+}
+
+.gallery-row-title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.gallery-row-name {
+    color: var(--muted);
+    font-size: 0.76rem;
+    overflow-wrap: anywhere;
+}
+
+.gallery-row-desc {
+    color: var(--body);
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.gallery-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem 0.55rem;
+    color: var(--muted);
+    font-size: 0.76rem;
+    overflow-wrap: anywhere;
+}
+
+.gallery-tag-text {
+    color: var(--faint);
+}
+
+.gallery-pills,
+.extension-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.pi-tag.gallery-on {
+    color: var(--ok);
+    background: var(--ok-soft);
+}
+
+.pi-tag.gallery-bad {
+    color: var(--err);
+    background: var(--err-soft);
+}
+
+.pi-tag.gallery-plain {
+    color: var(--muted);
+    background: var(--card-2);
+}
+
+/* Tag pills: one at a time filters the list. */
+.gallery-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.gallery-tag {
+    min-height: 32px;
+    padding: 4px 12px;
+    border: 1px solid var(--hair-2);
+    border-radius: var(--r-pill);
+    background: none;
+    color: var(--muted);
+    font-size: 12.5px;
+    transition:
+        background-color var(--t-hover) var(--ease-out),
+        border-color var(--t-hover) var(--ease-out),
+        color var(--t-hover) var(--ease-out);
+}
+
+@media (pointer: coarse) {
+    .gallery-tag {
+        min-height: 38px;
+        padding: 6px 14px;
+    }
+}
+
+@media (hover: hover) {
+    .gallery-tag:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
+}
+
+.gallery-tag.on {
+    color: var(--accent);
+    border-color: var(--accent-line);
+    background: var(--accent-soft);
+}
+
+.gallery-hidden {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.3rem 0.8rem;
+}
+
+.gallery-problems,
+.gallery-notes,
+.gallery-warn ul {
+    margin: 0;
+    padding-left: 1.2rem;
+    overflow-wrap: anywhere;
+}
+
+.gallery-panel > .setting {
+    margin: 0;
+    padding: 10px 14px;
+}
+
+.gallery-address {
+    overflow-wrap: anywhere;
+    color: var(--text);
+}
+
+.gallery-index-form {
+    padding: 12px 14px;
+}
+
+.gallery-wrap {
+    flex-wrap: wrap;
+}
+
+/* One entry. */
+.gallery-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.3rem 0.6rem;
+}
+
+.gallery-description {
+    overflow-wrap: anywhere;
+    color: var(--body);
+}
+
+.gallery-warn {
+    padding: 10px 12px;
+    border: 1px solid var(--warn-line);
+    border-radius: var(--r-card);
+    background: var(--warn-soft);
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.gallery-revoked .sheet-actions {
+    margin-top: 8px;
+    justify-content: flex-start;
+}
+
+.gallery-declares dd.mono {
+    font-size: 0.78rem;
+}
+
+.gallery-file {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.6rem;
+    padding: 8px 14px;
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+}
+
+.gallery-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+@media (pointer: coarse) {
+    .gallery-actions .button {
+        min-height: 40px;
+    }
+}
+
+/* Code: each file under its own head, scrolling sideways inside its box on a narrow screen. */
+.gallery-source {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.gallery-source-head,
+.gallery-entry-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem 0.6rem;
+}
+
+.gallery-entry-head .group-title {
+    flex: 1;
+}
+
+.gallery-source-name {
+    font-size: 13px;
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+pre.gallery-code {
+    margin: 0;
+    padding: 10px 12px;
+    max-height: 60vh;
+    overflow: auto;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-control);
+    background: var(--code-bg);
+    color: var(--body);
+    font: 12px / 1.55 var(--mono);
+    white-space: pre;
+    tab-size: 4;
+}
+
+/* An update: what each file does, and what was added to or taken from its declarations. */
+.gallery-change {
+    color: var(--muted);
+}
+
+.gallery-change.added,
+.gallery-added {
+    color: var(--ok);
+}
+
+.gallery-change.removed,
+.gallery-removed {
+    color: var(--err);
+}
+
+.gallery-change.changed {
+    color: var(--warn);
+}
