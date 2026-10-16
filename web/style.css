@@ -5528,6 +5528,21 @@ pre.diff .del {
     color: var(--accent);
 }
 
+/* On a touch screen scoped and all keep their size; each one's hit area reaches about 40px, away from the other. */
+@media (pointer: coarse) {
+    .model-scope button {
+        position: relative;
+    }
+    .model-scope button::before {
+        content: "";
+        position: absolute;
+        inset: -11px -2px -11px -14px;
+    }
+    .model-scope button:last-of-type::before {
+        inset: -11px -18px -11px -2px;
+    }
+}
+
 /* Thinking: the levels in one track, the chosen one raised. Past the general segmented rules, which come later. */
 .segmented.model-levels {
     display: grid;
