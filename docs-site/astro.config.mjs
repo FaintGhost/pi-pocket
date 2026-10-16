@@ -1,5 +1,5 @@
 // Pi Pocket's docs: Starlight, at https://tannermidd.github.io/pi-pocket/docs/, beside the product site (site/).
-import { existsSync } from "node:fs";
+import { copyFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
@@ -48,6 +48,19 @@ export default defineConfig({
         server: { fs: { allow: [REPO] } },
     },
     integrations: [
+        {
+            // A copy of the public types beside the docs, for editors outside a Pi Pocket: /pi-pocket/docs/pocket.d.ts.
+            name: "pocket-types",
+            hooks: {
+                "astro:build:done": ({ dir }) => {
+                    const types = join(REPO, "types/pocket.d.ts");
+
+                    if (existsSync(types)) {
+                        copyFileSync(types, new URL("pocket.d.ts", dir));
+                    }
+                },
+            },
+        },
         starlight({
             title: "Pi Pocket docs",
             description:

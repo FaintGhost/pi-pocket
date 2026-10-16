@@ -74,17 +74,11 @@ export const SIDEBAR = [
 ];
 
 /**
- * Paths that other branches add: the reference and the types file (docs-reference), and the policies and
- * CONTRIBUTING.md (extension-guidelines). Until they are merged, a link to one is a warning, and the sidebar leaves it
- * out. `npm run check` (DOCS_STRICT=1, as CI runs it) ignores this
- * list. Empty it once they are all merged.
+ * Path prefixes of pages that another branch adds, while work goes on in parallel. Until that branch is merged, a link
+ * to one is a warning, and the sidebar leaves it out. `npm run check` (DOCS_STRICT=1, as CI runs it) ignores this
+ * list. Empty it once they are merged.
  */
-export const PENDING = [
-    "docs/extensions/reference/",
-    "docs/extensions/policies/",
-    "types/",
-    "CONTRIBUTING.md",
-];
+export const PENDING = [];
 
 /**
  * Pages of a coming release, which may be missing even in strict mode: the theming guides of 0.15. The sidebar shows

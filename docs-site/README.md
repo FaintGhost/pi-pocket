@@ -9,16 +9,17 @@ cd docs-site
 npm ci
 npm run dev -- --host 127.0.0.1 --port 4321   # http://127.0.0.1:4321/pi-pocket/docs/
 npm run build                                 # into dist/
-npm run check                                 # as CI builds it: every page that other branches add must be there
+npm run check                                 # as CI builds it: strict, with no page left pending
 ```
 
 ## How it works
 
 - `src/repo-docs.mjs` loads the pages. A page's title is its `# H1`, and its address is its path: `docs/extensions/tools.md` is `/pi-pocket/docs/extensions/tools/`, `docs/index.md` is `/start/`. A relative link to a page goes to that page on the site; a link to anything else (code, an example) goes to GitHub, at the commit the site was built from.
-- Each build checks every relative link and anchor of every page, as GitHub makes anchors, and fails with the list of problems.
+- Each build checks every relative link and anchor of every page, as GitHub makes anchors, and fails with the list of problems. It also checks that the reference pages and `types/pocket.d.ts` give each member the same Since line, that each number in the limits page is also in its guide, and that the tutorial's code is the tested example (`src/reference-check.mjs`, `src/repo-docs.mjs`).
 - `src/sidebar.mjs` is the sidebar. A new page must be added there, or the build fails.
 - A reference member's line `Since 0.14.0 · Stable` shows as two tags.
 - `src/pages/index.astro` is the home page, the one page that is not in `docs/`.
+- The build puts a copy of `types/pocket.d.ts` at `/pi-pocket/docs/pocket.d.ts`.
 
 ## Publishing
 

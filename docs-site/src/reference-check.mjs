@@ -1,88 +1,151 @@
-// The reference pages and the public types file say the same: each member of an interface has a heading on its page
-// (### `name`), and the line under it (Since 0.14.0 · Stable) gives the same release and stability as the member's
-// TSDoc (@since, @experimental, @deprecated). types/pocket.d.ts is the one source of the signatures; the pages are
-// written by hand, so this check keeps them in step.
+// The reference pages and the public types file say the same. types/pocket.d.ts is the one source of the signatures,
+// and each member's TSDoc gives its release (@since) and stability (@experimental, @deprecated). The pages are
+// written by hand, in this format:
+//
+// - a heading at level 2 to 4 that is only the name in code (### `resolveModel`), then the signature, then the line
+//   "Since 0.14.0 · Stable" (or Experimental, or Deprecated);
+// - the members of Host, Web, Pocket, Command, CommandContext, Module, and BrowserModule have headings with their
+//   names alone; the nested ones are written `text.quoted` and `linkedSessions.start`;
+// - every other exported type has a heading of its own name, with its fields as bullets.
+//
+// Each heading the types file expects must be on its page with the same Since line, and each heading with a Since
+// line must be one the types file has (the gallery entry's fields are not in it, so gallery-entry.md is not checked).
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 
-/** Which interfaces each reference page describes. */
+export const TYPES = "types/pocket.d.ts";
+const REFERENCE = "docs/extensions/reference";
+
+/** The interfaces whose members are headings, and the prefix of nested ones. */
+const HEADED = new Map([
+    ["Host", ""],
+    ["Web", ""],
+    ["Pocket", ""],
+    ["Command", ""],
+    ["CommandContext", ""],
+    ["Module", ""],
+    ["BrowserModule", ""],
+    ["SafeText", "text."],
+    ["LinkedSessions", "linkedSessions."],
+]);
+
+/** Which types each page describes. */
 export const PAGES = {
-    "docs/extensions/reference/host.md": ["Host"],
-    "docs/extensions/reference/web.md": ["Web"],
-    "docs/extensions/reference/command-context.md": ["Command", "CommandContext"],
-    "docs/extensions/reference/pocket.md": ["BrowserModule", "Pocket"],
+    "host.md": ["Host", "SafeText", "LinkedSessions", "LinkedSession"],
+    "web.md": ["Web", "WebHandler", "WebRequest", "WebMethod", "WebAccess"],
+    "pocket.md": [
+        "Pocket",
+        "BrowserModule",
+        "Action",
+        "RailSpec",
+        "MenuSpec",
+        "LauncherSpec",
+        "PageSpec",
+        "SheetSpec",
+        "PageProps",
+        "SheetProps",
+        "ToolCallSpec",
+        "CallSummary",
+        "Added",
+        "IconProps",
+        "LoaderProps",
+        "MarkdownProps",
+        "SwitchProps",
+    ],
+    "command-context.md": ["Command", "CommandContext", "CommandResult"],
+    "types.md": ["Module", "Person", "Role", "NoticeLevel"],
 };
 
-export const TYPES = "types/pocket.d.ts";
+function meta(node) {
+    const tags = ts.getJSDocTags(node);
+    const has = (kind) => tags.some((tag) => tag.tagName.text === kind);
+    const since = tags.find((tag) => tag.tagName.text === "since")?.comment;
+    const stability = has("deprecated")
+        ? "Deprecated"
+        : has("experimental")
+          ? "Experimental"
+          : "Stable";
 
-/** Each member of each interface in the types file: its release, and its stability. */
-function members(source) {
+    return `${typeof since === "string" ? since.trim() : "no @since"} · ${stability}`;
+}
+
+/** What the types file expects on each page: heading → "Since … · …". */
+function expected(source) {
     const file = ts.createSourceFile(TYPES, source, ts.ScriptTarget.Latest, true);
-    const found = new Map();
+    const owners = new Map();
 
     for (const statement of file.statements) {
-        if (!ts.isInterfaceDeclaration(statement)) {
+        if (!ts.isInterfaceDeclaration(statement) && !ts.isTypeAliasDeclaration(statement)) {
             continue;
         }
 
-        const own = new Map();
+        const name = statement.name.text;
+        const headings = new Map();
 
-        for (const member of statement.members) {
-            const name = member.name?.getText(file);
+        // A type is a heading of its own, but for the headed interfaces, whose members are (Module is both).
+        if (!HEADED.has(name) || name === "Module") {
+            headings.set(name, meta(statement));
+        }
 
-            if (name === undefined || own.has(name)) {
-                continue;
+        if (ts.isInterfaceDeclaration(statement) && HEADED.has(name)) {
+            for (const member of statement.members) {
+                const key = `${HEADED.get(name)}${member.name?.getText(file)}`;
+
+                if (!headings.has(key)) {
+                    headings.set(key, meta(member));
+                }
             }
-
-            const tags = ts.getJSDocTags(member);
-            const tag = (kind) => tags.find((each) => each.tagName.text === kind);
-            const since = tag("since")?.comment;
-
-            own.set(name, {
-                since: typeof since === "string" ? since.trim() : undefined,
-                stability: tag("deprecated")
-                    ? "Deprecated"
-                    : tag("experimental")
-                      ? "Experimental"
-                      : "Stable",
-            });
         }
 
-        found.set(statement.name.text, own);
+        owners.set(name, headings);
     }
 
-    return found;
+    return owners;
 }
 
-/** The members a page describes: ### `name`, and its "Since … · …" line. */
-function headings(source) {
-    const found = new Map();
-    const lines = source.replace(/^```[\s\S]*?^```/gm, "").split("\n");
+/** The headings of a page that have a Since line: heading → { line, says }. */
+function found(source) {
+    const headings = new Map();
+    let heading;
+    let fence = false;
 
-    for (const [at, line] of lines.entries()) {
-        const heading = /^###\s+`([^`(]+)/.exec(line);
-
-        if (heading === null) {
+    for (const [at, line] of source.split("\n").entries()) {
+        if (line.startsWith("```")) {
+            fence = !fence;
             continue;
         }
 
-        const meta = lines
-            .slice(at + 1, at + 12)
-            .map((each) => /^Since (\d+\.\d+\.\d+) · (Stable|Experimental|Deprecated)\b/.exec(each))
-            .find((each) => each !== null);
+        if (fence) {
+            continue;
+        }
 
-        found.set(heading[1].trim().replace(/^[a-z]+\./, ""), {
-            line: at + 1,
-            since: meta?.[1],
-            stability: meta?.[2],
-        });
+        const title = /^#{2,4} `([^`]+)`$/.exec(line);
+
+        if (title !== null) {
+            heading = { name: title[1], line: at + 1 };
+            continue;
+        }
+
+        if (line.startsWith("#")) {
+            heading = undefined;
+            continue;
+        }
+
+        const since = /^Since (\S+) · (Stable|Experimental|Deprecated)\b/.exec(line);
+
+        if (since !== null && heading !== undefined) {
+            const key = headings.has(heading.name) ? `${heading.name} (again)` : heading.name;
+
+            headings.set(key, { line: heading.line, says: `${since[1]} · ${since[2]}` });
+            heading = undefined;
+        }
     }
 
-    return found;
+    return headings;
 }
 
-/** Every difference between the types file and the reference pages, or none when the types file is not there yet. */
+/** Every difference between the types file and the reference pages; none while the types file is not there. */
 export function checkReference(root) {
     const errors = [];
 
@@ -90,32 +153,89 @@ export function checkReference(root) {
         return errors;
     }
 
-    const types = members(readFileSync(join(root, TYPES), "utf8"));
+    const owners = expected(readFileSync(join(root, TYPES), "utf8"));
 
-    for (const [page, interfaces] of Object.entries(PAGES)) {
-        if (!existsSync(join(root, page))) {
+    for (const [page, types] of Object.entries(PAGES)) {
+        const path = `${REFERENCE}/${page}`;
+
+        if (!existsSync(join(root, path))) {
             continue;
         }
 
-        const described = headings(readFileSync(join(root, page), "utf8"));
+        const there = found(readFileSync(join(root, path), "utf8"));
+        const wanted = new Map();
 
-        for (const name of interfaces) {
-            const own = types.get(name);
+        for (const type of types) {
+            const headings = owners.get(type);
 
-            if (own === undefined) {
-                errors.push(`${TYPES}: there is no interface ${name}, which ${page} describes`);
+            if (headings === undefined) {
+                errors.push(`${TYPES}: there is no type ${type}, which ${path} describes`);
                 continue;
             }
 
-            for (const [member, { since, stability }] of own) {
-                const heading = described.get(member);
+            for (const [heading, says] of headings) {
+                wanted.set(heading, says);
+            }
+        }
 
-                if (heading === undefined) {
-                    errors.push(`${page}: no heading for ${name}.${member} (### \`${member}\`)`);
-                } else if (heading.since !== since || heading.stability !== stability) {
+        for (const [heading, says] of wanted) {
+            const seen = there.get(heading);
+
+            if (seen === undefined) {
+                errors.push(
+                    `${path}: no heading \`${heading}\` with "Since ${says}" (${TYPES} has it)`,
+                );
+            } else if (seen.says !== says) {
+                errors.push(
+                    `${path}:${seen.line}: \`${heading}\` says "Since ${seen.says}", ${TYPES} "Since ${says}"`,
+                );
+            }
+        }
+
+        for (const [heading, { line }] of there) {
+            if (!wanted.has(heading)) {
+                errors.push(
+                    `${path}:${line}: \`${heading}\` has a Since line, but ${TYPES} has no such member here`,
+                );
+            }
+        }
+    }
+
+    return errors;
+}
+
+/**
+ * Each number in the limits page is also in a page that its section or its line links to, so that a limit is never
+ * stated in one place only, and a change to it shows in both.
+ */
+export function checkLimits(root) {
+    const page = `${REFERENCE}/limits.md`;
+    const errors = [];
+
+    if (!existsSync(join(root, page))) {
+        return errors;
+    }
+
+    const pagesIn = (text) =>
+        [...text.matchAll(/\]\(([^)#]+\.md)(#[^)]*)?\)/g)].map((link) =>
+            readFileSync(join(root, REFERENCE, link[1]), "utf8"),
+        );
+    const numbers = (text) =>
+        text.replace(/`[^`]*`/g, "").match(/(?<![\w.,])\d+(?:,\d{3})*(?![\w,]\d|\.\d)/g) ?? [];
+    const has = (text, number) => new RegExp(`(?<![\\d,.])${number}(?![\\d]|,\\d)`).test(text);
+
+    for (const section of readFileSync(join(root, page), "utf8").split(/^## /m).slice(1)) {
+        const [head, ...lines] = section.split("\n");
+        const intro = lines.filter((line) => !line.startsWith("- ")).join("\n");
+        const shared = pagesIn(intro);
+
+        for (const line of lines.filter((each) => each.startsWith("- "))) {
+            const texts = [...shared, ...pagesIn(line)].join("\n");
+
+            for (const number of numbers(line.replace(/\]\([^)]*\)/g, "]"))) {
+                if (!has(texts, number)) {
                     errors.push(
-                        `${page}:${heading.line}: ${name}.${member} says "Since ${heading.since} · ${heading.stability}", ` +
-                            `but ${TYPES} says "Since ${since} · ${stability}"`,
+                        `${page} (${head}): ${number} is in no page that it links to: "${line.slice(2, 80)}…"`,
                     );
                 }
             }
