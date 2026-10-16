@@ -1063,7 +1063,7 @@ export function GalleryUpdateSheet({ name }) {
         ${
             data.edited.length > 0 &&
             html`<div class="gallery-warn small" role="alert">
-                Edited here since it was installed: <span class="mono">${data.edited.join(", ")}</span>. The diff is against your edits, and the update replaces them.
+                Yours here, edited since it was installed or never part of it: <span class="mono">${data.edited.join(", ")}</span>. The diff is against your files, and the update replaces them.
             </div>`
         }
         ${
