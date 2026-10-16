@@ -1736,7 +1736,7 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
         }
     });
 
-    return items.map((item, index) => {
+    return items.flatMap((item, index) => {
         if (item.type === "row") {
             return html`<${Memo} key=${item.key} deps=${rowDeps(item.entry)}>
                 <${EntryView} entry=${item.entry} />
@@ -1793,7 +1793,7 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
             }
         }
 
-        return html`<${Memo} key=${item.key} deps=${deps}>
+        const group = html`<${Memo} key=${item.key} deps=${deps}>
             <${ActivityGroup}
                 item=${item}
                 live=${live}
@@ -1806,6 +1806,24 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
                 conversationId=${conversationId}
             />
         <//>`;
+        const lastCall = item.steps.findLast((step) => step.block.type === "toolCall");
+
+        // Stopped in a call, no answer follows to say so: the run ends here, as a stopped answer does.
+        if (
+            past ||
+            busy ||
+            index !== items.length - 1 ||
+            !STOPPED.test(results.get(lastCall?.block.id)?.text ?? "")
+        ) {
+            return group;
+        }
+
+        return [
+            group,
+            html`<div key=${`${item.key}:stopped`} class="reply">
+                <div class="muted small">Stopped.</div>
+            </div>`,
+        ];
     });
 }
 

@@ -735,10 +735,12 @@ function PeopleTabs({ ask, focus }) {
     const [tab, setTab] = useState(ask.tab ?? "chat");
     const [highlight, setHighlight] = useState(ask.highlight ?? null);
     const pins = view.pins?.length ?? 0;
+    // Messages arriving while another tab is open: the top bar's badge counts them, and so does the tab.
+    const unread = tab === "chat" ? 0 : chatUnread();
     const tabs = collab()
         ? html`<div class="segmented tabs">
             <button class=${tab === "chat" ? "on" : ""} onClick=${() => setTab("chat")}>
-                Chat
+                Chat${unread > 0 ? ` ${unread}` : ""}
             </button>
             <button class=${tab === "pins" ? "on" : ""} onClick=${() => setTab("pins")}>
                 Pinned${pins > 0 ? ` ${pins}` : ""}

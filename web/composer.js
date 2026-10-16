@@ -29,6 +29,7 @@ import { useDock } from "./dock.js";
 import { SubagentsBar } from "./subagents.js";
 import { TrustBar } from "./trust.js";
 import { prefs } from "./theme.js";
+import { says } from "./turns.js";
 import { MicButton, useDictation } from "./voice.js";
 import {
     APPLE,
@@ -228,6 +229,16 @@ function PlanBar({ blocked }) {
 
     // A subagent follows its session's plan mode; it is approved there.
     const subagent = view.conversation?.kind === "subagent";
+    // There is a plan to approve once Pi has answered since plan mode went on.
+    const proposed =
+        view.plan.at === undefined ||
+        [...view.entries.values()].some(
+            (entry) =>
+                entry.kind === "assistant" &&
+                entry.at > view.plan.at &&
+                entry.stopReason !== "toolUse" &&
+                entry.blocks.some(says),
+        );
 
     return html`<div class="plan-bar">
         <span class="grow">
@@ -241,7 +252,8 @@ function PlanBar({ blocked }) {
             </button>
             <button
                 class="button small primary"
-                disabled=${view.live.busy}
+                disabled=${view.live.busy || !proposed}
+                title=${proposed ? undefined : "Pi has not proposed a plan yet."}
                 onClick=${() => attempt(actions.approvePlan)}
             >
                 Approve plan
@@ -1551,6 +1563,8 @@ function StatusLine() {
     const window = view.agent?.contextWindow;
     const line = useRef(null);
     const parts = [];
+    // What each item says, for a tap on the line: a touch screen shows no tooltips.
+    const details = [];
 
     useStatusFit(line);
 
@@ -1585,6 +1599,8 @@ function StatusLine() {
         const about = stats.contextEstimated ? "~" : "";
         const title = `${about}${formatTokens(used)} of ${formatTokens(window)} tokens in context`;
 
+        details.push(title);
+
         parts.push(
             html`<span class="context" title=${title}>
                 <span class="word">context</span>
@@ -1597,6 +1613,7 @@ function StatusLine() {
     }
 
     if (stats.cacheRate !== undefined) {
+        details.push(`${Math.round(stats.cacheRate * 100)}% of the input came from the cache`);
         parts.push(html`<span class="cache">
                 cache <span class="num">${Math.round(stats.cacheRate * 100)}%</span>
             </span>`);
@@ -1606,6 +1623,9 @@ function StatusLine() {
     const spend = view.conversation?.spend;
     const spent = spend?.spent ?? stats.cost ?? 0;
 
+    details.push(
+        `$${spent.toFixed(2)} spent${spend?.budget !== undefined ? ` of $${spend.budget.toFixed(2)}` : ""}`,
+    );
     parts.push(
         html`<span class=${spend?.budget !== undefined && spent >= spend.budget ? "warn" : ""}>
             <span class="num">
@@ -1634,5 +1654,12 @@ function StatusLine() {
         );
     }
 
-    return html`<div class="status-line" ref=${line}>${parts}</div>`;
+    // A tap on the line says what it shows (the guard's pill has its own); with a mouse, the tooltips do.
+    const explain = (event) => {
+        if (coarse && !event.target.closest("button")) {
+            notify("info", details.join(" · "));
+        }
+    };
+
+    return html`<div class="status-line" ref=${line} onClick=${explain}>${parts}</div>`;
 }

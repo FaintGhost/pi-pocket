@@ -307,6 +307,13 @@ function SessionRow({
     ].filter(Boolean);
     // The Folders tab names the folder above the row already: its model comes first.
     const tip = [title, ...(folders ? where.reverse() : where)].join(" · ");
+    // A search can match the folder or model instead of the title: the row shows which.
+    const hit =
+        needle && !title.toLowerCase().includes(needle)
+            ? [path, session.cwd, session.model].find((text) =>
+                  text?.toLowerCase().includes(needle),
+              )
+            : undefined;
     const counts = session.subagents ?? {};
     const live = (counts.working ?? 0) + (counts.waiting ?? 0);
     const failed = failing(counts);
@@ -346,8 +353,15 @@ function SessionRow({
                         ></span>`
                 }
             </span>
-            <span class="session-title">
-                <${Highlight} text=${title} needle=${needle} />
+            <span class=${`session-title ${hit ? "with-hit" : ""}`}>
+                ${
+                    hit
+                        ? html`<span class="session-name">${title}</span>
+                            <span class="session-hit">
+                                <${Highlight} text=${hit} needle=${needle} />
+                            </span>`
+                        : html`<${Highlight} text=${title} needle=${needle} />`
+                }
             </span>
             <span class="session-side">
                 ${

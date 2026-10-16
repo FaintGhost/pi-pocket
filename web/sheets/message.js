@@ -11,7 +11,17 @@ import {
     scoped,
     store,
 } from "../store.js";
-import { copyText, html, Icon, item, modelLabel, replyText, Sheet, writtenText } from "../ui.js";
+import {
+    copyText,
+    html,
+    Icon,
+    item,
+    modelLabel,
+    replyText,
+    Sheet,
+    Switch,
+    writtenText,
+} from "../ui.js";
 import { memoryAvailable } from "./memory.js";
 
 /** The message to Pi a reply answers: the newest one before it. */
@@ -159,9 +169,16 @@ export function MessageSheet({ entryId }) {
         ${
             canBranch &&
             view.conversation.inRepository &&
-            html`<label class="check">
-                <input type="checkbox" checked=${worktree} onChange=${(event) => setWorktree(event.currentTarget.checked)} /> New sessions get a git worktree of their own
-            </label>`
+            html`<div class="sheet-list">
+                <div class="extension message-worktree">
+                    <div class="extension-main">New sessions get a git worktree of their own</div>
+                    <${Switch}
+                        on=${worktree}
+                        label="New sessions get a git worktree of their own"
+                        onChange=${() => setWorktree(!worktree)}
+                    />
+                </div>
+            </div>`
         }
         <div class="sheet-list message-actions">
             ${canBranch && !toPi && item("Fork from here", () => openBranch(() => actions.fork(entry.id, { worktree })), "everything up to this reply")}

@@ -3326,7 +3326,8 @@ pre.diff .del {
     background: var(--o-bg);
 }
 
-.notifications-sheet .extension {
+.notifications-sheet .extension,
+.message-worktree {
     align-items: center;
 }
 
@@ -4278,6 +4279,28 @@ pre.diff .del {
     overflow: hidden;
     text-overflow: ellipsis;
     transition: color var(--t-hover) var(--ease-out);
+}
+
+/* A search that matched the folder or model, not the title: it shows after the title, which keeps its room first. */
+.session-title.with-hit {
+    display: flex;
+    gap: 8px;
+}
+
+.session-name {
+    flex: none;
+    max-width: 65%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.session-hit {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+    color: var(--muted);
 }
 
 /* New chat messages there, in a session not open. */
@@ -7270,6 +7293,15 @@ textarea.notes {
 /* The trust question keeps its words a readable width: on a phone its answers go under them, together, to the right. */
 .trust-bar > .grow {
     flex: 1 1 15rem;
+}
+
+/* The plan bar's words keep a readable width too: its buttons go under them when they would squeeze them. */
+.plan-bar > .grow {
+    flex: 1 1 18rem;
+}
+
+.plan-bar > .link {
+    margin-left: auto;
 }
 
 /* Trust choices keep the three existing decisions, with a selected radio and soft accent card. */

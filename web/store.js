@@ -238,9 +238,19 @@ export const canSteer = () => store.state.me?.role !== "viewer";
 /** People invited to one session cannot start sessions or invite others. */
 export const scoped = () => Array.isArray(store.state.me?.sessions);
 
+/** The notices that announce chat messages: reading the chat takes them down. */
+const chatNotices = new Set();
+
 /** Everything in the chat counts as read: called while the chat is open. */
 export function markChatRead() {
     const { chat, chatRead, conversationId } = store.state;
+
+    for (const id of chatNotices) {
+        dismiss(id);
+    }
+
+    chatNotices.clear();
+
     const last = chat.at(-1)?.at ?? 0;
 
     if (last <= chatRead || conversationId === null) {
@@ -264,7 +274,7 @@ function applyChat(data) {
     store.set({ chat: (data.full ? data.messages : [...state.chat, ...added]).slice(-CHAT_LIMIT) });
 
     // The People panel stays open for long: on its Pinned or Notes tab, new messages still count and show a notice.
-    if (state.sheet?.type === "chat" || chatLogs > 0) {
+    if (chatLogs > 0) {
         markChatRead();
 
         return;
@@ -280,9 +290,10 @@ function applyChat(data) {
     }
 
     const open = () => openSheet({ type: "chat" });
+    const announce = (message) => chatNotices.add(notify("info", message, open));
 
     if (fresh.length > 1) {
-        return notify("info", `${fresh.length} new chat messages`, open);
+        return announce(`${fresh.length} new chat messages`);
     }
 
     const [message] = fresh;
@@ -290,10 +301,8 @@ function applyChat(data) {
     const text = message.text.replace(/\s+/g, " ");
     const mentioned = message.mentions?.includes(state.me?.id);
 
-    notify(
-        "info",
+    announce(
         `${name}${mentioned ? " mentioned you" : ""}: ${text.length > 120 ? `${text.slice(0, 119)}…` : text}`,
-        open,
     );
 }
 
