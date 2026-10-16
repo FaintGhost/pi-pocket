@@ -5,8 +5,10 @@ This page collects, for authors, what [SECURITY.md](../../../SECURITY.md) and [e
 ## Who is who
 
 - **The owner** runs Pi Pocket. The server runs as the owner's user on the machine.
-- **Guests** are people who came in through an invite. A guest can steer or only view, in every session or in only one session.
-- **Viewers** are guests who can only view. They read, react, and chat. They cannot make Pi do anything.
+- **Guests** are people whom the owner invited with the role guest. A guest can steer, in every session or only in the sessions of the invite.
+- **Viewers** are people whom the owner invited with the role viewer. A viewer reads, reacts, and chats, in every session or only in the sessions of the invite. A viewer cannot make Pi do anything.
+
+Owner, guest, and viewer are three separate roles. A person has one of them.
 - **Pi** is the model. It does what people ask. It can also do what text from outside asks, if that text gets into its context (prompt injection).
 - **Other modules** run in the same server, with the same rights as yours.
 
@@ -25,7 +27,7 @@ A module's server part runs inside the server. It can read `config.json` (with t
 - **S1.3. Do not read the owner's token to call the app's own API.**\
   _Reason:_ then the module acts as the owner, past every check of who may act.
 
-## S2. A browser module runs with the viewer's rights
+## S2. A browser module runs with the rights of the person whose tab loads it
 
 Sources: SECURITY.md, "Drop-in extensions"; extensions.md, "The browser module" and "Who may use it"; architecture.md, "Extensions' browser modules".
 
