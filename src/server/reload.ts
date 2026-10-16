@@ -24,6 +24,7 @@ import {
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Extension, Registry } from "@earendil-works/pi-durable";
+import { type Deprecation, watchDeprecated } from "./deprecations.ts";
 import { describe } from "./errors.ts";
 import { ExtensionWebs, POCKET_API } from "./extension-web.ts";
 import type { ExtensionModule, PocketHost, WebAccess } from "./host.ts";
@@ -143,6 +144,8 @@ export interface ExtensionInfo {
      * access of the two, and its commands (`conversation /name`, `global /name`).
      */
     web?: { routes: string[]; client?: WebAccess; access?: WebAccess; commands?: string[] };
+    /** The deprecated members of `host` and `web` that its version in force used: the owner sees a warning. */
+    deprecated?: Deprecation[];
     /** Why the module is not loaded, when it failed. */
     error?: string;
 }
@@ -434,6 +437,7 @@ export class ExtensionLoader {
             const { file } = module;
             const error = this.#errors.get(file);
             const web = this.#webs.describe(file);
+            const deprecated = this.#webs.deprecated(file);
 
             return {
                 file,
@@ -445,6 +449,7 @@ export class ExtensionLoader {
                 required: REQUIRED.has(file),
                 extensions: (this.#installed.get(file) ?? []).map(declared),
                 ...(web === undefined ? {} : { web }),
+                ...(deprecated.length === 0 ? {} : { deprecated }),
                 ...(error === undefined ? {} : { error }),
             };
         });
@@ -521,7 +526,12 @@ export class ExtensionLoader {
         let committed = false;
 
         try {
-            const returned = loaded.default(this.#host, web) as unknown;
+            // Each version sees deprecated members through a view of its own, so what it uses is told for it alone.
+            const used = (deprecation: Deprecation) => this.#webs.used(part, deprecation);
+            const returned = loaded.default(
+                watchDeprecated(this.#host, "host", used),
+                watchDeprecated(web, "web", used),
+            ) as unknown;
             // An async default export: it may register until it settles.
             const built = isThenable(returned)
                 ? await this.#within(Promise.resolve(returned), deadline, file)

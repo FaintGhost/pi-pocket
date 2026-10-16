@@ -91,6 +91,27 @@ function WebPart({ module }) {
 }
 
 /**
+ * A line for each deprecated member that a module used, on the server or in this browser: it stops working in a later
+ * release, so the owner can update the module or turn it off before then.
+ */
+function Deprecations({ module }) {
+    if (!module.enabled) {
+        return null;
+    }
+
+    const here = browserModuleState(module.file.replace(/\.ts$/, ""));
+    const words = (each) =>
+        `, deprecated in ${each.since}. It goes in ${each.removal}: use ${each.use}.`;
+    const line = (each, where) =>
+        html`<div class="warn small">
+            ${where} <span class="mono">${each.member}</span>${words(each)}
+        </div>`;
+
+    return html`${(module.deprecated ?? []).map((each) => line(each, "Uses"))}
+    ${(here?.deprecated ?? []).map((each) => line(each, "In this browser: uses"))}`;
+}
+
+/**
  * Safe mode (`?noext=1`): this tab loads no browser parts of extensions, so one that breaks the app can be turned off
  * here. The button loads them again.
  */
@@ -372,6 +393,7 @@ export function ExtensionsSheet() {
                                             </div>`
                                         }
                                         ${module.error && html`<div class="error-box small">${module.error}</div>`}
+                                        <${Deprecations} module=${module} />
                                         <${WebPart} module=${module} />
                                         <${GalleryPart}
                                             module=${module}
