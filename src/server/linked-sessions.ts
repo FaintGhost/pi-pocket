@@ -2,7 +2,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
-import { AgentDoc, type AgentState, type ConversationId } from "@earendil-works/pi-durable";
+import { AgentDoc, type ConversationId } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
 import { LinkedSessionCallDoc, LinkedSessionPeersDoc, PlanDoc, SessionsDoc } from "./docs.ts";
@@ -16,24 +16,6 @@ const context = BACKGROUND_CONTEXT;
 /** Stable across restarts, short enough that Commands.submit preserves the entire request key. */
 function callKey(source: ConversationId, key: string): string {
     return createHash("sha256").update(`${source}:${key}`).digest("hex");
-}
-
-/** Copy configuration, not another conversation's dynamically installed terminal tool extension. */
-function independentAgent(agent: AgentState): AgentState {
-    const copy = structuredClone(agent);
-    // Exclude private registrations when running alongside the optional terminal bridge.
-    const keep = (name: string) => !name.startsWith("pocket-terminal-tools-");
-
-    if (Array.isArray(copy.extensions)) {
-        copy.extensions = copy.extensions.filter(keep);
-    } else if (copy.extensions) {
-        copy.extensions = {
-            ...(copy.extensions.add ? { add: copy.extensions.add.filter(keep) } : {}),
-            ...(copy.extensions.remove ? { remove: copy.extensions.remove.filter(keep) } : {}),
-        };
-    }
-
-    return copy;
 }
 
 export class LinkedSessions {
@@ -194,7 +176,7 @@ export class LinkedSessions {
 
         await this.#maySend(source, user);
         // Copy omitted settings once; an explicit override must never silently select another model.
-        const agent = independentAgent((await app.agentState(source)) ?? {});
+        const agent = structuredClone((await app.agentState(source)) ?? {});
         const spec =
             request.model === undefined
                 ? agent.model && `${agent.model.provider}/${agent.model.modelId}`
