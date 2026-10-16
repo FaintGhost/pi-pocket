@@ -10,7 +10,7 @@ The host is the first argument of a module's default export. A module gets the a
 
 Text from a web page, an issue, or a file that a person did not write can try to steer Pi. Before you put such text in a prompt section or a tool's result, make it safe with `host.text`, and tell Pi in the same place that it is data:
 
-- `host.text.quoted(text, max)` gives one line in quotes that the text cannot close. It removes invisible characters and tags, and cuts the line to `max` characters: 120 when you give no `max`.
+- `host.text.quoted(text, max)` gives one line in quotes that the text cannot close. It removes invisible characters and tags, and cuts the line to `max` characters, or to a [default length](reference/limits.md#host).
 - `host.text.defang(text)` keeps the lines, but leaves no closing tag in them. Use it for text that you put between tags of your own.
 
 ## Check for new members

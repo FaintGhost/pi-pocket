@@ -1,6 +1,6 @@
 # Limits
 
-All the numbers that limit a module, in one place. Each group links to the guide that tells you why the limit is there and what happens past it. Only this page and the guides give these numbers.
+All the numbers that limit a module, in one place. Each group links to the guide that tells why the limit is there and what happens past it. The guides link here, and do not repeat the numbers.
 
 ## Loading
 
@@ -35,14 +35,7 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **Messages between the sessions of a team:** 20 at most since a person last wrote in one of them. Then a person must write.
 - **A message:** 20,000 characters at most.
 - **A title:** one line of 120 characters at most.
-- **A call's key:** Pi Pocket keeps the record of a `key` for 30 days.
-
-## Routes
-
-[Routes](../routes.md)
-
-- **The status of an error that a route throws:** 400 to 599.
-- **Time for a route:** no limit. A route ends when it answers, or when the browser stops waiting.
+- **A call's key:** Pi Pocket keeps the record of a `key` for 30 days, and the records of the last 1,000 calls of each session.
 
 ## Browser modules
 
@@ -86,7 +79,7 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **A toast's message:** cut to 500 characters.
 - **A card:** Pi Pocket keeps the last 30,000 characters.
 - **Runs of one person:** 4 at the same time, in all sessions together. Pi Pocket refuses a fifth run until one ends.
-- **Time for a command:** no limit. The handler must watch `ctx.signal`, and end when it aborts.
+- **Kept requests:** Pi Pocket keeps the request ids of the last 100 finished runs of each person in each session. The same text sent again from the same tab finds the first run only while its id is kept.
 
 ## Cleanups
 

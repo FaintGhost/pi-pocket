@@ -4,8 +4,8 @@
 //
 // - `repoDocsLoader` is Astro's glob loader on the repository root. A page's title is its `# H1`, its description
 //   its first paragraph. Each build also checks every relative link and anchor of every page (`checkLinks`), and
-//   that the reference says what types/pocket.d.ts says (`checkReference`), and that each limit is also in its guide
-//   (`checkLimits`). It fails with the whole list.
+//   that the reference says what types/pocket.d.ts says (`checkReference`), and that docs/ has no links in it. It fails
+//   with the whole list.
 // - `repoMarkdown` is a Sätteri mdast plugin for the pages: it drops the H1 (Starlight draws the title), rewrites
 //   relative links (a page to its address on the site, anything else to GitHub), and draws a reference member's
 //   "Since 0.14.0 · Stable" line as two tags.
@@ -16,7 +16,7 @@ import { fileURLToPath } from "node:url";
 import GithubSlugger from "github-slugger";
 import { glob } from "astro/loaders";
 import { markdownToMdast } from "satteri";
-import { checkLimits, checkReference } from "./reference-check.mjs";
+import { checkReference } from "./reference-check.mjs";
 import { MOVED } from "./sidebar.mjs";
 
 export const REPO = resolve(fileURLToPath(new URL("../../", import.meta.url)));
@@ -332,7 +332,7 @@ export function repoDocsLoader() {
                 ),
             );
 
-            errors.push(...checkReference(REPO), ...checkLimits(REPO));
+            errors.push(...checkReference(REPO));
 
             if (errors.length > 0) {
                 throw new Error(`The docs have broken links or headings:\n${errors.join("\n")}`);

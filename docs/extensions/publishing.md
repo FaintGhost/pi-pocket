@@ -1,6 +1,6 @@
 # Publishing to the gallery
 
-The gallery lists drop-ins that other people wrote. This page tells how Pi Pocket installs them, and how to share your own. The rules for entries, and their review, are in [Gallery review](policies/gallery-review.md). The fields of an entry are in [the gallery entry reference](reference/gallery-entry.md).
+The gallery lists drop-ins that other people wrote. This page tells how Pi Pocket installs them, and how to share your own. The rules for entries, and their review, are in [Gallery review](policies/gallery-review.md). The fields of an entry are in [the gallery entry reference](reference/gallery-entry.md), and their limits in [Limits](reference/limits.md#gallery).
 
 ## How the gallery works
 
@@ -15,7 +15,7 @@ Each entry gives the files of one drop-in, at one commit of a GitHub repository,
 
 Pi Pocket trusts nothing in an entry. So it:
 
-- **Reads it strictly** (`src/server/gallery/entry.ts`). It checks each field. Each field is one line of plain text, with no control, invisible, or direction characters. Names follow the rules of the drop-in folder. Sizes stay in bounds: 4 MB of index, and 50 files of 512 KB each and 2 MB together.
+- **Reads it strictly** (`src/server/gallery/entry.ts`). It checks each field. Each field is one line of plain text, with no control, invisible, or direction characters. Names follow the rules of the drop-in folder. Sizes and lengths stay in the [limits](reference/limits.md#gallery): of the index, of the files, and of each field.
     - It leaves out an entry that it cannot read, and hides an entry for a newer Pi Pocket or extension API. The list says how many.
     - It shows all of an entry as text, and links only to the GitHub addresses that it makes itself.
 - **Downloads files only over https**, from the entry's repository on `raw.githubusercontent.com`, at the entry's commit. When the size or the SHA-256 of one file is different from the entry's, it installs nothing at all.
@@ -27,7 +27,7 @@ Pi Pocket trusts nothing in an entry. So it:
     - Other code files that it imports load at the next restart. The gallery then asks for one.
 - **Warns about revoked versions.** The index can revoke a commit of an extension.
     - Where that commit is installed, the gallery and the Extensions sheet say so, with the reason, and offer to turn it off.
-    - While extensions from the index are installed, the gallery looks again two times a day. It tells the owner in a notice when a revoked version is on.
+    - While extensions from the index are installed, the gallery looks again from time to time ([limits](reference/limits.md#gallery)). It tells the owner in a notice when a revoked version is on.
     - An entry whose own commit is revoked is withdrawn: the gallery does not offer it, and does not install it.
 
 ## Before you turn one on
@@ -45,30 +45,14 @@ The button does not send while Plan mode is off in Menu → Extensions. The revi
 
 The index's checks are not a security review. They check the entry, and that the module loads. A maintainer reads the code before an entry goes in.
 
-## Limits of an entry
-
-Pi Pocket and the index refuse an entry past these limits. **Share…** checks them for you.
-
-- The index: 4 MB at most, with 2000 entries at most. Its `name` has 80 characters at most, and its `repo` 160.
-- The files: 50 at most, of 512 KB each at most, and 2 MB together at most. A file's name has 200 characters at most, and each part of it 100. It is four folders deep at most, with `<name>/` as the first folder.
-- `title`: 60 characters at most. `description`: 600 characters at most.
-- `tags`: 10 at most, of 24 characters each at most.
-- `author.name`: 60 characters at most. `author.github`: 39 characters at most.
-- `version`: 32 characters at most. `minPocket`: three numbers of 4 digits at most each, such as `0.14.0`.
-- `source.repo`: an owner of 39 characters at most, and a repository name of 100 at most. `source.path`: 200 characters at most, and four folders deep at most.
-- Each list in `declares`: 100 names at most. An extension, tool, hook, or section name has 64 characters at most, a route's path 200, and a command with its scope 80.
-- `revoked`: 50 commits at most, each with a reason of 300 characters at most.
-
-The fields are in [the gallery entry reference](reference/gallery-entry.md).
-
 ## Sharing yours
 
 The files of an entry belong to its drop-in, and have its name, so they never meet the files of another drop-in:
 
-- **`<name>.ts`**, the module. `<name>` has 2 to 64 lowercase letters, digits, `-`, and `_`, and starts with a letter or a digit. It is not the name of a built-in module, and does not start with `pocket-`. Its extensions and tools follow the [name rules](reference/names.md).
+- **`<name>.ts`**, the module. `<name>` has lowercase letters, digits, `-`, and `_` ([length](reference/limits.md#names)), and starts with a letter or a digit. It is not the name of a built-in module, and does not start with `pocket-`. Its extensions and tools follow the [name rules](reference/names.md).
 - **`<name>.js` or `<name>.mjs`** beside it, or the folder **`<name>/`**, for its browser module: `web.client("<name>.js")`, or `web.client("<name>")`.
     - Helpers go in that folder too, for example `import { zones } from "./<name>/zones.ts"`. The folder serves no `.ts` files.
-    - The folder is four folders deep at most, with no hidden files and no `node_modules`.
+    - The folder has a depth limit ([limits](reference/limits.md#gallery)), no hidden files, and no `node_modules`.
 - **Imports**: only those files, Node's own modules, and the packages that Pi Pocket has (`@earendil-works/pi-durable`, `@earendil-works/pi-ai`, and others). Nothing by its place on this machine, and no code from other places. An `import type` is allowed, for example from `./_pocket.d.ts`: Node removes it when the module runs.
 - **Description**: the first paragraph of its `/** … */` comment is the entry's description.
 

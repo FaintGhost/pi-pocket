@@ -4,7 +4,7 @@ An event is a message from a module on the server to its browser module in the t
 
 ## Send an event
 
-On the server, `web.send(event, data, { to })` sends `data` as JSON, of 256 KB at most. The name of the event has 1 to 64 letters, digits, `.`, `_`, `:`, and `-`. The event goes:
+On the server, `web.send(event, data, { to })` sends `data` as JSON. The name of the event has letters, digits, `.`, `_`, `:`, and `-`. Both have [limits](reference/limits.md#events). The event goes:
 
 - without `to`, to the tabs of each person that the browser module's `access` lets in;
 - with `to`, only to the tabs of the person whose id is `to`.
@@ -33,14 +33,14 @@ const stop = pocket.on("load", ({ load }) => setLoad(load));
 
 ## Limits
 
-A version of a module can send 100 events, and 1 MB of events, in each second. Pi Pocket drops the rest of that second's events. Send what changed, or a summary, not each tick.
+A version of a module can send a limited number of events, and of bytes, in each second ([limits](reference/limits.md#events)). Pi Pocket drops the rest of that second's events. Send what changed, or a summary, not each tick.
 
-Pi Pocket cuts off a tab that is far behind, and the tab connects again with a new view. It does not keep the events for it. It cuts off:
+Pi Pocket cuts off a tab that is far behind, and the tab connects again with a new view. It does not keep the events for it. It cuts off ([limits](reference/limits.md#events)):
 
-- a tab more than 8 MB behind that takes nothing for 30 s: it does not read its stream, or it polls and acknowledges nothing;
-- any tab more than 128 MB behind.
+- a tab that is behind and takes nothing for some time: it does not read its stream, or it polls and acknowledges nothing;
+- any tab that is very far behind.
 
-Under 128 MB, Pi Pocket does not cut off a tab that continues to take events. So a slow phone gets all of them.
+Below the second limit, Pi Pocket does not cut off a tab that continues to take events. So a slow phone gets all of them.
 
 ## Errors
 

@@ -25,7 +25,7 @@ export default function createUsage(_host: Host, web: Web) {
 
 What a module adds to the app goes by the name of its file. For example, `server-status.ts` has the name `server-status`. Its routes are at `/api/x/server-status/`, and its browser module at `/x/server-status/`.
 
-File names are different across the drop-in folder and the built-in modules, so these addresses never collide. A module that adds to the app must have a name of up to 64 letters, digits, `-`, and `_`, that starts with a letter or a digit.
+File names are different across the drop-in folder and the built-in modules, so these addresses never collide. A module that adds to the app must have a name of letters, digits, `-`, and `_`, that starts with a letter or a digit, up to a [length](reference/limits.md#names).
 
 ## Versions
 

@@ -71,7 +71,7 @@ What each part does:
 2. Find **my-words** in the group **Yours**. It is off: a new drop-in always starts off.
 3. Turn it on, and confirm.
 
-If the module does not load, the sheet shows "failed to load", and the error. Correct the file, and save it. Pi Pocket loads it again about 300 ms after you save.
+If the module does not load, the sheet shows "failed to load", and the error. Correct the file, and save it. Pi Pocket loads it again a moment after you save.
 
 ## 3. Ask Pi to use the tool
 
@@ -90,7 +90,7 @@ In the message box, type `/my-words the quick brown fox`, and send it. A notice 
 2. Save the file.
 3. Send `/my-words the quick brown fox` again. The notice shows "4 words in total".
 
-Pi Pocket loads the new version of the module about 300 ms after you save. A tool call that runs at that time finishes with the old version. If the new version does not load, the old version stays on, and the sheet shows the error.
+Pi Pocket loads the new version of the module a moment after you save. A tool call that runs at that time finishes with the old version. If the new version does not load, the old version stays on, and the sheet shows the error.
 
 ## 6. Turn it off, or remove it
 

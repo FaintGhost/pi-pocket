@@ -55,7 +55,7 @@ Keep the top level of the module to declarations, and do its work in the default
 
 - A folder serves its `.js`, `.mjs`, `.css`, and `.json` files, its images, and its fonts.
 - It never serves `.ts` files, hidden files, `node_modules`, or a file through a link. A link could lead to such a file, or out of the folder.
-- It serves a file of 8 MB at most.
+- It serves files up to a size [limit](reference/limits.md#browser-modules).
 - All the people that the browser module is for can read each file of those types in the folder. Keep no secret there. Keep the module's own data, such as a cache or settings, in another place: beside the module, or in a folder of its own in the data folder.
 - When the file or the folder goes, or becomes a link, Pi Pocket tells the owner. Tabs cannot load the browser module until it is back.
 
@@ -65,14 +65,14 @@ When you save a file that the folder serves, the browser module gets a new addre
 
 - Only the types that the folder serves count. A `.log` or `.txt` file does not count, so a write to one loads nothing again. A `.json` file or an image counts.
 - The version in the address is only for this. Each version serves the files as they are now.
-- The first 2000 files that the folder serves, in up to 500 folders, count. An edit past those gives no new address, so open tabs keep their version until the page loads again.
-- Pi Pocket watches the first 64 folders. It sees an edit in a deeper folder at its next look: when something that it watches changes, or when the module loads again.
+- Only a [limited number](reference/limits.md#browser-modules) of files and folders count. An edit past those gives no new address, so open tabs keep their version until the page loads again.
+- Pi Pocket watches a [limited number](reference/limits.md#browser-modules) of folders. It sees an edit in a deeper folder at its next look: when something that it watches changes, or when the module loads again.
 
 ## Rail buttons, menu rows, and launcher actions
 
-- **`rail({ id, title, icon or iconPath, badge, … })`** adds a button on the rail, after the app's own tools. It shows in the sidebar, in the drawer, and on a phone's home screen. The buttons of modules take the height of four buttons at most, and scroll past that.
+- **`rail({ id, title, icon or iconPath, badge, … })`** adds a button on the rail, after the app's own tools. It shows in the sidebar, in the drawer, and on a phone's home screen. The buttons of modules take a [limited height](reference/limits.md#browser-modules), and scroll past that.
     - `icon` is the name of one of the app's icons: `pulse`, `grid`, `globe`, `key`, `chat`, `folder`, `search`, and more. An unknown name shows `grid`. `iconPath` is a 24×24 stroked SVG path of your own.
-    - `badge` is a short count or word on the button. `0`, `NaN`, `-Infinity`, `""`, `"0"`, `null`, and `false` show no badge, as the app's own counts hide at 0. A count above 99, and `Infinity`, show "99+". Other numbers, negative or with decimals, show as they are. Text longer than 24 characters is cut to 23 and "…", in the button's label too, without cutting a character in two.
+    - `badge` is a short count or word on the button. `0`, `NaN`, `-Infinity`, `""`, `"0"`, `null`, and `false` show no badge, as the app's own counts hide at 0. A large count, and `Infinity`, show as a capped count. Other numbers, negative or with decimals, show as they are. Long text is cut, with "…", in the button's label too, without cutting a character in two. The [limits](reference/limits.md#browser-modules) give the sizes.
 - **`menu({ id, label, hint, … })`** adds a row to the menu's App group.
 - **`launcher({ id, label, detail, icon or iconPath, keywords, … })`** adds an action to the launcher (Ctrl+K or ⌘+K).
 
@@ -90,7 +90,7 @@ The buttons, rows, and actions of modules show in the order that the server list
 
 - Esc and back close it. Esc never closes it while an input method composes a character.
 - `escape: false` keeps Esc for the page. Esc still closes a sheet, the launcher, or PiP over it, and the close button and back still close the page.
-- On a touch screen up to 699 px wide, a swipe to the right on the page goes back. A swipe in a field or in a sideways scroller does not. In an app on an iPhone's or iPad's home screen, a swipe in from the left edge also goes back.
+- On a narrow touch screen ([limits](reference/limits.md#browser-modules)), a swipe to the right on the page goes back. A swipe in a field or in a sideways scroller does not. In an app on an iPhone's or iPad's home screen, a swipe in from the left edge also goes back.
 - `swipe: false` starts no back swipe on the page, at the edge too. A `data-no-swipe` attribute on an element starts no swipe on it or in it: use it on a slider, or a canvas that people draw on.
 
 **`sheet({ id, title, component, wide })`** adds a sheet like the app's own.
@@ -102,13 +102,13 @@ The components of pages and sheets get `pocket` and `close`. A sheet's component
 
 ## Ids and updates
 
-- Each thing that a module adds has an `id` of its own: up to 64 letters, digits, `.`, `_`, `:`, and `-`, that starts with a letter or a digit.
+- Each thing that a module adds has an `id` of its own: letters, digits, `.`, `_`, `:`, and `-`, that starts with a letter or a digit, up to a [length](reference/limits.md#names).
 - To add a thing with the same `id` again replaces it.
 - Each `rail`, `menu`, `launcher`, `page`, and `sheet` returns `{ update(patch), remove() }`. `update` takes an object.
 
 ## Redraws
 
-The app draws what a module changed at the next frame, one time for all its changes. So a module costs the app one redraw in each frame at most, at any refresh rate, as an animation does. A hidden tab draws no frames, so it draws by a 100 ms timer, which the browser can slow.
+The app draws what a module changed at the next frame, one time for all its changes. So a module costs the app one redraw in each frame at most, at any refresh rate, as an animation does. A hidden tab draws no frames, so it draws by a short timer ([limits](reference/limits.md#browser-modules)), which the browser can slow.
 
 - Adding the same thing again, or an update that changes nothing, draws nothing.
 - Values are the same only when they are the very same value. A new array or function is a change, each time.
@@ -118,8 +118,8 @@ Change what the module added from an event, a timer, or an effect, not while a c
 
 Pi Pocket stops a module in that browser, as one that failed ("was stopped in this browser: it redraws without end"), until the page loads again or the module changes, when:
 
-- One task makes more than 1000 calls to `pocket` over more than one second. All of `pocket` counts, but not `h`, `html`, `Fragment`, the hooks, and the components. This stops a loop of microtasks, which holds the page, and also a long batch with heavy work between its calls. Then its calls throw until the next task, `pocket.api` too, so an `await` loop rejects and a `.then` chain stops.
-- It opens and closes its pages or sheets more than 300 times in one second. Or it does this again and again with no task between: more than 1000 times, or 5 or more times over more than one second.
+- One task makes too many calls to `pocket`, over more than one second ([limits](reference/limits.md#browser-modules)). All of `pocket` counts, but not `h`, `html`, `Fragment`, the hooks, and the components. This stops a loop of microtasks, which holds the page, and also a long batch with heavy work between its calls. Then its calls throw until the next task, `pocket.api` too, so an `await` loop rejects and a `.then` chain stops.
+- It opens and closes its pages or sheets too many times in one second, or again and again with no task between ([limits](reference/limits.md#browser-modules)).
 
 Nothing outside a module can stop a loop that never yields and calls nothing of `pocket`. This is also true for a loop that catches the error that the calls of a stopped module throw. Such a loop holds the tab.
 

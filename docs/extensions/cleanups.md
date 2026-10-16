@@ -20,7 +20,7 @@ Stop timers and close connections there.
 
 - A cleanup that the module registers after it loaded, for example from a timer, also runs.
 - A cleanup that the module registers after the version went runs at once.
-- `run` can return a promise. When the server stops, it waits up to 3 s for these promises. This includes the cleanups of versions that still go (replaced or turned off a moment before), and of a version that still loads.
+- `run` can return a promise. When the server stops, it waits a short time for these promises ([limits](reference/limits.md#cleanups)). This includes the cleanups of versions that still go (replaced or turned off a moment before), and of a version that still loads.
 
 ## In the browser
 

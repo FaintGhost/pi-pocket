@@ -46,16 +46,16 @@ Pi Pocket refuses them while the source is in plan mode, past a spend limit, or 
 
 ## Limits of a team
 
-Pi Pocket keeps a team small. Past these limits, it refuses the call with a plain error:
+Pi Pocket keeps a team small. Past these limits ([Limits](reference/limits.md#linked-sessions)), it refuses the call with a plain error:
 
 - A linked session can send messages to the other sessions of its team. It cannot start sessions.
-- A session can start 10 sessions at most.
-- After 20 messages between the sessions of a team, no more go until a person writes in one of them.
+- A session can start a limited number of sessions.
+- After a limited number of messages between the sessions of a team, no more go until a person writes in one of them.
 - The budget of the session that started a team covers all of the team. What its linked sessions spend counts against it.
-- A message has 20,000 characters at most. A title is one line of 120 characters at most, without invisible or direction characters.
+- A message and a title have a length limit. A title is one line, without invisible or direction characters.
 
 ## Replays
 
-Give a `key` that stays the same when the call runs again: `${api.taskId}:${api.callId}`. A start or a send with a key that Pi Pocket saw before returns what the first call returned. So a replay makes one session, and sends one message. Pi Pocket keeps the record of a key for 30 days.
+Give a `key` that stays the same when the call runs again: `${api.taskId}:${api.callId}`. A start or a send with a key that Pi Pocket saw before returns what the first call returned. So a replay makes one session, and sends one message. Pi Pocket keeps the record of a key for a limited time, and for a limited number of calls ([limits](reference/limits.md#linked-sessions)).
 
 The errors say what is wrong. They do not tell Pi what to do about it: your tool tells Pi that.

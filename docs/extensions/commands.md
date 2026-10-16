@@ -16,16 +16,16 @@ web.command("my-status", {
 
 The [clock example](../examples/clock.ts) has a command: `/clock-zone Europe/Berlin` sets the session's time zone, and `/clock-zone` shows it. The members of `ctx` are in [the command context reference](reference/command-context.md).
 
-- **`name`**: up to 64 lowercase letters, digits, `-`, and `_`, without the `/`. It starts with a letter, and has at least one `-`: `my-status`, not `status`. The app's own commands are one word each, so a new command of the app never takes your name. Give it a prefix of your own.
+- **`name`**: lowercase letters, digits, `-`, and `_`, without the `/`, up to a [length](reference/limits.md#names). It starts with a letter, and has at least one `-`: `my-status`, not `status`. The app's own commands are one word each, so a new command of the app never takes your name. Give it a prefix of your own.
     - Pi Pocket refuses a name that a command of another module has. The first module keeps it.
     - A prompt template with the same name wins in the message box.
 - **`description`**: shows in the suggestions.
 - **`args`**: a hint in words, such as `"[zone]"`. It is optional.
-- `description` and `args` have 200 characters each at most. A module has 50 commands at most.
+- `description` and `args` have a [length limit](reference/limits.md#commands), and a module has a limited number of commands.
 
 ## The handler
 
-`handler(args, ctx)` gets all the text after the name as one string, of 4000 characters at most.
+`handler(args, ctx)` gets all the text after the name as one string, up to a [length](reference/limits.md#commands).
 
 - `ctx.user` is who ran the command, as `{ id, name, role }`.
 - `ctx.conversationId` is the session, and `ctx.cwd` its folder.
@@ -34,11 +34,11 @@ The [clock example](../examples/clock.ts) has a command: `/clock-zone Europe/Ber
 
 ## What it returns
 
-- **`{ type: "toast", level, message }`**: a notice for the person who ran the command, in that tab only. `level` is `"info"`, `"warning"`, or `"error"`. Pi Pocket cuts the message to 500 characters.
+- **`{ type: "toast", level, message }`**: a notice for the person who ran the command, in that tab only. `level` is `"info"`, `"warning"`, or `"error"`. Pi Pocket cuts a long message ([limits](reference/limits.md#commands)).
 - **`{ type: "card", output }`**: plain text in the session where the person typed the command, for all the people who see it.
     - Pi never gets it, and it does not change whom Pi works for.
     - Find in session and export include it.
-    - Pi Pocket keeps only its last 30,000 characters, as for a `!` command.
+    - Pi Pocket keeps only its end ([limits](reference/limits.md#commands)), as for a `!` command.
     - Put no secrets in it.
 
 ## Errors
@@ -63,14 +63,14 @@ The handler runs with the owner's rights, as all of the module does. A conversat
 
 Each run is a durable task, kept by the person who ran it, the session, and the request's id.
 
-- When a reply gets lost, the same text sent again from the same tab finds the first run, and gets its result. The handler runs one time.
+- When a reply gets lost, the same text sent again from the same tab finds the first run, and gets its result. The handler runs one time. Pi Pocket keeps the ids of a person's recent runs only ([limits](reference/limits.md#commands)).
 - A restart of the server never runs a handler again. The person hears that it was stopped, because it can have done a part of its work.
 - Menu → **Running now** shows a command while it runs, and can stop it. People who steer stop conversation commands; the owner stops global commands.
 - To stop a run aborts `ctx.signal`. It does not undo what the handler did. A stop just after the handler wrote its card leaves the card, and the run says that it was stopped.
 
 A command has no time limit. The handler must watch `ctx.signal`, and end when it aborts.
 
-- One person can have 4 runs at the same time, over all sessions. Pi Pocket refuses a fifth until one ends. So a handler that never ends holds one run until the server restarts.
+- One person can have only a few runs at the same time, over all sessions ([limits](reference/limits.md#commands)). Pi Pocket refuses one more until one ends. So a handler that never ends holds one run until the server restarts.
 - Pi Pocket stores the arguments and the result with the task. Do not ask people to type a password in a command.
 
 ## Versions

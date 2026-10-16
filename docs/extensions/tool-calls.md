@@ -34,8 +34,8 @@ When Pi makes many calls, the app counts them in a group's summary, for example 
 ## Rules
 
 - Each function gets a copy of the arguments.
-- The label is one line, cut to 80 characters. The subject is one line, cut to 160 characters.
-- `verb`, `noun`, and `by` have 60 characters at most each. A longer one gives the default display.
+- The label and the subject are each one line, cut to a length ([limits](reference/limits.md#tool-calls)).
+- `verb`, `noun`, and `by` have a length limit too. A longer one gives the default display.
 - What it gives shows as one line of text, never as HTML.
 - When a function throws, or gives something that is not text (or not such a kind), the call shows the default way. The error is in the browser's console.
 - `tool` must be a tool that the module's own extensions install. The server lists them with the browser module. Pi Pocket refuses any other name, so no module changes how the calls of another module show.
