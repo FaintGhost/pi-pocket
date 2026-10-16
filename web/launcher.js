@@ -12,6 +12,7 @@ import { modelRefreshAvailable, refreshModels } from "./model-refresh.js";
 import { openPip, pipAvailable } from "./pip.js";
 import { setArchived, workspaceOrder } from "./sessions.js";
 import { branchAvailable, headLabel } from "./sheets/branch.js";
+import { galleryAvailable } from "./sheets/gallery.js";
 import { piSessionsAvailable } from "./sheets/pi-sessions.js";
 import {
     actions,
@@ -278,6 +279,13 @@ function actionItems() {
             run: refreshModels,
         },
         { label: "Extensions", icon: "shield", run: () => openSheet({ type: "extensions" }) },
+        galleryAvailable() && {
+            label: "Find extensions",
+            detail: "browse and install drop-ins",
+            keywords: "gallery",
+            icon: "search",
+            run: () => openSheet({ type: "gallery" }),
+        },
         { label: "Spend", icon: "pulse", run: () => openSheet({ type: "spend" }) },
         collab()
             ? {

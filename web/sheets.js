@@ -9,6 +9,14 @@ import { BranchPicker } from "./sheets/branch.js";
 import { ExtensionsSheet } from "./sheets/extensions.js";
 import { FileSheet } from "./sheets/file.js";
 import { FindSheet } from "./sheets/find.js";
+import {
+    galleryAvailable,
+    GalleryEntrySheet,
+    GalleryShareSheet,
+    GallerySheet,
+    GallerySourceSheet,
+    GalleryUpdateSheet,
+} from "./sheets/gallery.js";
 import { CwdSheet } from "./sheets/folder.js";
 import { MemorySheet } from "./sheets/memory.js";
 import { MenuSheet, PlacesSheet } from "./sheets/menu.js";
@@ -191,6 +199,29 @@ function sheetBody(sheet) {
             break;
         case "extensions":
             body = html`<${ExtensionsSheet} />`;
+            break;
+        case "gallery":
+            body = galleryAvailable() ? html`<${GallerySheet} />` : null;
+            break;
+        case "gallery-entry":
+            body = galleryAvailable()
+                ? html`<${GalleryEntrySheet} key=${sheet.id} name=${sheet.id} />`
+                : null;
+            break;
+        case "gallery-source":
+            body = galleryAvailable()
+                ? html`<${GallerySourceSheet} key=${sheet.id} name=${sheet.id} />`
+                : null;
+            break;
+        case "gallery-update":
+            body = galleryAvailable()
+                ? html`<${GalleryUpdateSheet} key=${sheet.id} name=${sheet.id} />`
+                : null;
+            break;
+        case "gallery-share":
+            body = galleryAvailable()
+                ? html`<${GalleryShareSheet} key=${sheet.id} file=${sheet.id} />`
+                : null;
             break;
         // A sheet an extension's browser module added (`extension-ui.js`).
         case "ext":

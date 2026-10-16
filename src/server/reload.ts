@@ -50,7 +50,13 @@ const ORDER = [
     "memory.ts",
     "pip.ts",
     "triggers.ts",
+    "gallery.ts",
 ];
+
+/** The built-in modules' names (their files' without `.ts`): a drop-in with one of them is never loaded. */
+export const BUILT_IN_MODULES: ReadonlySet<string> = new Set(
+    ORDER.map((file) => file.replace(/\.ts$/, "")),
+);
 /** Modules the app cannot work without: always on. */
 const REQUIRED = new Set(["prompt.ts"]);
 /** Built-in modules that stay off until the owner turns them on. Drop-ins all do. */
@@ -68,6 +74,7 @@ const TITLES: Record<string, string> = {
     "memory.ts": "Memory",
     "pip.ts": "PiP",
     "triggers.ts": "Triggers",
+    "gallery.ts": "Extension gallery",
 };
 
 /**
@@ -75,7 +82,7 @@ const TITLES: Record<string, string> = {
  * with a name already taken replaces it in place, so a drop-in that used one would quietly replace a built-in (or be
  * replaced by it when the built-in is turned on), and turning the drop-in off would remove the built-in too.
  */
-const RESERVED_EXTENSIONS = /^(pocket-.*|coding-tools)$/;
+export const RESERVED_EXTENSIONS = /^(pocket-.*|coding-tools)$/;
 
 /** The tools of Pi Durable's coding tools and of the built-in modules. A test checks it against what they install. */
 export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
@@ -116,10 +123,23 @@ export interface ExtensionInfo {
     summary: string;
     enabled: boolean;
     required: boolean;
-    /** What the module installed, with the tools each extension provides. */
-    extensions: { name: string; tools: string[] }[];
-    /** What it adds to the app: its routes (`GET status`), and who loads its browser module, when it has one. */
-    web?: { routes: string[]; client?: WebAccess };
+    /**
+     * What the module installed: each extension's tools (and which of them say they only read), the hooks' handlers,
+     * prompt sections, and the tools and sections it wraps (`tool bash`).
+     */
+    extensions: {
+        name: string;
+        tools: string[];
+        readOnlyTools: string[];
+        hooks: string[];
+        sections: string[];
+        wraps: string[];
+    }[];
+    /**
+     * What it adds to the app: its routes (`GET status`), who loads its browser module, when it has one, and the widest
+     * access of the two.
+     */
+    web?: { routes: string[]; client?: WebAccess; access?: WebAccess };
     /** Why the module is not loaded, when it failed. */
     error?: string;
 }
@@ -420,10 +440,7 @@ export class ExtensionLoader {
                 summary: summary(join(module.directory, file)),
                 enabled: this.#isOn(module),
                 required: REQUIRED.has(file),
-                extensions: (this.#installed.get(file) ?? []).map((extension) => ({
-                    name: extension.name,
-                    tools: (extension.tools ?? []).map((tool) => tool.name),
-                })),
+                extensions: (this.#installed.get(file) ?? []).map(declared),
                 ...(web === undefined ? {} : { web }),
                 ...(error === undefined ? {} : { error }),
             };
@@ -849,6 +866,28 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
         value !== null &&
         typeof (value as { then?: unknown }).then === "function"
     );
+}
+
+/** What an extension installs, by name: what the Extensions sheet and the gallery's index say it does. */
+function declared(extension: Extension): ExtensionInfo["extensions"][number] {
+    const tools = extension.tools ?? [];
+
+    return {
+        name: extension.name,
+        tools: tools.map((tool) => tool.name),
+        readOnlyTools: tools
+            .filter(
+                (tool) =>
+                    (tool as { annotations?: { readOnlyHint?: unknown } }).annotations
+                        ?.readOnlyHint === true,
+            )
+            .map((tool) => tool.name),
+        hooks: [...new Set((extension.hooks ?? []).flatMap((each) => Object.keys(each.handlers)))],
+        sections: (extension.sections ?? []).map((each) => each.key),
+        wraps: (extension.wraps ?? []).map((each) =>
+            "tool" in each ? `tool ${each.tool}` : `section ${each.section}`,
+        ),
+    };
 }
 
 /** A module's title in the Extensions sheet: a built-in's own, or a drop-in's file name. */

@@ -2,8 +2,9 @@
 // its context.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { browserModuleState, leaveSafeMode, safeMode } from "../extension-ui.js";
-import { api, attempt, closeSheet, store } from "../store.js";
-import { html, Loader, Sheet, shortPath, Switch } from "../ui.js";
+import { api, attempt, closeSheet, openSheet, store } from "../store.js";
+import { html, Icon, Loader, Sheet, shortPath, Switch } from "../ui.js";
+import { galleryApi, galleryAvailable } from "./gallery.js";
 
 /** What Lancet Guard does here, given the module's switch and Pi's own setting. */
 function guardNote(module, guard) {
@@ -100,6 +101,52 @@ function SafeMode() {
     </div>`;
 }
 
+/**
+ * How a drop-in the gallery installed stands (`installed`: the gallery's word on it), or, for one of the owner's own, a
+ * way to share it. Nothing for the rest.
+ */
+function GalleryPart({ module, installed, busy, turnOff }) {
+    if (!galleryAvailable() || module.source !== "drop-in") {
+        return null;
+    }
+
+    if (!installed) {
+        return html`<div class="extension-gallery">
+            <button
+                class="link small"
+                onClick=${() => openSheet({ type: "gallery-share", id: module.file })}
+            >
+                Share…
+            </button>
+        </div>`;
+    }
+
+    return html`${
+        installed.revoked !== null &&
+        html`<div class="error-box small">
+            The gallery revoked this version: ${installed.revoked}
+            ${
+                module.enabled &&
+                html`<div class="sheet-actions">
+                    <button class="button small primary" disabled=${busy} onClick=${turnOff}>
+                        Turn it off
+                    </button>
+                </div>`
+            }
+        </div>`
+    }
+    <div class="extension-gallery">
+        <span class="pi-tag gallery-plain">from the gallery · ${installed.version}</span>
+        ${installed.update && html`<span class="pi-tag behind">update available</span>`}
+        <button
+            class="link small"
+            onClick=${() => openSheet({ type: "gallery-entry", id: installed.name })}
+        >
+            Details
+        </button>
+    </div>`;
+}
+
 /** When PiP compacts its own context: once idle above so many tokens (`pip-compact.ts`), or only as sessions do. */
 const PIP_COMPACT = [
     [40000, "Above 40k tokens"],
@@ -143,11 +190,24 @@ export function ExtensionsSheet() {
     const [confirmGuard, setConfirmGuard] = useState(false);
     const guardCancel = useRef(null);
     const guardSwitch = useRef(null);
+    // What the gallery installed, by module file: read after the list, and never in the way of it.
+    const [fromGallery, setFromGallery] = useState(new Map());
     const load = () =>
         api("extensions").then(
             (result) => {
                 setData(result);
                 setProblem(null);
+
+                if (
+                    galleryAvailable() &&
+                    result.modules.some((each) => each.source === "drop-in")
+                ) {
+                    galleryApi("installed").then(
+                        ({ items }) =>
+                            setFromGallery(new Map(items.map((each) => [each.file, each]))),
+                        () => {},
+                    );
+                }
             },
             (error) =>
                 setProblem(
@@ -208,6 +268,15 @@ export function ExtensionsSheet() {
             Extensions give Pi its tools and checks in Pi Pocket, and can add pages and buttons to the app. A change applies to every session right away and stays after restarts.${owner ? "" : " Only the owner can change them."}
         </p>
         <${SafeMode} />
+        ${
+            galleryAvailable() &&
+            html`<div class="sheet-list">
+                <button class="list-item" onClick=${() => openSheet({ type: "gallery" })}>
+                    <span><${Icon} name="search" size=${16} /> Find extensions</span>
+                    <span class="muted small">drop-ins other people wrote</span>
+                </button>
+            </div>`
+        }
         ${problem && html`<div class="error-box">${problem}</div>`}
         ${!data && !problem && html`<${Loader} label="Loading extensions" />`}
         ${
@@ -296,6 +365,12 @@ export function ExtensionsSheet() {
                                         }
                                         ${module.error && html`<div class="error-box small">${module.error}</div>`}
                                         <${WebPart} module=${module} />
+                                        <${GalleryPart}
+                                            module=${module}
+                                            installed=${fromGallery.get(module.file)}
+                                            busy=${busy !== null}
+                                            turnOff=${() => change(module, "", { enabled: false })}
+                                        />
                                         <div class="muted small mono">
                                             ${module.source === "drop-in" ? `drop-in${module.path ? ` · ${shortPath(module.path, store.state.server?.home)}` : ""}` : module.file}
                                             ${tools.length > 0 ? ` · tools: ${tools.join(", ")}` : ""}
