@@ -322,12 +322,16 @@ function sync(list) {
 
     for (const record of [...modules.values()]) {
         const entry = wanted.get(record.module);
+        const tools = Array.isArray(entry?.tools) ? entry.tools : null;
+        // A module reloaded on the server may install other tools, with the same browser module.
+        const retooled = tools !== null && String(tools) !== String(record.tools);
 
-        if (entry?.url !== record.url) {
+        // One that failed (describing a tool its server module did not have yet, say) gets another go.
+        if (entry?.url !== record.url || (retooled && record.dead)) {
             unload(record);
-        } else if (Array.isArray(entry.tools)) {
-            // A module reloaded on the server may install other tools, with the same browser module.
-            record.tools = entry.tools;
+        } else if (retooled) {
+            record.tools = tools;
+            describersChanged();
         }
     }
 
@@ -962,7 +966,12 @@ function describerOf(tool) {
     for (const module of order) {
         const record = modules.get(module);
 
-        if (liveRecord(record) && record.calls.has(tool)) {
+        // Only a tool its module still installs: one a newer version took away is no longer its own.
+        if (
+            liveRecord(record) &&
+            record.calls.has(tool) &&
+            (record.tools === null || record.tools.includes(tool))
+        ) {
             return { record, spec: record.calls.get(tool) };
         }
     }

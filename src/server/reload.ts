@@ -647,7 +647,10 @@ export class ExtensionLoader {
             this.#replace(extensions, this.#installed.get(file) ?? []);
             this.#installed.set(file, extensions);
             this.#errors.delete(file);
-            this.#webs.commit(part);
+            this.#webs.commit(
+                part,
+                extensions.flatMap((extension) => declared(extension).tools),
+            );
             committed = true;
 
             return extensions;
