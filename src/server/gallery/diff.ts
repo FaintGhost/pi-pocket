@@ -189,8 +189,12 @@ function hunks(ops: Op[]): string[] {
 
         out.push(
             `@@ -${oldCount === 0 ? oldBefore : oldBefore + 1},${oldCount} +${newCount === 0 ? newBefore : newBefore + 1},${newCount} @@`,
-            ...slice.map((op) => `${op.kind}${op.line}`),
         );
+
+        // One at a time: a long hunk spread into one call would pass more arguments than a call takes.
+        for (const op of slice) {
+            out.push(`${op.kind}${op.line}`);
+        }
     }
 
     return out;

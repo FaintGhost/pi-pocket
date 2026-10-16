@@ -69,7 +69,7 @@ export default function createGallery(host: PocketHost, web: ExtensionWeb) {
     web.route(
         "POST",
         "install/:name",
-        handle((request) => gallery.install(name(request), request.body.commit, request.signal)),
+        handle((request) => gallery.install(name(request), request.body.pin, request.signal)),
     );
     web.route(
         "GET",
@@ -79,7 +79,7 @@ export default function createGallery(host: PocketHost, web: ExtensionWeb) {
     web.route(
         "POST",
         "update/:name",
-        handle((request) => gallery.update(name(request), request.body.commit, request.signal)),
+        handle((request) => gallery.update(name(request), request.body.pin, request.signal)),
     );
     web.route(
         "POST",

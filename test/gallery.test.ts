@@ -71,6 +71,10 @@ async function index(...entries: unknown[]) {
     return app.gallery.listing(true);
 }
 
+/** What the owner approves for an entry the gallery lists: its pin. */
+const pin = async (name: string) =>
+    (await app.gallery.listing(false)).entries.find((each) => each.name === name)?.pin;
+
 before(async () => {
     app = await openApp(scriptedModel(), dataDir);
     app.gallery.fetch = async (url) =>
@@ -89,7 +93,7 @@ test("an entry whose file would leave the extensions folder is not listed, and w
 
     assert.deepEqual(listing.entries, []);
     assert.match(listing.hidden.invalid[0]?.problem ?? "", /files\[1\]\.name/);
-    await assert.rejects(app.gallery.install("escape", "1".repeat(40)), { status: 404 });
+    await assert.rejects(app.gallery.install("escape", "any"), { status: 404 });
     assert.ok(!existsSync(join(dataDir, "escape.ts")));
     assert.ok(!existsSync(join(dropIns, "escape.ts")));
 });
@@ -104,7 +108,7 @@ test("a file that does not match its pinned SHA-256 installs nothing", async () 
         clock.replace("now", "new"),
     );
 
-    await assert.rejects(app.gallery.install("tampered", commit), (error: Error) => {
+    await assert.rejects(app.gallery.install("tampered", await pin("tampered")), (error: Error) => {
         assert.match(error.message, /SHA-256/);
 
         return true;
@@ -124,7 +128,7 @@ test("an installed extension arrives off, even under a name that was turned on b
     app.config.setExtensionEnabled("stale.ts", true);
     await index(entry("stale", { "stale.ts": clock }, commit));
 
-    const installed = await app.gallery.install("stale", commit);
+    const installed = await app.gallery.install("stale", await pin("stale"));
 
     assert.ok(existsSync(join(dropIns, "stale.ts")));
     assert.equal(installed.enabled, false);
@@ -132,17 +136,30 @@ test("an installed extension arrives off, even under a name that was turned on b
     assert.ok(!app.loader.extensionNames().includes("test-clock"));
 });
 
+test("an install goes ahead only as the owner saw it, not as the index changed it since", async () => {
+    const commit = "6".repeat(40);
+
+    await index(entry("seen", { "seen.ts": clock }, commit));
+    const seen = await pin("seen");
+
+    // Same commit, other files: the commit alone is no approval of what gets written.
+    await index(entry("seen", { "seen.ts": clock.replace("now", "new") }, commit));
+
+    await assert.rejects(app.gallery.install("seen", seen), { status: 409 });
+    assert.ok(!existsSync(join(dropIns, "seen.ts")));
+});
+
 test("a revoked version is flagged where it is installed, and is never installed again", async () => {
     const first = "4".repeat(40);
-    const fixed = "5".repeat(40);
 
     await index(entry("revoked", { "revoked.ts": clock }, first));
-    await app.gallery.install("revoked", first);
+    await app.gallery.install("revoked", await pin("revoked"));
     await app.setExtensionEnabled(owner(app), "revoked.ts", true);
 
-    // The index revokes it: the version installed here, and, in another entry, the only one there is.
+    // The index revokes it, with a fix only a newer Pi Pocket can use; and, in another entry, the only version there is.
     await index(
-        entry("revoked", { "revoked.ts": clock.replace("now", "later") }, fixed, {
+        entry("revoked", { "revoked.ts": clock.replace("now", "later") }, "5".repeat(40), {
+            minPocket: "99.0.0",
             revoked: [{ commit: first, reason: "It sends your config away." }],
         }),
         entry("withdrawn", { "withdrawn.ts": clock }, first, {
@@ -154,6 +171,7 @@ test("a revoked version is flagged where it is installed, and is never installed
 
     assert.equal(state?.revoked, "It sends your config away.");
     assert.equal(state?.enabled, true);
-    assert.equal(state?.update?.commit, fixed);
-    await assert.rejects(app.gallery.install("withdrawn", first), { status: 409 });
+    await assert.rejects(app.gallery.install("withdrawn", await pin("withdrawn")), {
+        status: 409,
+    });
 });

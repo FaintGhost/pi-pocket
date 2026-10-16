@@ -91,6 +91,11 @@ export interface Index {
     incompatible: number;
     /** Entries that are not valid, or repeat a name, with why. */
     invalid: { name?: string; problem: string }[];
+    /**
+     * Each name's revoked commits, from every entry whose `revoked` can be read: also one for a newer Pi Pocket, or one
+     * not valid otherwise, as a revocation is a warning for whoever has that commit, whatever else the entry says.
+     */
+    revoked: Map<string, Entry["revoked"]>;
 }
 
 /** Why something in the index is not valid. */
@@ -106,6 +111,12 @@ const OWNER = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const REPO = /^[A-Za-z0-9._-]{1,100}$/;
 /** One part of a path in an extension's folder: no hidden files, no `.` or `..`. */
 const PART = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$/;
+/**
+ * Names Windows keeps for devices, with any ending (`nul.js`), and names that end in a dot, which Windows reads as the
+ * name without it: on Windows each is another file than it says, or none.
+ */
+const NOT_PORTABLE =
+    /^(con|prn|aux|nul|com[0-9\u00b9\u00b2\u00b3]|lpt[0-9\u00b9\u00b2\u00b3])(\..*)?$|\.$/i;
 const TAG = /^[a-z0-9][a-z0-9-]{0,23}$/;
 const VERSION = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$/;
 const POCKET_VERSION = /^(\d{1,4})\.(\d{1,4})\.(\d{1,4})$/;
@@ -133,6 +144,10 @@ export function fileProblem(file: string, extension: string): string | undefined
         return "is not a file name of 200 characters at most";
     }
 
+    if (NOT_PORTABLE.test(extension)) {
+        return `is not a name every system can keep: ${extension} is a device on Windows`;
+    }
+
     if ([`${extension}.ts`, `${extension}.js`, `${extension}.mjs`].includes(file)) {
         return undefined;
     }
@@ -150,6 +165,10 @@ export function fileProblem(file: string, extension: string): string | undefined
     for (const part of parts.slice(1)) {
         if (!PART.test(part) || part === "node_modules") {
             return `has the part ${JSON.stringify(part)}: use letters, digits, . _ and -, not starting with a dot`;
+        }
+
+        if (NOT_PORTABLE.test(part)) {
+            return `has the part ${JSON.stringify(part)}, which Windows reads as another name`;
         }
     }
 
@@ -402,6 +421,19 @@ export function parseEntry(value: unknown): Entry {
         throw new EntryError("files has two names that differ only in case");
     }
 
+    // A file cannot be a folder of another one too (`a/b` and `a/b/c`).
+    for (const file of folded) {
+        const parts = file.split("/");
+
+        for (let at = 1; at < parts.length; at++) {
+            if (folded.has(parts.slice(0, at).join("/"))) {
+                throw new EntryError(
+                    `files has ${parts.slice(0, at).join("/")} as a file and as a folder`,
+                );
+            }
+        }
+    }
+
     if (files.reduce((sum, file) => sum + file.size, 0) > LIMITS.total) {
         throw new EntryError(`files are more than ${LIMITS.total} bytes together`);
     }
@@ -427,20 +459,37 @@ export function parseEntry(value: unknown): Entry {
         pocketApi: shape.pocketApi as number,
         minPocket: text(shape.minPocket, "minPocket", 14, POCKET_VERSION),
         declares: declares(shape.declares, "declares"),
-        revoked:
-            shape.revoked === undefined
-                ? []
-                : list(shape.revoked, "revoked", 50, (item, at) => {
-                      const revoked = object(item, at, ["commit", "reason"]);
-
-                      return {
-                          commit: text(revoked.commit, `${at}.commit`, 40, COMMIT),
-                          reason: text(revoked.reason, `${at}.reason`, 300),
-                      };
-                  }),
+        revoked: revocations(shape.revoked),
     };
 
     return entry;
+}
+
+/** An entry's revoked commits, each with why: none when it has no `revoked`. */
+function revocations(value: unknown): Entry["revoked"] {
+    return value === undefined
+        ? []
+        : list(value, "revoked", 50, (item, at) => {
+              const revoked = object(item, at, ["commit", "reason"]);
+
+              return {
+                  commit: text(revoked.commit, `${at}.commit`, 40, COMMIT),
+                  reason: text(revoked.reason, `${at}.reason`, 300),
+              };
+          });
+}
+
+/**
+ * What the owner approves when they install or update: a digest of everything that decides what is written and what
+ * it does (its repository, folder, commit, files with their hashes, and what it declares). The index could change any
+ * of them and keep the commit; an install or update the owner saw goes ahead only while this is the same.
+ */
+export function pinOf(entry: Entry): string {
+    const { name, source, files, declares } = entry;
+
+    return createHash("sha256")
+        .update(JSON.stringify({ name, source, files, declares }))
+        .digest("hex");
 }
 
 /**
@@ -500,7 +549,7 @@ export function parseIndex(source: string, here: { api: number; version: string 
         throw new EntryError(`The index's extensions are not a list of ${LIMITS.entries} at most`);
     }
 
-    const index: Index = { entries: [], incompatible: 0, invalid: [] };
+    const index: Index = { entries: [], incompatible: 0, invalid: [], revoked: new Map() };
 
     if (shape.name !== undefined) {
         index.name = text(shape.name, "The index's name", 80);
@@ -525,6 +574,14 @@ export function parseIndex(source: string, here: { api: number; version: string 
 
         if (name !== undefined) {
             taken.add(name);
+        }
+
+        if (name !== undefined && !twice) {
+            try {
+                index.revoked.set(name, revocations((item as Shape).revoked));
+            } catch {
+                // Said below, when the entry is read whole.
+            }
         }
 
         if (compatibility(item, here) === "newer" && !twice) {

@@ -33,6 +33,7 @@ import {
     NAME,
     parseEntry,
     parseIndex,
+    pinOf,
     repoPage,
     sha256,
     sourcePage,
@@ -92,8 +93,8 @@ export interface Installed {
     index: string;
     installedAt: number;
     enabled: boolean;
-    /** A newer version the index lists, which the owner may apply. */
-    update: { version: string; commit: string } | null;
+    /** A newer version the index lists, which the owner may apply (`pin`: what they approve, `pinOf`). */
+    update: { version: string; commit: string; pin: string } | null;
     /** Why the index revoked the installed version, or null. */
     revoked: string | null;
     /** Whether the index read now lists it: false too when it came from another index. */
@@ -154,6 +155,14 @@ function repoUrlOf(address: string, index: Index | undefined): string | null {
 
 const revocation = (entry: Entry, commit: string) =>
     entry.revoked.find((each) => each.commit === commit)?.reason;
+
+/** Why the index read revoked a commit of an extension, whatever else its entry says (`Index.revoked`). */
+const revokedIn = (read: Read, provenance: Provenance) =>
+    read.address === provenance.index
+        ? read.index.revoked
+              .get(provenance.entry.name)
+              ?.find((each) => each.commit === provenance.entry.source.commit)?.reason
+        : undefined;
 
 const exists = (path: string) =>
     lstat(path).then(
@@ -337,20 +346,28 @@ export class Gallery {
     }
 
     /**
-     * Get `url`'s body, `limit` bytes at most: https only, also where it redirects to (three times at most), each request
-     * within `REQUEST_MS`. `what` names it in errors.
+     * Get `url`'s body, `limit` bytes at most: https only, also where it redirects to (three times at most, and only on its
+     * own host when `sameHost`), each request within `REQUEST_MS`. `what` names it in errors; `large` is the error for a
+     * body past `limit`.
      */
     async #get(
         url: string,
         limit: number,
         what: string,
-        signal?: AbortSignal,
-        large = () => new HttpError(502, `${what} is larger than ${limit} bytes`),
+        options: { signal?: AbortSignal; large?: () => HttpError; sameHost?: boolean } = {},
     ): Promise<Uint8Array> {
+        const { signal, sameHost = false } = options;
+        const large =
+            options.large ?? (() => new HttpError(502, `${what} is larger than ${limit} bytes`));
+        const host = new URL(url).host;
         let address = url;
 
         for (let hop = 0; ; hop++) {
             const target = new URL(address);
+
+            if (sameHost && target.host !== host) {
+                throw new HttpError(502, `${what}: ${host} sends it on to ${target.host}`);
+            }
 
             if (target.protocol !== "https:") {
                 throw new HttpError(
@@ -470,13 +487,11 @@ export class Gallery {
                     502,
                     `${file.name} at the pinned commit does not match the size and SHA-256 the index pins for it, so nothing was written. Tell the index's maintainers.`,
                 );
-            const bytes = await this.#get(
-                fileUrl(entry, file.name),
-                file.size,
-                file.name,
-                signal,
-                mismatch,
-            );
+            const bytes = await this.#get(fileUrl(entry, file.name), file.size, file.name, {
+                ...(signal === undefined ? {} : { signal }),
+                large: mismatch,
+                sameHost: true,
+            });
 
             if (bytes.byteLength !== file.size || sha256(bytes) !== file.sha256) {
                 throw mismatch();
@@ -631,6 +646,7 @@ export class Gallery {
         }
 
         const next = listed?.source.commit;
+        const revoked = read === undefined ? undefined : revokedIn(read, provenance);
 
         return {
             name: entry.name,
@@ -647,11 +663,9 @@ export class Gallery {
                 listed !== undefined &&
                 next !== entry.source.commit &&
                 revocation(listed, listed.source.commit) === undefined
-                    ? { version: listed.version, commit: listed.source.commit }
+                    ? { version: listed.version, commit: listed.source.commit, pin: pinOf(listed) }
                     : null,
-            revoked:
-                (listed === undefined ? undefined : revocation(listed, entry.source.commit)) ??
-                null,
+            revoked: revoked ?? null,
             listed: listed !== undefined,
             changed,
             declares: entry.declares,
@@ -682,6 +696,7 @@ export class Gallery {
             ...(error === undefined ? {} : { error }),
             entries: (read?.index.entries ?? []).map((entry) => ({
                 ...entry,
+                pin: pinOf(entry),
                 sourceUrl: sourcePage(entry),
                 installed: installed.find((each) => each.name === entry.name) ?? null,
             })),
@@ -718,12 +733,7 @@ export class Gallery {
     async #warnRevoked(read: Read): Promise<void> {
         for (const provenance of await this.#provenances()) {
             const { entry } = provenance;
-            const listed =
-                provenance.index === read.address
-                    ? read.index.entries.find((each) => each.name === entry.name)
-                    : undefined;
-            const reason =
-                listed === undefined ? undefined : revocation(listed, entry.source.commit);
+            const reason = revokedIn(read, provenance);
             const key = `${entry.name}@${entry.source.commit}`;
 
             if (
@@ -787,10 +797,11 @@ export class Gallery {
     // ─── Installing, updating, removing ──────────────────────────────────────────────
 
     /**
-     * Put an extension's files in place, and its provenance beside them. Each is written next to where it goes first, so
-     * a write that fails leaves the drop-in folder as it was; then they move into place, the module last, so that when it
-     * appears (and, when it is on, loads again) the files it imports are there. `remove` are files of the version before
-     * that this one no longer has.
+     * Put an extension's files in place, then its provenance beside them. Each is written next to where it goes first;
+     * then they move into place, the module last of its files, so that when it appears (and, when it is on, loads again)
+     * the files it imports are there, and the provenance after them all, so it never names a version that is not in
+     * place. What each move replaces is kept aside until all are done: when one fails, everything goes back as it was.
+     * `remove` are files of the version before that this one no longer has.
      */
     async #place(
         name: string,
@@ -799,68 +810,99 @@ export class Gallery {
         provenance: Provenance,
     ): Promise<void> {
         const module = `${name}.ts`;
-        const moves: { from: string; to: string; module: boolean }[] = [];
-        const sidecar = join(this.#dropIns(), `${name}${SIDECAR}`);
+        // A name that starts with a dot: neither the loader nor a browser module's folder serves it.
+        const aside = (path: string, end: string) =>
+            join(dirname(path), `.${basename(path)}.${randomUUID()}.${end}`);
+        const staged: { from: string; to: string }[] = [];
+        /** What is in place so far, and what it replaced, to put back. */
+        const done: { to: string; old?: string }[] = [];
 
         try {
-            for (const file of files) {
+            for (const file of [...files].sort(
+                (a, b) => Number(a.name === module) - Number(b.name === module),
+            )) {
                 await this.#plain(name, file.name);
                 const to = this.#target(name, file.name);
+                const from = aside(to, "part");
 
                 await mkdir(dirname(to), { recursive: true });
-                // A file whose name starts with a dot: neither the loader nor a browser module's folder serves it.
-                const from = join(dirname(to), `.${basename(to)}.${randomUUID()}.part`);
-
                 await writeFile(from, file.bytes, { flag: "wx" });
-                moves.push({ from, to, module: file.name === module });
+                staged.push({ from, to });
             }
 
-            const from = join(this.#dropIns(), `.${name}${SIDECAR}.${randomUUID()}.part`);
+            const sidecar = join(this.#dropIns(), `${name}${SIDECAR}`);
+            const from = aside(sidecar, "part");
 
             await writeFile(from, `${JSON.stringify({ format: 1, ...provenance }, null, 2)}\n`, {
                 flag: "wx",
             });
-            moves.push({ from, to: sidecar, module: false });
+            staged.push({ from, to: sidecar });
+
+            for (const { from, to } of staged) {
+                const old = (await exists(to)) ? aside(to, "old") : undefined;
+
+                if (old !== undefined) {
+                    await rename(to, old);
+                }
+
+                done.push(old === undefined ? { to } : { to, old });
+                await rename(from, to);
+            }
+
+            for (const file of remove) {
+                const to = await this.#removable(name, file);
+
+                if (to !== undefined) {
+                    const old = aside(to, "old");
+
+                    await rename(to, old);
+                    done.push({ to, old });
+                }
+            }
         } catch (error) {
-            await Promise.all(moves.map((move) => rm(move.from, { force: true })));
+            for (const step of done.reverse()) {
+                await rm(step.to, { force: true }).catch(() => {});
+
+                if (step.old !== undefined) {
+                    await rename(step.old, step.to).catch(() => {});
+                }
+            }
+
+            await Promise.all(staged.map((step) => rm(step.from, { force: true }).catch(() => {})));
 
             throw error;
         }
 
-        moves.sort((a, b) => Number(a.module) - Number(b.module));
-
-        for (const move of moves) {
-            await rename(move.from, move.to);
-        }
-
-        for (const file of remove) {
-            await this.#remove(name, file);
+        for (const step of done) {
+            if (step.old !== undefined) {
+                await rm(step.old, { force: true }).catch(() => {});
+            }
         }
 
         await this.#prune(join(this.#dropIns(), name));
     }
 
-    /** Remove one of an extension's files (a link itself, never what it leads to). */
-    async #remove(name: string, file: string): Promise<void> {
+    /**
+     * Where one of an extension's files is, to remove it: undefined when it is not there, or is reached through a folder
+     * that is a link (the file is elsewhere then). A link itself is removed, never what it leads to.
+     */
+    async #removable(name: string, file: string): Promise<string | undefined> {
         const target = this.#target(name, file);
         const parts = file.split("/");
 
-        // Through a folder that is a link, the file is elsewhere: leave it.
         for (let at = 1; at < parts.length; at++) {
             const folder = await lstat(join(this.#dropIns(), ...parts.slice(0, at))).catch(
                 () => undefined,
             );
 
             if (folder === undefined || !folder.isDirectory()) {
-                return;
+                return undefined;
             }
         }
 
         const stat = await lstat(target).catch(() => undefined);
 
-        if (stat !== undefined && !stat.isDirectory()) {
-            await rm(target, { force: true });
-        }
+        return stat === undefined || stat.isDirectory() ? undefined : target;
     }
 
     /** Remove the empty folders in an extension's own folder, and that folder when it is empty. */
@@ -881,14 +923,14 @@ export class Gallery {
     }
 
     /**
-     * Install an extension the index lists, at `commit`, the version the owner saw. It arrives off: a choice left from a
+     * Install an extension the index lists, as the owner saw it (`pin`, `pinOf`). It arrives off: a choice left from a
      * drop-in of that name before does not turn it on.
      */
-    install(name: string, commit: unknown, signal?: AbortSignal): Promise<Installed> {
+    install(name: string, pin: unknown, signal?: AbortSignal): Promise<Installed> {
         return this.#exclusive(async () => {
             const { entry, read } = await this.#listed(name);
 
-            if (commit !== entry.source.commit) {
+            if (pin !== pinOf(entry)) {
                 throw new HttpError(409, "The index changed since you looked: look at it again");
             }
 
@@ -929,8 +971,11 @@ export class Gallery {
         });
     }
 
-    /** The update the index offers for an installed extension, checked and downloaded, and what it changes. */
-    async #offered(name: string, signal?: AbortSignal) {
+    /**
+     * The update the index offers for an installed extension, checked and downloaded: when `pin` is given, only the one
+     * the owner saw.
+     */
+    async #offered(name: string, signal?: AbortSignal, pin?: unknown) {
         const provenance = await this.#provenance(name);
 
         if (provenance === undefined) {
@@ -951,6 +996,10 @@ export class Gallery {
 
         if (revoked !== undefined) {
             throw new HttpError(409, `The new version of ${entry.title} is revoked: ${revoked}`);
+        }
+
+        if (pin !== undefined && pin !== pinOf(entry)) {
+            throw new HttpError(409, "The index changed since you looked: look at it again");
         }
 
         return { provenance, entry, read, files: await this.#download(entry, signal) };
@@ -1001,7 +1050,12 @@ export class Gallery {
                 commit: before.source.commit,
                 repo: before.source.repo,
             },
-            to: { version: entry.version, commit: entry.source.commit, repo: entry.source.repo },
+            to: {
+                version: entry.version,
+                commit: entry.source.commit,
+                repo: entry.source.repo,
+                pin: pinOf(entry),
+            },
             sourceUrl: sourcePage(entry),
             diff: diffs.join(""),
             files: changes,
@@ -1011,23 +1065,23 @@ export class Gallery {
     }
 
     /**
-     * Apply the update the owner saw (`commit`). It stays on or off as it was: when on, the new module loads at once, and
+     * Apply the update the owner saw (`pin`). It stays on or off as it was: when on, the new module loads at once, and
      * other code files it imports load at the next restart (`restart`).
      */
     update(
         name: string,
-        commit: unknown,
+        pin: unknown,
         signal?: AbortSignal,
     ): Promise<Installed & { restart: boolean }> {
         return this.#exclusive(async () => {
-            const { provenance, entry, read, files } = await this.#offered(name, signal);
-
-            if (commit !== entry.source.commit) {
-                throw new HttpError(409, "The index changed since you looked: look at it again");
+            if (typeof pin !== "string") {
+                throw new HttpError(400, "pin is the update's pin, from its preview");
             }
 
+            const { provenance, entry, read, files } = await this.#offered(name, signal, pin);
             const before = provenance.entry.files;
-            const kept = new Set(entry.files.map((file) => file.name));
+            // Where the file system ignores case, a file renamed only in case is the one written: it stays.
+            const kept = new Set(entry.files.map((file) => file.name.toLowerCase()));
             const helpers = files.some(
                 (file) =>
                     /\.(ts|js|mjs)$/.test(file.name) &&
@@ -1039,7 +1093,7 @@ export class Gallery {
             await this.#place(
                 name,
                 files,
-                before.map((file) => file.name).filter((file) => !kept.has(file)),
+                before.map((file) => file.name).filter((file) => !kept.has(file.toLowerCase())),
                 next,
             );
 
@@ -1075,7 +1129,11 @@ export class Gallery {
                 .sort((a, b) => Number(b === `${name}.ts`) - Number(a === `${name}.ts`));
 
             for (const file of files) {
-                await this.#remove(name, file);
+                const target = await this.#removable(name, file);
+
+                if (target !== undefined) {
+                    await rm(target, { force: true });
+                }
             }
 
             await this.#prune(join(this.#dropIns(), name));
@@ -1267,6 +1325,7 @@ export class Gallery {
     async #ownFiles(name: string, problems: string[], notes: string[]): Promise<Fetched[]> {
         const root = this.#dropIns();
         const found: Fetched[] = [];
+        const over = { files: false, total: false };
         let total = 0;
 
         const add = async (file: string, path: string) => {
@@ -1274,6 +1333,20 @@ export class Gallery {
 
             if (stat.isSymbolicLink()) {
                 problems.push(`${file} is a link: put the file itself there.`);
+
+                return;
+            }
+
+            if (!stat.isFile()) {
+                problems.push(`${file} is not a file.`);
+
+                return;
+            }
+
+            // Past the limits nothing more is read: the problem is said once, below.
+            if (found.length >= LIMITS.files || total + stat.size > LIMITS.total) {
+                over.files ||= found.length >= LIMITS.files;
+                over.total ||= total + stat.size > LIMITS.total;
 
                 return;
             }
@@ -1328,11 +1401,11 @@ export class Gallery {
             await walk(join(root, name), name, 1);
         }
 
-        if (found.length > LIMITS.files) {
+        if (over.files) {
             problems.push(`It has more than ${LIMITS.files} files.`);
         }
 
-        if (total > LIMITS.total) {
+        if (over.total) {
             problems.push(`Its files are more than ${LIMITS.total} bytes together.`);
         }
 
