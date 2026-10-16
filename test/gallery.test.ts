@@ -224,9 +224,12 @@ test("an update the server stopped in the middle of goes back to the version bef
     renameSync(steps[0]!.to, steps[0]!.old);
     renameSync(steps[0]!.from, steps[0]!.to);
     renameSync(steps[1]!.to, steps[1]!.old);
+    // Another stopped while it wrote its journal: nothing moved, and the next change to it must not be refused.
+    writeFileSync(at(".torn.gallery-undo.json"), '[{"to": "');
 
     await app.gallery.recover();
 
+    assert.ok(!existsSync(at(".torn.gallery-undo.json")));
     assert.equal(readFileSync(at("halted.ts"), "utf8"), "old module");
     assert.equal(readFileSync(at("halted/util.ts"), "utf8"), "old helper");
     assert.deepEqual(
