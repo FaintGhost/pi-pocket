@@ -126,9 +126,16 @@ const chosen = readJson(CHOSEN, null) ?? {
     look: own.look !== DEFAULTS.look,
 };
 
+/** The owner's default as the last `hello` said it: it stands until the next one, so a reload paints it from the start. */
+const DEFAULT_CACHE = "pocket.themeDefault";
+
+/** The owner's default theme and colors: the server's, or, before it said, the one it said last time. */
+const ownerDefault = (state = store.state) =>
+    state.server ? (state.server.themeDefault ?? null) : readJson(DEFAULT_CACHE, null);
+
 /** The look in force: this browser's own, with the owner's default theme and colors where its person chose none. */
 function inForce() {
-    const fallback = store.state.server?.themeDefault;
+    const fallback = ownerDefault();
 
     return {
         ...own,
@@ -504,7 +511,8 @@ export function apply() {
 
     const attrs = {
         mode: palette ? modeOf(palette) : (cached.attrs?.mode ?? "dark"),
-        theme: lookOf()?.id ?? BASE_LOOK,
+        // Before the list, the theme index.html painted from the cache stays named, as its stylesheets stay.
+        theme: sheets === null ? (cached.attrs?.theme ?? BASE_LOOK) : (lookOf()?.id ?? BASE_LOOK),
         colors: palette?.id ?? cached.attrs?.colors ?? p.theme,
         tiling: p.tiling ? "on" : "off",
         motion: reducedMotion() ? "reduced" : "full",
@@ -672,10 +680,14 @@ export function startTheme() {
     // The server's list of theme folders came or changed (a theme's new version, or one that went), or the owner's
     // default did.
     let list = store.state.themeList;
-    let fallback = JSON.stringify(themeDefault());
+    let fallback = JSON.stringify(ownerDefault());
 
     store.subscribe((state) => {
-        const next = JSON.stringify(state.server?.themeDefault ?? null);
+        const next = JSON.stringify(ownerDefault(state));
+
+        if (state.server && localStorage.getItem(DEFAULT_CACHE) !== next) {
+            localStorage.setItem(DEFAULT_CACHE, next);
+        }
 
         if (next !== fallback) {
             fallback = next;
