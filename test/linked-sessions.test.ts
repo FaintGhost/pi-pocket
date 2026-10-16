@@ -129,6 +129,9 @@ test("an unavailable model creates no session", async (t) => {
     const count = app.sessions().length;
     const key = "unavailable";
 
+    // A model that is neither the session's own nor on the owner's list for subagents is refused.
+    await assert.rejects(start(id, key, "faux/faux-2"), /not allowed/);
+    await app.allowSubagentModel(owner(app), "faux/faux-2", true);
     t.mock.method(app.providers, "problem", async () => "its sign-in expired");
     await assert.rejects(start(id, key, "faux/faux-2"), /sign-in expired/);
     assert.equal(app.sessions().length, count);

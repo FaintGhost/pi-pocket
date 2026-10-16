@@ -76,7 +76,7 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
             ),
         }),
         replay: "safe",
-        execute: async (args, api, context) => {
+        execute: async (args, api) => {
             const reply = (text: string) => ({ content: [{ type: "text" as const, text }] });
             const key = `${api.taskId}:${api.callId}`;
 
@@ -100,22 +100,6 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
             }
 
             if (args.action === "start") {
-                // Only people choose models: another one than this session's only from the owner's list for subagents.
-                const model = args.model?.trim();
-                const own = (await api.agent(context)).model;
-                const allowed =
-                    typeof host.subagentModels === "function" ? host.subagentModels() : [];
-
-                if (
-                    model !== undefined &&
-                    model !== (own && `${own.provider}/${own.modelId}`) &&
-                    !allowed.includes(model)
-                ) {
-                    throw new Error(
-                        `${model} is neither this session's model nor one the owner allows for subagents (Menu → Providers → Models for subagents). Leave model out, or stop and tell the person; do not pick another.`,
-                    );
-                }
-
                 const { address } = await chats.start(
                     api.conversationId,
                     {

@@ -227,6 +227,16 @@ export class LinkedSessions implements LinkedSessionsApi {
 
         let thinking = wantedThinking;
         const model = resolveModel(app.models, spec, app.signInNeeded);
+        const chosen = `${model.provider}/${model.modelId}`;
+
+        // Only people choose models: the source's own, or one the owner allows for subagents.
+        if (
+            chosen !== (agent.model && `${agent.model.provider}/${agent.model.modelId}`) &&
+            !app.config.subagentModels.includes(chosen)
+        ) {
+            throw new HttpError(403, `The model ${chosen} is not allowed here.`);
+        }
+
         const selected = app.models.getModel(model.provider, model.modelId)!;
         const supported = getSupportedThinkingLevels(selected);
 
