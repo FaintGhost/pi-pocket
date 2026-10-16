@@ -63,11 +63,12 @@ export function importProblems(
     const names = new Set(files.map((file) => file.name));
 
     for (const file of files) {
-        if (file.text === undefined || !/\.(ts|js|mjs)$/.test(file.name)) {
+        if (file.text === undefined || !/\.[cm]?[jt]s$/i.test(file.name)) {
             continue;
         }
 
-        const browser = !file.name.endsWith(".ts");
+        // Server code is TypeScript; the rest runs in the browser.
+        const browser = !/\.[cm]?ts$/i.test(file.name);
 
         for (const spec of specifiers(file.text)) {
             if (spec.startsWith("./") || spec.startsWith("../")) {
