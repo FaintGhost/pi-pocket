@@ -37,7 +37,7 @@ import { WorktreeSheet } from "./sheets/worktree.js";
 import { TrustSheet } from "./trust.js";
 import { addLayer, goBack, removeLayer } from "./back.js";
 import { actions, api, signOut, store } from "./store.js";
-import { Boundary, html, Icon, SheetBack, usePresence } from "./ui.js";
+import { Boundary, html, Icon, SheetBack, SheetType, usePresence } from "./ui.js";
 
 // ─── Back ─────────────────────────────────────────────────────────────────────────
 
@@ -160,7 +160,9 @@ export function Sheets() {
 
     return html`<div class=${`sheet-host ${leaving ? "leaving" : ""}`} inert=${leaving}>
         <${SheetBack.Provider} value=${trail.length > 1 ? goBack : null}>
-            <${Boundary} key=${key} reset=${sheet}>${sheetBody(sheet)}<//>
+            <${SheetType.Provider} value=${sheet.type}>
+                <${Boundary} key=${key} reset=${sheet}>${sheetBody(sheet)}<//>
+            <//>
         <//>
     </div>
     ${auth}`;

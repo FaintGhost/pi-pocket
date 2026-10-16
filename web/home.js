@@ -92,7 +92,7 @@ export function Splash() {
     const canStart = canSteer() && !scoped();
     let line = 0;
 
-    return html`<div class="splash">
+    return html`<div class="splash" data-part="home">
         <div class="fetch">
             <pre class="fetch-logo" aria-hidden="true">${LOGO}</pre>
             <div class="fetch-info">

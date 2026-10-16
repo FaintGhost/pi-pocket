@@ -154,6 +154,8 @@
     /* The conversation's column, and the message box under it, at their widest. */
     --transcript-width: 720px;
     --composer-width: 768px;
+    /* What shows in the gaps between tiled windows: the desktop's wallpaper when Appearance asks for it (inline), else this. */
+    --wallpaper: none;
     /*
      * Density, from Appearance (`data-density`): how much room the spacing takes. Padding and gaps from top to bottom
      * scale by --space-y, and from side to side by --space-x; --leading is the conversation's line height. Rows that

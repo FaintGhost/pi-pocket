@@ -767,6 +767,7 @@ export function Launcher({ leaving, returnTo }) {
     >
         <section
             class="launcher"
+            data-part="launcher"
             role="dialog"
             aria-modal="true"
             aria-label="Launcher"

@@ -109,7 +109,8 @@ marked.use({
 
 /**
  * Replies are untrusted: a file or page Pi read can steer what it writes. No forms or controls, no media that loads by
- * itself, and no style, class, or id hooks that could lay a fake screen over the app.
+ * itself, and no style, class, id, or data hooks that could lay a fake screen over the app: a theme styles
+ * `[data-part="approval"]`, and a reply must not wear it. A code block's language is the one data attribute kept.
  */
 const PURIFY = {
     FORBID_TAGS: [
@@ -126,6 +127,8 @@ const PURIFY = {
         "track",
         "picture",
     ],
+    ALLOW_DATA_ATTR: false,
+    ADD_ATTR: ["data-lang"],
     // `data-path` is the app's own mark for file paths (`sanitize`): a reply may not set it.
     FORBID_ATTR: [
         "style",
@@ -200,6 +203,7 @@ function codeBlock(pre, fold) {
     }
 
     wrap.className = "code";
+    wrap.dataset.part = "code-block";
     copy.className = "copy";
     copy.type = "button";
     copy.dataset.copy = "";
@@ -1200,10 +1204,14 @@ export const BOTTOM_SHEETS = matchMedia("(max-width: 699px)");
 /** The sheet host supplies a back action only when another sheet is under this one. */
 export const SheetBack = createContext(null);
 
+/** The open sheet's type (`sheets.js`), which `Sheet` puts on itself for themes as `data-sheet`. */
+export const SheetType = createContext(null);
+
 /** A bottom sheet on phones, a centered dialog on wide screens. */
 export function Sheet({ title, onClose, children, wide = false, actions = null, className = "" }) {
     const ref = useRef(null);
     const onBack = useContext(SheetBack);
+    const type = useContext(SheetType);
 
     useDragToClose(ref, { dir: "down", onClose, enabled: BOTTOM_SHEETS.matches });
 
@@ -1237,6 +1245,8 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
     >
         <section
             class=${`sheet ${wide ? "wide" : ""} ${className}`}
+            data-part="sheet"
+            data-sheet=${type ?? undefined}
             ref=${ref}
             role="dialog"
             aria-modal="true"
@@ -1244,7 +1254,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
             tabindex="-1"
             onKeyDown=${scrollFromKeys}
         >
-            <header class="sheet-head">
+            <header class="sheet-head" data-part="sheet-head">
                 <div class="grip" aria-hidden="true"></div>
                 ${
                     onBack &&
@@ -1258,7 +1268,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
                     <${Icon} name="close" />
                 </button>
             </header>
-            <div class="sheet-body">${children}</div>
+            <div class="sheet-body" data-part="sheet-body">${children}</div>
         </section>
     </div>`;
 }

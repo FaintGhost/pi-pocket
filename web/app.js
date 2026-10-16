@@ -129,7 +129,7 @@ function Topbar() {
     // How far down it reaches: PiP's window on a short wide screen stops below its buttons.
     const edge = useEdge("--topbar-h", (rect) => rect.bottom);
 
-    return html`<header class="topbar" ref=${edge}>
+    return html`<header class="topbar" data-part="topbar" ref=${edge}>
         <button
             class="icon-button badge-host topbar-back"
             aria-label=${waiting > 0 ? `Back to sessions, ${waiting} waiting for you` : "Back to sessions"}
@@ -251,6 +251,7 @@ function Notice({ notice, leaving }) {
     return html`<button
         ref=${ref}
         class=${`notice ${notice.level} ${notice.action ? "acts" : ""} ${held ? "held" : ""} ${leaving ? "leaving" : ""}`}
+        data-part="notice"
         style=${`--life:${notice.life ?? 4500}ms`}
         onPointerEnter=${() => setPointed(true)}
         onPointerLeave=${() => setPointed(false)}
@@ -299,7 +300,7 @@ function Notices() {
         return null;
     }
 
-    return html`<div class="notices" role="status" aria-live="polite">
+    return html`<div class="notices" data-part="notices" role="status" aria-live="polite">
         ${all.map(
             (notice) =>
                 html`<${Notice}
@@ -449,15 +450,16 @@ function App() {
 
     return html`<div
         class=${`layout ${inConversation || placed ? "" : "home"} ${browsing ? "browsing" : ""} ${filing ? "filing" : ""}`}
+        data-part="app"
     >
-        <aside class="sidebar window">
+        <aside class="sidebar window" data-part="sidebar">
             <div class="sidebar-clip">
                 <${RailNav} foldable=${true} folded=${rail} />
                 ${!rail && html`<${SessionList} />`}
             </div>
             ${!rail && html`<${ResizeHandle} />`}
         </aside>
-        <div class=${`pane window ${placed ? "boarded" : ""}`}>
+        <div class=${`pane window ${placed ? "boarded" : ""}`} data-part="pane">
             ${
                 board
                     ? html`<${SubagentsBoard} />`
@@ -477,7 +479,7 @@ function App() {
                         !state.missing &&
                         html`<${Composer} key=${state.conversationId} />`
                     }`
-                        : html`<div class="home-list">
+                        : html`<div class="home-list" data-part="home-list">
                           <${RailNav} />
                           <${SessionList} />
                       </div>

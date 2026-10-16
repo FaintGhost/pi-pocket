@@ -155,6 +155,7 @@ export function PeeksRailButton() {
 
     return html`<button
         class=${`rail-button rail-peeks ${on ? "open" : ""}`}
+        data-part="rail-button"
         title=${on ? "Hide peek tiles (Alt+P)" : "Peek at other sessions (Alt+P)"}
         aria-label="Peek tiles"
         aria-pressed=${on}

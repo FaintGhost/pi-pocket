@@ -1325,6 +1325,7 @@ export function ExtensionRailButtons() {
             return html`<button
                 key=${`${record.module}:${spec.id}`}
                 class=${`rail-button rail-ext ${open ? "open" : ""}`}
+                data-part="rail-button"
                 title=${spec.title}
                 aria-label=${badge === "" ? spec.title : `${spec.title}, ${badge}`}
                 aria-pressed=${spec.page === undefined ? undefined : open}

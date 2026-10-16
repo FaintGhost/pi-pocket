@@ -327,6 +327,8 @@ function UserEntry({ entry, view, users }) {
     return html`<div class=${`user-row ${fresh ? "enter" : ""}`} id=${`entry-${entry.id}`}>
         <div
             class="prompt tappable"
+            data-part="prompt"
+            data-from=${authorId === undefined ? "other" : authorId === store.state.me?.id ? "me" : "person"}
             title="Edit, send again, or copy"
             tabindex="0"
             onClick=${(event) => openMessage(event, entry.id)}
@@ -621,6 +623,16 @@ function outcome({ call, result, details, status }) {
     }
 }
 
+/** A call's state for themes (`data-state`), by its status: documented names that stay when the statuses change. */
+const CALL_STATES = {
+    approval: "waiting",
+    denied: "denied",
+    running: "running",
+    done: "ok",
+    error: "failed",
+    stopped: "stopped",
+};
+
 /**
  * Where a call is: waiting for approval, denied, running, done, failed, or stopped before it finished. A call with
  * nothing to say for it yet runs while it is being written, or while Pi works on the answer that asked for it
@@ -659,6 +671,7 @@ function ThoughtStep({ block, streaming, reading }) {
 
     return html`<div
         class=${`step ${open ? "open" : ""}`}
+        data-part="thinking"
         data-status=${streaming ? "running" : "done"}
     >
         <div class="step-line">
@@ -902,6 +915,8 @@ function ToolStep({
 
     return html`<div
         class=${`step ${open ? "open" : ""} ${settled ? "settled" : ""}`}
+        data-part="tool-call"
+        data-state=${CALL_STATES[status]}
         data-status=${status}
     >
         <div class="step-line">
@@ -1150,7 +1165,7 @@ function ActivityGroup({
         return () => document.removeEventListener("pocket:reveal", reveal);
     }, [anchors, id]);
 
-    return html`<div class=${`activity ${open ? "open" : ""} ${fresh ? "enter" : ""}`}>
+    return html`<div class=${`activity ${open ? "open" : ""} ${fresh ? "enter" : ""}`} data-part="activity">
         ${item.anchors.map(
             (entryId) => html`<span class="entry-anchor" id=${`entry-${entryId}`}></span>`,
         )}
@@ -1271,7 +1286,7 @@ function ApprovalCard({ approval }) {
         me?.role !== "owner" &&
         approval.requestedBy === me?.id;
 
-    return html`<div class="approval">
+    return html`<div class="approval" data-part="approval">
         <div class="approval-head">
             <span class="approval-shield" aria-hidden="true"><${Icon} name="shield" size=${16} /></span>
             <div class="approval-title">
@@ -1329,7 +1344,7 @@ function AnswerActions({ entry }) {
         attempt(() => actions.react(entry.id, emoji));
     };
 
-    return html`<div class=${`answer-actions ${picking ? "picking" : ""}`}>
+    return html`<div class=${`answer-actions ${picking ? "picking" : ""}`} data-part="reply-actions">
         ${Object.entries(reactions).map(
             ([emoji, ids]) =>
                 html`<button
@@ -1410,6 +1425,7 @@ function Reply({ item, conversationId }) {
 
     return html`<div
         class=${`reply ${fresh ? "enter" : ""}`}
+        data-part="reply"
         id=${item.anchor ? `entry-${entry.id}` : undefined}
     >
         ${blocks.map(({ block, growing }, index) => {
@@ -1897,7 +1913,7 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
 
         return [
             group,
-            html`<div key=${`${item.key}:stopped`} class="reply">
+            html`<div key=${`${item.key}:stopped`} class="reply" data-part="reply">
                 <div class="muted small">Stopped.</div>
             </div>`,
         ];
@@ -2174,7 +2190,7 @@ function LiveLine({ live, approvals, start, entries, conversationId }) {
             <${LiveThought} generation=${live.generation} entries=${entries} id=${thoughtId} />
         <//>`
     }
-        <div class=${`live-line ${waiting ? "waiting" : ""}`} ref=${line}>
+        <div class=${`live-line ${waiting ? "waiting" : ""}`} data-part="live-line" ref=${line}>
         ${
             thinking &&
             html`<button
@@ -2465,7 +2481,7 @@ export function Transcript() {
         conversation.forkedFrom && sessions.find((each) => each.id === conversation.forkedFrom.id);
 
     return html`<main class="scroller" ref=${scroller} onScroll=${onScroll}>
-        <div class="transcript">
+        <div class="transcript" data-part="transcript">
             <${LinkedSessions} />
             ${
                 conversation.forkedFrom &&
