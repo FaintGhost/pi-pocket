@@ -231,12 +231,12 @@ The person who uses this tab, as `{ id, name, role }`, or `null` before sign-in.
 ### `conversationId`
 
 ```ts
-conversationId(): string | null;
+conversationId(): number | null;
 ```
 
 Since 0.14.0 · Stable
 
-The id of the session that this tab shows, or `null` when it shows none.
+The id of the session that this tab shows, a number as in its address (`/s/12`), or `null` when it shows none.
 
 ## Routes and events
 

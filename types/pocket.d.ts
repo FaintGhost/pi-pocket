@@ -909,10 +909,10 @@ export interface Pocket {
      */
     me(): Person | null;
     /**
-     * The id of the session that this tab shows, or null.
+     * The id of the session that this tab shows, a number as in its address (`/s/12`), or null.
      * @since 0.14.0
      */
-    conversationId(): string | null;
+    conversationId(): number | null;
     /**
      * Calls one of the module's routes: a GET without `body`, a POST with it.
      * @since 0.14.0
