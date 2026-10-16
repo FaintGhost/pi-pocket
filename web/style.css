@@ -5322,7 +5322,7 @@ pre.diff .del {
     margin: 0.2rem 0 0;
 }
 
-/* What new sessions start with, under the thinking levels: the default, and making this one it. */
+/* Under the thinking levels: the owner's Make default, or in the default's picker, how the default works. */
 .pop-menu-default {
     display: flex;
     flex-wrap: wrap;
@@ -5336,12 +5336,6 @@ pre.diff .del {
 .pop-menu-foot + .pop-menu-default {
     border-top: 0;
     padding-top: 0;
-}
-
-.pop-menu-default-text {
-    min-width: 0;
-    color: var(--body);
-    overflow-wrap: anywhere;
 }
 
 .pop-menu-default-mark {
@@ -5509,17 +5503,42 @@ pre.diff .del {
     color: var(--muted);
 }
 
-.model-scope-wrap {
-    padding: 0 14px 10px;
+.model-scope {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 5px;
+    font-size: 11px;
+    font-weight: 400;
+    white-space: nowrap;
 }
 
-.segmented.model-scope {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+.model-scope button {
+    padding: 6px 3px;
+    color: var(--muted);
+    font: inherit;
 }
 
-.segmented.model-scope button {
-    min-height: 40px;
+.model-scope button.on {
+    color: var(--accent);
+}
+
+/*
+ * On a touch screen scoped and all keep their size; each one's hit area reaches out to about 45px high, away from the
+ * other and within the header. Providers stays on top where the two meet on a narrow phone.
+ */
+@media (pointer: coarse) {
+    .model-scope button,
+    .model-menu .pop-menu-head > .pop-menu-link {
+        position: relative;
+    }
+    .model-scope button::before {
+        content: "";
+        position: absolute;
+        inset: -8px -1px -8px -14px;
+    }
+    .model-scope button:last-of-type::before {
+        inset: -8px -18px -8px -1px;
+    }
 }
 
 /* Thinking: the levels in one track, the chosen one raised. Past the general segmented rules, which come later. */
@@ -6429,10 +6448,6 @@ pre.diff .del {
 
 .model-refresh-status p {
     margin: 0.35rem 0 0;
-}
-
-.pop-menu-foot .model-refresh {
-    margin: 0;
 }
 
 /* The owner's choice of models for subagents, above the providers. */

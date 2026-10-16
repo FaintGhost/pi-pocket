@@ -2,7 +2,6 @@
 // and thinking level new sessions start with.
 import { useEffect, useRef, useState } from "preact/hooks";
 import { actions, api, attempt, closeSheet, openSheet, store } from "../store.js";
-import { modelRefreshAvailable, RefreshModels } from "../model-refresh.js";
 import { useDragToClose } from "../gestures.js";
 import { anchorStyle, BOTTOM_SHEETS, formatTokens, html, Icon, popAnchor } from "../ui.js";
 
@@ -42,9 +41,10 @@ export function defaultLabel(chosen, models) {
 
 /**
  * The model picker: a menu that opens up from the message box's model chip, with the current model first and checked,
- * and how hard Pi thinks below, then what new sessions start with. Arrows and Enter pick; a search box shows when there
- * are many models, or when `/model son` opened it already searching. Opened for the default (`forDefault`, from the
- * menu), it picks the model and thinking level new sessions start with instead, and stays open for both.
+ * and how hard Pi thinks below, then, for the owner, Make default. Arrows and Enter pick, and Tab switches between the
+ * scoped models (Pi's `enabledModels`) and all of them; a search box shows when there are many models, or when
+ * `/model son` opened it already searching. Opened for the default (`forDefault`, from the menu), it picks the model
+ * and thinking level new sessions start with instead, and stays open for both.
  */
 export function ModelPicker() {
     const { models, server, me } = store.state;
@@ -175,13 +175,30 @@ export function ModelPicker() {
             ? setDefault(defaultModel, each)
             : attempt(() => configure({ thinkingLevel: each }));
 
-    // Arrows and Enter move through the models from the search box or the picker itself, not from its other buttons.
+    // Arrows and Enter move through the models, and Tab switches scoped and all, from the search box or the picker
+    // itself, not from its other buttons: there Tab and Shift+Tab move the focus as anywhere else.
     const onKeyDown = (event) => {
         if (
             event.isComposing ||
-            shown.length === 0 ||
             (event.target !== search.current && event.target !== box.current)
         ) {
+            return;
+        }
+
+        if (
+            event.key === "Tab" &&
+            scopedModels.length > 0 &&
+            !(event.shiftKey || event.altKey || event.ctrlKey || event.metaKey)
+        ) {
+            event.preventDefault();
+            setShowAll((all) => !all);
+            setPicked(0);
+            list.current?.scrollTo({ top: 0 });
+
+            return;
+        }
+
+        if (shown.length === 0) {
             return;
         }
 
@@ -208,6 +225,7 @@ export function ModelPicker() {
             role="dialog"
             aria-modal="true"
             aria-label=${forDefault ? "Default model" : "Model"}
+            aria-keyshortcuts=${scopedModels.length > 0 ? "Tab" : undefined}
             tabindex="-1"
             onKeyDown=${onKeyDown}
         >
@@ -216,40 +234,46 @@ export function ModelPicker() {
                 <span>
                     ${forDefault ? "Default model" : "Model"}
                     ${forDefault && html`<span class="pop-menu-head-sub">for new sessions</span>`}
+                    ${
+                        scopedModels.length > 0 &&
+                        html`<span
+                            class="model-scope"
+                            role="group"
+                            aria-label="Model scope"
+                            title="Tab switches between scoped and all models"
+                        >
+                            <span aria-hidden="true">[</span>
+                            <button
+                                class=${!showAll ? "on" : ""}
+                                aria-pressed=${!showAll}
+                                title="Models from Pi’s enabledModels setting"
+                                onClick=${() => {
+                                    setShowAll(false);
+                                    setPicked(0);
+                                }}
+                            >
+                                scoped
+                            </button>
+                            <span aria-hidden="true">|</span>
+                            <button
+                                class=${showAll ? "on" : ""}
+                                aria-pressed=${showAll}
+                                title="All models with a configured sign-in"
+                                onClick=${() => {
+                                    setShowAll(true);
+                                    setPicked(0);
+                                }}
+                            >
+                                all
+                            </button>
+                            <span aria-hidden="true">]</span>
+                        </span>`
+                    }
                 </span>
                 <button class="pop-menu-link" onClick=${() => openSheet({ type: "providers" })}>
                     <${Icon} name="key" size=${13} /> Providers
                 </button>
             </header>
-            ${
-                scopedModels.length > 0 &&
-                html`<div class="model-scope-wrap">
-                    <div class="segmented model-scope" role="group" aria-label="Model scope">
-                        <button
-                            class=${!showAll ? "on" : ""}
-                            aria-pressed=${!showAll}
-                            title="Models from Pi’s enabledModels setting"
-                            onClick=${() => {
-                                setShowAll(false);
-                                setPicked(0);
-                            }}
-                        >
-                            Scoped · ${scopedModels.length}
-                        </button>
-                        <button
-                            class=${showAll ? "on" : ""}
-                            aria-pressed=${showAll}
-                            title="All models with a configured sign-in"
-                            onClick=${() => {
-                                setShowAll(true);
-                                setPicked(0);
-                            }}
-                        >
-                            All · ${models.length}
-                        </button>
-                    </div>
-                </div>`
-            }
             ${
                 searchable &&
                 html`<label class="search pop-menu-search">
@@ -257,6 +281,7 @@ export function ModelPicker() {
                     <input
                         ref=${search}
                         placeholder="Search models"
+                        aria-keyshortcuts=${scopedModels.length > 0 ? "Tab" : undefined}
                         value=${query}
                         onInput=${(event) => {
                             setQuery(event.currentTarget.value);
@@ -339,31 +364,24 @@ export function ModelPicker() {
                                     </span>`
                           }
                       </div>`
-                      : html`<div class="pop-menu-foot pop-menu-default">
-                          <span class="pop-menu-default-text">
-                              <span class="muted">New sessions:</span>
-                              ${" "}${chosen ? defaultLabel(chosen, models) : "trusted project defaults, then last picked, then Pi global"}
-                          </span>
-                          ${
-                              owner &&
-                              models.some((model) => isCurrent(model)) &&
-                              (sessionIsDefault
-                                  ? html`<span class="pop-menu-default-mark">
-                                        <${Icon} name="check" size=${13} /> Default
-                                    </span>`
-                                  : html`<button
-                                        class="pop-menu-link"
-                                        title="New sessions start with this model and thinking level"
-                                        onClick=${() => setDefault(agent.model, agent.thinkingLevel ?? "off")}
-                                    >
-                                        Make default
-                                    </button>`)
-                          }
-                      </div>`
-            }
-            ${
-                modelRefreshAvailable() &&
-                html`<div class="pop-menu-foot"><${RefreshModels} /></div>`
+                      : // Only the owner makes a default: no one else gets an empty footer.
+                        owner &&
+                        models.some((model) => isCurrent(model)) &&
+                        html`<div class="pop-menu-foot pop-menu-default">
+                            ${
+                                sessionIsDefault
+                                    ? html`<span class="pop-menu-default-mark">
+                                          <${Icon} name="check" size=${13} /> Default
+                                      </span>`
+                                    : html`<button
+                                          class="pop-menu-link"
+                                          title="New sessions start with this model and thinking level"
+                                          onClick=${() => setDefault(agent.model, agent.thinkingLevel ?? "off")}
+                                      >
+                                          Make default
+                                      </button>`
+                            }
+                        </div>`
             }
         </section>
     </div>`;
