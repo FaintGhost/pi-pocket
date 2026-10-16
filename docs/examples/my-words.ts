@@ -3,7 +3,7 @@
  */
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
-import type { ExtensionWeb as Web } from "../../src/server/host.ts";
+import type { Web } from "../../types/pocket.d.ts";
 
 /** The number of words in a text: the parts between spaces, tabs, and line breaks. */
 function countWords(text: string): number {

@@ -45,6 +45,22 @@ The button does not send while Plan mode is off in Menu → Extensions. The revi
 
 The index's checks are not a security review. They check the entry, and that the module loads. A maintainer reads the code before an entry goes in.
 
+## Limits of an entry
+
+Pi Pocket and the index refuse an entry past these limits. **Share…** checks them for you.
+
+- The index: 4 MB at most, with 2000 entries at most. Its `name` has 80 characters at most, and its `repo` 160.
+- The files: 50 at most, of 512 KB each at most, and 2 MB together at most. A file's name has 200 characters at most, and each part of it 100. It is four folders deep at most, with `<name>/` as the first folder.
+- `title`: 60 characters at most. `description`: 600 characters at most.
+- `tags`: 10 at most, of 24 characters each at most.
+- `author.name`: 60 characters at most. `author.github`: 39 characters at most.
+- `version`: 32 characters at most. `minPocket`: three numbers of 4 digits at most each, such as `0.14.0`.
+- `source.repo`: an owner of 39 characters at most, and a repository name of 100 at most. `source.path`: 200 characters at most, and four folders deep at most.
+- Each list in `declares`: 100 names at most. An extension, tool, hook, or section name has 64 characters at most, a route's path 200, and a command with its scope 80.
+- `revoked`: 50 commits at most, each with a reason of 300 characters at most.
+
+The fields are in [the gallery entry reference](reference/gallery-entry.md).
+
 ## Sharing yours
 
 The files of an entry belong to its drop-in, and have its name, so they never meet the files of another drop-in:

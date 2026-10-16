@@ -4,7 +4,7 @@ An event is a message from a module on the server to its browser module in the t
 
 ## Send an event
 
-On the server, `web.send(event, data, { to })` sends `data` as JSON, of 256 KB at most:
+On the server, `web.send(event, data, { to })` sends `data` as JSON, of 256 KB at most. The name of the event has 1 to 64 letters, digits, `.`, `_`, `:`, and `-`. The event goes:
 
 - without `to`, to the tabs of each person that the browser module's `access` lets in;
 - with `to`, only to the tabs of the person whose id is `to`.
