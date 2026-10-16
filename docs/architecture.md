@@ -108,7 +108,7 @@ Pi Durable publishes each commit's changes in no set order. `#committed` handles
     - Document changes go to `#documentCommitted`. It tracks busy and ended runs, agents, the session list, and the documents the rooms show (`ROOM_DOCS`).
     - Submissions go to `attribution.submissionCommitted`.
 
-Everything here is synchronous. A commit listener may not call the harness's session APIs, so a write it causes (noting a message's author) runs in `setImmediate`. Keep this one coordinator: separate listeners would make their registration order a billing rule nobody can see.
+Everything here is synchronous. A commit listener may not call the harness's session APIs, so a write it causes (noting a message's author, or moving a session up the list when Pi starts work there) runs in `setImmediate`. Keep this one coordinator: separate listeners would make their registration order a billing rule nobody can see.
 
 Updates to tabs are coalesced:
 

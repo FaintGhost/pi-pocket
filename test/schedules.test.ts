@@ -198,7 +198,7 @@ async function userTexts(id: ConversationId): Promise<string[]> {
 const items = async (id: ConversationId) =>
     Object.values((await app.harness.snapshot(ScheduleDoc, id, context))?.items ?? {});
 
-test("a scheduled message goes out at its time, also after a restart, once; a repeat goes back to sleep", async () => {
+test("a scheduled message goes out at its time, also after a restart, once, and moves its session up; a repeat goes back to sleep", async () => {
     const id = await newSession(app);
     const once = await app.commands.schedule(id, owner(app), {
         when: "in 10m check the build",
@@ -218,6 +218,9 @@ test("a scheduled message goes out at its time, also after a restart, once; a re
     assert.match(chat[0]!, /^scheduled “check the build” for \w{3} \d\d:\d\d$/);
     assert.equal(chat[1], "scheduled “ping” every 20 minutes");
 
+    const updatedAt = () => app.sessions().find((each) => each.id === Number(id))!.updatedAt;
+    const before = updatedAt();
+
     // Eleven minutes on, after a restart: the first goes out, the repeat waits.
     await restartLater(11);
     await until(
@@ -225,6 +228,8 @@ test("a scheduled message goes out at its time, also after a restart, once; a re
             (await userTexts(id)).some((text) => text.includes("[scheduled] check the build")),
         "the scheduled message to go out",
     );
+    // Pi started work there, as with a message someone sent: the session moves up the list.
+    await until(() => updatedAt() > before, "the session to move up");
     await until(async () => (await items(id)).length === 1, "the sent one to be done");
     assert.equal((await items(id))[0]?.id, repeat.id);
     // It went out as the owner's message: who set it up.

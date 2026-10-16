@@ -686,6 +686,26 @@ export class PocketApp {
         }
     }
 
+    /**
+     * Pi started work in session `id` at `at`: it moves up the list, as a message sent there does, whatever started it
+     * (a scheduled message, a subagent's report, a message sent again after a restart). One moved up since `at` (a
+     * message through `Commands.submit` moves it too) is left as it is. A commit listener may not commit, so this commits
+     * after it.
+     */
+    #movedUp(id: ConversationId, at: number): void {
+        setImmediate(() => {
+            this.harness
+                .commit(async (tx) => {
+                    const meta = (await tx.doc(SessionsDoc)).items[String(id)];
+
+                    if (meta !== undefined && meta.updatedAt < at) {
+                        meta.updatedAt = Date.now();
+                    }
+                }, context)
+                .catch((error: unknown) => this.log(`session not moved up: ${describe(error)}`));
+        });
+    }
+
     /** A document changed: the views that show it update. True when the session list changed too. */
     #documentCommitted(change: Extract<DocumentCommitChange, { type: "document" }>): boolean {
         const kind = change.record.kind;
@@ -700,6 +720,10 @@ export class PocketApp {
                     this.#busy.add(id);
                     // A new run starts over: whether it fails is its own to say.
                     this.#failed.delete(id);
+
+                    if (this.#sessions[String(id)] !== undefined) {
+                        this.#movedUp(id, Date.now());
+                    }
                 } else {
                     this.#busy.delete(id);
                 }
