@@ -4,8 +4,9 @@
  * one drop-in at a pinned commit of a GitHub repository, with each file's SHA-256, and what the module installs.
  *
  * Pi Pocket reads it here, and the index repository's checks use these same functions, so an entry they let in is one
- * Pi Pocket reads (they import this file from a Pi Pocket checkout, the loader's lists of reserved names with it). Text is kept to one plain line (no control, invisible, or direction characters), names to the
- * drop-in folder's rules, and sizes to `LIMITS`.
+ * Pi Pocket reads (they import this file from a Pi Pocket checkout, the loader's lists of reserved names with it). Text
+ * is kept to one plain line (no control, invisible, or direction characters), names to the drop-in folder's rules, and
+ * sizes to `LIMITS`.
  */
 import { createHash } from "node:crypto";
 import { INVISIBLE_CLASS } from "../fence.ts";
@@ -493,9 +494,9 @@ export function pinOf(entry: Entry): string {
 }
 
 /**
- * Whether an entry is for this Pi Pocket: `newer` when it needs a newer extension API or Pi Pocket. Read loosely, before
- * the entry is checked whole, so an entry written for a newer Pi Pocket (with fields this one does not know) counts as
- * one for later, not as invalid.
+ * Whether an entry is for this Pi Pocket: `newer` when it needs a newer extension API or Pi Pocket. Read loosely,
+ * before the entry is checked whole, so an entry written for a newer Pi Pocket (with fields this one does not know)
+ * counts as one for later, not as invalid.
  */
 export function compatibility(
     value: unknown,

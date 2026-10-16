@@ -1,6 +1,6 @@
 // The extension gallery: drop-ins other people wrote, from a reviewed index. Browse and search them, read one's code
-// before it is installed, install it (off), ask Pi to review it, turn it on, update it with a diff, remove it; and share
-// your own as a draft index entry. The owner's alone; the server side is src/server/gallery.ts.
+// before it is installed, install it (off), ask Pi to review it, turn it on, update it with a diff, remove it; and
+// share your own as a draft index entry. The owner's alone; the server side is src/server/gallery.ts.
 //
 // Everything the index says is untrusted: it shows as text only, and links go only to addresses the server built.
 import { useEffect, useRef, useState } from "preact/hooks";
@@ -328,7 +328,7 @@ export function GallerySheet() {
         ${
             elsewhere.length > 0 &&
             html`<div class="group">
-                <div class="group-title">Installed, not in this index</div>
+                <div class="group-title">Installed, not listed now</div>
                 <div class="sheet-list gallery-list">
                     ${elsewhere.map(
                         (each) => html`<button

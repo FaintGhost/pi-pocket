@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import {
     existsSync,
+    mkdirSync,
     readdirSync,
     readFileSync,
     renameSync,
@@ -187,6 +188,41 @@ test("updates and removal never reach past an extension's own files: not through
     assert.ok(existsSync(join(outside, "util.ts")) && existsSync(join(outside, "mine.txt")));
 });
 
+test("an update the server stopped in the middle of goes back to the version before", async () => {
+    const at = (file: string) => join(dropIns, file);
+
+    mkdirSync(at("halted"));
+    writeFileSync(at("halted.ts"), "old module");
+    writeFileSync(at("halted/util.ts"), "old helper");
+    writeFileSync(at(".halted.ts.1.part"), "new module");
+    writeFileSync(at("halted/.util.ts.2.part"), "new helper");
+    // Its journal, as the update wrote it; then the helper moved in, and the module moved aside, when the server stopped.
+    const steps = [
+        {
+            to: at("halted/util.ts"),
+            from: at("halted/.util.ts.2.part"),
+            old: at("halted/.util.ts.2.old"),
+        },
+        { to: at("halted.ts"), from: at(".halted.ts.1.part"), old: at(".halted.ts.1.old") },
+    ];
+
+    writeFileSync(at(".halted.gallery-undo.json"), JSON.stringify(steps));
+    renameSync(steps[0]!.to, steps[0]!.old);
+    renameSync(steps[0]!.from, steps[0]!.to);
+    renameSync(steps[1]!.to, steps[1]!.old);
+
+    await app.gallery.recover();
+
+    assert.equal(readFileSync(at("halted.ts"), "utf8"), "old module");
+    assert.equal(readFileSync(at("halted/util.ts"), "utf8"), "old helper");
+    assert.deepEqual(
+        [...readdirSync(dropIns), ...readdirSync(at("halted"))].filter(
+            (file) => file.includes("halted.") || file.startsWith(".util"),
+        ),
+        ["halted.ts"],
+    );
+});
+
 test("a revoked version is flagged where it is installed, and is never installed again", async () => {
     const first = "4".repeat(40);
 
@@ -194,7 +230,8 @@ test("a revoked version is flagged where it is installed, and is never installed
     await app.gallery.install("revoked", await pin("revoked"));
     await app.setExtensionEnabled(owner(app), "revoked.ts", true);
 
-    // The index revokes it, with a fix only a newer Pi Pocket can use; and, in another entry, the only version there is.
+    // The index revokes it, with a fix only a newer Pi Pocket can use; and, in another entry, the only version there
+    // is.
     await index(
         entry("revoked", { "revoked.ts": clock.replace("now", "later") }, "5".repeat(40), {
             minPocket: "99.0.0",

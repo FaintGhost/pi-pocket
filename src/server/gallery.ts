@@ -1,12 +1,12 @@
 /**
- * The extension gallery: other people's drop-ins, from an index of reviewed entries (`gallery/entry.ts`), which the owner
- * finds, installs, reads, updates, and removes here, and the owner's own drop-ins, shared as a draft entry.
+ * The extension gallery: other people's drop-ins, from an index of reviewed entries (`gallery/entry.ts`), which the
+ * owner finds, installs, reads, updates, and removes here, and the owner's own drop-ins, shared as a draft entry.
  *
  * A drop-in runs inside the server with the owner's rights, and nothing from the index is trusted: it is read strictly,
- * files come only over https from the pinned commit of the entry's GitHub repository, each must have the size and SHA-256
- * the index pins, and their names keep to the drop-in folder's rules. What it installs arrives off, as every drop-in
- * does, whatever was chosen for that name before; only the owner turns it on, in Menu → Extensions. Updates are never
- * automatic: the owner sees what changes, then applies it.
+ * files come only over https from the pinned commit of the entry's GitHub repository, each must have the size and
+ * SHA-256 the index pins, and their names keep to the drop-in folder's rules. What it installs arrives off, as every
+ * drop-in does, whatever was chosen for that name before; only the owner turns it on, in Menu → Extensions. Updates are
+ * never automatic: the owner sees what changes, then applies it.
  *
  * Where each installed extension came from is kept beside it, in `<name>.gallery.json` in the drop-in folder, with its
  * entry as installed: its update and its removal go by that. The gallery's own data (its setting, the index it read
@@ -24,11 +24,11 @@ import { download, type Fetcher } from "./gallery/fetch.ts";
 import {
     exists,
     place,
-    textOf,
     prune,
     readInstalled,
     recover,
     removable,
+    textOf,
 } from "./gallery/files.ts";
 import {
     type Declares,
@@ -732,7 +732,9 @@ export class Gallery {
         return { provenance, entry, read, files: await this.#fetchFiles(entry, signal) };
     }
 
-    /** What an update would change: a diff of each file against it as it is here, and what it declares before and after. */
+    /**
+     * What an update would change: a diff of each file against it as it is here, and what it declares before and after.
+     */
     async updatePreview(name: string, signal?: AbortSignal) {
         const { provenance, entry, files } = await this.#offered(name, signal);
         const before = provenance.entry;

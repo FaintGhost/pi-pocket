@@ -12,8 +12,8 @@ export type Fetcher = (url: string, init: RequestInit) => Promise<Response>;
 
 /**
  * Get `url`'s body, `limit` bytes at most: https only, also where it redirects to (three times at most, and only on its
- * own host when `sameHost`), each request within `REQUEST_MS`, through `fetcher`. `what` names it in errors; `large` is the error for a
- * body past `limit`.
+ * own host when `sameHost`), each request within `REQUEST_MS`, through `fetcher`. `what` names it in errors; `large` is
+ * the error for a body past `limit`.
  */
 export async function download(
     fetcher: Fetcher,

@@ -208,11 +208,26 @@ export async function place(
     const journal = journalOf(root, name);
     const steps: Step[] = [];
 
+    // A version that could not be put back is still in its journal, for the next start: a new one must not overwrite it.
+    if (await exists(journal)) {
+        throw new HttpError(
+            409,
+            `An earlier change to ${name} was not put back yet: restart the server, then try again`,
+        );
+    }
+
     try {
         const staged = async (to: string, bytes: Uint8Array | string) => {
             const from = aside(to, "part");
 
-            await writeFile(from, bytes, { flag: "wx" });
+            try {
+                await writeFile(from, bytes, { flag: "wx" });
+            } catch (error) {
+                await rm(from, { force: true });
+
+                throw error;
+            }
+
             steps.push({ to, from, ...((await exists(to)) ? { old: aside(to, "old") } : {}) });
         };
 
@@ -265,7 +280,8 @@ export async function place(
         throw error;
     }
 
-    // All in place: the journal goes first, so a stop from here on keeps the new version, then what it replaced.
+    // All in place: the journal goes first, so a stop from here on keeps the new version, then what it replaced (a stop
+    // between the two leaves those hidden `.old` files behind, which nothing loads or serves).
     await rm(journal, { force: true });
 
     for (const step of steps) {
