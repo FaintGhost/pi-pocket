@@ -25,7 +25,7 @@ Some state lives in this process alone, and a restart forgets it. For example:
 
 - `commands`, `collab`, `alerts`, `providers`, `schedules`, `goals`, `shell`, `spend`
 - `workspace`, `transcripts`, `attribution`, `piSessions`, `pip`, `watches`, `hooks`, `memory`, `gallery`
-- `browsers`, `linkedChats`
+- `browsers`, `linkedSessions`
 
 **What stays on `PocketApp`** (the parts call these rather than keeping copies):
 
@@ -46,9 +46,9 @@ Extensions never see `PocketApp`. They get `PocketHost` (`host.ts`), whose funct
 
 ## Agent Teams
 
-`linked-chats.ts` starts ownerless conversations with ordinary `SessionsDoc` entries. The independent
+`linked-sessions.ts` starts ownerless conversations with ordinary `SessionsDoc` entries. The independent
 `extensions/agent-teams.ts` module (**Agent Teams**) provides its tool and prompt through
-`PocketHost.linkedChats`; **Subagents** keeps only nested agents and their report tasks. Either module
+`PocketHost.linkedSessions`; **Subagents** keeps only nested agents and their report tasks. Either module
 can be disabled without affecting the other. Disabling Agent Teams does not delete its ordinary
 chats or their links. Nested agents exclude both delegation extensions, including when enabled later.
 `agent_chat`
@@ -67,7 +67,7 @@ without route options. Models and thinking levels are not changed by peer sends.
 bridge capability keeps hot-loaded modules from sending new route options to an older service that
 would silently ignore them; a restart is required instead.
 
-`pocket.linked-chat-peers` keeps local opaque UUID addresses for tools and incoming message headers,
+`pocket.linked-session-peers` keeps local opaque UUID addresses for tools and incoming message headers,
 so shared tool history never automatically records another chat's numeric id. Peer discovery withholds
 titles, folders and status unless every current viewer of the source can see that peer. Underlying
 target errors get metadata-free guidance. This is not content redaction: deliberately sent messages
@@ -76,7 +76,7 @@ title and task originate in the source tool call and are ordinary source content
 read from the peer. Later private renames are withheld by discovery. Sharing a chat shares its existing
 history; links do not retroactively redact messages.
 
-Each `pocket.linked-chat-call` family document freezes its target and requester. Creation and its
+Each `pocket.linked-session-call` family document freezes its target and requester. Creation and its
 receipt commit together, and hashed call keys deduplicate admission across restarts. Peer messages
 are prefixed and fenced before `Commands.submit`, so they use normal access, driver, model and spend
 checks without interpreting their text as slash commands. Both source and
@@ -86,7 +86,7 @@ A refused first message leaves a linked chat whose local address the tool report
 
 Session lists project links per person: a hidden origin becomes only `linkedOrigin: true`, never its
 id or title. Later live broadcasts use the same per-person projection for scoped viewers; filtering
-a previously built global list is not sufficient. `web/linked-chats.js` renders the current visible origin and outgoing links above the
+a previously built global list is not sufficient. `web/linked-sessions.js` renders the current visible origin and outgoing links above the
 transcript, including links to archived chats. The shared session list uses `web/session-tree.js` to
 nest visible linked chats under their origins with branch lines. It only groups rows already passing
 search/archive filters; hidden or absent origins are never synthesized. Pinned children remain roots,

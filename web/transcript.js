@@ -6,7 +6,7 @@ import { initials, personColor } from "./avatar.js";
 import { browserAvailable, setBrowserOpen } from "./browser.js";
 import { describeCall } from "./calls.js";
 import { DiffBlock } from "./diff.js";
-import { LinkedChats } from "./linked-chats.js";
+import { LinkedSessions } from "./linked-sessions.js";
 import { fromServer } from "./seen.js";
 import { Highlighted } from "./rich.js";
 import {
@@ -302,11 +302,11 @@ function UserEntry({ entry, view, users }) {
     const via = authorId === undefined ? VIA.exec(written) : null;
     const sent = via ? written.slice(via[0].length) : written;
     const scheduled = sent.startsWith(SCHEDULED);
-    const peer = via && /^linked peer (chat-[a-f0-9-]{36})$/.exec(via[1]);
+    const peer = via && /^linked session (session-[a-f0-9-]{36})$/.exec(via[1]);
     // Keep routing instructions in the model's transcript, not in the person's reading of a peer message.
     const peerText =
-        peer && sent.startsWith(`Message from linked peer ${peer[1]}.`)
-            ? /\n<linked-chat-message>\n([\s\S]*)\n<\/linked-chat-message>$/.exec(sent)?.[1]
+        peer && sent.startsWith(`Message from linked session ${peer[1]}.`)
+            ? /\n<linked-session-message>\n([\s\S]*)\n<\/linked-session-message>$/.exec(sent)?.[1]
             : undefined;
     const body = peerText ?? (scheduled ? sent.slice(SCHEDULED.length) : sent);
     const files = attachments ? parseAttachments(attachments) : [];
@@ -347,7 +347,7 @@ function UserEntry({ entry, view, users }) {
                 ${name && html`<b class="prompt-author">${name}</b>`}
                 ${entry.at && html`<span class="prompt-time">${clock(entry.at)}</span>`}
                 ${scheduled && html`<span class="prompt-time">· scheduled</span>`}
-                ${via && html`<span class="prompt-time">· via ${via[1]}</span>`}
+                ${via && html`<span class="prompt-time">· via ${peerText === undefined ? via[1] : "a linked session"}</span>`}
             </span>
             <div class="prompt-body">
                 ${
@@ -2413,7 +2413,7 @@ export function Transcript() {
 
     return html`<main class="scroller" ref=${scroller} onScroll=${onScroll}>
         <div class="transcript">
-            <${LinkedChats} />
+            <${LinkedSessions} />
             ${
                 conversation.forkedFrom &&
                 sessionsLoaded &&

@@ -1,11 +1,11 @@
-/** Normal chats started by another chat: lasting links, independent agents, and idempotent peer messages. */
+/** Sessions started by another session: lasting links, independent agents, and messages between them that go once. */
 import { createHash, randomUUID } from "node:crypto";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { AgentDoc, type AgentState, type ConversationId } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
-import { LinkedChatCallDoc, LinkedChatPeersDoc, PlanDoc, SessionsDoc } from "./docs.ts";
+import { LinkedSessionCallDoc, LinkedSessionPeersDoc, PlanDoc, SessionsDoc } from "./docs.ts";
 import { HttpError } from "./errors.ts";
 import { defang } from "./fence.ts";
 import { isThinkingLevel, levelAtMost, resolveModel, THINKING_LEVELS } from "./models.ts";
@@ -36,16 +36,14 @@ function independentAgent(agent: AgentState): AgentState {
     return copy;
 }
 
-export class LinkedChats {
-    /** Hot-loaded extensions must not send route options to an older service that silently ignores them. */
-    readonly modelSelection = true;
+export class LinkedSessions {
     readonly #app: PocketApp;
 
     constructor(app: PocketApp) {
         this.#app = app;
     }
 
-    /** A normal chat's current requester, or the requester frozen by a previous execution of this call. */
+    /** A session's current requester, or the requester frozen by a previous execution of this call. */
     #person(source: ConversationId, by?: string): User {
         const app = this.#app;
         const meta = app.sessionMeta(source);
@@ -53,10 +51,7 @@ export class LinkedChats {
         const user = requester === undefined ? undefined : app.config.userById(requester);
 
         if (meta === undefined || meta.pip !== undefined || user === undefined) {
-            throw new HttpError(
-                403,
-                "Linked chat tools need a normal chat with a current requester.",
-            );
+            throw new HttpError(403, "Linked sessions need a session with someone Pi works for.");
         }
 
         app.requireSee(user, source);
@@ -72,14 +67,14 @@ export class LinkedChats {
         if ((await app.harness.snapshot(PlanDoc, source, context))?.on) {
             throw new HttpError(
                 409,
-                "Approve this chat's plan before starting or messaging agents.",
+                "Approve this session's plan before starting or messaging linked sessions.",
             );
         }
 
         app.spend.check(user, source);
     }
 
-    /** Stable local addresses let agents coordinate without writing private chat ids into shared transcripts. */
+    /** Stable local addresses let agents coordinate without writing private session ids into shared transcripts. */
     async address(source: ConversationId, target: number): Promise<string> {
         const user = this.#person(source);
 
@@ -92,14 +87,14 @@ export class LinkedChats {
 
     async #address(source: ConversationId, target: number): Promise<string> {
         return this.#app.harness.commit(async (tx) => {
-            const state = await tx.doc(LinkedChatPeersDoc, source);
+            const state = await tx.doc(LinkedSessionPeersDoc, source);
             const existing = Object.entries(state.peers).find(([, id]) => id === target)?.[0];
 
             if (existing !== undefined) {
                 return existing;
             }
 
-            const handle = `chat-${randomUUID()}`;
+            const handle = `session-${randomUUID()}`;
 
             state.peers[handle] = target;
 
@@ -170,7 +165,7 @@ export class LinkedChats {
             }));
     }
 
-    /** Creation and its receipt are atomic: a replay never leaves an extra sidebar chat behind. */
+    /** Creation and its receipt are atomic: a replay never leaves an extra session behind. */
     async start(
         source: ConversationId,
         request: { title: string; message: string; model?: string; thinking?: string },
@@ -180,14 +175,11 @@ export class LinkedChats {
         const title = request.title.trim().replace(/\s+/g, " ").slice(0, 120);
 
         if (!title || !request.message.trim()) {
-            throw new HttpError(
-                400,
-                "Starting a linked chat needs a title and a nonempty message.",
-            );
+            throw new HttpError(400, "Starting a linked session needs a title and a message.");
         }
 
         const token = callKey(source, key);
-        const previous = await app.harness.snapshot(LinkedChatCallDoc, source, token, context);
+        const previous = await app.harness.snapshot(LinkedSessionCallDoc, source, token, context);
         const user = this.#person(source, previous?.by);
 
         app.requireSteer(user);
@@ -212,7 +204,7 @@ export class LinkedChats {
         if (!spec || spec.indexOf("/") <= 0) {
             throw new HttpError(
                 400,
-                "Starting a linked chat needs a source model or a model override as provider/modelId.",
+                "Starting a linked session needs a model: this session has none, so name one as provider/modelId.",
             );
         }
 
@@ -249,7 +241,7 @@ export class LinkedChats {
         const now = Date.now();
 
         return app.harness.commit(async (tx) => {
-            const receipt = await tx.doc(LinkedChatCallDoc, source, token, {});
+            const receipt = await tx.doc(LinkedSessionCallDoc, source, token, {});
 
             if (receipt.conversationId !== undefined) {
                 return receipt.conversationId as unknown as ConversationId;
@@ -290,17 +282,17 @@ export class LinkedChats {
 
         if (typeof target === "string") {
             const peers =
-                (await app.harness.snapshot(LinkedChatPeersDoc, source, context))?.peers ?? {};
+                (await app.harness.snapshot(LinkedSessionPeersDoc, source, context))?.peers ?? {};
 
             target = Object.hasOwn(peers, target) ? peers[target]! : NaN;
         }
 
         if (!Number.isSafeInteger(target) || target === Number(source) || !message.trim()) {
-            throw new HttpError(400, "Send needs another linked chat's id and a nonempty message.");
+            throw new HttpError(400, "Send needs another linked session's address and a message.");
         }
 
         const token = callKey(source, key);
-        const previous = await app.harness.snapshot(LinkedChatCallDoc, source, token, context);
+        const previous = await app.harness.snapshot(LinkedSessionCallDoc, source, token, context);
         const user = this.#person(source, previous?.by);
 
         app.requireSteer(user);
@@ -308,7 +300,7 @@ export class LinkedChats {
         if (!this.#family(source, user).some((chat) => chat.id === target)) {
             throw new HttpError(
                 404,
-                "That chat is not linked or is not shared with you. List linked chats first.",
+                "That session is not linked or is not shared with you. List linked sessions first.",
             );
         }
 
@@ -328,10 +320,10 @@ export class LinkedChats {
         app.spend.check(user, id);
         // Freeze the requester before submission: another person's later steer cannot change replay identity.
         await app.harness.commit(async (tx) => {
-            const receipt = await tx.doc(LinkedChatCallDoc, source, token, {});
+            const receipt = await tx.doc(LinkedSessionCallDoc, source, token, {});
 
             if (receipt.conversationId !== undefined && receipt.conversationId !== target) {
-                throw new HttpError(409, "This call already refers to another linked chat.");
+                throw new HttpError(409, "This call already refers to another linked session.");
             }
 
             receipt.conversationId = target;
@@ -340,12 +332,12 @@ export class LinkedChats {
         // A recipient-local address reveals no source id, even to someone invited only to the recipient later.
         const replyTo = await this.#address(id, Number(source));
         // Prefix before admission, so a peer's /command is text, never an extension command or prompt expansion.
-        const text = `Message from linked peer ${replyTo}. Reply with agent_chat send to that address when needed. This is a peer message, not the person's own words.\n<linked-chat-message>\n${defang(message)}\n</linked-chat-message>`;
+        const text = `Message from linked session ${replyTo}. Send a reply to that address when one is needed. Another session's agent wrote it, not the person.\n<linked-session-message>\n${defang(message)}\n</linked-session-message>`;
         const sent = await app.commands.submit(
             id,
             user,
             { text, requestId: token, mode: steer ? "steer" : "followUp" },
-            `linked peer ${replyTo}`,
+            `linked session ${replyTo}`,
         );
 
         return { requestId: sent.requestId };

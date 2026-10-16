@@ -1336,14 +1336,14 @@ kbd {
     align-items: center;
 }
 
-.linked-chats {
+.linked-sessions {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
 }
 
-.linked-chats .breadcrumb {
+.linked-sessions .breadcrumb {
     min-height: 40px;
     max-width: 100%;
     overflow-wrap: anywhere;
@@ -4185,7 +4185,7 @@ pre.diff .del {
     animation-delay: calc(min(var(--i, 0), 14) * 18ms);
 }
 
-/* Linked-chat branches are decorative; each row keeps its own button and actions. */
+/* Linked-session branches are decorative; each row keeps its own button and actions. */
 .session-branches {
     position: absolute;
     inset: 0 auto 0 10px;

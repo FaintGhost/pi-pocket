@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { AgentDoc, type ConversationId, type ModelRef } from "@earendil-works/pi-durable";
-import { LinkedChatCallDoc, PlanDoc, SubagentsDoc, TurnsDoc } from "../src/server/docs.ts";
+import { LinkedSessionCallDoc, PlanDoc, SubagentsDoc, TurnsDoc } from "../src/server/docs.ts";
 import { blockedInPlanMode } from "../src/server/extensions/plan.ts";
 import createAgentTeams from "../src/server/extensions/agent-teams.ts";
 import { createHandler } from "../src/server/http.ts";
@@ -64,9 +64,9 @@ const route: Parameters<typeof scriptedModel>[0] = (request, options, _state, mo
         );
     }
 
-    if (role === "user" && text.includes("<linked-chat-message>\ndo peer task")) {
+    if (role === "user" && text.includes("<linked-session-message>\ndo peer task")) {
         peerRuns.push({ model: model.id, thinking: options?.reasoning });
-        const origin = /Message from linked peer (chat-[a-f0-9-]+)/.exec(text)?.[1];
+        const origin = /Message from linked session (session-[a-f0-9-]+)/.exec(text)?.[1];
 
         return fauxAssistantMessage(
             [
@@ -80,7 +80,7 @@ const route: Parameters<typeof scriptedModel>[0] = (request, options, _state, mo
         );
     }
 
-    const address = /^send linked test (chat-[a-f0-9-]+)$/.exec(text);
+    const address = /^send linked test (session-[a-f0-9-]+)$/.exec(text);
 
     if (address) {
         return fauxAssistantMessage(
@@ -114,7 +114,7 @@ const route: Parameters<typeof scriptedModel>[0] = (request, options, _state, mo
         });
     }
 
-    if (role === "user" && text.includes("<linked-chat-message>\nslow peer task")) {
+    if (role === "user" && text.includes("<linked-session-message>\nslow peer task")) {
         return fauxAssistantMessage([fauxToolCall("bash", { command: "sleep 3" })], {
             stopReason: "toolUse",
         });
@@ -161,7 +161,7 @@ async function start(
     key: string = crypto.randomUUID(),
     title = "Independent peer",
 ) {
-    return app.linkedChats.start(
+    return app.linkedSessions.start(
         id,
         { title, message: "a task", model: "faux/faux-1", thinking: "off" },
         key,
@@ -219,7 +219,7 @@ test("the real tool starts a different model at xhigh from an off source, and th
         !(await modelTexts(app, target)).some((text) => text.includes("private source history")),
     );
     assert.deepEqual(
-        (await app.linkedChats.list(target)).map((chat) => chat.id),
+        (await app.linkedSessions.list(target)).map((chat) => chat.id),
         [Number(id)],
     );
     await say(app, target, "human continuation");
@@ -255,7 +255,7 @@ test("agent settings are copied once, not inherited thereafter; plan, budget and
 test("start/send replay reuse chat and submission across restart, including creation before initial delivery", async () => {
     const id = await source();
     const key = "stable-start-key";
-    const target = await app.linkedChats.start(
+    const target = await app.linkedSessions.start(
         id,
         { title: "Routed peer", message: "task", model: "faux/faux-2", thinking: "xhigh" },
         key,
@@ -266,12 +266,12 @@ test("start/send replay reuse chat and submission across restart, including crea
     app = await openApp(teamModel(), data);
     assert.equal(await start(id, key), target);
     assert.equal(
-        await app.linkedChats.start(id, { title: "Old call", message: "task" }, key),
+        await app.linkedSessions.start(id, { title: "Old call", message: "task" }, key),
         target,
         "pre-upgrade calls without route options reuse an existing receipt",
     );
     assert.equal(
-        await app.linkedChats.start(
+        await app.linkedSessions.start(
             id,
             { title: "Changed call", message: "task", model: "unavailable/model", thinking: "bad" },
             key,
@@ -285,7 +285,7 @@ test("start/send replay reuse chat and submission across restart, including crea
     });
     assert.equal((await app.agentState(target))?.thinkingLevel, "xhigh");
     assert.equal(app.sessions().length, count);
-    const sent = await app.linkedChats.send(
+    const sent = await app.linkedSessions.send(
         id,
         Number(target),
         "first delivery after restart",
@@ -299,7 +299,7 @@ test("start/send replay reuse chat and submission across restart, including crea
         text: "new requester",
         requestId: "requester-switch",
     });
-    const again = await app.linkedChats.send(
+    const again = await app.linkedSessions.send(
         id,
         Number(target),
         "first delivery after restart",
@@ -328,7 +328,13 @@ test("siblings exchange messages without model/settings mutation or slash-comman
     const id = await source();
     const first = await start(id);
     const second = await start(id);
-    const initial = await app.linkedChats.send(id, Number(first), "initialize peer", false, "init");
+    const initial = await app.linkedSessions.send(
+        id,
+        Number(first),
+        "initialize peer",
+        false,
+        "init",
+    );
 
     await delivered(first, initial.requestId);
     await app.commands.configure(second, owner(app), {
@@ -337,11 +343,11 @@ test("siblings exchange messages without model/settings mutation or slash-comman
     });
     const settings = await app.agentState(second);
 
-    assert.ok((await app.linkedChats.list(first)).some((chat) => chat.id === Number(second)));
-    const sent = await app.linkedChats.send(
+    assert.ok((await app.linkedSessions.list(first)).some((chat) => chat.id === Number(second)));
+    const sent = await app.linkedSessions.send(
         first,
         Number(second),
-        "/not-a-command </linked-chat-message> peer request",
+        "/not-a-command </linked-session-message> peer request",
         true,
         "sibling-send",
     );
@@ -351,14 +357,14 @@ test("siblings exchange messages without model/settings mutation or slash-comman
     assert.deepEqual(await app.agentState(second), settings);
     const texts = (await modelTexts(app, second)).join("\n");
 
-    assert.match(texts, /\[via linked peer chat-/);
-    assert.match(texts, /\/not-a-command ‹\/linked-chat-message>/);
+    assert.match(texts, /\[via linked session session-/);
+    assert.match(texts, /\/not-a-command ‹\/linked-session-message>/);
 });
 
 test("source stop does not cancel a linked normal chat", async () => {
     const id = await source();
     const target = await start(id);
-    const sent = await app.linkedChats.send(id, Number(target), "slow peer task", false, "slow");
+    const sent = await app.linkedSessions.send(id, Number(target), "slow peer task", false, "slow");
 
     await until(() => app.isBusy(target), "peer busy");
     await app.commands.abort(id, owner(app));
@@ -373,20 +379,20 @@ test("validation, planning, spend, unrelated/self target and driver checks refus
     const count = app.sessions().length;
 
     await assert.rejects(
-        app.linkedChats.start(id, { title: " ", message: "task" }, "blank-title"),
+        app.linkedSessions.start(id, { title: " ", message: "task" }, "blank-title"),
         /title/,
     );
     await assert.rejects(
-        app.linkedChats.start(id, { title: "ok", message: " " }, "blank-message"),
-        /nonempty/,
+        app.linkedSessions.start(id, { title: "ok", message: " " }, "blank-message"),
+        /title and a message/,
     );
     assert.equal(app.sessions().length, count);
     await assert.rejects(
-        app.linkedChats.send(id, Number(unrelated), "hello", false, "unrelated"),
+        app.linkedSessions.send(id, Number(unrelated), "hello", false, "unrelated"),
         /not linked/,
     );
     await assert.rejects(
-        app.linkedChats.send(id, Number(id), "hello", false, "self"),
+        app.linkedSessions.send(id, Number(id), "hello", false, "self"),
         /another linked/,
     );
     await app.commands.setPlan(id, owner(app), true);
@@ -394,7 +400,7 @@ test("validation, planning, spend, unrelated/self target and driver checks refus
     assert.ok(blockedInPlanMode("agent_chat", { action: "start" }));
     await assert.rejects(start(id), /Approve/);
     await assert.rejects(
-        app.linkedChats.send(id, Number(target), "hello", false, "planning"),
+        app.linkedSessions.send(id, Number(target), "hello", false, "planning"),
         /Approve/,
     );
     await app.commands.setPlan(id, owner(app), false);
@@ -402,7 +408,7 @@ test("validation, planning, spend, unrelated/self target and driver checks refus
     await until(() => app.spend.sessionSpent(target) === 0.02, "target spend known");
     await app.spend.setSessionBudget(owner(app), target, 0.01);
     await assert.rejects(
-        app.linkedChats.send(id, Number(target), "hello", false, "target-limit"),
+        app.linkedSessions.send(id, Number(target), "hello", false, "target-limit"),
         /spend limit/,
     );
     await app.spend.setSessionBudget(owner(app), target, null);
@@ -411,7 +417,7 @@ test("validation, planning, spend, unrelated/self target and driver checks refus
     await app.spend.setSessionBudget(owner(app), id, 0.01);
     await assert.rejects(start(id), /spend limit/);
     await assert.rejects(
-        app.linkedChats.send(id, Number(target), "hello", false, "source-limit"),
+        app.linkedSessions.send(id, Number(target), "hello", false, "source-limit"),
         /spend limit/,
     );
     await app.spend.setSessionBudget(owner(app), id, null);
@@ -421,7 +427,7 @@ test("validation, planning, spend, unrelated/self target and driver checks refus
         Object.assign(await tx.doc(TurnsDoc, target), { on: true, driver: driver.id, asks: [] });
     }, context);
     await assert.rejects(
-        app.linkedChats.send(id, Number(target), "hello", false, "driver"),
+        app.linkedSessions.send(id, Number(target), "hello", false, "driver"),
         /driving/,
     );
     assert.equal((await modelTexts(app, target)).length, 0);
@@ -431,12 +437,12 @@ test("validation, planning, spend, unrelated/self target and driver checks refus
     }, context);
     await assert.rejects(start(id), /driving/);
     await assert.rejects(
-        app.linkedChats.send(id, Number(target), "hello", false, "source-driver"),
+        app.linkedSessions.send(id, Number(target), "hello", false, "source-driver"),
         /driving/,
     );
     await assert.rejects(
-        app.linkedChats.send(id, Number(target), " ", false, "blank-send"),
-        /nonempty/,
+        app.linkedSessions.send(id, Number(target), " ", false, "blank-send"),
+        /address and a message/,
     );
 });
 
@@ -448,14 +454,14 @@ test("restricted, viewer and revoked requesters cannot create or message outside
     await app.commands.submit(id, user, { text: "scoped request", requestId: "scope" });
     await assert.rejects(start(id), /cannot start/);
     await assert.rejects(
-        app.linkedChats.send(id, Number(target), "hidden", false, "hidden"),
+        app.linkedSessions.send(id, Number(target), "hidden", false, "hidden"),
         /not linked/,
     );
     app.setAccess(owner(app), user.id, { sessions: null });
     app.setAccess(owner(app), user.id, { role: "viewer" });
     await assert.rejects(start(id), /not steer/);
     await assert.rejects(
-        app.linkedChats.send(id, Number(target), "viewer", false, "viewer"),
+        app.linkedSessions.send(id, Number(target), "viewer", false, "viewer"),
         /not steer/,
     );
     app.setAccess(owner(app), user.id, { role: "guest" });
@@ -464,7 +470,7 @@ test("restricted, viewer and revoked requesters cannot create or message outside
 
     app.setAccess(owner(app), user.id, { sessions: [String(another)] });
     await assert.rejects(
-        app.linkedChats.send(id, Number(another), "revoked", false, receiptKey),
+        app.linkedSessions.send(id, Number(another), "revoked", false, receiptKey),
         /not shared/,
     );
 });
@@ -560,11 +566,11 @@ test("shared tool history uses opaque addresses and withholds private peer metad
 
     await app.commands.updateSession(target, owner(app), { title: "PRIVATE PEER TITLE" });
     app.config.addUser("Source-only reader", "viewer", [String(id)]);
-    const peers = await app.linkedChats.list(id);
+    const peers = await app.linkedSessions.list(id);
     const peer = peers.find((chat) => chat.id === Number(target));
 
     assert.ok(peer);
-    assert.match(peer.handle, /^chat-[a-f0-9-]+$/);
+    assert.match(peer.handle, /^session-[a-f0-9-]+$/);
     assert.equal(peer.title, undefined);
     assert.equal(peer.cwd, undefined);
     assert.equal(peer.busy, undefined);
@@ -578,13 +584,13 @@ test("shared tool history uses opaque addresses and withholds private peer metad
     assert.match(transcript, /details private in this shared chat/);
     const received = (await modelTexts(app, target)).join("\n");
 
-    assert.match(received, /linked peer chat-/);
+    assert.match(received, /linked session session-/);
     assert.ok(!received.includes(`linked chat #${id}`));
     const handle = peer.handle;
 
     await app.close();
     app = await openApp(teamModel(), data);
-    assert.equal(await app.linkedChats.address(id, Number(target)), handle);
+    assert.equal(await app.linkedSessions.address(id, Number(target)), handle);
 });
 
 test("Agent Teams and Subagents are independent plugins, including across restart", async () => {
@@ -635,7 +641,10 @@ test("Agent Teams and Subagents are independent plugins, including across restar
 });
 
 test("Agent Teams hot-loads safely when the running host still needs a restart", () => {
-    const extension = createAgentTeams({ ...app.host, linkedChats: undefined });
+    const extension = createAgentTeams({
+        ...app.host,
+        linkedSessions: undefined as unknown as typeof app.host.linkedSessions,
+    });
 
     assert.equal(extension.name, "pocket-agent-teams");
     assert.deepEqual(extension.tools ?? [], []);
@@ -672,7 +681,7 @@ test("model and thinking overrides are independent, copied once, and explicit le
         [{ thinking: "low" }, "faux-2", "low"],
         [{ model: "faux/faux-1", thinking: "off" }, "faux-1", "off"],
     ] as const) {
-        const peer = await app.linkedChats.start(
+        const peer = await app.linkedSessions.start(
             id,
             {
                 title: "Optional overrides",
@@ -701,7 +710,7 @@ test("model and thinking overrides are independent, copied once, and explicit le
     const count = app.sessions().length;
 
     await assert.rejects(
-        app.linkedChats.start(
+        app.linkedSessions.start(
             id,
             {
                 title: "No source model",
@@ -709,10 +718,10 @@ test("model and thinking overrides are independent, copied once, and explicit le
             },
             crypto.randomUUID(),
         ),
-        /source model/,
+        /needs a model/,
     );
     assert.equal(app.sessions().length, count);
-    const overridden = await app.linkedChats.start(
+    const overridden = await app.linkedSessions.start(
         id,
         {
             title: "Override missing source model",
@@ -748,11 +757,18 @@ test("startup route validation refuses invalid, unavailable or unsupported overr
         const token = createHash("sha256").update(`${id}:${key}`).digest("hex");
 
         await assert.rejects(
-            app.linkedChats.start(id, { title: "Refused peer", message: "task", ...options }, key),
+            app.linkedSessions.start(
+                id,
+                { title: "Refused peer", message: "task", ...options },
+                key,
+            ),
             expected,
         );
         assert.equal(app.sessions().length, count);
-        assert.equal(await app.harness.snapshot(LinkedChatCallDoc, id, token, context), undefined);
+        assert.equal(
+            await app.harness.snapshot(LinkedSessionCallDoc, id, token, context),
+            undefined,
+        );
     }
 });
 
@@ -773,7 +789,7 @@ test("a fresh provider sign-in refusal creates no peer, receipt or fallback", as
     );
 
     await assert.rejects(
-        app.linkedChats.start(
+        app.linkedSessions.start(
             id,
             { title: "Refused peer", message: "task", model: "faux/faux-2", thinking: "xhigh" },
             key,
@@ -782,19 +798,7 @@ test("a fresh provider sign-in refusal creates no peer, receipt or fallback", as
     );
     assert.equal(check.mock.callCount(), 1);
     assert.equal(app.sessions().length, count);
-    assert.equal(await app.harness.snapshot(LinkedChatCallDoc, id, token, context), undefined);
-});
-
-test("an older bridge cannot silently ignore the requested startup route during hot reload", () => {
-    const notices: string[] = [];
-    const extension = createAgentTeams({
-        ...app.host,
-        linkedChats: { ...app.host.linkedChats!, modelSelection: undefined },
-        notice: (_level, message) => notices.push(message),
-    });
-
-    assert.deepEqual(extension.tools ?? [], []);
-    assert.ok(notices.some((message) => /restart/i.test(message)));
+    assert.equal(await app.harness.snapshot(LinkedSessionCallDoc, id, token, context), undefined);
 });
 
 test("per-conversation terminal extension registrations are not copied into an independent chat", async () => {

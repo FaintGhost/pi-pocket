@@ -24,7 +24,7 @@ export type SessionMeta = {
     archived?: boolean;
     /** The session this one was forked from, and the last entry it inherited; no entry: forked before the first message. */
     forkedFrom?: { id: number; entryId?: number };
-    /** The normal chat that started this one; a link, never an ownership or access relationship. */
+    /** The session that started this one (`linked-sessions.ts`): a link only, which gives no access and owns nothing. */
     linkedFrom?: { id: number };
     /** The most Pi may spend here, in dollars, subagents included. */
     budget?: number;
@@ -55,9 +55,9 @@ export const FolderFavoritesDoc = defineDoc<{ users: Record<string, string[]> }>
     initial: () => ({ users: {} }),
 });
 
-/** Local opaque peer addresses, never raw chat ids in a shared tool transcript. A fork makes its own addresses. */
-export const LinkedChatPeersDoc = defineDoc<{ peers: Record<string, number> }>({
-    kind: "pocket.linked-chat-peers",
+/** The addresses this session knows its linked sessions by, so no session id goes into its transcript. A fork makes its own. */
+export const LinkedSessionPeersDoc = defineDoc<{ peers: Record<string, number> }>({
+    kind: "pocket.linked-session-peers",
     version: 1,
     scope: "conversation",
     history: "latest",
@@ -65,12 +65,12 @@ export const LinkedChatPeersDoc = defineDoc<{ peers: Record<string, number> }>({
     initial: () => ({ peers: {} }),
 });
 
-/** A peer-chat tool call's target and requester, committed with creation and retained for safe replay. */
-export const LinkedChatCallDoc = defineDocFamily<
+/** What one call to start or message a linked session did, by its hashed key: the session, and whom Pi worked for. */
+export const LinkedSessionCallDoc = defineDocFamily<
     { conversationId?: number; by?: string },
     Record<string, never>
 >({
-    kind: "pocket.linked-chat-call",
+    kind: "pocket.linked-session-call",
     version: 1,
     family: true,
     scope: "conversation",

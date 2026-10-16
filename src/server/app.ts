@@ -46,7 +46,7 @@ import { Browsers } from "./browser.ts";
 import type { BrowserState } from "./browser/page.ts";
 import { Collab, REACTIONS } from "./collab.ts";
 import { Commands } from "./commands.ts";
-import { LinkedChats } from "./linked-chats.ts";
+import { LinkedSessions } from "./linked-sessions.ts";
 import { APP_ROOT, ConfigStore, type User } from "./config.ts";
 import {
     ArtifactBodyDoc,
@@ -257,7 +257,7 @@ export class PocketApp {
     host!: PocketHost;
     loader!: ExtensionLoader;
     readonly commands = new Commands(this);
-    readonly linkedChats = new LinkedChats(this);
+    readonly linkedSessions = new LinkedSessions(this);
     readonly collab = new Collab(this);
     readonly alerts = new Alerts(this);
     readonly providers = new Providers(this);
@@ -486,7 +486,7 @@ export class PocketApp {
             notice: (level, message, conversationId) => this.notice(level, message, conversationId),
             heldBack: (conversationId) => this.spend.heldBack(conversationId),
             onLimitsChanged: (listener) => this.spend.onLimitsChanged(listener),
-            linkedChats: this.linkedChats,
+            linkedSessions: this.linkedSessions,
             schedules: this.schedules,
             goals: this.goals,
             browsers: this.browsers,

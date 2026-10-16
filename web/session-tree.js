@@ -1,4 +1,4 @@
-// Presentation only: linked chats remain independent sessions, never lifecycle children.
+// Presentation only: linked sessions stay independent sessions, never subagents of the one that started them.
 export function sessionForest(shown, { pinned = [], folders = false } = {}) {
     const byId = new Map(shown.map((session) => [session.id, session]));
     const pins = new Set(pinned);

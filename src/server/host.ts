@@ -9,7 +9,7 @@ import type { Role } from "./config.ts";
 import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
 import type { Memory } from "./memory.ts";
-import type { LinkedChats } from "./linked-chats.ts";
+import type { LinkedSessions } from "./linked-sessions.ts";
 import type { Pip } from "./pip.ts";
 import type { PipCompaction } from "./pip-compact.ts";
 import type { Schedules } from "./schedules.ts";
@@ -153,10 +153,11 @@ export interface PocketHost {
     heldBack(conversationId: ConversationId): string | undefined;
     /** Call `listener` whenever the owner changes a spend limit; returns how to stop. */
     onLimitsChanged(listener: () => void): () => void;
-    /** Normal linked peer chats; optional capability marker prevents new route options being ignored before restart. */
-    readonly linkedChats?: Pick<LinkedChats, "start" | "send" | "list" | "address"> & {
-        readonly modelSelection?: true;
-    };
+    /**
+     * Sessions that a session starts and messages (`linked-sessions.ts`): each one is an ordinary session, linked to the
+     * one that started it. The checks of the person Pi works for apply, and a call repeated with its key acts once.
+     */
+    readonly linkedSessions: Pick<LinkedSessions, "start" | "send" | "list" | "address">;
     /** Messages to Pi for later: the schedule tool sets up Pi's own. */
     readonly schedules: Pick<Schedules, "add" | "cancel" | "list" | "task">;
     /** Sessions' goals: the goals extension runs their checks and counts them. */

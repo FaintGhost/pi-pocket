@@ -1,8 +1,8 @@
-// Navigation between ordinary peer chats. Only the server's per-person session list may name a linked chat.
+// Links between linked sessions, above the transcript. Only the server's list for this person may name one.
 import { navigate, store } from "./store.js";
 import { html, Icon } from "./ui.js";
 
-export function LinkedChats() {
+export function LinkedSessions() {
     const { conversationId, sessions, sessionsLoaded } = store.state;
 
     if (!sessionsLoaded) {
@@ -27,15 +27,15 @@ export function LinkedChats() {
         <span>${label}: ${chat.title ?? "New session"}</span>
     </button>`;
 
-    return html`<nav class="linked-chats" aria-label="Linked chats">
+    return html`<nav class="linked-sessions" aria-label="Linked sessions">
         ${
             origin
                 ? link(origin, "Started from")
                 : (current?.linkedOrigin || current?.linkedFrom) &&
                   html`<p class="muted small">
-                Started from another chat
+                Started from another session
             </p>`
         }
-        ${started.map((chat) => link(chat, "Linked chat"))}
+        ${started.map((chat) => link(chat, "Linked session"))}
     </nav>`;
 }

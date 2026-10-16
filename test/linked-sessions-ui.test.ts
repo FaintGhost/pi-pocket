@@ -57,7 +57,7 @@ before(async () => {
     origin = await newSession(app);
     await say(app, origin, "main chat context");
     await app.commands.updateSession(origin, owner(app), { title: "Main task" });
-    target = await app.linkedChats.start(
+    target = await app.linkedSessions.start(
         origin,
         {
             title: "Authentication investigation",
@@ -67,7 +67,7 @@ before(async () => {
         },
         "browser-start",
     );
-    await app.linkedChats.send(
+    await app.linkedSessions.send(
         origin,
         Number(target),
         "Investigate authentication and send findings back when ready.",
@@ -108,7 +108,7 @@ test(
             await page.setViewport(viewport);
             await page.navigate(`${base}/s/${origin}`);
             await see(
-                `return JSON.stringify(document.querySelector('.linked-chats')?.textContent.includes('Authentication investigation') === true)`,
+                `return JSON.stringify(document.querySelector('.linked-sessions')?.textContent.includes('Authentication investigation') === true)`,
                 "source link",
             );
             assert.equal(
@@ -118,7 +118,7 @@ test(
                 true,
             );
             await settled();
-            await page.click({ selector: ".linked-chats button" });
+            await page.click({ selector: ".linked-sessions button" });
             await see(
                 `return JSON.stringify((await import('/store.js')).store.state.conversationId === ${Number(target)} && (await import('/store.js')).store.state.view.conversation?.id === ${Number(target)})`,
                 "normal target chat",
@@ -128,7 +128,7 @@ test(
                 "the peer's selected model, not the source model",
             );
             await see(
-                `return JSON.stringify(document.querySelector('.linked-chats')?.textContent.includes('Started from: Main task') === true)`,
+                `return JSON.stringify(document.querySelector('.linked-sessions')?.textContent.includes('Started from: Main task') === true)`,
                 "origin link",
             );
             assert.equal(
@@ -143,13 +143,13 @@ test(
             );
             assert.equal(
                 await evaluate(
-                    `return JSON.stringify(document.querySelector('.prompt-body').textContent.includes('<linked-chat-message>'))`,
+                    `return JSON.stringify(document.querySelector('.prompt-body').textContent.includes('<linked-session-message>'))`,
                 ),
                 false,
             );
             assert.equal(
                 await evaluate(
-                    `return JSON.stringify(document.querySelector('.prompt-body').textContent.includes('Message from linked peer'))`,
+                    `return JSON.stringify(document.querySelector('.prompt-body').textContent.includes('Message from linked session'))`,
                 ),
                 false,
             );
@@ -173,7 +173,7 @@ test(
             );
             await settled();
             const rect = await evaluate<{ height: number; right: number }>(
-                `const r = document.querySelector('.linked-chats button').getBoundingClientRect(); return JSON.stringify({height:r.height,right:r.right})`,
+                `const r = document.querySelector('.linked-sessions button').getBoundingClientRect(); return JSON.stringify({height:r.height,right:r.right})`,
             );
 
             assert.ok(rect.height >= 40, JSON.stringify(rect));
@@ -189,7 +189,7 @@ test(
                 [],
             );
             await settled();
-            await page.click({ selector: ".linked-chats button" });
+            await page.click({ selector: ".linked-sessions button" });
             await see(
                 `return JSON.stringify((await import('/store.js')).store.state.view.conversation?.id === ${Number(origin)})`,
                 "back to origin",
@@ -202,7 +202,7 @@ test(
     "linked sidebar rows nest, filter and select independently at desktop and phone sizes",
     real,
     async () => {
-        const sibling = await app.linkedChats.start(
+        const sibling = await app.linkedSessions.start(
             origin,
             {
                 title: "Review sibling",
@@ -211,7 +211,7 @@ test(
             },
             "sidebar-sibling",
         );
-        const grandchild = await app.linkedChats.start(
+        const grandchild = await app.linkedSessions.start(
             target,
             {
                 title: "Follow-up child",
@@ -296,7 +296,7 @@ test(
         let deep = origin;
 
         for (let index = 0; index < 12; index++) {
-            deep = await app.linkedChats.start(
+            deep = await app.linkedSessions.start(
                 deep,
                 {
                     title: `Deep linked agent ${index}`,
@@ -378,16 +378,16 @@ test("renaming, archive and reload retain the current links", real, async () => 
     });
     await page.navigate(`${base}/s/${target}`);
     await see(
-        `return JSON.stringify(document.querySelector('.linked-chats')?.textContent.includes('Renamed main chat') === true)`,
+        `return JSON.stringify(document.querySelector('.linked-sessions')?.textContent.includes('Renamed main chat') === true)`,
         "updated linked title",
     );
     await page.reload();
     await see(
-        `return JSON.stringify(document.querySelector('.linked-chats')?.textContent.includes('Renamed main chat') === true)`,
+        `return JSON.stringify(document.querySelector('.linked-sessions')?.textContent.includes('Renamed main chat') === true)`,
         "link after reload",
     );
     await settled();
-    await page.click({ selector: ".linked-chats button" });
+    await page.click({ selector: ".linked-sessions button" });
     await see(
         `return JSON.stringify((await import('/store.js')).store.state.view.conversation?.id === ${Number(origin)})`,
         "archived origin remains openable",
@@ -409,12 +409,12 @@ test(
         );
         await page.navigate(`${base}/s/${target}`);
         await see(
-            `return JSON.stringify(document.querySelector('.linked-chats')?.textContent.includes('Started from another chat') === true)`,
+            `return JSON.stringify(document.querySelector('.linked-sessions')?.textContent.includes('Started from another session') === true)`,
             "private origin fallback",
         );
         assert.equal(
             await evaluate(
-                `return JSON.stringify(document.querySelectorAll('.linked-chats button').length)`,
+                `return JSON.stringify(document.querySelectorAll('.linked-sessions button').length)`,
             ),
             0,
         );
