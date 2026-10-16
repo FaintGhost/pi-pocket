@@ -29,6 +29,10 @@ test("a theme's CSS may load only files in its own folder", () => {
         "a { background: url(/login?token=a); }",
         "a { background: \\75 rl(../../a.png); }",
         'a { background: image-set("/api/me" 1x); }',
+        'a { background: image-set(var(--n, "/login?token=a") 1x); }',
+        ':root { --x: "/login?token=a"; } a { background: image-set(var(--x) 1x); }',
+        "a { background: attr(data-x url); }",
+        "@font-face { font-family: x; src: src(var(--f)); }",
     ]) {
         assert.throws(css(rule), ThemeProblem, rule);
     }
