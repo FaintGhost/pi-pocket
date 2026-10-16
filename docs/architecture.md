@@ -24,7 +24,7 @@ Some state lives in this process alone, and a restart forgets it. For example:
 **Its parts:**
 
 - `commands`, `collab`, `alerts`, `providers`, `schedules`, `goals`, `shell`, `spend`
-- `workspace`, `transcripts`, `attribution`, `piSessions`, `pip`, `watches`, `hooks`, `memory`
+- `workspace`, `transcripts`, `attribution`, `piSessions`, `pip`, `watches`, `hooks`, `memory`, `gallery`
 - `browsers`
 
 **What stays on `PocketApp`** (the parts call these rather than keeping copies):
