@@ -453,13 +453,14 @@ function setTheme(arg) {
 
     const needle = arg.toLowerCase().replace(/\s+/g, "-");
     const words = arg.toLowerCase();
-    const looks = lookIds().map((id) => ({
-        id,
-        name:
-            id === BASE_LOOK
-                ? "Pocket"
-                : (store.state.themeList?.find((each) => each.id === id)?.name ?? id),
-    }));
+    // Themes that work: one broken, which Appearance shows greyed out, would leave the app on Pocket.
+    const looks = lookIds().flatMap((id) => {
+        const listed = store.state.themeList?.find((each) => each.id === id);
+
+        return id === BASE_LOOK || listed?.usable
+            ? [{ id, name: id === BASE_LOOK ? "Pocket" : (listed?.name ?? id) }]
+            : [];
+    });
     const palettes = ["desktop", ...Object.keys(THEMES), ...folderPaletteIds()].map((id) => ({
         id,
         name: id === "desktop" ? "desktop" : paletteOf(id).name,
