@@ -923,13 +923,15 @@ function pocketFor(record) {
                 );
             }
 
-            const link = document.createElement("link");
+            // In the app's own layer (index.html), after its rules: it wins and loses against them by specificity and
+            // order, as a stylesheet of its own would, and the theme's layer stays above both. The address is the URL
+            // parser's, so it holds no quote or backslash to end the string early.
+            const sheet = document.createElement("style");
 
-            link.rel = "stylesheet";
-            link.href = href.href;
-            link.dataset.extension = record.module;
-            link.addEventListener("error", () => {
-                if (live() && link.isConnected) {
+            sheet.textContent = `@import url("${href.href.replace(/["\\\n]/g, encodeURIComponent)}") layer(pocket);`;
+            sheet.dataset.extension = record.module;
+            sheet.addEventListener("error", () => {
+                if (live() && sheet.isConnected) {
                     console.warn(`${record.title}: ${href.href} did not load`);
                     noticeFrom(
                         record,
@@ -938,8 +940,8 @@ function pocketFor(record) {
                     );
                 }
             });
-            document.head.append(link);
-            record.disposers.push(() => link.remove());
+            document.head.append(sheet);
+            record.disposers.push(() => sheet.remove());
         },
         /** Run `dispose` when this version goes: an edit, or the module turned off. Gone or failed already: now. */
         onDispose(dispose) {

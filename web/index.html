@@ -22,18 +22,32 @@
             type="font/woff2"
             crossorigin
         />
-        <link rel="stylesheet" href="/style.css" />
+        <link rel="preload" href="/style.css" as="style" />
+        <!--
+            The cascade layers, in the order they win: the app's own CSS and extensions' (pocket), the colors chosen in
+            Appearance (palette), then the theme (theme.js). Sizes people choose stay inline and win over all three.
+        -->
+        <style>
+            @layer pocket, palette, theme;
+            @import url("/style.css") layer(pocket);
+        </style>
         <!-- The last look this browser used (theme.js keeps it), before the first paint: no flash of another theme. -->
         <script>
             try {
                 var look = JSON.parse(localStorage.getItem("pocket.themeCache") || "null");
                 if (look) {
                     var root = document.documentElement;
-                    for (var name in look.vars) root.style.setProperty(name, look.vars[name]);
+                    var colors = "";
+                    for (var name in look.palette) colors += name + ":" + look.palette[name] + ";";
+                    var palette = document.createElement("style");
+                    palette.id = "pocket-palette";
+                    palette.textContent = "@layer palette{:root{" + colors + "}}";
+                    document.head.appendChild(palette);
+                    for (var each in look.vars) root.style.setProperty(each, look.vars[each]);
                     for (var key in look.attrs) root.dataset[key] = look.attrs[key];
                     document
                         .querySelector('meta[name="theme-color"]')
-                        .setAttribute("content", look.vars["--o-bg"]);
+                        .setAttribute("content", look.color || look.vars["--o-bg"]);
                 }
             } catch (error) {}
         </script>

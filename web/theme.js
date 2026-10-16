@@ -174,9 +174,29 @@ export const varsStyle = (vars) =>
         .map(([name, value]) => `${name}:${value}`)
         .join(";");
 
-function setVars(root, vars) {
-    for (const [name, value] of Object.entries(vars)) {
-        root.style.setProperty(name, value);
+/**
+ * Put a palette's variables in the palette layer (index.html declares the layers): under the theme, which may set them
+ * again, and over the app's defaults. Inline they would beat the theme. Variables an older version of this page left
+ * inline go.
+ */
+function setPalette(vars) {
+    const root = document.documentElement;
+    let style = document.getElementById("pocket-palette");
+
+    if (style === null) {
+        style = document.createElement("style");
+        style.id = "pocket-palette";
+        document.head.append(style);
+    }
+
+    const text = `@layer palette{:root{${varsStyle(vars)}}}`;
+
+    if (style.textContent !== text) {
+        style.textContent = text;
+    }
+
+    for (const name of Object.keys(vars)) {
+        root.style.removeProperty(name);
     }
 }
 
@@ -194,17 +214,29 @@ export function apply() {
     const palette = paletteOf();
     const vars = themeVars(palette);
 
-    setVars(root, vars);
+    setPalette(vars);
     const p = prefs();
     const desktop = store.state.desktopTheme;
+    // The desktop's wallpaper is the person's choice, so it stays inline and wins; without it, the app's default (none)
+    // or the theme's own shows.
     const wallpaper =
         p.theme === "desktop" && p.wallpaper && p.tiling && desktop?.wallpaper
             ? `url("/api/theme/wallpaper?v=${encodeURIComponent(desktop.stamp)}")`
-            : "none";
+            : null;
+    const inline = {
+        "--text-size": `${p.text}px`,
+        "--sidebar-w": sidebarWidth(p),
+        ...(wallpaper === null ? {} : { "--wallpaper": wallpaper }),
+    };
 
-    root.style.setProperty("--wallpaper", wallpaper);
-    root.style.setProperty("--text-size", `${p.text}px`);
-    root.style.setProperty("--sidebar-w", sidebarWidth(p));
+    if (wallpaper === null) {
+        root.style.removeProperty("--wallpaper");
+    }
+
+    for (const [name, value] of Object.entries(inline)) {
+        root.style.setProperty(name, value);
+    }
+
     const attrs = {
         mode: modeOf(palette),
         tiling: p.tiling ? "on" : "off",
@@ -218,15 +250,7 @@ export function apply() {
     document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", attrs.mode);
     localStorage.setItem(
         CACHE,
-        JSON.stringify({
-            vars: {
-                ...vars,
-                "--wallpaper": wallpaper,
-                "--text-size": `${p.text}px`,
-                "--sidebar-w": sidebarWidth(p),
-            },
-            attrs,
-        }),
+        JSON.stringify({ palette: vars, vars: inline, attrs, color: vars["--o-bg"] }),
     );
 }
 
@@ -293,11 +317,10 @@ export function preview(id) {
     }
 
     previewing = id;
-    const root = document.documentElement;
     const palette = id === null ? paletteOf() : paletteOf(id);
 
-    setVars(root, themeVars(palette));
-    root.dataset.mode = modeOf(palette);
+    setPalette(themeVars(palette));
+    document.documentElement.dataset.mode = modeOf(palette);
 }
 
 // ─── Follow desktop ─────────────────────────────────────────────────────────────
