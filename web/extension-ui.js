@@ -25,6 +25,14 @@ import { html, Icon, iconPath, Loader, Markdown, Sheet, Spinner, Switch } from "
  */
 export const POCKET_API = 1;
 
+/**
+ * Members of `pocket` that are going (docs/extensions/policies/api-stability.md, "Deprecation"), as
+ * `{ member: "pocket.<name>", since, removal, use }`: the server's `DEPRECATED` (`src/server/deprecations.ts`) has
+ * `host`'s and `web`'s. A browser module that uses one shows a warning in this tab's Extensions sheet. Nothing is
+ * deprecated yet.
+ */
+const DEPRECATED = [];
+
 /** What a browser module can add, each kept by its id. */
 const KINDS = ["rail", "menu", "launcher", "page", "sheet"];
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
@@ -444,11 +452,13 @@ async function load(entry) {
         dead: false,
         // How it failed, for its page and sheets: "failed to load", or "was stopped".
         how: null,
+        // The deprecated members of `pocket` it used, by member, for the Extensions sheet.
+        deprecated: new Map(),
         // Its calls in this task, and the pages and sheets it opened and closed lately (`tick`, `chargeOpen`).
         spent: spending(),
     };
 
-    record.pocket = pocketFor(record);
+    record.pocket = watchDeprecated(pocketFor(record), record);
     modules.set(entry.module, record);
     redraw();
 
@@ -553,6 +563,39 @@ onExtensionEvent(({ module, event, data }) => {
 });
 
 // ─── pocket: the app's API for a browser module ──────────────────────────────
+
+/** `pocket` as a module gets it: a deprecated member is noted the first time it is read. While none is, `pocket` itself. */
+function watchDeprecated(pocket, record) {
+    const rows = DEPRECATED.filter(
+        (row) => row.member.startsWith("pocket.") && row.member.slice(7) in pocket,
+    );
+
+    if (rows.length === 0) {
+        return pocket;
+    }
+
+    const members = Object.getOwnPropertyDescriptors(pocket);
+
+    for (const row of rows) {
+        const name = row.member.slice(7);
+
+        members[name] = {
+            enumerable: true,
+            get: () => {
+                if (!record.deprecated.has(row.member)) {
+                    record.deprecated.set(row.member, row);
+                    console.warn(
+                        `${record.title} uses ${row.member}, deprecated in ${row.since}, which goes in ${row.removal}: use ${row.use}`,
+                    );
+                }
+
+                return pocket[name];
+            },
+        };
+    }
+
+    return Object.freeze(Object.create(Object.getPrototypeOf(pocket), members));
+}
 
 /** A copy of what a module gives to add, once it holds: read once, so what is checked is what is kept. */
 function specOf(kind, spec) {
@@ -1288,7 +1331,8 @@ function badgeOf(badge) {
 
 /**
  * How this tab's copy of a module's browser module stands, for the Extensions sheet: `loading`, `ready`, `failed` (with
- * its `error`), or `off` in safe mode; undefined when this tab loads none.
+ * its `error`), or `off` in safe mode, and the deprecated members of `pocket` it used; undefined when this tab loads
+ * none.
  */
 export function browserModuleState(module) {
     const record = modules.get(module);
@@ -1297,7 +1341,13 @@ export function browserModuleState(module) {
         return safe && order.includes(module) ? { status: "off", error: null } : undefined;
     }
 
-    return { status: record.status, error: record.error };
+    const deprecated = [...record.deprecated.values()];
+
+    return {
+        status: record.status,
+        error: record.error,
+        ...(deprecated.length > 0 ? { deprecated } : {}),
+    };
 }
 
 // ─── Where they show ─────────────────────────────────────────────────────────

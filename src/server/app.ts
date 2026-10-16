@@ -2323,12 +2323,14 @@ export class PocketApp {
         const owner = user.role === "owner";
         // A load error can name the server's folders too.
         // Modules' routes are the owner's to know: others see only whose tabs load a browser module.
-        const modules = this.loader.list().map(({ path, error, web, ...module }) =>
+        // Warnings of deprecated members are for the owner, who can update or turn off the module.
+        const modules = this.loader.list().map(({ path, error, web, deprecated, ...module }) =>
             owner
                 ? {
                       ...module,
                       ...(path === undefined ? {} : { path }),
                       ...(web === undefined ? {} : { web }),
+                      ...(deprecated === undefined ? {} : { deprecated }),
                       ...(error === undefined ? {} : { error }),
                   }
                 : {
