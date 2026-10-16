@@ -24,6 +24,8 @@ export type SessionMeta = {
     archived?: boolean;
     /** The session this one was forked from, and the last entry it inherited; no entry: forked before the first message. */
     forkedFrom?: { id: number; entryId?: number };
+    /** The session that started this one (`linked-sessions.ts`): a link only, which gives no access and owns nothing. */
+    linkedFrom?: { id: number };
     /** The most Pi may spend here, in dollars, subagents included. */
     budget?: number;
     /** The git worktree the session works in, when it has one of its own. */
@@ -51,6 +53,30 @@ export const FolderFavoritesDoc = defineDoc<{ users: Record<string, string[]> }>
     version: 1,
     scope: "session",
     initial: () => ({ users: {} }),
+});
+
+/** The addresses this session knows its linked sessions by, so no session id goes into its transcript. A fork makes its own. */
+export const LinkedSessionPeersDoc = defineDoc<{ peers: Record<string, number> }>({
+    kind: "pocket.linked-session-peers",
+    version: 1,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({ peers: {} }),
+});
+
+/** What one call to start or message a linked session did, by its hashed key: the session, and whom Pi worked for. */
+export const LinkedSessionCallDoc = defineDocFamily<
+    { conversationId?: number; by?: string },
+    Record<string, never>
+>({
+    kind: "pocket.linked-session-call",
+    version: 1,
+    family: true,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({}),
 });
 
 /**

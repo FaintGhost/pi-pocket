@@ -4,8 +4,9 @@ import { Component } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { initials, personColor } from "./avatar.js";
 import { browserAvailable, setBrowserOpen } from "./browser.js";
-import { describeCall } from "./calls.js";
+import { describeCall, describersRevision } from "./calls.js";
 import { DiffBlock } from "./diff.js";
+import { LinkedSessions } from "./linked-sessions.js";
 import { fromServer } from "./seen.js";
 import { Highlighted } from "./rich.js";
 import {
@@ -301,7 +302,13 @@ function UserEntry({ entry, view, users }) {
     const via = authorId === undefined ? VIA.exec(written) : null;
     const sent = via ? written.slice(via[0].length) : written;
     const scheduled = sent.startsWith(SCHEDULED);
-    const body = scheduled ? sent.slice(SCHEDULED.length) : sent;
+    const peer = via && /^linked session (session-[a-f0-9-]{36})$/.exec(via[1]);
+    // Keep routing instructions in the model's transcript, not in the person's reading of a peer message.
+    const peerText =
+        peer && sent.startsWith(`Message from linked session ${peer[1]}.`)
+            ? /\n<linked-session-message>\n([\s\S]*)\n<\/linked-session-message>$/.exec(sent)?.[1]
+            : undefined;
+    const body = peerText ?? (scheduled ? sent.slice(SCHEDULED.length) : sent);
     const files = attachments ? parseAttachments(attachments) : [];
     // `/skill:name request`: the skill by name, and the request.
     const skill = SKILL.exec(body);
@@ -340,7 +347,7 @@ function UserEntry({ entry, view, users }) {
                 ${name && html`<b class="prompt-author">${name}</b>`}
                 ${entry.at && html`<span class="prompt-time">${clock(entry.at)}</span>`}
                 ${scheduled && html`<span class="prompt-time">· scheduled</span>`}
-                ${via && html`<span class="prompt-time">· via ${via[1]}</span>`}
+                ${via && html`<span class="prompt-time">· via ${peerText === undefined ? via[1] : "a linked session"}</span>`}
             </span>
             <div class="prompt-body">
                 ${
@@ -470,8 +477,16 @@ function stepWords(call) {
             };
         case "watch_pr":
             return { label: "watch PR", subject: [args.action, args.pr].filter(Boolean).join(" ") };
-        default:
-            return { label: call.name, subject: describeCall(call).subject };
+
+        default: {
+            const described = describeCall(call);
+
+            // An extension's own words for its tool, or the tool's name.
+            return {
+                label: described.own ? described.label : call.name,
+                subject: described.subject,
+            };
+        }
     }
 }
 
@@ -1725,6 +1740,8 @@ function callDeps(block, results, slots, approvals) {
         results.get(block.id),
         slot === undefined ? "" : JSON.stringify(slot),
         decision === undefined ? "" : JSON.stringify(decision),
+        // How extensions describe their tools' calls (`pocket.toolCall`).
+        describersRevision(),
     ];
 
     if (slot?.taskId !== undefined) {
@@ -2466,6 +2483,7 @@ export function Transcript() {
 
     return html`<main class="scroller" ref=${scroller} onScroll=${onScroll}>
         <div class="transcript">
+            <${LinkedSessions} />
             ${
                 conversation.forkedFrom &&
                 sessionsLoaded &&

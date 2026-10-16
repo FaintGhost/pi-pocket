@@ -42,6 +42,7 @@ const ORDER = [
     "artifacts.ts",
     "browser.ts",
     "subagents.ts",
+    "agent-teams.ts",
     "schedules.ts",
     "goals.ts",
     "plan.ts",
@@ -60,12 +61,13 @@ export const BUILT_IN_MODULES: ReadonlySet<string> = new Set(
 /** Modules the app cannot work without: always on. */
 const REQUIRED = new Set(["prompt.ts"]);
 /** Built-in modules that stay off until the owner turns them on. Drop-ins all do. */
-const OFF_BY_DEFAULT = new Set(["guard.ts"]);
+const OFF_BY_DEFAULT = new Set(["guard.ts", "agent-teams.ts"]);
 const TITLES: Record<string, string> = {
     "prompt.ts": "System prompt",
     "artifacts.ts": "Artifacts",
     "browser.ts": "Browser",
     "subagents.ts": "Subagents",
+    "agent-teams.ts": "Agent Teams",
     "schedules.ts": "Scheduled messages",
     "goals.ts": "Done when",
     "plan.ts": "Plan mode",
@@ -93,6 +95,7 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "artifact",
     "browser",
     "subagent",
+    "agent_chat",
     "schedule",
     "codemode",
     "memory",
