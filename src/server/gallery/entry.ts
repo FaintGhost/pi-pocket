@@ -11,6 +11,7 @@
  * sizes to `LIMITS`.
  */
 import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
 import { BUILT_IN_COMMANDS } from "../extension-web.ts";
 import { INVISIBLE_CLASS } from "../fence.ts";
 import { BUILT_IN_MODULES, BUILT_IN_TOOLS, RESERVED_EXTENSIONS } from "../reload.ts";
@@ -571,8 +572,22 @@ export function parseEntry(value: unknown): Entry {
     };
 }
 
-/** Ids a theme in the index may not have: the app's own look, and the desktop's colors. */
-const RESERVED_THEMES = new Set(["pocket", "desktop"]);
+/**
+ * Ids a theme in the index may not have, as Pi Pocket keeps them for itself: `desktop` (the desktop's colors), the
+ * themes that come with it (`web/themes/`), and its palettes (`web/themes.js`). Read from this checkout, as the index's
+ * checks import this file from one.
+ */
+export const RESERVED_THEMES: ReadonlySet<string> = await (async () => {
+    const web = new URL("../../../web/", import.meta.url);
+    const builtIn = readdirSync(new URL("themes/", web), { withFileTypes: true })
+        .filter((each) => each.isDirectory())
+        .map((each) => each.name);
+    const { THEMES } = (await import(new URL("themes.js", web).href)) as {
+        THEMES: Record<string, unknown>;
+    };
+
+    return new Set(["desktop", "pocket", ...builtIn, ...Object.keys(THEMES)]);
+})();
 
 /**
  * A theme's entry, checked whole: its files keep to the theme format's names and limits (`themes/format.ts`). What

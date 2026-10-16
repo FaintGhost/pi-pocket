@@ -191,9 +191,10 @@ These can change in any release: the words of errors and notices, timing that th
 
 ### Reserved names
 
-- **A12. Pi Pocket can keep a new name for itself in any minor release:** a module, an extension, a tool, or a command. The release notes list it.\
+- **A12. Pi Pocket can keep a new name for itself in any minor release:** a module, an extension, a tool, a command, or a theme id (a theme or a palette that comes with Pi Pocket). The release notes list it.\
   _Reason:_ new built-in features need names. A module with its own prefix ([Names](../reference/names.md)) never meets them.
 - When a new reserved name is the name of a drop-in, Pi Pocket refuses the drop-in, and the Extensions sheet says why. For example, 0.14 keeps the tool `team` and the module `agent-teams`.
+- When a new reserved theme id is the id of a theme folder of the owner's, Pi Pocket does not read that folder, and tells the owner. The gallery does not accept a theme entry with a reserved id. For example, 0.14 keeps the theme `lantern`.
 
 ### Security fixes
 
