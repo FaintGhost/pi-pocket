@@ -43,7 +43,7 @@ A copy of Pocket starts with a `theme.css` that lists every token with its value
     images/grain.webp
 ```
 
-The folder's name is the theme's id: 2 to 48 lowercase letters, digits, and `-`. A theme cannot take the name of one that comes with Pi Pocket, of a palette, or `desktop`.
+The folder's name is the theme's id: lowercase letters, digits, and `-` ([Limits](reference/limits.md#themes) gives the lengths). A theme cannot take the name of one that comes with Pi Pocket, of a palette, or `desktop`.
 
 `theme.json` is needed when the folder has CSS:
 
@@ -61,8 +61,8 @@ The folder's name is the theme's id: 2 to 48 lowercase letters, digits, and `-`.
 | Field                   | What                                                                                        |
 | ----------------------- | ------------------------------------------------------------------------------------------- |
 | `themeApi`              | Required. The version of the theme surface it uses: 1. A newer one is not loaded.           |
-| `name`                  | Required. Up to 60 characters.                                                              |
-| `description`, `author` | Optional. Up to 200 and 60 characters.                                                      |
+| `name`                  | Required. One line.                                                                         |
+| `description`, `author` | Optional. One line each.                                                                    |
 | `version`               | Optional. The theme's own version, for people.                                              |
 | `minPocket`             | Optional. The oldest Pi Pocket it works with, for parts and tokens added in later releases. |
 
@@ -77,7 +77,7 @@ Nothing else in the folder is served. Hidden files, `node_modules`, and links ar
 
 Fonts: many open fonts reserve their name (the SIL Open Font License's Reserved Font Name), so a cut-down copy (a subset) would have to be renamed. Ship the font files whole; a family name of your own in `@font-face` is not a change to the font. Keep the licence file beside the font.
 
-Limits: all CSS together 256 KB; each font or image 4 MB; everything 16 MB and 200 files; folders 4 deep; `theme.json` and `colors.toml` 8 KB each.
+What a theme may hold, in sizes and counts, is in [Limits](reference/limits.md#themes). A theme past one of them is not loaded, and the owner is told which.
 
 ## Writing the CSS
 
