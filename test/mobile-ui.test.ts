@@ -2088,6 +2088,14 @@ test("the menu's grid arrows and Home/End reach items, and Esc returns focus", r
     await goTo(first);
     await tap('.topbar [aria-label="Menu"]');
     await reach({ sheet: "menu" }, "the menu");
+    // The menu takes the keys once it has the focus, a frame or so after it opens.
+    await until(
+        async () =>
+            await inPage<boolean>(
+                `return JSON.stringify(document.activeElement?.closest(".nav-menu") != null)`,
+            ),
+        "the focus in the menu",
+    );
     await page.press("ArrowDown");
     assert.equal(
         await inPage<string>(
