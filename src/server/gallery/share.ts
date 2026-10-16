@@ -40,6 +40,7 @@ function specifiers(source: string): Set<string> {
         ...found(/\b(?:import|export)\s+(?!type\s)[^;]*?\bfrom\s*(["'])([^"'\n]+)\1/g),
         ...found(/\bimport\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g),
         ...found(/(?:^|[;\s])import\s*(["'])([^"'\n]+)\1/g),
+        ...found(/\brequire\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g),
     ]);
 }
 
@@ -67,8 +68,8 @@ export function importProblems(
             continue;
         }
 
-        // Server code is TypeScript; the rest runs in the browser.
-        const browser = !/\.[cm]?ts$/i.test(file.name);
+        // A browser module's files are .js and .mjs (`WEB_FILE_TYPES`); the rest is server code.
+        const browser = /\.m?js$/i.test(file.name);
 
         for (const spec of specifiers(file.text)) {
             if (spec.startsWith("./") || spec.startsWith("../")) {
