@@ -195,6 +195,8 @@ export class Gallery {
     readonly #app: PocketApp;
     #settings: { index: string } | undefined;
     #read: Read | undefined;
+    /** The last read of the index that failed, since the last that did not: the read before counts until it is old. */
+    #failed: { address: string; at: number; error: string } | undefined;
     /** A read of the index that runs: one at a time for each address. */
     #reading: { address: string; done: Promise<Read> } | undefined;
     /** Installs, updates, and removals, one at a time. */
@@ -279,14 +281,21 @@ export class Gallery {
 
     /**
      * The index, read again when the last read is an hour old, or when `fresh`. When reading it fails, the last read
-     * still counts, with why; with none, the failure is the answer.
+     * still counts, with why, and is not read again for an hour unless `fresh`; with none, the failure is the answer.
      */
     async #index(fresh: boolean): Promise<Read> {
         const { index: address } = await this.#setting();
         const last = this.#read?.address === address ? this.#read : await this.#saved(address);
+        const failed = this.#failed?.address === address ? this.#failed : undefined;
 
-        if (last !== undefined && !fresh && Date.now() - last.fetchedAt < FRESH_MS) {
-            return last;
+        if (last !== undefined && !fresh) {
+            if (Date.now() - last.fetchedAt < FRESH_MS) {
+                return last;
+            }
+
+            if (failed !== undefined && Date.now() - failed.at < FRESH_MS) {
+                return { ...last, error: failed.error };
+            }
         }
 
         if (this.#reading?.address !== address) {
@@ -302,6 +311,8 @@ export class Gallery {
         try {
             return await this.#reading.done;
         } catch (error) {
+            this.#failed = { address, at: Date.now(), error: describe(error) };
+
             if (last === undefined) {
                 throw error;
             }
@@ -329,6 +340,7 @@ export class Gallery {
         const read: Read = { address, fetchedAt: Date.now(), index };
 
         this.#read = read;
+        this.#failed = undefined;
         // Kept for the next start, and for when the index cannot be reached: read strictly again then.
         await mkdir(this.#folder(), { recursive: true });
         await writeFile(
