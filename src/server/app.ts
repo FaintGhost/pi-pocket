@@ -256,8 +256,6 @@ export class PocketApp {
     harness!: Harness;
     models!: ModelRuntime;
     settings!: SettingsManager;
-    /** What extension modules get (`PocketHost`): kept for tests that stand in for an older server's. */
-    host!: PocketHost;
     loader!: ExtensionLoader;
     readonly commands = new Commands(this);
     readonly extensionCommands = new ExtensionCommands(this);
@@ -540,7 +538,6 @@ export class PocketApp {
             thinkingLevels: THINKING_LEVELS,
         };
 
-        this.host = host;
         this.#registry = registry;
         const dropIn = join(this.dataDir, "extensions");
 

@@ -121,7 +121,7 @@ export function exposedError(error: unknown): { status: number; message: string 
 }
 
 /** The files a browser module's folder serves, by type. Never `.ts`: server code can hold secrets. */
-export const WEB_FILE_TYPES: Readonly<Record<string, string>> = {
+const WEB_FILE_TYPES: Readonly<Record<string, string>> = {
     ".js": "text/javascript; charset=utf-8",
     ".mjs": "text/javascript; charset=utf-8",
     ".css": "text/css; charset=utf-8",
@@ -149,7 +149,7 @@ export function mayUse(user: Pick<User, "role" | "sessions">, access: WebAccess)
 }
 
 /** A module's name, from its file: `server-status.ts` is `server-status`. */
-export function moduleName(file: string): string {
+function moduleName(file: string): string {
     return file.replace(/\.ts$/, "");
 }
 
