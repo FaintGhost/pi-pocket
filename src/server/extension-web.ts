@@ -503,16 +503,26 @@ export class ExtensionWebs {
     }
 
     /** What a module's web part has, for the Extensions sheet. */
-    describe(file: string): { routes: string[]; client?: WebAccess } | undefined {
+    describe(
+        file: string,
+    ): { routes: string[]; client?: WebAccess; access: WebAccess } | undefined {
         const part = this.#parts.get(moduleName(file));
 
         if (part === undefined || part.file !== file || part.empty) {
             return undefined;
         }
 
+        // The widest of its routes' and its browser module's: who can reach any of it.
+        const reach: WebAccess[] = [
+            ...part.routes.map((route) => route.access),
+            ...(part.client === undefined ? [] : [part.client.access]),
+        ];
+        const access = (["view", "steer"] as const).find((each) => reach.includes(each)) ?? "owner";
+
         return {
             routes: part.routes.map((route) => `${route.method} ${route.path}`),
             ...(part.client === undefined ? {} : { client: part.client.access }),
+            access,
         };
     }
 

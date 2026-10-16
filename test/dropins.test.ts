@@ -105,7 +105,16 @@ test("drop-ins are off until the owner turns them on, and cannot replace a built
 
 test("a drop-in that is on gives Pi its tools and hooks, reloads when edited, and goes away when deleted", async () => {
     await app.setExtensionEnabled(owner(app), "shout.ts", true);
-    assert.deepEqual(module("shout.ts")[0]?.extensions, [{ name: "shout", tools: ["shout"] }]);
+    assert.deepEqual(module("shout.ts")[0]?.extensions, [
+        {
+            name: "shout",
+            tools: ["shout"],
+            readOnlyTools: [],
+            hooks: ["beforeTool"],
+            sections: [],
+            wraps: [],
+        },
+    ]);
     const id = await newSession(app);
 
     await say(app, id, "shout hello");
