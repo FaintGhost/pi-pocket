@@ -120,7 +120,12 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
                     { to: args.to, message: args.message, steer: args.steer },
                     key,
                 );
-            } catch {
+            } catch (error) {
+                // A message too long names no session: Pi can send a shorter one.
+                if ((error as { status?: unknown } | null)?.status === 413) {
+                    throw new Error(`${(error as Error).message} Send a shorter one.`);
+                }
+
                 // What the target refused may name what not everyone here can see: say only what it can be.
                 throw new Error(
                     "The message was not taken. The address may be unknown here (list them), or a session may be in plan mode, past a spend limit, or in someone else's turn; or the team sent 20 messages without a person, and a person must write first. Do not work around it: tell the person.",
