@@ -1,13 +1,16 @@
 /**
  * Sharing a drop-in: whether it stands on its own (its files are all its own, and it imports only what every Pi Pocket
  * has), and a draft of its index entry, from its doc comment and its files' hashes. Pi Pocket makes no GitHub calls for
- * it: the owner opens the pull request.
+ * it: the owner opens the pull request. A theme folder of the owner's is shared the same way (`shareThemeDraft`).
  */
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 import { join, posix } from "node:path";
+import { describe } from "../errors.ts";
 import { POCKET_API } from "../extension-web.ts";
 import type { ExtensionInfo } from "../reload.ts";
+import { readTheme } from "../themes.ts";
+import { THEME_API } from "../themes/format.ts";
 import {
     type Declares,
     EntryError,
@@ -15,9 +18,11 @@ import {
     LIMITS,
     NAME,
     parseEntry,
+    parseThemeEntry,
     sha256,
 } from "./entry.ts";
 import { exists, textOf, type Written } from "./files.ts";
+import { readThemeFile } from "./themes.ts";
 
 /** The packages a browser module can import by name: the app's import map (`web/index.html`). */
 const BROWSER_PACKAGES = new Set(["preact", "preact/hooks", "htm", "marked", "dompurify"]);
@@ -346,5 +351,111 @@ export async function shareDraft(options: {
             repoUrl === null
                 ? null
                 : `${repoUrl}/new/main/entries?filename=${encodeURIComponent(`${name}.json`)}`,
+    };
+}
+
+/** Where an entry is submitted, from the index's repository: its guide, and GitHub's page for a new entry file. */
+const submitPages = (repoUrl: string | null, name: string) => ({
+    repoUrl,
+    contributingUrl: repoUrl === null ? null : `${repoUrl}/blob/HEAD/CONTRIBUTING.md`,
+    newEntryPage:
+        repoUrl === null
+            ? null
+            : `${repoUrl}/new/main/entries?filename=${encodeURIComponent(`${name}.json`)}`,
+});
+
+/**
+ * Whether one of the owner's theme folders passes the theme check, and a draft of its index entry (`kind: "theme"`):
+ * the files the theme loads, with their sizes and hashes, and its name and description from `theme.json`. Files it
+ * does not load are left out. In the same shape as a drop-in's draft, so the same sheet shows it.
+ */
+export async function shareThemeDraft(options: {
+    dir: string;
+    id: string;
+    owner: string;
+    repoUrl: string | null;
+    version: string;
+}) {
+    const { dir, id } = options;
+    const problems: string[] = [];
+    const notes: string[] = [];
+    let theme: ReturnType<typeof readTheme> | undefined;
+
+    try {
+        theme = readTheme(join(dir, id), id, false, options.version);
+    } catch (error) {
+        problems.push(`The theme check refuses it: ${describe(error)}.`);
+    }
+
+    const paths =
+        theme === undefined
+            ? []
+            : [
+                  ...(theme.manifest === undefined ? [] : ["theme.json"]),
+                  ...(theme.colors === undefined ? [] : ["colors.toml"]),
+                  ...theme.css.keys(),
+                  ...theme.assets.keys(),
+              ];
+    const files = [];
+
+    for (const path of paths) {
+        const bytes = await readThemeFile(dir, id, path);
+
+        if (bytes === undefined) {
+            problems.push(`${path} cannot be read: it is gone, or a link.`);
+            continue;
+        }
+
+        files.push({ name: `${id}/${path}`, sha256: sha256(bytes), size: bytes.byteLength });
+    }
+
+    notes.push("Only the files the theme loads are shared: others in its folder are left out.");
+
+    const manifest = theme?.manifest;
+    const description = manifest?.description ?? "";
+
+    if (theme !== undefined && description === "") {
+        problems.push("Give it a description in theme.json: one line that says how it looks.");
+    }
+
+    const entry = {
+        kind: "theme",
+        name: id,
+        title: manifest?.name ?? titleOf(id),
+        description,
+        tags: [],
+        author: { name: manifest?.author ?? options.owner },
+        version: manifest?.version ?? "1.0.0",
+        source: { repo: "your-github-name/your-repository", commit: "", path: "" },
+        files,
+        themeApi: THEME_API,
+        minPocket: options.version.replace(/[-+].*$/, ""),
+    };
+
+    if (theme !== undefined && description !== "") {
+        try {
+            parseThemeEntry({
+                ...entry,
+                author: { name: entry.author.name || "someone" },
+                source: { repo: "someone/something", commit: "0".repeat(40), path: "" },
+            });
+        } catch (error) {
+            if (!(error instanceof EntryError)) {
+                throw error;
+            }
+
+            problems.push(`The index would refuse it: ${error.message}.`);
+        }
+    }
+
+    return {
+        file: id,
+        name: id,
+        entry,
+        text: `${JSON.stringify(entry, null, 4)}\n`,
+        problems,
+        notes,
+        declaresKnown: true,
+        ...submitPages(options.repoUrl, id),
     };
 }
