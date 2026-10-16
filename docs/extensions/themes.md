@@ -25,7 +25,7 @@ Besides Appearance: the launcher's **Themes** (Ctrl/⌘+K, then `#`) lists the t
 
 Each save shows at once in every tab that uses the theme. The page does not reload, so nothing you typed is lost.
 
-You can also edit the folder yourself: `~/.pi-pocket/themes/<id>/` (or `themes/` in `PI_POCKET_DIR`). It is the one place in the data folder, with `extensions/`, that you edit by hand. **Remove** moves a theme's folder to `themes/.removed/`, so you can get it back from there.
+You can also edit the folder yourself: `~/.pi-pocket/themes/<id>/` (or `themes/` in `PI_POCKET_DIR`). It is the one place in the data folder, with `extensions/`, that you edit by hand. **Remove** moves a theme's folder to `themes/.removed/`, so you can get it back from there. Pi Pocket never deletes what is in `.removed/`, so it grows: delete the folders there you no longer want.
 
 A copy of Pocket starts with a `theme.css` that lists every token with its value, commented out. Take the comment marks off a token and change its value. Leave the others commented out, so they follow the app's updates.
 
@@ -157,7 +157,7 @@ The app's CSS comes in three cascade layers: the app's own (with extensions' sty
 
 - A theme's rule wins over the app's, however specific the app's rule is. `[data-part="message-box"] { border-radius: 0; }` is enough.
 - The app's `!important` rules still win, such as Appearance's reduced motion. A theme cannot turn motion back on.
-- What people set themselves still wins: the text size, and the widths they drag (`--text-size` and `--sidebar-w` are theirs).
+- What people set themselves still wins: the text size, and the widths they drag (`--text-size` and `--sidebar-w` are theirs). A theme's `!important` would beat even those: never mark a size `!important`.
 - A theme's `@font-face` and `@keyframes` are in its layer too.
 
 Each browser keeps the theme's addresses, and the page loads them before it first draws, so a reload never flashes the app's own look. It preloads the theme's fonts in place of the app's. A theme's addresses carry a hash of its files, so the browser keeps each file until the theme changes, and then fetches the new ones.
