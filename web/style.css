@@ -6025,6 +6025,14 @@ pre.diff .del {
     color: var(--accent);
 }
 
+/* A favorite's shortcut, Ctrl/⌘+1…9, at the end of its place. */
+.fp-key {
+    flex: none;
+    margin-left: auto;
+    font: 11px var(--mono);
+    color: var(--faint);
+}
+
 .fp-places-title {
     margin: 10px 10px 4px;
     font-size: 12px;
@@ -6127,6 +6135,31 @@ pre.diff .del {
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--text);
+}
+
+/* Star the folder Open takes, to keep it among the places as a favorite. */
+.fp-target .fp-star {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    margin: -6px 0;
+    color: var(--muted);
+}
+
+.fp-star.on {
+    color: var(--accent);
+}
+
+.fp-star.on .icon {
+    fill: currentColor;
+}
+
+@media (pointer: coarse) {
+    .fp-target .fp-star {
+        width: 40px;
+        height: 40px;
+        margin: -12px 0;
+    }
 }
 
 .fp-options {

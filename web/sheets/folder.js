@@ -1,9 +1,21 @@
 // The folder picker, as a desktop's file dialog: places on the left (home, the computer, recent folders), the folders
 // where you are on the right, and Cancel and Open at the bottom. With a mouse, a click selects a folder and a double
 // click goes into it; on a touch screen, a tap goes into it. Open takes the selected folder, or the one you are in.
+// Favorites, each person's own and on all their devices, sit first among the places; Ctrl/⌘+1…9 starts in one.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { actions, api, closeSheet, navigate, notify, openSheet, store } from "../store.js";
-import { html, Icon, Sheet, shortPath } from "../ui.js";
+import {
+    actions,
+    api,
+    attempt,
+    canSteer,
+    closeSheet,
+    navigate,
+    notify,
+    openSheet,
+    scoped,
+    store,
+} from "../store.js";
+import { APPLE, html, Icon, Sheet, shortPath } from "../ui.js";
 import { piSessionsAvailable } from "./pi-sessions.js";
 
 /** Whether hidden folders show: kept for the next time the picker opens. */
@@ -105,7 +117,7 @@ function LineInput({ value, placeholder, label, onSubmit, onCancel, class: class
 }
 
 export function CwdSheet({ mode }) {
-    const { view, server } = store.state;
+    const { view, server, folderFavorites: favorites } = store.state;
     const changing = mode === "change";
     const initial =
         (changing ? (view.agent?.cwd ?? server?.defaultCwd) : server?.defaultCwd) ?? "~";
@@ -120,6 +132,9 @@ export function CwdSheet({ mode }) {
     const [editing, setEditing] = useState(null);
     const [missing, setMissing] = useState(null);
     const [busy, setBusy] = useState(false);
+    // Set at once, unlike busy: a second shortcut in the same moment does not start a second session.
+    const starting = useRef(false);
+    const [saving, setSaving] = useState(false);
     const list = useRef(null);
     const crumbsBox = useRef(null);
     // Only the latest read shows: a slow one answering after a later click is dropped.
@@ -213,29 +228,85 @@ export function CwdSheet({ mode }) {
         }
     };
 
-    /** Start the session in the folder Open names, or move this one there. */
-    const use = async () => {
-        if (target === null || busy || here) {
+    /** Start the session in the folder Open names (or a favorite's), or move this one there. */
+    const use = async (path = target) => {
+        if (path === null || starting.current || (changing && path === view.agent?.cwd)) {
             return;
         }
 
+        starting.current = true;
         setBusy(true);
 
         try {
             if (changing) {
-                await actions.configure({ cwd: target });
+                await actions.configure({ cwd: path });
                 closeSheet();
             } else {
-                const created = await actions.createSession(target, { worktree });
+                const created = await actions.createSession(path, { worktree });
 
                 navigate(created.id);
             }
         } catch (error) {
             notify("error", error.message);
         } finally {
+            starting.current = false;
             setBusy(false);
         }
     };
+
+    const mayStar = canSteer() && !scoped();
+    const starred = target !== null && favorites.includes(target);
+
+    /** Star or unstar the folder Open takes. The list changes when the server says it did, on every device. */
+    const toggleFavorite = () =>
+        attempt(async () => {
+            setSaving(true);
+
+            try {
+                await api("folder-favorites", { path: target, starred: !starred });
+            } finally {
+                setSaving(false);
+            }
+        });
+
+    // Ctrl/⌘+1…9 starts a session in a favorite, while this is the New session picker on top. Caught before the
+    // app's own keys; Alt+1…9 (sessions) has Alt, so it never gets here.
+    useEffect(() => {
+        if (changing) {
+            return;
+        }
+
+        const shortcut = (event) => {
+            const sheet = store.state.sheet;
+            const mod = APPLE ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+            const digit = /^Digit([1-9])$/.exec(event.code);
+            const favorite = digit && favorites[Number(digit[1]) - 1];
+
+            if (
+                !mod ||
+                !favorite ||
+                event.altKey ||
+                event.shiftKey ||
+                event.isComposing ||
+                sheet?.type !== "cwd" ||
+                sheet.mode !== "new" ||
+                store.state.launcher
+            ) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopImmediatePropagation();
+
+            if (!event.repeat) {
+                use(favorite);
+            }
+        };
+
+        addEventListener("keydown", shortcut, true);
+
+        return () => removeEventListener("keydown", shortcut, true);
+    }, [changing, favorites, worktree]);
 
     const toggleHidden = () => {
         const next = !hidden;
@@ -315,14 +386,15 @@ export function CwdSheet({ mode }) {
     };
 
     const crumbs = folder === null ? [] : crumbsOf(folder, home);
-    const recent = listing?.recent ?? [];
+    const recent = (listing?.recent ?? []).filter((path) => !favorites.includes(path));
+    const favoriteLabels = recentLabels(favorites, home);
     const labels = recentLabels(recent, home);
     const places = [
         ...(home ? [{ path: home, name: "Home", icon: "home" }] : []),
         { path: "/", name: "Computer", icon: "monitor" },
     ];
 
-    const place = (path, name, icon) => html`<button
+    const place = (path, name, icon, key = null) => html`<button
         key=${path}
         type="button"
         class=${`fp-place ${path === folder ? "on" : ""}`}
@@ -332,6 +404,7 @@ export function CwdSheet({ mode }) {
     >
         <${Icon} name=${icon} size=${15} />
         <span>${name}</span>
+        ${key && html`<span class="fp-key">${key}</span>`}
     </button>`;
 
     return html`<${Sheet}
@@ -431,6 +504,17 @@ export function CwdSheet({ mode }) {
         <div class="fp-main">
             <nav class="fp-places" aria-label="Places">
                 ${places.map((each) => place(each.path, each.name, each.icon))}
+                ${favorites.length > 0 && html`<div class="fp-places-title">Favorites</div>`}
+                ${favorites.map((path, index) =>
+                    place(
+                        path,
+                        favoriteLabels[index],
+                        "star",
+                        !changing && !touch && index < 9
+                            ? `${APPLE ? "⌘" : "Ctrl+"}${index + 1}`
+                            : null,
+                    ),
+                )}
                 ${recent.length > 0 && html`<div class="fp-places-title">Recent</div>`}
                 ${recent.map((path, index) => place(path, labels[index], "folder"))}
                 ${
@@ -493,6 +577,21 @@ export function CwdSheet({ mode }) {
             <div class="fp-target" title=${target ? shortPath(target, home) : ""}>
                 <span class="muted">Folder:</span>
                 <span class="mono">${target ? shortPath(target, home) : "…"}</span>
+                ${
+                    mayStar &&
+                    target !== null &&
+                    html`<button
+                        type="button"
+                        class=${`icon-button fp-star ${starred ? "on" : ""}`}
+                        aria-pressed=${starred ? "true" : "false"}
+                        aria-label=${starred ? "Remove from favorites" : "Add to favorites"}
+                        title=${starred ? "Remove from favorites" : "Add to favorites"}
+                        disabled=${saving}
+                        onClick=${toggleFavorite}
+                    >
+                        <${Icon} name="star" size=${15} />
+                    </button>`
+                }
             </div>
             <div class="fp-options">
                 ${
@@ -520,7 +619,7 @@ export function CwdSheet({ mode }) {
                     class="button primary"
                     title=${touch ? undefined : "Ctrl+Enter"}
                     disabled=${target === null || busy || here}
-                    onClick=${use}
+                    onClick=${() => use()}
                 >
                     ${here ? "Already here" : changing ? "Move here" : "Open"}
                 </button>
