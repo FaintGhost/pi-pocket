@@ -85,7 +85,7 @@ import { PIP_COMPACT_CHOICES, PipCompaction } from "./pip-compact.ts";
 import { RepoWatches } from "./repo-watches.ts";
 import { snippet } from "./projection.ts";
 import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./prompts.ts";
-import { Themes } from "./themes.ts";
+import { BASE_THEME, Themes } from "./themes.ts";
 import { THEME_ID } from "./themes/format.ts";
 import { measureModelStreams } from "./timing.ts";
 import { Providers } from "./providers.ts";
@@ -395,6 +395,8 @@ export class PocketApp {
                         client.user.role === "owner" ? lists.owner : lists.others,
                     );
                 }
+
+                void this.#themeDefaultStillHere();
             },
             log: (line) => this.#log(line),
         });
@@ -565,6 +567,7 @@ export class PocketApp {
         await this.themes.load().catch((error: unknown) => {
             this.#log(`Themes could not be read: ${describe(error)}`);
         });
+        await this.#themeDefaultStillHere();
         // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one.
         await this.gallery.recover().catch((error: unknown) => {
             this.#log(`The extension gallery could not check its updates: ${describe(error)}`);
@@ -2537,6 +2540,41 @@ export class PocketApp {
         }
 
         await this.#refreshClients();
+    }
+
+    /**
+     * The owner's default after a theme went (removed in Appearance or the gallery, or its folder deleted): a theme that
+     * is gone gives way to Pocket, and colors that went with it (its own) to the desktop's; with both gone, no default.
+     * Everyone's tabs hear it.
+     */
+    async #themeDefaultStillHere(): Promise<void> {
+        const before = this.config.themeDefault;
+
+        if (before === undefined) {
+            return;
+        }
+
+        try {
+            const lookGone =
+                before.look !== BASE_THEME &&
+                !this.themes.list().some((each) => each.id === before.look);
+            // The desktop's colors are the app's own default: they never go.
+            const colorsGone =
+                before.colors !== "desktop" && !(await this.themes.hasColors(before.colors));
+
+            if (!lookGone && !colorsGone) {
+                return;
+            }
+
+            const look = lookGone ? BASE_THEME : before.look;
+            const colors = colorsGone ? "desktop" : before.colors;
+
+            this.config.themeDefault =
+                look === BASE_THEME && colors === "desktop" ? undefined : { look, colors };
+            await this.#refreshClients();
+        } catch (error) {
+            this.#log(`The default theme could not be checked: ${describe(error)}`);
+        }
     }
 
     /**
