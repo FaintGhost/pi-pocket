@@ -206,6 +206,15 @@ export function ProvidersSheet() {
         </label>
         ${providers === null && html`<${Loader} label="Loading providers" />`}
         <div class="sheet-list">
+            ${
+                providers !== null &&
+                list.length === 0 &&
+                needle !== "" &&
+                html`<div class="launcher-empty" role="status">
+                    <strong>No providers match “${query.trim()}”.</strong>
+                    <button class="button" onClick=${() => setQuery("")}>Clear search</button>
+                </div>`
+            }
             ${list.map(
                 (provider) => html`<div class="provider">
                     <div>
@@ -329,6 +338,10 @@ export function AuthDialog({ inline = false }) {
     const answer = (payload) => {
         const { flowId, prompt: asked } = auth;
 
+        if (asked.type === "secret" && payload.value?.trim() === "") {
+            return;
+        }
+
         return attempt(async () => {
             await api(`auth/${flowId}/${asked.id}`, payload);
             signInAnswered(flowId, asked.id);
@@ -352,7 +365,7 @@ export function AuthDialog({ inline = false }) {
         inline=${inline}
         focusKey=${`${auth.flowId}:${prompt?.id ?? auth.events.length}`}
     >
-        ${auth.events.map((event) => {
+        ${(auth.done ? [] : auth.events).map((event) => {
             if (event.type === "auth_url") {
                 return html`<div class="auth-event">
                     <a class="button primary wide" href=${event.url} target="_blank" rel="noopener">
@@ -407,13 +420,39 @@ export function AuthDialog({ inline = false }) {
                             onInput=${(event) => setValue(event.currentTarget.value)}
                             onKeyDown=${(event) => event.key === "Enter" && answer({ value })}
                         />
-                        <button class="button primary" onClick=${() => answer({ value })}>
+                        <button
+                            class="button primary"
+                            disabled=${prompt.type === "secret" && value.trim() === ""}
+                            onClick=${() => answer({ value })}
+                        >
                             Continue
                         </button>
                     </div>
                 </div>`)
         }
         ${!prompt && !auth.done && html`<${Loader} label="Waiting for the provider" />`}
-        ${auth.done && !auth.done.ok && html`<div class="error-box">${auth.done.error}</div>`}
+        ${
+            auth.done &&
+            !auth.done.ok &&
+            html`<div class="error-box">
+                <p>${auth.done.details ? auth.done.error : "Sign-in did not finish. Try again."}</p>
+                <details>
+                    <summary>Details</summary>
+                    <p>${auth.done.details ?? auth.done.error}</p>
+                </details>
+                <button
+                    class="button"
+                    onClick=${() =>
+                        attempt(async () => {
+                            await api(`providers/${encodeURIComponent(auth.providerId)}/login`, {
+                                type: auth.done.loginType ?? "oauth",
+                            });
+                            closeSignIn(auth.flowId);
+                        })}
+                >
+                    Start again
+                </button>
+            </div>`
+        }
     <//>`;
 }

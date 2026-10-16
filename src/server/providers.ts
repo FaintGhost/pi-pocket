@@ -67,7 +67,10 @@ export function renewalRefused(error: unknown): boolean {
 interface AuthFlow {
     id: string;
     userId: string;
-    prompts: Map<string, { resolve: (value: string) => void; reject: (error: Error) => void }>;
+    prompts: Map<
+        string,
+        { resolve: (value: string) => void; reject: (error: Error) => void; requiresKey: boolean }
+    >;
     abort: AbortController;
 }
 
@@ -283,13 +286,20 @@ export class Providers {
             }
         };
 
+        let lastPromptType: AuthPrompt["type"] | undefined;
+
         const interaction = {
             signal: flow.abort.signal,
             prompt: (prompt: AuthPrompt) =>
                 new Promise<string>((resolvePrompt, rejectPrompt) => {
                     const promptId = randomUUID();
 
-                    flow.prompts.set(promptId, { resolve: resolvePrompt, reject: rejectPrompt });
+                    lastPromptType = prompt.type;
+                    flow.prompts.set(promptId, {
+                        resolve: resolvePrompt,
+                        reject: rejectPrompt,
+                        requiresKey: type === "api_key" && prompt.type === "secret",
+                    });
                     const { signal, ...shown } = prompt;
 
                     signal?.addEventListener("abort", () => {
@@ -314,7 +324,17 @@ export class Providers {
                     send({ step: "done", ok: true });
                     this.#changed();
                 },
-                (error: unknown) => send({ step: "done", ok: false, error: describe(error) }),
+                (error: unknown) =>
+                    send({
+                        step: "done",
+                        ok: false,
+                        loginType: type,
+                        error:
+                            type === "oauth" && lastPromptType === "manual_code"
+                                ? "That code was not accepted."
+                                : "Sign-in did not finish. Try again.",
+                        details: describe(error),
+                    }),
             )
             .finally(() => this.#flows.delete(flow.id));
 
@@ -332,6 +352,10 @@ export class Providers {
 
         if (prompt === undefined) {
             throw new HttpError(404, "No such prompt");
+        }
+
+        if (prompt.requiresKey && value !== undefined && value.trim() === "") {
+            throw new HttpError(400, "Enter an API key.");
         }
 
         flow.prompts.delete(promptId);
