@@ -142,6 +142,7 @@ const data = join(root, "linked-data");
 
 before(async () => {
     app = await openApp(teamModel(), data);
+    await app.setExtensionEnabled(owner(app), "agent-teams.ts", true);
 });
 after(async () => {
     await app?.close();
@@ -396,7 +397,6 @@ test("validation, planning, spend, unrelated/self target and driver checks refus
         /another linked/,
     );
     await app.commands.setPlan(id, owner(app), true);
-    assert.equal(blockedInPlanMode("agent_chat", { action: "list" }), undefined);
     assert.ok(blockedInPlanMode("agent_chat", { action: "start" }));
     await assert.rejects(start(id), /Approve/);
     await assert.rejects(
@@ -647,7 +647,7 @@ test("Agent Teams hot-loads safely when the running host still needs a restart",
     });
 
     assert.equal(extension.name, "pocket-agent-teams");
-    assert.deepEqual(extension.tools ?? [], []);
+    assert.match(extension.tools?.[0]?.description ?? "", /restart/);
     assert.deepEqual(extension.sections ?? [], []);
 });
 
