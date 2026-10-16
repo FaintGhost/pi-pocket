@@ -729,6 +729,8 @@ export function BrowserPanel({ leaving = false }) {
     const wasOpen = useRef(false);
     const stageRef = useRef(null);
     const typeInput = useRef(null);
+    /** The size this tab last fitted the page to: the page follows the panel only while it still has it. */
+    const fittedHere = useRef(null);
     const beside = panelsBeside();
 
     // Over the conversation, back closes the panel.
@@ -756,6 +758,8 @@ export function BrowserPanel({ leaving = false }) {
         // The size of a page that has none yet: a phone's, or the panel's.
         const phone = matchMedia("(max-width: 700px)").matches;
         const viewport = phone ? "mobile" : stageRef.current && fitViewport(stageRef.current);
+
+        fittedHere.current = phone ? null : viewport;
 
         browserApi("open", viewport ? { viewport } : {}).catch((error) =>
             setProblem(error.message),
@@ -794,12 +798,15 @@ export function BrowserPanel({ leaving = false }) {
                 ? stageRef.current && fitViewport(stageRef.current)
                 : nextPreset.id;
 
+        fittedHere.current = nextPreset.id === "fit" ? viewport : null;
+
         if (viewport) {
             run("viewport", { viewport });
         }
     };
 
-    // Fitted, the page follows the panel's size (a dragged edge, a folded sidebar, a resized window) once it settles.
+    // Fitted here, the page follows the panel's size (a dragged edge, a folded sidebar, a resized window) once it
+    // settles; not a size Pi or another tab chose since, which reads as "fit" too.
     const fitted = open && steer && preset.id === "fit";
     const shown = useRef(state?.viewport);
 
@@ -826,8 +833,15 @@ export function BrowserPanel({ leaving = false }) {
             timer = setTimeout(() => {
                 const viewport = fitViewport(element);
                 const { width, height } = shown.current ?? {};
+                const mine = fittedHere.current;
 
-                if (viewport && (viewport.width !== width || viewport.height !== height)) {
+                if (
+                    viewport &&
+                    mine?.width === width &&
+                    mine?.height === height &&
+                    (viewport.width !== width || viewport.height !== height)
+                ) {
+                    fittedHere.current = viewport;
                     run("viewport", { viewport });
                 }
             }, 300);
