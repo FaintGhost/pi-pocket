@@ -53,7 +53,7 @@ const plural = (count, word) =>
 const revocation = (entry, commit) => entry.revoked.find((each) => each.commit === commit)?.reason;
 
 /** Who a browser module or a route is for, in words. */
-const ACCESS_WORDS = {
+export const ACCESS_WORDS = {
     owner: "the owner",
     steer: "people who can steer",
     view: "everyone who sees every session",

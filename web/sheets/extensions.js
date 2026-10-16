@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { browserModuleState, leaveSafeMode, safeMode } from "../extension-ui.js";
 import { api, attempt, closeSheet, openSheet, store } from "../store.js";
 import { html, Icon, Loader, Sheet, shortPath, Switch } from "../ui.js";
-import { galleryApi, galleryAvailable } from "./gallery.js";
+import { ACCESS_WORDS, galleryApi, galleryAvailable } from "./gallery.js";
 
 /** The guide for people who write extensions: its first page, on the docs site, which describes the latest release. */
 const GUIDE = "https://tannermidd.github.io/pi-pocket/docs/extensions/first-extension/";
@@ -56,13 +56,6 @@ function ApprovalRule({ owner }) {
         />
     </div>`;
 }
-
-/** Who loads a module's browser module, in words. */
-const ACCESS_WORDS = {
-    owner: "the owner",
-    steer: "people who can steer",
-    view: "everyone who sees every session",
-};
 
 /** What a module adds to the app: its routes, commands, and browser module with how it stands in this browser. */
 function WebPart({ module }) {

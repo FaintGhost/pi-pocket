@@ -333,28 +333,20 @@ export async function shareDraft(options: {
         problems.push(`The index would refuse it: ${error.message}.`);
     }
 
-    const text = `${JSON.stringify(entry, null, 4)}\n`;
-
     return {
-        file,
         name,
         entry,
-        text,
         problems,
         notes,
         declaresKnown: loaded,
-        repoUrl,
-        contributingUrl: repoUrl === null ? null : `${repoUrl}/blob/HEAD/CONTRIBUTING.md`,
-        // GitHub's page for a new file in the index repository's main branch: the sheet adds the entry once the owner
-        // filled in where its files are (`value`, while it fits a link).
-        newEntryPage:
-            repoUrl === null
-                ? null
-                : `${repoUrl}/new/main/entries?filename=${encodeURIComponent(`${name}.json`)}`,
+        ...submitPages(repoUrl, name),
     };
 }
 
-/** Where an entry is submitted, from the index's repository: its guide, and GitHub's page for a new entry file. */
+/**
+ * Where an entry is submitted, from the index's repository: its guide, and GitHub's page for a new file in its main
+ * branch, where the sheet adds the entry once the owner filled in where its files are (`value`, while it fits a link).
+ */
 const submitPages = (repoUrl: string | null, name: string) => ({
     repoUrl,
     contributingUrl: repoUrl === null ? null : `${repoUrl}/blob/HEAD/CONTRIBUTING.md`,
@@ -458,10 +450,8 @@ export async function shareThemeDraft(options: {
     }
 
     return {
-        file: id,
         name: id,
         entry,
-        text: `${JSON.stringify(entry, null, 4)}\n`,
         problems,
         notes,
         declaresKnown: true,

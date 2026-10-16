@@ -59,7 +59,7 @@ import {
     themeProvenance,
     themeProvenances,
 } from "./gallery/themes.ts";
-import { pocketPackage } from "./versions.ts";
+import { pocketPackage, pocketVersion } from "./versions.ts";
 
 /** The index Pi Pocket reads unless the owner picks another: the curated one. */
 export const DEFAULT_INDEX = "TannerMidd/pi-pocket-extensions";
@@ -73,9 +73,8 @@ const CODE_FILE = /\.(?:[cm]?[jt]s|json|css)$/;
 /** Characters that change the direction of text: code holding them can read as other code than what runs. */
 const BIDI = /[\u202a-\u202e\u2066-\u2069]/;
 
-/** Pi Pocket's own package: its version, and the packages a drop-in can import by name. */
-const PACKAGE = pocketPackage;
-const HERE = { api: POCKET_API, version: PACKAGE.version ?? "0.0.0" };
+/** This Pi Pocket, as the index's entries are checked against it. */
+const HERE = { api: POCKET_API, version: pocketVersion() };
 
 /** Where an installed extension came from: the index, and its entry as installed. */
 interface Provenance {
@@ -1149,7 +1148,8 @@ export class Gallery {
             module,
             owner: this.#app.config.users.find((each) => each.role === "owner")?.name ?? "",
             repoUrl: repoUrlOf(address, this.#read?.index),
-            packages: new Set(Object.keys(PACKAGE.dependencies ?? {})),
+            // The packages a drop-in can import by name: Pi Pocket's own.
+            packages: new Set(Object.keys(pocketPackage.dependencies ?? {})),
             version: HERE.version,
         });
     }
