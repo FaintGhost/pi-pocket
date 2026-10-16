@@ -4185,13 +4185,16 @@ pre.diff .del {
     animation-delay: calc(min(var(--i, 0), 14) * 18ms);
 }
 
-/* Linked-session branches are decorative; each row keeps its own button and actions. */
+/*
+ * Linked-session branches are decorative; each row keeps its own button and actions. Each line runs down from the middle
+ * of its parent's mark, and turns with a soft corner to the row's own.
+ */
 .session-branches {
     position: absolute;
-    inset: 0 auto 0 10px;
+    inset: 0 auto 0 15px;
     display: flex;
     pointer-events: none;
-    color: var(--muted);
+    color: color-mix(in srgb, var(--muted) 60%, transparent);
 }
 
 .session-branches > span {
@@ -4206,20 +4209,24 @@ pre.diff .del {
     left: 0;
     top: -1px;
     bottom: -1px;
-    border-left: 1px solid currentColor;
-}
-
-.session-branches > .elbow:not(.continues)::before {
-    bottom: 50%;
+    border-left: 1.5px solid currentColor;
 }
 
 .session-branches > .elbow::after {
     content: "";
     position: absolute;
     left: 0;
-    top: 50%;
-    width: 10px;
-    border-top: 1px solid currentColor;
+    top: -1px;
+    bottom: 50%;
+    width: 8px;
+    border-bottom: 1.5px solid currentColor;
+    border-left: 1.5px solid currentColor;
+    border-bottom-left-radius: 6px;
+}
+
+/* The last child: only the corner, no line on down. */
+.session-branches > .elbow:not(.continues)::before {
+    display: none;
 }
 
 /* One line: the folder's color, the title, and what goes on there on the right. */

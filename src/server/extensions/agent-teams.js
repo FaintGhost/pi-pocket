@@ -3,9 +3,9 @@
 export const pocketApi = 1;
 
 const LABELS = {
-    start: "start linked session",
-    send: "message linked session",
-    list: "list linked sessions",
+    start: "start session",
+    send: "message session",
+    list: "list sessions",
 };
 
 const text = (value) => (typeof value === "string" ? value : "");
