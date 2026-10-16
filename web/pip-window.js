@@ -14,20 +14,28 @@ export function usePipResize(ref, account) {
         panel.style.removeProperty("--pip-width");
         panel.style.removeProperty("--pip-height");
 
-        const size = (width, height) => {
-            panel.style.setProperty("--pip-width", `${width}px`);
-            panel.style.setProperty("--pip-height", `${height}px`);
+        // Each dimension apart: a drag on the left edge chose a width only, and the height stays the default, which
+        // follows the window's height.
+        const size = ({ width, height }) => {
+            if (Number.isFinite(width)) {
+                panel.style.setProperty("--pip-width", `${Math.max(420, Math.min(800, width))}px`);
+            }
+
+            if (Number.isFinite(height)) {
+                panel.style.setProperty("--pip-height", `${Math.max(360, height)}px`);
+            }
         };
 
-        try {
-            const saved = JSON.parse(localStorage.getItem(key));
-
-            if (Number.isFinite(saved?.width) && Number.isFinite(saved?.height)) {
-                size(Math.max(420, Math.min(800, saved.width)), Math.max(360, saved.height));
+        const saved = () => {
+            try {
+                return JSON.parse(localStorage.getItem(key)) ?? {};
+            } catch {
+                // A missing or invalid preference uses the normal CSS size.
+                return {};
             }
-        } catch {
-            // A missing or invalid preference uses the normal CSS size.
-        }
+        };
+
+        size(saved());
 
         let drag = null;
 
@@ -77,14 +85,14 @@ export function usePipResize(ref, account) {
 
             drag.moved = true;
 
-            const width = drag.edge === "top" ? drag.width : drag.width + drag.x - event.clientX;
-            const height =
-                drag.edge === "left" ? drag.height : drag.height + drag.y - event.clientY;
-
-            size(
-                Math.min(drag.maxWidth, Math.max(420, width)),
-                Math.min(drag.maxHeight, Math.max(360, height)),
-            );
+            size({
+                ...(drag.edge === "top"
+                    ? {}
+                    : { width: Math.min(drag.maxWidth, drag.width + drag.x - event.clientX) }),
+                ...(drag.edge === "left"
+                    ? {}
+                    : { height: Math.min(drag.maxHeight, drag.height + drag.y - event.clientY) }),
+            });
         };
 
         const up = (event) => {
@@ -99,7 +107,11 @@ export function usePipResize(ref, account) {
                 try {
                     localStorage.setItem(
                         key,
-                        JSON.stringify({ width: rect.width, height: rect.height }),
+                        JSON.stringify({
+                            ...saved(),
+                            ...(drag.edge === "top" ? {} : { width: rect.width }),
+                            ...(drag.edge === "left" ? {} : { height: rect.height }),
+                        }),
                     );
                 } catch {
                     // Resizing still works when browser storage is unavailable.
