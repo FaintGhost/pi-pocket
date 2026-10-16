@@ -384,7 +384,24 @@ export function cssReferences(source: string): CssReferences {
     };
     /** The functions (or plain brackets, as "") open around the current token, innermost last. */
     const open: string[] = [];
+    // How many of them load a file, and how many are attr(), kept as they open and close: a scan of `open` for each
+    // token would take time that grows with the square of the nesting, which a theme's CSS chooses.
+    let loading = 0;
+    let attrs = 0;
     let importing: number | undefined;
+
+    const push = (fn: string) => {
+        open.push(fn);
+        loading += loads(fn) ? 1 : 0;
+        attrs += fn === "attr" ? 1 : 0;
+    };
+
+    const pop = () => {
+        const fn = open.pop();
+
+        loading -= fn !== undefined && loads(fn) ? 1 : 0;
+        attrs -= fn === "attr" ? 1 : 0;
+    };
 
     const take = (token: Token) => {
         const reference = {
@@ -425,7 +442,7 @@ export function cssReferences(source: string): CssReferences {
                 // or a format's, which names a kind of file.
                 if (
                     (importing !== undefined && open.length === 0) ||
-                    (inner !== "type" && inner !== "format" && open.some(loads))
+                    (inner !== "type" && inner !== "format" && loading > 0)
                 ) {
                     take(token);
                 }
@@ -441,14 +458,14 @@ export function cssReferences(source: string): CssReferences {
                 }
 
                 // An address made where the CSS is used, not written: it could name any address here.
-                if (SUBSTITUTE.has(fn) && open.some(loads)) {
+                if (SUBSTITUTE.has(fn) && loading > 0) {
                     found.problems.push({
                         line: token.line,
                         message: `${fn}() inside a function that loads a file: name the file itself`,
                     });
                 }
 
-                open.push(fn);
+                push(fn);
                 break;
             }
 
@@ -461,20 +478,22 @@ export function cssReferences(source: string): CssReferences {
                     importing = undefined;
                 }
 
-                open.push("");
+                push("");
                 break;
             case "close":
                 // A block's end ends whatever was left open in it: functions never span blocks.
                 if (token.value === "}") {
                     open.length = 0;
+                    loading = 0;
+                    attrs = 0;
                 } else {
-                    open.pop();
+                    pop();
                 }
 
                 break;
             case "ident":
                 // `attr(data-x url)`, `attr(data-x type(<url>))`: an address from the page.
-                if (token.value.toLowerCase() === "url" && open.includes("attr")) {
+                if (token.value.toLowerCase() === "url" && attrs > 0) {
                     found.problems.push({
                         line: token.line,
                         message: "attr() as an address: name the file itself",

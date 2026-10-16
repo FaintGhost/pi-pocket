@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { APP_ROOT } from "../src/server/config.ts";
 import { readTheme, Themes } from "../src/server/themes.ts";
+import { cssReferences } from "../src/server/themes/css.ts";
 import { ThemeProblem } from "../src/server/themes/format.ts";
 
 test("a theme's CSS may load only files in its own folder", () => {
@@ -36,6 +37,14 @@ test("a theme's CSS may load only files in its own folder", () => {
     ]) {
         assert.throws(css(rule), ThemeProblem, rule);
     }
+});
+
+test("the check reads deeply nested CSS in time: its cost does not grow with the square of the nesting", () => {
+    const started = Date.now();
+
+    // 256 KB, a theme's limit: about half a minute before the fix, a fraction of a second after.
+    cssReferences(`a{b:${"var(".repeat(64_000)}`);
+    assert.ok(Date.now() - started < 5_000);
 });
 
 test("every built-in theme passes its checks", () => {
