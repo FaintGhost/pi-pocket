@@ -1692,9 +1692,13 @@ export class PocketApp {
         const patterns = Array.isArray(configured)
             ? configured.filter((pattern): pattern is string => typeof pattern === "string")
             : [];
+        // The scope asks Pi which models are available, which reads its sign-ins: one that cannot be read leaves the
+        // scope out, as in a picker without one, rather than failing `hello` and with it every tab.
         const { scopedModels } =
-            patterns && patterns.length > 0
-                ? await resolveModelScopeWithDiagnostics(patterns, this.models)
+            patterns.length > 0
+                ? await resolveModelScopeWithDiagnostics(patterns, this.models).catch(() => ({
+                      scopedModels: [],
+                  }))
                 : { scopedModels: [] };
 
         return modelList(this.models, this.signInNeeded, scopedModels);
