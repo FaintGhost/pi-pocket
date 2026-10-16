@@ -53,7 +53,7 @@ export interface ThemeInfo {
     version?: string;
     /** In `web/themes/`, with the app: it cannot be changed or removed here. */
     builtIn: boolean;
-    /** The stylesheets to load, in order (a theme it extends first); none for the base theme and for colors alone. */
+    /** The stylesheets to load; none for the base theme and for colors alone. */
     css: string[];
     /** Its palette, by `colors.toml`'s keys, when it has one. */
     colors?: Record<string, string>;
@@ -63,7 +63,6 @@ export interface ThemeInfo {
     fonts: string[];
     /** Changes when any of its files do. */
     rev?: string;
-    extends?: string;
     /** Why it is not as its files are: it keeps its last good version, or, with none, it is not offered. */
     problem?: string;
     /** Whether it can be chosen: it has a good version. */
@@ -235,7 +234,6 @@ export class Themes {
                 ...(good?.colorsLight === undefined ? {} : { colorsLight: good.colorsLight }),
                 fonts: good === undefined || id === BASE_THEME ? [] : this.#fonts(good),
                 ...(good === undefined ? {} : { rev: good.rev }),
-                ...(manifest?.extends === undefined ? {} : { extends: manifest.extends }),
                 ...(problem === undefined ? {} : { problem }),
                 usable: good !== undefined,
             };
@@ -413,26 +411,18 @@ export class Themes {
         }
     }
 
-    /** The fonts a theme's stylesheets load, the ones of the themes it extends too. */
+    /** The fonts a theme's stylesheets load. */
     #fonts(version: Version): string[] {
-        const own = [...version.assets]
+        return [...version.assets]
             .filter(([, asset]) => asset.type === "font/woff2")
             .map(([path]) => themeAddress(version.id, version.rev, path));
-        const base = version.manifest?.extends;
-        const parent = base === undefined || base === BASE_THEME ? undefined : this.#good.get(base);
-
-        return parent === undefined ? own : [...this.#fonts(parent), ...own];
     }
 
-    /** The stylesheets of a theme, the ones of the themes it extends first. */
+    /** The stylesheet of a theme: its `theme.css`, which imports the rest; none for colors alone. */
     #chain(version: Version): string[] {
-        const own = version.css.has("theme.css")
+        return version.css.has("theme.css")
             ? [`/themes/${version.id}/${version.rev}/theme.css`]
             : [];
-        const base = version.manifest?.extends;
-        const parent = base === undefined || base === BASE_THEME ? undefined : this.#good.get(base);
-
-        return parent === undefined ? own : [...this.#chain(parent), ...own];
     }
 
     /** Read every theme folder; with `tell`, tell the owner about new problems and the tabs about a changed list. */
@@ -706,10 +696,6 @@ export function readTheme(
 
     if (entry !== undefined && manifest === undefined) {
         throw new ThemeProblem("it has a theme.css but no theme.json");
-    }
-
-    if (manifest?.extends === id) {
-        throw new ThemeProblem("it extends itself");
     }
 
     const css = new Map<string, string>();
