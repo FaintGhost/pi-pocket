@@ -86,6 +86,7 @@ import { RepoWatches } from "./repo-watches.ts";
 import { snippet } from "./projection.ts";
 import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./prompts.ts";
 import { Themes } from "./themes.ts";
+import { THEME_ID } from "./themes/format.ts";
 import { measureModelStreams } from "./timing.ts";
 import { Providers } from "./providers.ts";
 import { PushStore } from "./push.ts";
@@ -2514,8 +2515,8 @@ export class PocketApp {
             if (
                 typeof look !== "string" ||
                 typeof colors !== "string" ||
-                !/^[a-z0-9][a-z0-9-]{1,47}$/.test(look) ||
-                !/^[a-z0-9][a-z0-9-]{1,47}(@(dark|light))?$/.test(colors)
+                !THEME_ID.test(look) ||
+                !THEME_ID.test(colors.replace(/@(dark|light)$/, ""))
             ) {
                 throw new HttpError(
                     400,
@@ -2525,6 +2526,11 @@ export class PocketApp {
 
             if (!this.themes.list().some((each) => each.id === look && each.usable)) {
                 throw new HttpError(404, "No such theme");
+            }
+
+            // Colors that are not here (the desktop's, on a machine without Omarchy) would leave new browsers on none.
+            if (!(await this.themes.hasColors(colors))) {
+                throw new HttpError(404, "No such colors here");
             }
 
             this.config.themeDefault = { look, colors };
