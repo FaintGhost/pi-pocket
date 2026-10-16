@@ -267,12 +267,16 @@ function ColorsTools() {
 function DefaultTools() {
     const current = themeDefault();
     const p = prefs();
-    // The colors in use as the server knows them: "desktop" only where there is a desktop's, as Appearance shows.
+    // The theme and colors in use as the server knows them, as Appearance shows them: a theme that is gone or broken
+    // shows Pocket, and "desktop" colors only where there is a desktop's.
+    const look = store.state.themeList?.some((each) => each.id === p.look && each.usable)
+        ? p.look
+        : BASE_LOOK;
     const colors = paletteOf(p.theme).id;
     // What new browsers get already: the default, or with none, Pocket and the desktop's colors.
     const same = current
-        ? current.look === p.look && current.colors === colors
-        : p.look === BASE_LOOK && p.theme === "desktop";
+        ? current.look === look && current.colors === colors
+        : look === BASE_LOOK && p.theme === "desktop";
     // A theme with its own colors is named once: "My Lantern", not "My Lantern with My Lantern".
     const name = (look, colors) =>
         colors.split("@")[0] === look
@@ -295,7 +299,7 @@ function DefaultTools() {
         </span>
         ${
             !same &&
-            html`<button class="button" onClick=${() => set({ look: p.look, colors })}>
+            html`<button class="button" onClick=${() => set({ look, colors })}>
                 Use these for new browsers
             </button>`
         }
