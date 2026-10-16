@@ -119,6 +119,7 @@ function parse(repoPath) {
     const slugger = new GithubSlugger();
     const headings = [];
     const links = [];
+    const code = [];
 
     const visit = (node) => {
         if (node.type === "heading") {
@@ -131,6 +132,14 @@ function parse(repoPath) {
 
         if (node.type === "link" || node.type === "definition" || node.type === "image") {
             links.push({ url: node.url, line: node.position?.start.line });
+        }
+
+        if (node.type === "code" && typeof node.meta === "string") {
+            const title = /title="([^"]+)"/.exec(node.meta)?.[1];
+
+            if (title !== undefined) {
+                code.push({ title, value: node.value, line: node.position?.start.line });
+            }
         }
 
         for (const child of node.children ?? []) {
@@ -148,6 +157,7 @@ function parse(repoPath) {
         anchors: new Set(headings.map((heading) => heading.slug)),
         headings,
         links,
+        code,
     };
 
     parsed.set(repoPath, page);
@@ -200,10 +210,18 @@ export function rewrite(from, url) {
     return `${GITHUB}/${kind}/${REF}/${path}${to.hash}`;
 }
 
+const withoutTypeImports = (text) =>
+    text
+        .split("\n")
+        .filter((line) => !line.startsWith("import type "))
+        .join("\n")
+        .trim();
+
 /**
  * Every problem with the pages' links and headings: a link to a file that is not in the repository, or to an
  * anchor that is not there (as GitHub makes anchors, and the site the same way), a page without one `# H1` at its
- * top, or a heading that repeats the H1 (GitHub would give it another anchor than the site does).
+ * top, a heading that repeats the H1 (GitHub would give it another anchor than the site does), or a code block that
+ * shows an example as it no longer is.
  */
 export function checkLinks() {
     const errors = [];
@@ -219,6 +237,21 @@ export function checkLinks() {
             page.headings.some((heading) => heading.depth > 1 && heading.slug === h1[0].slug)
         ) {
             errors.push(`${from}: a heading repeats the title "${h1[0].text}"`);
+        }
+
+        // A code block titled after an example (title="my-words.ts") shows that example, which the tests run: it must
+        // say what the file says, but for its `import type` lines, which differ where the file lies.
+        for (const { title, value, line } of page.code) {
+            const example = join(REPO, "docs/examples", title);
+
+            if (
+                existsSync(example) &&
+                withoutTypeImports(value) !== withoutTypeImports(readFileSync(example, "utf8"))
+            ) {
+                errors.push(
+                    `${from}:${line ?? "?"}: the code titled ${title} differs from docs/examples/${title}`,
+                );
+            }
         }
 
         for (const { url, line } of page.links) {

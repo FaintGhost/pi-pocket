@@ -10,6 +10,7 @@ This page is the map. Read it, then only the pages that your task needs.
 
 | To                                                             | Read                                                                                                            |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Make a first extension, step by step                           | [Your first extension](extensions/first-extension.md)                                                           |
 | Know what the file must be, and how it loads and fails         | [Modules, loading, and errors](extensions/modules.md)                                                           |
 | Give Pi a tool                                                 | [Tools](extensions/tools.md)                                                                                    |
 | Add a rule to Pi's system prompt                               | [Prompt sections](extensions/prompt-sections.md)                                                                |
@@ -27,6 +28,7 @@ This page is the map. Read it, then only the pages that your task needs.
 | Share a module, or install one other people wrote              | [Publishing to the gallery](extensions/publishing.md)                                                           |
 | Move a module into Pi Pocket itself                            | [Making it built in](extensions/built-in.md)                                                                    |
 | Find a member of `host`, `web`, `pocket`, or a command's `ctx` | [The reference](extensions/reference/host.md), and the exact types in [types/pocket.d.ts](../types/pocket.d.ts) |
+| Find a limit, or what a word means                             | [Limits](extensions/reference/limits.md), [Glossary](extensions/reference/glossary.md)                          |
 | Know the rules: core or extension, the API, security, gallery  | [The policies](extensions/policies/index.md)                                                                    |
 
 ## Drop-in or built-in
