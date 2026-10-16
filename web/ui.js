@@ -1265,6 +1265,13 @@ export const SheetBack = createContext(null);
  */
 export const SheetInfo = createContext(null);
 
+/**
+ * A scrim's press: it closes its layer only when it starts on the scrim itself, not on what the scrim holds, and only
+ * with the main button (a right click opens the browser's menu, and must not close anything).
+ */
+export const scrimPress = (close) => (event) =>
+    event.button === 0 && event.target === event.currentTarget && close();
+
 /** A bottom sheet on phones, a centered dialog on wide screens. */
 export function Sheet({ title, onClose, children, wide = false, actions = null, className = "" }) {
     const ref = useRef(null);
@@ -1301,7 +1308,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
         class="overlay"
         data-part="scrim"
         data-for="sheet"
-        onMouseDown=${(event) => event.target === event.currentTarget && onClose()}
+        onMouseDown=${scrimPress(onClose)}
     >
         <section
             class=${`sheet ${wide ? "wide" : ""} ${className}`}

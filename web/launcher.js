@@ -41,7 +41,7 @@ import {
     themeVars,
     varsStyle,
 } from "./theme.js";
-import { APPLE, copyText, html, Icon, Keys, Marked, shortPath, timeAgo } from "./ui.js";
+import { APPLE, copyText, html, Icon, Keys, Marked, scrimPress, shortPath, timeAgo } from "./ui.js";
 
 /** How far a letter that does not begin a word may be from the one before it, in a match that is not contiguous. */
 const MAX_GAP = 3;
@@ -819,7 +819,7 @@ export function Launcher({ leaving, returnTo }) {
         data-part="scrim"
         data-for="launcher"
         inert=${leaving}
-        onMouseDown=${(event) => event.target === event.currentTarget && close()}
+        onMouseDown=${scrimPress(close)}
     >
         <section
             class="launcher"

@@ -30,6 +30,7 @@ import {
     html,
     Icon,
     railState,
+    scrimPress,
     shortPath,
     Slide,
     timeAgo,
@@ -1507,7 +1508,7 @@ export function Drawer() {
             class="overlay drawer-overlay"
             data-part="scrim"
             data-for="drawer"
-            onMouseDown=${(event) => event.target === event.currentTarget && close()}
+            onMouseDown=${scrimPress(close)}
         >
             <aside
                 class="drawer"

@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { actions, api, attempt, closeSheet, openSheet, store } from "../store.js";
 import { useDragToClose } from "../gestures.js";
-import { anchorStyle, BOTTOM_SHEETS, formatTokens, html, Icon, popAnchor } from "../ui.js";
+import {
+    anchorStyle,
+    BOTTOM_SHEETS,
+    formatTokens,
+    html,
+    Icon,
+    popAnchor,
+    scrimPress,
+} from "../ui.js";
 
 /** Models past this many get a search box in the picker. */
 const MODEL_SEARCH_AT = 8;
@@ -216,7 +224,7 @@ export function ModelPicker() {
 
     return html`<div
         class="overlay pop-overlay"
-        onMouseDown=${(event) => event.target === event.currentTarget && closeSheet()}
+        onMouseDown=${scrimPress(closeSheet)}
     >
         <section
             class=${`pop-menu model-menu ${anchor ? (anchor.down ? "down" : "") : "free"}`}
