@@ -2,7 +2,7 @@
 import { cleanUp, openApp, owner, root, scriptedModel } from "./helpers.ts";
 import type { Installed } from "../src/server/gallery.ts";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
     existsSync,
     mkdirSync,
@@ -84,11 +84,14 @@ async function index(...entries: unknown[]) {
 const pin = async (name: string) =>
     (await app.gallery.listing(false)).entries.find((each) => each.name === name)?.pin;
 
-before(async () => {
+/** Open the app on the gallery's data folder (again, for a restart), with the stand-in for the network. */
+async function open() {
     app = await openApp(scriptedModel(), dataDir);
     app.gallery.fetch = async (url) =>
         served.has(url) ? new Response(served.get(url)) : new Response("", { status: 404 });
-});
+}
+
+before(open);
 
 after(async () => {
     await app?.close();
@@ -303,4 +306,11 @@ test("a theme installs into the themes folder only as pinned, and only when its 
     assert.deepEqual(readdirSync(themes), ["paper"]);
     assert.equal(readFileSync(join(themes, "paper", "theme.css"), "utf8"), good);
     assert.equal(app.themes.list().find((each) => each.id === "paper")?.usable, true);
+
+    // The owner's default, and a restart while an update had the theme out of its folder: it stays the default.
+    app.config.themeDefault = { look: "paper", colors: "desktop" };
+    await app.close();
+    renameSync(join(themes, "paper"), join(themes, `.gallery-paper-${randomUUID()}.part`));
+    await open();
+    assert.deepEqual(app.config.themeDefault, { look: "paper", colors: "desktop" });
 });

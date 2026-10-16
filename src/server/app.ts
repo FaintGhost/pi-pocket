@@ -564,11 +564,12 @@ export class PocketApp {
         await this.themes.load().catch((error: unknown) => {
             this.#log(`Themes could not be read: ${describe(error)}`);
         });
-        await this.#themeDefaultStillHere();
-        // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one.
+        // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one, and
+        // a theme it had out of its folder is back before the owner's default is checked.
         await this.gallery.recover().catch((error: unknown) => {
             this.#log(`The extension gallery could not check its updates: ${describe(error)}`);
         });
+        await this.#themeDefaultStillHere();
         await this.loader.loadAll();
 
         const storage = await openNodeSqliteStorage(join(this.dataDir, "pocket.sqlite"));
