@@ -97,8 +97,30 @@ function savedPrefs() {
 /** The open sidebar's width as it shows: the rail and its borders, and a list 204–464px wide. */
 const sidebarWidth = (p) => `${Math.min(524, Math.max(264, p.sidebarWidth))}px`;
 
+/** This browser's own choices: what it saved, over the defaults. */
+let own = { ...DEFAULTS, ...savedPrefs() };
+
+/** Which of the theme (`look`) and the colors (`theme`) this browser's person chose; the rest follow the owner's default. */
+const CHOSEN = "pocket.themeChosen";
+const chosen = readJson(CHOSEN, null) ?? {
+    // From before there were defaults: colors other than the desktop's were someone's choice.
+    theme: own.theme !== DEFAULTS.theme,
+    look: own.look !== DEFAULTS.look,
+};
+
+/** The look in force: this browser's own, with the owner's default theme and colors where its person chose none. */
+function inForce() {
+    const fallback = store.state.server?.themeDefault;
+
+    return {
+        ...own,
+        ...(fallback && !chosen.look ? { look: fallback.look } : {}),
+        ...(fallback && !chosen.theme ? { theme: fallback.colors } : {}),
+    };
+}
+
 store.set({
-    appearance: { ...DEFAULTS, ...savedPrefs() },
+    appearance: inForce(),
     desktopTheme: readJson(DESKTOP_CACHE, null),
     pinned: readJson(PINNED, []),
 });
@@ -106,12 +128,23 @@ store.set({
 export const prefs = () => store.state.appearance;
 
 export function setPrefs(patch) {
-    const next = { ...prefs(), ...patch };
+    own = { ...own, ...patch };
 
-    localStorage.setItem(KEY, JSON.stringify(next));
-    store.set({ appearance: next });
+    // Choosing the theme or the colors makes them this browser's own: the owner's default no longer moves them.
+    for (const key of ["look", "theme"]) {
+        if (key in patch) {
+            chosen[key] = true;
+            localStorage.setItem(CHOSEN, JSON.stringify(chosen));
+        }
+    }
+
+    localStorage.setItem(KEY, JSON.stringify(own));
+    store.set({ appearance: inForce() });
     apply();
 }
+
+/** The owner's default for browsers that have not chosen (`hello`), or null. */
+export const themeDefault = () => store.state.server?.themeDefault ?? null;
 
 // ─── Pinned sessions (this browser) ──────────────────────────────────────────────
 
@@ -592,11 +625,19 @@ export function startTheme() {
     reduceQuery.addEventListener?.("change", apply);
     lightQuery.addEventListener?.("change", apply);
     onSafeModeEnd(apply);
-    // The server's list of theme folders came or changed: a theme's new version, or one that went.
+    // The server's list of theme folders came or changed (a theme's new version, or one that went), or the owner's
+    // default did.
     let list = store.state.themeList;
+    let fallback = JSON.stringify(themeDefault());
 
     store.subscribe((state) => {
-        if (state.themeList !== list) {
+        const next = JSON.stringify(state.server?.themeDefault ?? null);
+
+        if (next !== fallback) {
+            fallback = next;
+            store.set({ appearance: inForce() });
+            apply();
+        } else if (state.themeList !== list) {
             list = state.themeList;
             apply();
         }

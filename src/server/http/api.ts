@@ -357,6 +357,15 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, { themes: app.themes.list() });
         }
 
+        if (first === "themes" && second === "default" && method === "PUT") {
+            await app.setThemeDefault(
+                user,
+                (await readJson<{ default?: unknown }>(request)).default,
+            );
+
+            return json(response, 200, { ok: true });
+        }
+
         if (first === "themes" && second === "duplicate" && method === "POST") {
             requireOwner(user);
             const body = await readJson<{ from?: unknown; name?: unknown; colors?: unknown }>(

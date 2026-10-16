@@ -1723,6 +1723,8 @@ export class PocketApp {
                 approvalRule: this.config.approvalRule,
                 // The model and thinking level new sessions start with, or null for the last one picked.
                 defaultModel: this.config.defaultModel ?? null,
+                // The theme and colors of browsers that have not chosen their own, or null for the app's own.
+                themeDefault: this.config.themeDefault ?? null,
                 // The models Pi may start subagents on besides their session's own: the owner's to see and change.
                 ...(user.role === "owner"
                     ? { subagentModels: [...this.config.subagentModels] }
@@ -2477,6 +2479,42 @@ export class PocketApp {
         }
 
         this.config.pipCompactAt = tokens;
+        await this.#refreshClients();
+    }
+
+    /**
+     * The theme and colors browsers start with until their person chooses (`config.themeDefault`): the owner's to set,
+     * or `null` for the app's own. Everyone's tabs hear it in `hello`.
+     */
+    async setThemeDefault(user: User, choice: unknown): Promise<void> {
+        if (user.role !== "owner") {
+            throw new HttpError(403, "Only the owner sets the default theme");
+        }
+
+        if (choice === null) {
+            this.config.themeDefault = undefined;
+        } else {
+            const { look, colors } = (choice ?? {}) as { look?: unknown; colors?: unknown };
+
+            if (
+                typeof look !== "string" ||
+                typeof colors !== "string" ||
+                !/^[a-z0-9][a-z0-9-]{1,47}$/.test(look) ||
+                !/^[a-z0-9][a-z0-9-]{1,47}(@(dark|light))?$/.test(colors)
+            ) {
+                throw new HttpError(
+                    400,
+                    "The default is { look, colors }: a theme's id and colors' id, or null",
+                );
+            }
+
+            if (!this.themes.list().some((each) => each.id === look && each.usable)) {
+                throw new HttpError(404, "No such theme");
+            }
+
+            this.config.themeDefault = { look, colors };
+        }
+
         await this.#refreshClients();
     }
 
