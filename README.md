@@ -90,6 +90,10 @@ Open the link in Chrome and choose **Add to Home screen**. Run `termux-wake-lock
 
 Lancet Guard needs ONNX Runtime, which may not load on Android. If the guard is on but cannot load, Pi Pocket blocks bash, write, and edit calls (the status line shows "guard failed"). Turn it off in the app (Menu → Extensions), in `~/.pi/lancet-guard.json`, or by starting with `PI_POCKET_GUARD=off`.
 
+## Nix and NixOS
+
+The flake builds Pi Pocket (`nix run github:TannerMidd/pi-pocket`) and has a NixOS module: `services.pi-pocket.enable = true;`. Options include `access`, `openFirewall`, `extensions`, `skills`, and `environmentFile`. The service listens on this machine only, unless you set `access` or `host`. Read the owner's sign-in link with `journalctl -u pi-pocket`. See `nix/module.nix`.
+
 ## Configuration
 
 | Option            | Default        | Purpose                                                           |
