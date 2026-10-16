@@ -58,24 +58,24 @@ Set by Colors (`colors.toml`, an Omarchy palette, or the desktop's). A theme rea
 
 ### Type, corners, space, shadows, motion
 
-| Token                                                          | Default                                                                                                            |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `--sans`, `--mono`                                             | Geist for words; JetBrains Mono for code, paths, counts, keys                                                      |
-| `--ligatures`                                                  | `none`: no ligatures, as in a terminal. `contextual` turns on a font's `calt`; `normal`, all its usual ones        |
-| `--r-mark`, `--r-tag`, `--r-seg`, `--r-row`, `--r-control`     | 3, 5, 7, 9, 10 px: state squares, tags, segments, rows, fields                                                     |
-| `--r-card`, `--r-window`, `--r-sheet`, `--r-float`, `--r-pill` | 12, 14, 18, 20, 999 px: cards, windows, sheets, PiP, pills                                                         |
-| `--radius`                                                     | A control's corner that names none (`--r-control`)                                                                 |
-| `--gap-out`, `--gap-in`, `--border`                            | 8, 4, 1 px: the tiled windows' gaps and border                                                                     |
-| `--window-border`, `--window-border-active`                    | A tiled window's border color (`--hair`), and the one in focus (`--accent-line`)                                   |
-| `--window-ring`                                                | The shadow around the window in focus (`0 0 0 3px var(--accent-soft)`)                                             |
-| `--space-x`, `--space-y`, `--leading`                          | Density's scale of room (1, 1) and the conversation's line height (1.65)                                           |
-| `--transcript-width`, `--composer-width`                       | 720 px and 768 px: the conversation and the message box at their widest                                            |
-| `--transcript-gutter`                                          | `0px`: room before the conversation's turns, for a column of a theme's own                                         |
-| `--timeline-x`, `--step-mark-size`, `--step-gap`               | 22.5, 19, 10 px: where the timeline's rule and its marks' centers are, the marks' size, and the gap to their words |
-| `--wallpaper`                                                  | `none`: what shows in the gaps between tiled windows. The desktop's wallpaper wins when Appearance shows it        |
-| `--sh`, `--shadow`, `--pop`                                    | The shadow color; a soft lift; what floats (sheets, menus, the launcher)                                           |
-| `--ease-out`, `--ease-in-out`, `--ease-almost`                 | Hyprland's curves                                                                                                  |
-| `--t-in`, `--t-out`, `--t-fade`, `--t-border`, `--t-hover`     | 410, 150, 175, 540, 140 ms                                                                                         |
+| Token                                                          | Default                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--sans`, `--mono`                                             | Geist for words; JetBrains Mono for code, paths, counts, keys                                                                                                                                                                                               |
+| `--ligatures`                                                  | `none`: no ligatures, as in a terminal. `contextual` turns on a font's `calt`; `normal`, all its usual ones                                                                                                                                                 |
+| `--r-mark`, `--r-tag`, `--r-seg`, `--r-row`, `--r-control`     | 3, 5, 7, 9, 10 px: state squares, tags, segments, rows, fields                                                                                                                                                                                              |
+| `--r-card`, `--r-window`, `--r-sheet`, `--r-float`, `--r-pill` | 12, 14, 18, 20, 999 px: cards, windows, sheets, PiP, pills                                                                                                                                                                                                  |
+| `--radius`                                                     | A control's corner that names none (`--r-control`)                                                                                                                                                                                                          |
+| `--gap-out`, `--gap-in`, `--border`                            | 8, 4, 1 px: the tiled windows' gaps and border                                                                                                                                                                                                              |
+| `--window-border`, `--window-border-active`                    | A tiled window's border color (`--hair`), and the one in focus (`--accent-line`)                                                                                                                                                                            |
+| `--window-ring`                                                | The shadow around the window in focus (`0 0 0 3px var(--accent-soft)`)                                                                                                                                                                                      |
+| `--space-x`, `--space-y`, `--leading`                          | Density's scale of room (1, 1) and the conversation's line height (1.65)                                                                                                                                                                                    |
+| `--transcript-width`, `--composer-width`                       | The conversation and the message box at their widest: `clamp(720px, 72%, 1200px)` of the pane, and 48 px more. Set them as a share of the pane, with a floor, so phones keep their width; Appearance's Width (Wide, Full) sets them inline over the theme's |
+| `--transcript-gutter`                                          | `0px`: room before the conversation's turns, for a column of a theme's own                                                                                                                                                                                  |
+| `--timeline-x`, `--step-mark-size`, `--step-gap`               | 22.5, 19, 10 px: where the timeline's rule and its marks' centers are, the marks' size, and the gap to their words                                                                                                                                          |
+| `--wallpaper`                                                  | `none`: what shows in the gaps between tiled windows. The desktop's wallpaper wins when Appearance shows it                                                                                                                                                 |
+| `--sh`, `--shadow`, `--pop`                                    | The shadow color; a soft lift; what floats (sheets, menus, the launcher)                                                                                                                                                                                    |
+| `--ease-out`, `--ease-in-out`, `--ease-almost`                 | Hyprland's curves                                                                                                                                                                                                                                           |
+| `--t-in`, `--t-out`, `--t-fade`, `--t-border`, `--t-hover`     | 410, 150, 175, 540, 140 ms                                                                                                                                                                                                                                  |
 
 Most corners in the app are these tokens, some a pixel or two from one (`calc(var(--r-row) - 1px)`), so they follow when a theme changes the scale. The timeline's rule, marks, and what shows under each step all place themselves from `--timeline-x`, `--step-mark-size`, and `--step-gap`, so a theme that moves the marks moves them all.
 
@@ -83,10 +83,11 @@ Most corners in the app are these tokens, some a pixel or two from one (`calc(va
 
 Read them; a theme cannot change them, as they are each person's choice in Appearance.
 
-| Token         | What                                      |
-| ------------- | ----------------------------------------- |
-| `--text-size` | The conversation's text size, 13 to 17 px |
-| `--sidebar-w` | The open sidebar's width, as dragged      |
+| Token                                    | What                                                                                |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- |
+| `--text-size`                            | The conversation's text size, 13 to 17 px                                           |
+| `--sidebar-w`                            | The open sidebar's width, as dragged                                                |
+| `--transcript-width`, `--composer-width` | Only with Width set to Wide or Full: then they are inline, and win over the theme's |
 
 ## Parts
 
@@ -212,6 +213,7 @@ On `<html>`:
 | `data-colors`  | The colors in use: `desktop`, a palette's id, or a folder's (`id`, `id@dark`, `id@light`)                                                                                                                                                                                                      |
 | `data-tiling`  | `on` or `off`: tiled windows on wide screens                                                                                                                                                                                                                                                   |
 | `data-rail`    | `on` when the sidebar is folded to the rail                                                                                                                                                                                                                                                    |
+| `data-width`   | `comfortable` (the theme's width), `wide`, or `full`: Appearance's Width. With `wide` or `full`, the widths are the person's; a theme that lays things out by the column's width reads this, as `:root[data-width="full"]`                                                                     |
 | `data-density` | `comfortable`, `compact`, or `tight`                                                                                                                                                                                                                                                           |
 | `data-motion`  | `full` or `reduced`                                                                                                                                                                                                                                                                            |
 | `data-focus`   | The window in focus: `pane` (the conversation's, at first), `sidebar`, `peeks`, `people-panel`, `browser-panel`, or `files-panel`: the window's part name. The app draws the focus only on wide screens with tiling on: `:root[data-tiling="on"][data-focus="sidebar"] [data-part~="sidebar"]` |
