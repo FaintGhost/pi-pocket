@@ -490,7 +490,7 @@ export function AppearanceSheet() {
         <div class="sheet-list">
             <${SettingRow}
                 title="Show thinking"
-                detail=${`Adds a chevron before the live spinner. Tap it to read the current thought above the line as it comes${touch ? "" : ". Also Alt+T"}`}
+                detail=${`Shows Pi's current thought above the live line as it comes, and its finished thoughts. The chevron before the line folds the live one${touch ? "" : ". Also Alt+T"}`}
             >
                 <${Switch}
                     on=${p.showThinking}

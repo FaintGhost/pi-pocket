@@ -2155,8 +2155,8 @@ function LiveThought({ generation, entries, id }) {
 /**
  * The end of the live turn, in one line: what Pi does (thinks, works, waits for an approval, retries a failed request,
  * compacts its context), for how long, and how to stop it. Screen readers hear what it does when that changes, not the
- * seconds counting. With Appearance → Show thinking on, a chevron before the spinner opens Pi's newest thought above
- * the line; closed, nothing of the thought is drawn or looked for.
+ * seconds counting. With Appearance → Show thinking on, Pi's newest thought shows above the line, and a chevron before
+ * the line's dot folds it; folded, nothing of the thought is drawn or looked for.
  */
 function LiveLine({ live, approvals, start, entries, conversationId }) {
     const [, tick] = useState(0);

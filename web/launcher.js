@@ -154,7 +154,7 @@ function actionItems() {
         },
         {
             label: prefs().showThinking ? "Hide thinking" : "Show thinking",
-            detail: "a chevron before the live spinner opens Pi's thinking",
+            detail: "Pi's thoughts above the live line and in the conversation",
             icon: "sparkle",
             keys: "Alt T",
             run: () => setPrefs({ showThinking: !prefs().showThinking }),

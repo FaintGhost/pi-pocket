@@ -48,7 +48,7 @@ const DEFAULTS = {
     peeks: false,
     /** How fast the last answer came, in the status line under the message box. Off until turned on. */
     speed: false,
-    /** A chevron before the live line's spinner that opens Pi's thinking above it, live. Off until turned on. */
+    /** Pi's current thought above the live line, and its finished thoughts open. Off until turned on. */
     showThinking: false,
 };
 

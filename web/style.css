@@ -2819,7 +2819,8 @@ pre.diff .del {
     text-overflow: ellipsis;
 }
 
-/* Tapped: the whole message, wrapped (the queue scrolls past a few lines), with who sent it and its × at its top. */
+/* Tapped: what the queue holds of the message (its start), wrapped (the queue scrolls past a few lines), with who sent it
+   and its × at its top. */
 .queued-text.open {
     padding: 8px 0;
     white-space: pre-wrap;
