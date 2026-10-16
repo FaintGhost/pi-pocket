@@ -38,10 +38,6 @@ import {
     useSlide,
 } from "./ui.js";
 
-// Sessions in "workspace" order (Alt+1…9, the rail's numbers) live in the store, where peek tiles use them without
-// this module; the sidebar's other users still ask for them here.
-export { workspaceOrder };
-
 /**
  * Back to the session list, where it is not beside the conversation: back past the sessions opened from it, as a
  * phone's back would go, or to it in this session's place when history does not lead there.
@@ -366,7 +362,6 @@ function SessionRow({
         data-part="session-row"
         data-state=${ROW_STATES[mark.shape.split(" ")[0]]}
         data-id=${session.id}
-        data-linked-depth=${branches.length}
         style=${`--i:${index};--linked-depth:${Math.min(branches.length, 3)}`}
     >
         ${

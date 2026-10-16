@@ -30,14 +30,7 @@ import {
     togglePeeks,
 } from "./peeks.js";
 import { closePip, openPip, PipHost, pipAvailable, togglePip } from "./pip.js";
-import {
-    Drawer,
-    RailNav,
-    ResizeHandle,
-    SessionList,
-    toSessions,
-    workspaceOrder,
-} from "./sessions.js";
+import { Drawer, RailNav, ResizeHandle, SessionList, toSessions } from "./sessions.js";
 // Loaded for what it does: it gives replies' Markdown the component for pages, images, and diffs in code blocks.
 import "./rich.js";
 import { takeShare } from "./share.js";
@@ -61,6 +54,7 @@ import {
     scoped,
     start,
     store,
+    workspaceOrder,
 } from "./store.js";
 import { prefs, setPrefs, startTheme } from "./theme.js";
 import { Transcript } from "./transcript.js";

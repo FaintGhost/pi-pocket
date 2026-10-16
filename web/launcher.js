@@ -10,7 +10,7 @@ import { filesAvailable, toggleFiles } from "./files-panel.js";
 import { togglePeeks } from "./peeks.js";
 import { modelRefreshAvailable, refreshModels } from "./model-refresh.js";
 import { openPip, pipAvailable } from "./pip.js";
-import { setArchived, workspaceOrder } from "./sessions.js";
+import { setArchived } from "./sessions.js";
 import { branchAvailable, headLabel } from "./sheets/branch.js";
 import { recentLabels } from "./sheets/folder.js";
 import { galleryAvailable } from "./sheets/gallery.js";
@@ -26,6 +26,7 @@ import {
     scoped,
     signOut,
     store,
+    workspaceOrder,
 } from "./store.js";
 import {
     BASE_LOOK,

@@ -392,10 +392,6 @@ kbd {
     font-size: 0.8rem;
 }
 
-.pad {
-    padding: 1rem;
-}
-
 .grow {
     flex: 1;
 }
