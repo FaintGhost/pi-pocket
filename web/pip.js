@@ -1063,7 +1063,7 @@ function PipBubble() {
     return html`<button
         class=${`pip-bubble ${kept} ${leaving ? "leaving" : ""}`}
         aria-label=${kept === "busy" ? "PiP is working: open PiP" : "PiP has something new: open PiP"}
-        title="PiP (Alt A)"
+        title="PiP (Alt+A)"
         onClick=${() => openPip()}
     >
         <${Icon} name="pip" size=${22} />
@@ -1110,7 +1110,7 @@ export function PipRailButton() {
 
     return html`<button
         class=${`rail-button rail-pip ${pip?.busy ? "lit" : ""} ${pipOpen ? "open" : ""}`}
-        title="PiP, your assistant (Alt A)"
+        title="PiP, your assistant (Alt+A)"
         aria-label=${["PiP", pip?.busy && "working", unread && "something new"].filter(Boolean).join(", ")}
         aria-pressed=${pipOpen}
         onClick=${togglePip}

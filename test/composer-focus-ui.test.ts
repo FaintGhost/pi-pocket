@@ -329,3 +329,21 @@ test(
         await page.press("Escape");
     },
 );
+
+test("a sheet keeps Tab inside it and gives the focus back to its opener", real, async () => {
+    await page.setViewport(VIEWPORTS.desktop);
+    await page.navigate(`${base}/s/${Number(one)}`);
+    await opened(one);
+    await page.evaluate(`document.querySelector('.sidebar [aria-label="Theme"]').focus()`);
+    await page.press("Enter");
+    const focused = (selector: string) =>
+        inPage<boolean>(
+            `return JSON.stringify(document.activeElement?.matches(${JSON.stringify(selector)}) ?? false)`,
+        );
+
+    await until(() => focused(".sheet"), "the sheet");
+    await page.press("Shift+Tab");
+    assert.equal(await focused(".sheet *"), true, "Shift+Tab stays in the sheet");
+    await page.press("Escape");
+    await until(() => focused('.sidebar [aria-label="Theme"]'), "the button that opened it");
+});

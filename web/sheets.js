@@ -96,6 +96,46 @@ onExtensionsGone((gone) => {
     }
 });
 
+// ─── Focus ────────────────────────────────────────────────────────────────────────
+
+/** What had focus when a sheet opened over the app: it has it again when the last sheet closes. */
+let opener = null;
+/** What last had focus outside the sheets and the launcher: a sheet the launcher opens goes back there. */
+let lastFocus = null;
+
+addEventListener("focusin", (event) => {
+    if (!event.target.closest?.(".sheet-host, .launcher-overlay")) {
+        lastFocus = event.target;
+    }
+});
+
+store.subscribe(({ sheet, launcher }) => {
+    if (sheet && !opener) {
+        const active = document.activeElement;
+
+        opener = active?.closest(".launcher-overlay") ? lastFocus : active;
+    } else if (!sheet && opener) {
+        const back = opener;
+        const active = document.activeElement;
+
+        opener = null;
+
+        // Unless something else took focus meanwhile (a session the sheet opened), or a phone's keyboard would pop up.
+        if (
+            (active === null || active === document.body || active.closest(".sheet-host")) &&
+            !launcher &&
+            back.isConnected &&
+            !back.closest(".sheet-host") &&
+            !(
+                matchMedia("(pointer: coarse)").matches &&
+                back.matches("input, textarea, [contenteditable]")
+            )
+        ) {
+            back.focus({ preventScroll: true });
+        }
+    }
+});
+
 /**
  * The open sheet, if any. A sheet that closes stays a moment longer, marked as leaving, so it can animate out; one sheet
  * replacing another swaps at once.

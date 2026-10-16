@@ -246,6 +246,9 @@ function sanitize(html, fold) {
     for (const code of fragment.querySelectorAll("code")) {
         if (!code.closest("pre, a") && looksLikePath(code.textContent ?? "")) {
             code.dataset.path = code.textContent;
+            // Keys open it too (`openFile` below).
+            code.tabIndex = 0;
+            code.setAttribute("role", "button");
         }
     }
 
@@ -585,6 +588,16 @@ document.addEventListener("click", (event) => {
 
     event.stopPropagation();
     openFile(target.dataset.path);
+});
+
+// Enter or Space on a file path in inline code opens it, as a tap does: it is a button for keys.
+document.addEventListener("keydown", (event) => {
+    const target = event.target.closest?.(".md code[data-path]");
+
+    if (target && (event.key === "Enter" || event.key === " ") && !event.repeat) {
+        event.preventDefault();
+        openFile(target.dataset.path);
+    }
 });
 
 /** Images in rendered markdown open full screen, unless they are links. */
@@ -1166,10 +1179,18 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
 
         return () => removeEventListener("keydown", onKey);
     }, [onClose]);
-    // Keys go to the sheet, not the message box behind it, unless something inside already took focus.
+    // Keys go to the sheet, not the message box behind it, unless something inside already took focus. Its field marked
+    // autofocus takes them where a keyboard is at hand (the browser skips the attribute, the page already having focus);
+    // on touch screens the sheet does, so no keyboard pops up over it.
     useEffect(() => {
-        if (ref.current && !ref.current.contains(document.activeElement)) {
-            ref.current.focus({ preventScroll: true });
+        const sheet = ref.current;
+
+        if (sheet && !sheet.contains(document.activeElement)) {
+            const field = matchMedia("(pointer: coarse)").matches
+                ? null
+                : sheet.querySelector("[autofocus]");
+
+            (field ?? sheet).focus({ preventScroll: true });
         }
     }, []);
 
@@ -1203,6 +1224,58 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
         </section>
     </div>`;
 }
+
+/** What Tab reaches in `box`, in order. */
+function tabStops(box) {
+    const all = box.querySelectorAll(
+        'a[href], button, input, select, textarea, iframe, summary, [tabindex], [contenteditable="true"]',
+    );
+
+    return [...all].filter(
+        (each) =>
+            each.tabIndex >= 0 &&
+            !each.disabled &&
+            !each.closest("[inert]") &&
+            (each.checkVisibility?.({ visibilityProperty: true, checkVisibilityCSS: true }) ??
+                each.getClientRects().length > 0),
+    );
+}
+
+// Tab stays in the dialog on top (a sheet, a menu, the Files tile or Browser panel over the app), as in a browser's own
+// modal dialog: past its last control it goes round to the first, and from outside it goes in.
+addEventListener("keydown", (event) => {
+    if (
+        event.key !== "Tab" ||
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+    ) {
+        return;
+    }
+
+    const box = [...document.querySelectorAll('[aria-modal="true"]')]
+        .filter((each) => !each.closest("[inert]"))
+        .at(-1);
+
+    if (!box) {
+        return;
+    }
+
+    const active = document.activeElement;
+    const stops = tabStops(box);
+    const toward = event.shiftKey
+        ? Node.DOCUMENT_POSITION_PRECEDING
+        : Node.DOCUMENT_POSITION_FOLLOWING;
+    const more =
+        box.contains(active) &&
+        stops.some((each) => each !== active && active.compareDocumentPosition(each) & toward);
+
+    if (!more) {
+        event.preventDefault();
+        (event.shiftKey ? stops.at(-1) : stops[0])?.focus();
+    }
+});
 
 /**
  * Where a menu opens from the control `selector` names: above it and aligned with it, or below it for a control near the

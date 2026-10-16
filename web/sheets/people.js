@@ -150,11 +150,16 @@ export function InviteSheet({ session = null }) {
             html`<div class="field">
                 <div class="label">They can</div>
                 <div class="segmented">
-                    <button class=${role === "guest" ? "on" : ""} onClick=${() => setRole("guest")}>
+                    <button
+                        class=${role === "guest" ? "on" : ""}
+                        aria-pressed=${role === "guest"}
+                        onClick=${() => setRole("guest")}
+                    >
                         Steer
                     </button>
                     <button
                         class=${role === "viewer" ? "on" : ""}
+                        aria-pressed=${role === "viewer"}
                         onClick=${() => setRole("viewer")}
                     >
                         View only
@@ -169,10 +174,18 @@ export function InviteSheet({ session = null }) {
                 html`<div class="field">
                     <div class="label">In</div>
                     <div class="segmented">
-                        <button class=${!only ? "on" : ""} onClick=${() => setOnly(false)}>
+                        <button
+                            class=${!only ? "on" : ""}
+                            aria-pressed=${!only}
+                            onClick=${() => setOnly(false)}
+                        >
                             Every session
                         </button>
-                        <button class=${only ? "on" : ""} onClick=${() => setOnly(true)}>
+                        <button
+                            class=${only ? "on" : ""}
+                            aria-pressed=${only}
+                            onClick=${() => setOnly(true)}
+                        >
                             Only this session
                         </button>
                     </div>

@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { folderColor } from "./avatar.js";
 import { canGoBack, goBack, replaceAddress, startHistory, useBack } from "./back.js";
 import { BrowserButton, BrowserPanel } from "./browser-panel.js";
-import { browserAvailable, toggleBrowser } from "./browser.js";
+import { browserAvailable, setBrowserOpen, toggleBrowser } from "./browser.js";
 import { PeopleButton, PeoplePanel } from "./chat.js";
 import { Composer, openingByAlt } from "./composer.js";
 import { useChanges } from "./diff.js";
@@ -207,6 +207,7 @@ function Topbar() {
         <button
             class=${`icon-button badge-host ${artifacts > 0 ? "quiet-phone" : "quiet"}`}
             aria-label="Artifacts"
+            title="Artifacts"
             onClick=${() => openSheet({ type: "artifacts" })}
         >
             <${Icon} name="artifact" />
@@ -216,7 +217,9 @@ function Topbar() {
         <button
             class="icon-button"
             aria-label="Menu"
-            title="More"
+            title="Menu"
+            aria-haspopup="dialog"
+            aria-expanded=${store.state.sheet?.type === "menu"}
             onClick=${() => openSheet({ type: "menu" })}
         >
             <${Icon} name="more" />
@@ -366,6 +369,39 @@ function PeopleHost({ shown, replaced }) {
  */
 function PanelHost({ shown, panel }) {
     const [kept, leaving] = usePresence(shown || null, 240);
+    const covering = shown && !panelsBeside();
+
+    // Over the conversation, keys go to the panel (a dialog then, with Tab kept in it), unless something in it already
+    // took them; when it goes, they go back to what had them before, unless something else took them meanwhile.
+    useLayoutEffect(() => {
+        if (!covering) {
+            return undefined;
+        }
+
+        const opener = document.activeElement;
+        const box = document.querySelector(".layout > :is(.files-tile, .browser):not(.leaving)");
+
+        if (box && !box.contains(opener)) {
+            box.focus({ preventScroll: true });
+        }
+
+        return () => {
+            const active = document.activeElement;
+
+            // Not into a text field on touch screens, where its keyboard would pop up.
+            if (
+                (active === null || active === document.body || box?.contains(active)) &&
+                opener?.isConnected &&
+                !box?.contains(opener) &&
+                !(
+                    matchMedia("(pointer: coarse)").matches &&
+                    opener.matches("input, textarea, [contenteditable]")
+                )
+            ) {
+                opener.focus({ preventScroll: true });
+            }
+        };
+    }, [covering]);
 
     if (kept === null || (leaving && panelsBeside())) {
         return null;
@@ -673,6 +709,30 @@ addEventListener("keydown", (event) => {
     ) {
         event.preventDefault();
         closePip();
+
+        return;
+    }
+
+    // Esc closes the Files tile or the Browser panel where it covers the conversation, as back does. What is inside
+    // takes it first: a file open over the tree, the page in the panel, a field.
+    const cover =
+        event.key === "Escape" &&
+        !event.defaultPrevented &&
+        !store.state.sheet &&
+        !store.state.launcher &&
+        !store.state.drawer &&
+        document.querySelector(
+            '.layout > [aria-modal="true"]:is(.files-tile, .browser):not(.leaving)',
+        );
+
+    if (cover) {
+        event.preventDefault();
+
+        if (cover.classList.contains("files-tile")) {
+            setFilesOpen(false);
+        } else {
+            setBrowserOpen(false);
+        }
 
         return;
     }

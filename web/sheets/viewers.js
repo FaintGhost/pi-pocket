@@ -125,6 +125,7 @@ export function ImageViewer({ src, alt }) {
     return html`<div
         class="lightbox"
         role="dialog"
+        aria-modal="true"
         aria-label=${alt || "Image"}
         onClick=${closeSheet}
     >

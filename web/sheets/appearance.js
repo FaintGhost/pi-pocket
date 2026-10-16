@@ -37,6 +37,7 @@ function ThemeCard({ id, desktop = false }) {
 
     return html`<button
         class=${`theme-card ${on ? "on" : ""} ${desktop ? "theme-desktop" : ""}`}
+        aria-pressed=${on}
         style=${vars}
         title=${desktop ? "Follow the Omarchy theme of the machine Pi Pocket runs on" : THEMES[id].name}
         onMouseEnter=${() => matchMedia("(hover: hover)").matches && preview(id)}
@@ -141,6 +142,7 @@ export function AppearanceSheet() {
                         ([value, label]) =>
                             html`<button
                                 class=${p.sidebar === value ? "on" : ""}
+                                aria-pressed=${p.sidebar === value}
                                 onClick=${() => setPrefs({ sidebar: value })}
                             >
                                 ${label}
@@ -161,6 +163,7 @@ export function AppearanceSheet() {
                         ([value, label]) =>
                             html`<button
                                 class=${p.motion === value ? "on" : ""}
+                                aria-pressed=${p.motion === value}
                                 onClick=${() => setPrefs({ motion: value })}
                             >
                                 ${label}
@@ -173,6 +176,7 @@ export function AppearanceSheet() {
                     ${[13, 14, 15, 16, 17].map(
                         (size) => html`<button
                             class=${p.text === size ? "on" : ""}
+                            aria-pressed=${p.text === size}
                             onClick=${() => setPrefs({ text: size })}
                         >
                             ${size}

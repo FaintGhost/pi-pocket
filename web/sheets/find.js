@@ -189,6 +189,7 @@ export function FindSheet({ initial }) {
                 class="find-input"
                 ref=${box}
                 type="search"
+                aria-label="Find in session"
                 placeholder="Words in a message, a command, a file…"
                 value=${query}
                 onInput=${(event) => {
@@ -197,7 +198,12 @@ export function FindSheet({ initial }) {
                 }}
                 onKeyDown=${onKey}
             />
-            ${needle && html`<span class="find-count mono">${results.length}</span>`}
+            ${
+                needle &&
+                html`<span class="find-count mono" role="status">
+                    ${results.length}
+                </span>`
+            }
         </label>
         ${
             needle !== "" &&

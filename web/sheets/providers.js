@@ -414,6 +414,7 @@ export function AuthDialog({ inline = false }) {
                     <div class="row">
                         <input
                             type=${prompt.type === "secret" ? "password" : "text"}
+                            aria-label=${prompt.message}
                             autocomplete="off"
                             placeholder=${prompt.placeholder ?? ""}
                             value=${value}

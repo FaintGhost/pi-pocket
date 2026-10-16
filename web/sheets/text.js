@@ -29,12 +29,14 @@ export function TextSheet({
                 multiline
                     ? html`<textarea
                         rows="4"
+                        aria-label=${label}
                         value=${value}
                         placeholder=${placeholder}
                         onInput=${(event) => setValue(event.currentTarget.value)}
                     ></textarea>`
                     : html`<input
                         autofocus
+                        aria-label=${label}
                         value=${value}
                         placeholder=${placeholder}
                         onInput=${(event) => setValue(event.currentTarget.value)}

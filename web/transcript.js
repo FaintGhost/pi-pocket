@@ -321,7 +321,17 @@ function UserEntry({ entry, view, users }) {
         <div
             class="prompt tappable"
             title="Edit, send again, or copy"
+            tabindex="0"
             onClick=${(event) => openMessage(event, entry.id)}
+            onKeyDown=${(event) => {
+                if (
+                    (event.key === "Enter" || event.key === " ") &&
+                    event.target === event.currentTarget
+                ) {
+                    event.preventDefault();
+                    openMessage(event, entry.id);
+                }
+            }}
         >
             <span class="prompt-head">
                 <span class="prompt-avatar" style=${`--who:${mark}`} aria-hidden="true">

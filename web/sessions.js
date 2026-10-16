@@ -942,7 +942,7 @@ export function SessionList({ compact = false }) {
                 canStart &&
                 html`<button
                     class="new-button"
-                    title="New session (Alt N)"
+                    title="New session (Alt+N)"
                     onClick=${() => openSheet({ type: "cwd", mode: "new" })}
                 >
                     <${Icon} name="plus" size=${14} />
@@ -954,6 +954,7 @@ export function SessionList({ compact = false }) {
             <${Icon} name="search" size=${14} />
             <input
                 placeholder="Search sessions"
+                aria-label="Search sessions"
                 value=${query}
                 onInput=${(event) => setQuery(event.currentTarget.value)}
                 onKeyDown=${(event) => {
@@ -978,6 +979,7 @@ export function SessionList({ compact = false }) {
                     : html`<span
                             class="search-keys"
                             title="Launcher"
+                            aria-hidden="true"
                             onClick=${(event) => {
                                 event.preventDefault();
                                 store.set({ launcher: true, drawer: false });
@@ -1163,7 +1165,9 @@ function RailTiles() {
                 key=${session.id}
                 class=${`ws ${session.id === conversationId ? "active" : ""} ${session.busy ? "busy" : ""} ${session.waiting ? "waiting" : ""}`}
                 style=${`--i:${index}`}
-                title=${`${session.title ?? "New session"}${index < 9 ? `  (Alt ${index + 1})` : ""}`}
+                title=${`${session.title ?? "New session"}${index < 9 ? ` (Alt+${index + 1})` : ""}`}
+                aria-label=${`${session.title ?? "New session"}${session.waiting ? ", needs you" : session.busy ? ", working" : ""}`}
+                aria-current=${session.id === conversationId ? "page" : undefined}
                 onClick=${() => navigate(session.id)}
             >
                 ${index < 9 ? index + 1 : initials(session.title ?? "New session")}
@@ -1189,7 +1193,7 @@ export function RailNav({ foldable = false, folded = false }) {
     const agents = subagentTotals(sessions);
     const live = agents.working + agents.waiting;
     const failed = failing(agents);
-    const keys = `${APPLE ? "⌘" : "Ctrl"} B`;
+    const keys = APPLE ? "⌘B" : "Ctrl+B";
     const fold = () => setPrefs({ sidebar: folded ? "open" : "rail" });
     const role = me?.role === "owner" ? "owner" : me?.role === "viewer" ? "view only" : "guest";
 
@@ -1228,7 +1232,7 @@ export function RailNav({ foldable = false, folded = false }) {
             canStart &&
             html`<button
                 class="rail-button rail-new"
-                title="New session (Alt N)"
+                title="New session (Alt+N)"
                 aria-label="New session"
                 onClick=${() => openSheet({ type: "cwd", mode: "new" })}
             >

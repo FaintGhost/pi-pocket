@@ -270,6 +270,7 @@ export function BranchPicker() {
             style=${anchorStyle(anchor)}
             ref=${box}
             role="dialog"
+            aria-modal="true"
             aria-label="Branch"
             tabindex="-1"
             onKeyDown=${onKeyDown}

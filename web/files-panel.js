@@ -591,7 +591,17 @@ function FilesTab({ changes, covering }) {
         </div>
         ${
             shown
-                ? html`<div class=${`ft-view ${selected ? "" : "leaving"}`} inert=${!selected}>
+                ? html`<div
+                      class=${`ft-view ${selected ? "" : "leaving"}`}
+                      inert=${!selected}
+                      onKeyDown=${(event) => {
+                          // Esc goes back to the tree, as back does, where the file covers it.
+                          if (covered && event.key === "Escape" && !event.defaultPrevented) {
+                              event.preventDefault();
+                              closeFile();
+                          }
+                      }}
+                  >
                       <div class="ft-view-head">
                           ${
                               !side &&
@@ -648,7 +658,10 @@ export function FilesPanel({ leaving = false }) {
 
     return html`<section
         class=${`files-tile window ${leaving ? "leaving" : ""}`}
+        role=${beside ? undefined : "dialog"}
+        aria-modal=${beside ? undefined : "true"}
         aria-label="Files"
+        tabindex="-1"
         inert=${leaving}
     >
         <${ResizeEdge} />
@@ -726,6 +739,7 @@ export function FilesButton() {
     return html`<button
         class=${`icon-button top-toggle ${filesOpen ? "on" : ""}`}
         aria-label="Files"
+        aria-pressed=${filesOpen}
         title="Files and changes (Alt+E)"
         onClick=${() => toggleFiles()}
     >

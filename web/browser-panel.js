@@ -729,9 +729,10 @@ export function BrowserPanel({ leaving = false }) {
     const wasOpen = useRef(false);
     const stageRef = useRef(null);
     const typeInput = useRef(null);
+    const beside = panelsBeside();
 
     // Over the conversation, back closes the panel.
-    useBack(!panelsBeside() && !leaving, () => setBrowserOpen(false));
+    useBack(!beside && !leaving, () => setBrowserOpen(false));
 
     if (open) {
         wasOpen.current = true;
@@ -851,7 +852,10 @@ export function BrowserPanel({ leaving = false }) {
 
     return html`<section
         class=${`browser window ${leaving ? "leaving" : ""}`}
+        role=${beside ? undefined : "dialog"}
+        aria-modal=${beside ? undefined : "true"}
         aria-label="Browser"
+        tabindex="-1"
         inert=${leaving}
     >
         <${ResizeEdge} />
@@ -916,6 +920,7 @@ export function BrowserPanel({ leaving = false }) {
                     onBlur=${() => setTimeout(() => setAddress(null), 150)}
                     onKeyDown=${(event) => {
                         if (event.key === "Escape") {
+                            event.preventDefault();
                             event.currentTarget.blur();
                         }
                     }}
@@ -1024,6 +1029,7 @@ export function BrowserButton() {
     return html`<button
         class=${`icon-button badge-host ${browserOpen ? "on" : live ? "quiet-phone" : "quiet"}`}
         aria-label="Browser"
+        aria-pressed=${browserOpen}
         title="Browser (Alt+B)"
         onClick=${toggleBrowser}
     >

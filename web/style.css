@@ -11534,6 +11534,11 @@ textarea.notes {
     color: var(--text);
 }
 
+/* Focus lands on the whole tile or panel where it covers the conversation: no ring around the screen. */
+.layout > :is(.files-tile, .browser):focus-visible {
+    outline: none;
+}
+
 /*
  * Where they cover the conversation, the Files tile and the Browser panel are screens pushed over it: they slide in
  * from the right, as a phone's screens do. So does a file opened in the tile over its tree.

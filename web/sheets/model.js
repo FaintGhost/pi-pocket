@@ -203,6 +203,7 @@ export function ModelPicker() {
             style=${anchorStyle(anchor && { ...anchor, width: widthOf(anchor) })}
             ref=${box}
             role="dialog"
+            aria-modal="true"
             aria-label=${forDefault ? "Default model" : "Model"}
             tabindex="-1"
             onKeyDown=${onKeyDown}
