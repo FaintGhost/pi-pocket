@@ -16,7 +16,6 @@ import type { ModelRef } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
 import { describe, HttpError } from "./errors.ts";
-import { modelList } from "./models.ts";
 import { ModelRefresh } from "./model-refresh.ts";
 
 /** How long asking a provider's sign-in afresh may take: a renewal's own limit is 15 seconds. */
@@ -228,7 +227,9 @@ export class Providers {
 
     /** A mark came or went: tabs get the models marked again, and sessions' views their model's state. */
     #changed(): void {
-        this.#sendModels();
+        void this.#sendModels().catch((error: unknown) =>
+            this.#app.log(`Models not sent: ${describe(error)}`),
+        );
         this.#app.refreshViews();
     }
 
@@ -397,8 +398,8 @@ export class Providers {
     }
 
     /** Every tab gets the models available now, marked when their sign-in needs renewing. */
-    #sendModels(): void {
-        const models = modelList(this.#app.models, (provider) => this.#expired.has(provider));
+    async #sendModels(): Promise<void> {
+        const models = await this.#app.modelList();
 
         for (const client of this.#app.clients) {
             client.send("models", models);

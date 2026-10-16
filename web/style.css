@@ -5367,6 +5367,19 @@ pre.diff .del {
     color: var(--muted);
 }
 
+.model-scope-wrap {
+    padding: 0 14px 10px;
+}
+
+.segmented.model-scope {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+}
+
+.segmented.model-scope button {
+    min-height: 40px;
+}
+
 /* Thinking: the levels in one track, the chosen one raised. Past the general segmented rules, which come later. */
 .segmented.model-levels {
     display: grid;
