@@ -1,6 +1,6 @@
 # The security model for extension authors
 
-This page collects, for authors, what [SECURITY.md](../../../SECURITY.md) and [extensions.md](../../extensions.md) say about extensions. It adds rules for authors. Each section names its sources. When this page and a source do not agree, the source is correct. Tell us in an issue.
+This page collects, for authors, what [SECURITY.md](../../../SECURITY.md) and the guides say about extensions. It adds rules for authors. Each section names its sources. When this page and a source do not agree, the source is correct. Tell us in an issue.
 
 ## Who is who
 
@@ -16,7 +16,7 @@ Anyone who can steer a session can make Pi call every tool that is on there. Tha
 
 ## S1. A drop-in runs with the owner's rights
 
-Sources: SECURITY.md, "Drop-in extensions"; extensions.md, "Drop-in or built-in".
+Sources: SECURITY.md, "Drop-in extensions"; [Drop-in or built-in](../../extensions.md#drop-in-or-built-in).
 
 A module's server part runs inside the server. It can read `config.json` (with the owner's token), every session, Pi's sign-ins, and every file that the owner's user can read. It can start processes and open network connections. There is no sandbox. A drop-in starts off, and only the owner turns it on.
 
@@ -29,7 +29,7 @@ A module's server part runs inside the server. It can read `config.json` (with t
 
 ## S2. A browser module runs with the rights of the person whose tab loads it
 
-Sources: SECURITY.md, "Drop-in extensions"; extensions.md, "The browser module" and "Who may use it"; architecture.md, "Extensions' browser modules".
+Sources: SECURITY.md, "Drop-in extensions"; [Browser modules](../browser-modules.md); [Who may use it](../routes.md#who-may-use-it); architecture.md, "Extensions' browser modules".
 
 A browser module runs in the app's own page, in the tab of each person whom its `access` lets in. It has that person's rights. In a guest's tab, it can do nothing that the guest cannot do. In the owner's tab, it can do all that the owner can do. The page's content security policy stops it from loading scripts and styles from other sites, and from requests to other sites. It does not stop all ways out: code in the page can send the page to another address, for example.
 
@@ -44,7 +44,7 @@ A browser module runs in the app's own page, in the tab of each person whom its 
 
 ## S3. Who reaches routes and the browser module
 
-Sources: extensions.md, "Routes" and "Who may use it"; architecture.md, "A request".
+Sources: [Routes](../routes.md); architecture.md, "A request".
 
 | `access`            | Who                                                 |
 | ------------------- | --------------------------------------------------- |
@@ -63,12 +63,9 @@ People who were invited to one session never reach a module's routes or its brow
 
 ## S4. Who runs commands
 
-Sources: SECURITY.md, "Drop-in extensions"; extensions.md, "Commands".
+Sources: SECURITY.md, "Drop-in extensions"; [Slash commands](../commands.md#who-may-run-it).
 
-- A **conversation** command is for everyone who can steer that session, and that includes guests who were invited to only that session. While people take turns, only the person who drives can run it.
-- A **global** command is for the owner only.
-- Viewers run no commands.
-- Each handler runs with the owner's rights, as all of the module does.
+[Who may run it](../commands.md#who-may-run-it) tells who may run a conversation command and a global command. Each handler runs with the owner's rights, as all of the module does, also when a guest runs it.
 
 Rules:
 
@@ -83,7 +80,7 @@ Rules:
 
 ## S5. Text from outside and prompt injection
 
-Sources: SECURITY.md, "Linked sessions" and "Replies are untrusted"; extensions.md, "The host" (`text`) and "Starting and messaging sessions".
+Sources: SECURITY.md, "Linked sessions" and "Replies are untrusted"; [Using the host](../host.md) (`text`); [Starting and messaging sessions](../linked-sessions.md).
 
 Untrusted text includes route parameters, queries, and bodies; command `args`; tool arguments from the model; messages from linked sessions; and anything from the network, files, issues, or web pages. The model's tool arguments are untrusted because text that Pi read can steer what Pi asks for.
 
@@ -102,7 +99,7 @@ Untrusted text includes route parameters, queries, and bodies; command `args`; t
 
 ## S6. Secrets
 
-Sources: extensions.md, "Rules that are easy to break", "Routes", "Events", and "Commands".
+Sources: [Rules that are easy to break](../../extensions.md#rules-that-are-easy-to-break); [Routes](../routes.md); [Events](../events.md); [Slash commands](../commands.md).
 
 Know where each output goes:
 
@@ -127,17 +124,17 @@ Know where each output goes:
 
 ## S7. Names for stored data
 
-Sources: extensions.md, "Rules that are easy to break"; [api-stability.md](api-stability.md#9-names-for-stored-data).
+Sources: [Rules that are easy to break](../../extensions.md#rules-that-are-easy-to-break).
 
-- **S7.1. Name your document kinds, tasks, and entry kinds `x.<module>.<name>`.**\
-  _Reason:_ then no other module's data meets yours.
-- **S7.2. Do not rename them after people used them.**\
-  _Reason:_ stored data with the old name stays, and nothing reads it.
+[Rules that are easy to break](../../extensions.md#rules-that-are-easy-to-break) tells how to name your document kinds, tasks, entry kinds, and browser storage keys, and that a name stays once people used it.
+
+- **S7.1. Obey that rule.**\
+  _Reason:_ then no other module's data meets yours, and stored data with an old name is not lost.
 - The name stops collisions. It does not keep data private: any module can read any document.
 
 ## S8. What Lancet Guard does not see
 
-Sources: SECURITY.md, "Approvals", "The built-in browser", and "Drop-in extensions"; extensions.md, "Drop-in or built-in" and "Hooks".
+Sources: SECURITY.md, "Approvals", "The built-in browser", and "Drop-in extensions"; [Drop-in or built-in](../../extensions.md#drop-in-or-built-in); [Hooks](../hooks.md).
 
 Lancet Guard is off by default. When it is on, it judges each `bash`, `write`, and `edit` call before it runs, codemode's calls included. Risky calls wait for a person to approve them. It does not see:
 

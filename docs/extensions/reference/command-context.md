@@ -42,14 +42,7 @@ scope: "conversation" | "global";
 
 Since 0.14.0 · Stable
 
-Who can run the command.
-
-- `"conversation"`: a person who can steer the session. When people take turns, only the person who has the turn. Guests invited to one session can run it in that session.
-- `"global"`: the owner alone, in any session that the owner sees. Use it for settings of the whole app. When another person has the turn, the app shows the owner no message box in that session. Then the owner runs the command from another session, or takes the turn first. The card goes to the session where the owner typed the command, for all the people there.
-
-Viewers can run no commands, and the suggestions show them none.
-
-A conversation command runs with the owner's rights, as all of the module does, also when a guest runs it. Its arguments are text from outside. Check them, and check `ctx.user.role` and `ctx.conversationId` before you change anything outside the session.
+Who can run the command: `"conversation"` or `"global"`. [Who may run it](../commands.md#who-may-run-it) in the commands guide tells who each one lets in, and what to check.
 
 ### `handler`
 

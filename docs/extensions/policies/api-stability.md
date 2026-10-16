@@ -89,9 +89,8 @@ The host's members do not change while modules reload. A new member comes only a
 
 ### 9. Names for stored data
 
-- Name a document kind, a task, and an entry kind after the module: `x.<module>.<name>`, as `x.word-count.totals`. Core uses `pocket.` and never `x.`.
-- After people have used a name, do not change it, and do not change what its fields mean. Add new fields next to them.
-- In the browser, use `localStorage` and `sessionStorage` keys that start with `x.<module>.`. Core's keys start with `pocket.`, and core never uses `x.` keys.
+- The rule to name document kinds, tasks, entry kinds, and browser storage keys `x.<module>.…`, and to keep a name once people used it: [Rules that are easy to break](../../extensions.md#rules-that-are-easy-to-break).
+- **Promise:** core's names start with `pocket.`, and core never uses `x.` names, in the store or in the browser.
 
 ### 10. The gallery entry format
 
