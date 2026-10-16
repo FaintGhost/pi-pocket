@@ -34,6 +34,8 @@ export type CommandData = {
     name: string;
     output: string;
     taskId: number;
+    /** Only the end of a longer output is kept. */
+    clipped?: boolean;
 };
 
 /** What a command's entry holds. */

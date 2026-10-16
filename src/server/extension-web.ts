@@ -97,6 +97,10 @@ export const BUILT_IN_COMMANDS: ReadonlySet<string> = new Set([
 /** A module's command name: lowercase, starting with a letter, with at least one `-` (`clock-zone`). */
 const COMMAND_NAME = /^(?=[^-]*-)[a-z][a-z0-9_-]{0,63}$/;
 
+/** The most commands a module may register, and the longest description or `args` hint each may have. */
+const MAX_COMMANDS = 50;
+const MAX_COMMAND_TEXT = 200;
+
 /** A command with its handler and its module's file, which stay on the server. */
 export type RegisteredCommand = CommandInfo & Pick<ExtensionCommand, "handler"> & { file: string };
 
@@ -413,6 +417,16 @@ export class ExtensionWebs {
 
         if (args !== undefined && typeof args !== "string") {
             throw new Error(`web.command: /${name}: args is a hint in words, such as "[zone]"`);
+        }
+
+        if (description.length > MAX_COMMAND_TEXT || (args?.length ?? 0) > MAX_COMMAND_TEXT) {
+            throw new Error(
+                `web.command: /${name}: its description and args are ${MAX_COMMAND_TEXT} characters at most`,
+            );
+        }
+
+        if (part.commands.length >= MAX_COMMANDS) {
+            throw new Error(`web.command: a module has ${MAX_COMMANDS} commands at most`);
         }
 
         if (scope !== "conversation" && scope !== "global") {

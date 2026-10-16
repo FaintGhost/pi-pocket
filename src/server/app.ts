@@ -510,7 +510,7 @@ export class PocketApp {
             repoWatches: this.repoWatches,
             memory: this.memory,
             gallery: this.gallery,
-            text: { quoted, defang },
+            text: Object.freeze({ quoted, defang }),
             thinkingLevels: THINKING_LEVELS,
         };
 

@@ -38,6 +38,9 @@ export default (_host, web) => {
     web.command("count-here", {
         description: "Count", scope: "conversation",
         handler: async (args, ctx) => {
+            if (args === "throw") {
+                throw new Error("a secret path");
+            }
             await count(ctx);
             if (args === "hold") {
                 await new Promise((resolve) => ctx.signal.addEventListener("abort", resolve));
@@ -117,6 +120,11 @@ test("a viewer runs no command, and a global command is the owner's alone", asyn
         status: 403,
     });
     assert.equal(await runs(id), 0);
+    // A handler's own error words are the owner's to read, not the guest's.
+    assert.equal(
+        (await app.extensionCommands.run(id, guest, request("count-here", "throw"))).message,
+        "The command failed.",
+    );
     assert.equal(
         (await app.extensionCommands.run(id, guest, request("count-here"))).status,
         "done",

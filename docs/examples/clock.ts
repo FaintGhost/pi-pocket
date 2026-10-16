@@ -79,8 +79,9 @@ export default function createClock(_host: unknown, web: ExtensionWeb) {
                 };
             }
 
+            // An error made with web.error reaches the person who ran the command; others say only that it failed.
             if (!known(zone)) {
-                throw new Error(`There is no time zone ${zone}.`);
+                throw web.error(400, `There is no time zone ${zone}.`);
             }
 
             await ctx.commit(async (tx) => {
