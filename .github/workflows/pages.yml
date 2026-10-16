@@ -1,11 +1,13 @@
 # Publishes the product site (site/) at https://tannermidd.github.io/pi-pocket/ and the docs (docs-site/, built
-# from docs/ where it is) at /pi-pocket/docs/, as one GitHub Pages deployment. main gets only releases and site
-# changes, so the docs describe the latest release. To publish a branch's site/ before it is merged:
+# from docs/ where it is) at /pi-pocket/docs/, as one GitHub Pages deployment, from main only. main gets only
+# releases and site changes, so the docs describe the latest release. A run by hand (npm run site:publish, or
+# gh workflow run pages.yml) publishes main again.
 #
-#   gh workflow run pages.yml -f ref=<branch>
-#
-# This needs Settings → Pages → Source: GitHub Actions. The gh-pages branch (the old `git subtree push`) is not
-# used; setting the source back to it brings the old site back.
+# This needs, once, two settings that the owner makes:
+# - Settings → Pages → Source: GitHub Actions. The gh-pages branch (the old `git subtree push`) is not used;
+#   setting the source back to it brings the old site back.
+# - Settings → Environments → github-pages: add required reviewers, so no deployment goes out without a yes, and
+#   keep its deployment branches to main.
 name: Pages
 
 on:
@@ -21,11 +23,6 @@ on:
             - "package.json"
             - ".github/workflows/pages.yml"
     workflow_dispatch:
-        inputs:
-            ref:
-                description: "The branch, tag, or commit to publish (empty: the commit this runs on)"
-                required: false
-                default: ""
 
 permissions:
     contents: read
@@ -36,11 +33,12 @@ concurrency:
 
 jobs:
     build:
+        # A run by hand on another branch publishes nothing.
+        if: github.ref == 'refs/heads/main'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  ref: ${{ inputs.ref || github.sha }}
                   persist-credentials: false
             - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
               with:
@@ -50,7 +48,7 @@ jobs:
             - name: Build the docs, with every link checked
               working-directory: docs-site
               run: |
-                  npm ci
+                  npm ci --ignore-scripts
                   npm run check
             - name: Put the product site and the docs together
               run: |

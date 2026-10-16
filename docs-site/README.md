@@ -23,4 +23,6 @@ npm run check                                 # as CI builds it: strict, with no
 
 ## Publishing
 
-`.github/workflows/pages.yml` builds this site and copies `site/` beside it, on each push to `main` that changes them, and deploys both to GitHub Pages. `.github/workflows/docs.yml` builds the docs on pull requests.
+`.github/workflows/pages.yml` builds this site and copies `site/` beside it, on each push to `main` that changes them, and deploys both to GitHub Pages. It publishes `main` only: a run by hand (`npm run site:publish`) publishes `main` again. `.github/workflows/docs.yml` builds the docs on pull requests. Both install with `npm ci --ignore-scripts`: no package runs code at install.
+
+The owner sets, once: Settings → Pages → Source: GitHub Actions, and Settings → Environments → `github-pages` → required reviewers, with its deployment branches kept to `main`.
