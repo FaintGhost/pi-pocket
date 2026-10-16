@@ -26,7 +26,7 @@ Each member in the reference and in [types/pocket.d.ts](../../../types/pocket.d.
 
 - **Since 0.14.0**: the first release of Pi Pocket that has the member. A pre-release counts as its release. In the types file, this is `@since`.
 - **Stable**: the member changes only as the stability policy says.
-- **Experimental**: the member can change, or go, in any release. In the types file, this is `@experimental`. In 0.14.0, `host.linkedSessions` is the only experimental member.
+- **Experimental**: the member can change, or go, in any minor release (`0.15.0`), but never in a patch release (`0.14.1`). See A4 and A14 in [API stability](../policies/api-stability.md#experimental). In the types file, this is `@experimental`. In 0.14.0, `host.linkedSessions` is the only experimental member.
 
 Some members of the host are **internal**: only Pi Pocket's built-in modules use them. They are not in the types file. They can change in any release. [host](host.md#internal-members) lists them.
 

@@ -282,7 +282,7 @@ A member that changes only as [API stability](../policies/api-stability.md) says
 
 ### Experimental
 
-A member that can change, or go, in any release.
+A member that can change, or go, in any minor release, but never in a patch release.
 
 ### Internal
 

@@ -7,7 +7,7 @@ This page tells which interfaces of Pi Pocket are for extensions, what Pi Pocket
 - **Public:** an interface in the list below. Pi Pocket keeps it, or changes it only by the rules on this page.
 - **Internal:** all other code and data. It can change in any release, with no notice.
 - **Stable:** public, and not experimental or deprecated. All public interfaces are stable unless the docs mark them.
-- **Experimental:** public, but it can change or go in any minor release.
+- **Experimental:** public, but it can change or go in any minor release, never in a patch release.
 - **Deprecated:** public, but it will go. A replacement is available.
 - **Breaking change:** a change after which a module that obeys the docs can fail, or work differently.
 - **Addition:** a change after which every such module works as before.
@@ -131,7 +131,7 @@ All public interfaces are stable, unless the docs mark them experimental or depr
 
 - **A3. The docs mark an experimental member.** The reference writes "Since … · Experimental" under the member. In `types/pocket.d.ts`, its comment has `@experimental`. The docs build checks that the two agree.\
   _Reason:_ authors must know before they use it.
-- **A4. An experimental member can change or go in any minor release, with no deprecation.** The release notes say so.\
+- **A4. An experimental member can change or go in any minor release, with no deprecation, but never in a patch release (A14).** The release notes say so.\
   _Reason:_ a new interface must be able to change while its first users find its problems.
 - **A5. An experimental member becomes stable when the release notes say so.**\
   _Reason:_ the change of status is then easy to find.
