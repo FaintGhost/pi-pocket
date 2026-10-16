@@ -6446,10 +6446,6 @@ pre.diff .del {
     margin: 0.35rem 0 0;
 }
 
-.pop-menu-foot .model-refresh {
-    margin: 0;
-}
-
 /* The owner's choice of models for subagents, above the providers. */
 .subagent-models {
     display: flex;
