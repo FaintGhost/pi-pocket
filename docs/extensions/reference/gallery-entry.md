@@ -1,41 +1,295 @@
 # Gallery entry
 
-The extension gallery's index, read strictly: everything in it comes from elsewhere. An index is one JSON file (the index repository's generated `index.json`): its format, and an entry for each extension, which names the files of one drop-in at a pinned commit of a GitHub repository, with each file's SHA-256, and what the module installs.
+The extension gallery reads an index: one JSON file, the `index.json` that the index repository makes. The index has an entry for each extension. An entry names the files of one drop-in at a pinned commit of a GitHub repository, with the SHA-256 of each file. It also declares what the module installs. [Publishing to the gallery](../publishing.md) tells you how to share yours.
 
-Pi Pocket reads it here, and the index repository's checks use these same functions, so an entry they let in is one Pi Pocket reads (they import this file from a Pi Pocket checkout, the loader's lists of reserved names with it). Text is kept to one plain line (no control, invisible, or direction characters), names to the drop-in folder's rules, and sizes to `LIMITS`.
+Pi Pocket reads the index strictly, because all of it comes from other people. The code is `src/server/gallery/entry.ts`. The index repository's checks use the same code, so Pi Pocket can read each entry that the checks let in.
+
+- Each text field is one plain line, with no space at its ends. It has no control, invisible, or direction characters.
+- A list has no item two times.
+- A field that is not on this page makes the entry not valid.
+- An entry that Pi Pocket cannot read is left out. An entry for a newer Pi Pocket, or for a newer extension API, is hidden. The gallery says how many it left out.
+
+[Limits](limits.md#gallery) gives each length, count, and size.
 
 ## The index
 
-- `format`: The index format this Pi Pocket reads.
-- `name`
-- `repo`: The index's repository on GitHub, where entries are submitted.
-- `extensions`
+### `format`
+
+```ts
+format: 1;
+```
+
+Since 0.14.0 · Stable
+
+The format of the index. Pi Pocket reads format 1. For a newer format, it says that you must update Pi Pocket.
+
+### `name`
+
+```ts
+name?: string;
+```
+
+Since 0.14.0 · Stable
+
+The index's name.
+
+### `repo`
+
+```ts
+repo?: string;
+```
+
+Since 0.14.0 · Stable
+
+The address of the index's repository on GitHub, where people send entries: `https://github.com/owner/name`.
+
+### `extensions`
+
+```ts
+extensions: Entry[];
+```
+
+Since 0.14.0 · Stable
+
+The entries. Two entries cannot have the same `name`.
 
 ## An entry
 
-- `name`: The module's name: its file is `<name>.ts`.
-- `title`
-- `description`
-- `tags`
-- `author`: `{ name: string; github?: string }`
-- `version`: The author's version, for people: the commit is what counts.
-- `source`: A GitHub repository (`owner/name`), the commit the files are pinned to, and the folder in it they are in.
-- `files`: each `{ name, sha256, size }`. `name`: Where it goes in the drop-in folder, and where it is in the repository (under `source.path`).
-- `pocketApi`: The extension API version it needs (`POCKET_API`).
-- `minPocket`: The oldest Pi Pocket it works with: `0.14.0`.
-- `declares`
-- `revoked`: Commits of it that must not be used: Pi Pocket warns where one is installed.
+### `name`
+
+```ts
+name: string;
+```
+
+Since 0.14.0 · Stable
+
+The module's name: its file is `<name>.ts`. [Names](names.md#gallery-entries) gives the rules.
+
+### `title`
+
+```ts
+title: string;
+```
+
+Since 0.14.0 · Stable
+
+The title that the gallery shows.
+
+### `description`
+
+```ts
+description: string;
+```
+
+Since 0.14.0 · Stable
+
+What the extension does. **Share…** takes it from the first paragraph of the module's `/** … */` comment.
+
+### `tags`
+
+```ts
+tags: string[];
+```
+
+Since 0.14.0 · Stable
+
+Words that find the entry: lowercase letters, digits, and `-`, starting with a letter or digit.
+
+### `author`
+
+```ts
+author: { name: string; github?: string };
+```
+
+Since 0.14.0 · Stable
+
+Who wrote the extension: a name, and a GitHub user name.
+
+### `version`
+
+```ts
+version: string;
+```
+
+Since 0.14.0 · Stable
+
+The author's version, for people: letters, digits, `.`, `+`, and `-`. Pi Pocket goes by the commit, not by this version.
+
+### `source`
+
+```ts
+source: { repo: string; commit: string; path?: string };
+```
+
+Since 0.14.0 · Stable
+
+Where the files are.
+
+- `repo`: a GitHub repository, as `owner/name`.
+- `commit`: the full id of the commit with the files, 40 hexadecimal characters.
+- `path`: the folder in the repository that has the files. Leave it out, or give `""`, for the top of the repository.
+
+### `files`
+
+```ts
+files: {
+    name: string;
+    sha256: string;
+    size: number;
+}
+[];
+```
+
+Since 0.14.0 · Stable
+
+The extension's files.
+
+- `name`: where the file goes in the drop-in folder, and where it is in the repository, under `source.path`. [Names](names.md#gallery-entries) gives the names that a file can have. The files must include `<name>.ts`. Two names cannot differ only in case. A file cannot also be a folder of another file.
+- `sha256`: the file's SHA-256, in lowercase hexadecimal.
+- `size`: the file's size, in bytes.
+
+A file whose size or SHA-256 is not the same as in the entry installs nothing at all.
+
+### `pocketApi`
+
+```ts
+pocketApi: number;
+```
+
+Since 0.14.0 · Stable
+
+The version of the extension API that the extension needs, such as `1`. For a newer version than Pi Pocket's, the gallery hides the entry.
+
+### `minPocket`
+
+```ts
+minPocket: string;
+```
+
+Since 0.14.0 · Stable
+
+The oldest Pi Pocket that the extension works with, such as `0.14.0`. For an older Pi Pocket, the gallery hides the entry. A pre-release counts as its release: `0.14.0-beta.3` is `0.14.0`.
+
+### `declares`
+
+```ts
+declares: Declares;
+```
+
+Since 0.14.0 · Stable
+
+What the module installs. See [What an entry declares](#what-an-entry-declares).
+
+### `revoked`
+
+```ts
+revoked?: { commit: string; reason: string }[];
+```
+
+Since 0.14.0 · Stable
+
+Commits of the extension that people must not use, each with the reason. Where such a commit is installed, the gallery and the Extensions sheet say so, and offer to turn it off. When the entry's own `source.commit` is revoked, the gallery does not offer it. Pi Pocket reads `revoked` also from an entry that is otherwise not valid, or that is for a newer Pi Pocket.
 
 ## What an entry declares
 
-| Field                        | What                                                                                                                                                                                                     |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `extensions`                 | The names of the extensions it installs                                                                                                                                                                  |
-| `tools`, `readOnlyTools`     | Its tools, and those of them with `readOnlyHint` (plan mode lets them run)                                                                                                                               |
-| `hooks`                      | Its hooks' handlers: `beforeTool`, `onYield`, …                                                                                                                                                          |
-| `sections`                   | Its prompt sections                                                                                                                                                                                      |
-| `wraps`                      | The tools and sections it wraps: `tool bash`, `section memory`                                                                                                                                           |
-| `routes`, `client`, `access` | Its routes (`GET status`), who loads its browser module (or `null`), and the widest access of the two (`owner` when it adds nothing to the app)                                                          |
-| `commands`                   | Its slash commands, each with its scope, as a route has its method: `conversation clock-zone`, `global clock-reset`. Left out when it has none: a Pi Pocket before 0.14.0 does not read an entry with it |
+These are the same lists that Menu → Extensions shows for a module that is on. The index's checks load the module in a test app and compare.
 
-These are what Menu → Extensions shows for a module that is on, and the index's checks load the module in a test app and compare.
+### `extensions`
+
+```ts
+extensions: string[];
+```
+
+Since 0.14.0 · Stable
+
+The names of the extensions that the module installs. None can be a name that Pi Pocket keeps.
+
+### `tools`
+
+```ts
+tools: string[];
+```
+
+Since 0.14.0 · Stable
+
+The names of its tools. None can be the name of a built-in tool.
+
+### `readOnlyTools`
+
+```ts
+readOnlyTools: string[];
+```
+
+Since 0.14.0 · Stable
+
+The tools in `tools` that have `readOnlyHint`. Plan mode lets them run.
+
+### `hooks`
+
+```ts
+hooks: string[];
+```
+
+Since 0.14.0 · Stable
+
+The handlers of its hooks: `beforeTool`, `onYield`, and the others.
+
+### `sections`
+
+```ts
+sections: string[];
+```
+
+Since 0.14.0 · Stable
+
+Its prompt sections.
+
+### `wraps`
+
+```ts
+wraps: string[];
+```
+
+Since 0.14.0 · Stable
+
+The tools and sections that it wraps, as `tool bash` or `section memory`.
+
+### `routes`
+
+```ts
+routes: string[];
+```
+
+Since 0.14.0 · Stable
+
+Its routes, each as its method and path: `GET status`.
+
+### `client`
+
+```ts
+client: "owner" | "steer" | "view" | null;
+```
+
+Since 0.14.0 · Stable
+
+The `access` of its browser module, or `null` when it has none.
+
+### `access`
+
+```ts
+access: "owner" | "steer" | "view";
+```
+
+Since 0.14.0 · Stable
+
+The widest access of its routes and its browser module. It is `"owner"` when the module adds nothing to the app. It cannot be narrower than `client`.
+
+### `commands`
+
+```ts
+commands?: string[];
+```
+
+Since 0.14.0 · Stable
+
+Its commands, each as its scope and name, as a route has its method: `conversation clock-zone`, `global clock-reset`. None can be a name of the app's own commands. Leave the field out when the module has no commands: betas of 0.14.0 before beta.7 do not read an entry that has it.

@@ -1,140 +1,184 @@
 # host
 
-What the default export receives first. Extensions reach the app only through it (and add to it through `web`, [above](#adding-to-the-app)); it stays the same while modules reload.
+The host is the first argument of a module's default export. A module uses it to read from Pi Pocket and to report to it. To add to the app, a module uses [`web`](web.md), the second argument.
 
-## Public members
+The host does not change when a module reloads. It changes only when the server restarts. Thus a module that uses a member newer than the running server must check that the member is there. [Using the host](../host.md) tells you how.
+
+The types are `Host` and the types that it uses, in [types/pocket.d.ts](../../../types/pocket.d.ts). [Types for your editor](types.md) tells you how to import them.
+
+## Folders
 
 ### `dataDir`
 
 ```ts
-readonly dataDir: string
+readonly dataDir: string;
 ```
 
 Since 0.1.0 · Stable
 
-Pi Pocket's data folder
+Pi Pocket's data folder. It is `~/.pi-pocket`, unless `PI_POCKET_DIR` or the `--data` option gives another folder. The drop-in folder is `extensions/` in it.
 
 ### `agentDir`
 
 ```ts
-readonly agentDir: string
+readonly agentDir: string;
 ```
 
 Since 0.1.0 · Stable
 
-Pi's (`~/.pi/agent`)
+Pi's own folder, usually `~/.pi/agent`. Pi keeps its sign-ins, models, settings, skills, and prompt templates there.
+
+## Skills
 
 ### `skillPaths`
 
 ```ts
-skillPaths(): string[]
+skillPaths(): string[];
 ```
 
 Since 0.1.0 · Stable
 
-The extra skill folders in Pi's settings
-
-Pi's configured extra skill paths, from its settings.
+The extra skill folders that Pi's settings give.
 
 ### `skills`
 
 ```ts
-skills(cwd: string): Skill[]
+skills(cwd: string): Skill[];
 ```
 
 Since 0.12.0 · Stable
 
-Pi's skills for a session working in `cwd`, from every place Pi looks
+Pi's skills for a session that works in the folder `cwd`. The list has the skills from all the places where Pi looks.
+
+## Models
 
 ### `resolveModel`
 
 ```ts
-resolveModel(spec: string): ModelRef
+resolveModel(spec: string): ModelRef;
 ```
 
 Since 0.1.0 · Stable
 
-`provider/modelId` (or a bare id) to a signed-in model whose sign-in works, or an error that names no other models
-
-`provider/modelId` (or a bare model id) to a signed-in model whose sign-in has not expired, or an error that says it is not available. The error names no other models: models are a person's to choose.
+Finds a model from `provider/modelId`, or from a model id alone. The model must be signed in, and its sign-in must work. When there is no such model, it throws an error. The error names no other models: the choice of model is the person's.
 
 ### `subagentModels`
 
 ```ts
-subagentModels(): readonly string[]
+subagentModels(): readonly string[];
 ```
 
 Since 0.13.1 · Stable
 
-The models the owner allows subagents besides their session's own (`provider/modelId`); empty by default
+The models that the owner lets subagents use, as `provider/modelId`. A subagent can always use the model of its own session. The list is empty by default. The owner sets it in Menu → Providers → Models for subagents.
 
 ### `modelProblem`
 
 ```ts
-modelProblem(ref: ModelRef, fresh?: boolean): Promise<string | undefined>
+modelProblem(ref: ModelRef, fresh?: boolean): Promise<string | undefined>;
 ```
 
 Since 0.13.1 · Stable
 
-Why a model may not be used now (not signed in, its sign-in expired), or `undefined`; `fresh` asks its provider again
+Why Pi cannot use a model now, in words that Pi can tell a person. For example, Pi Pocket does not know the model, its provider is not signed in, or its sign-in expired. It is `undefined` when Pi can use the model. With `fresh: true`, it asks the provider about the sign-in again first.
 
-Why Pi may not use a model now, in words for Pi to pass on (not known here, its provider not signed in, or its sign-in expired), or undefined when it may. `fresh` asks the provider's sign-in again first.
+### `thinkingLevels`
+
+```ts
+readonly thinkingLevels: readonly ModelThinkingLevel[];
+```
+
+Since 0.14.0 · Stable
+
+The thinking levels, lowest first. They have the names that models and sessions use.
+
+## People and limits
 
 ### `requesterOf`
 
 ```ts
-requesterOf(conversationId: ConversationId): string | undefined
+requesterOf(conversationId: ConversationId): string | undefined;
 ```
 
 Since 0.3.0 · Stable
 
-The id of the person Pi works for in a session now
-
-Who Pi works for in a conversation now: whose message led to its current work.
-
-### `notice`
-
-```ts
-notice(level: "info" | "warning" | "error", message: string, conversationId?: ConversationId): void
-```
-
-Since 0.1.0 · Stable
-
-Report something to the server log and the app (`"info"`, `"warning"`, `"error"`); with a conversation's id, to its tabs only
+The id of the person that Pi works for in a session now. This is the person whose message started Pi's current work.
 
 ### `heldBack`
 
 ```ts
-heldBack(conversationId: ConversationId): string | undefined
+heldBack(conversationId: ConversationId): string | undefined;
 ```
 
 Since 0.12.0 · Stable
 
-Why work Pi would start there with nobody asking may not start now (a spend limit), or `undefined`
-
-Why work Pi would start in a conversation with nobody asking (a subagent's report, say) may not start now: the spend limit its session or whoever pays there reached. Undefined when it may.
+Why Pi cannot start work in a session now when nobody asked for it, for example to read a subagent's report. The reason is a spend limit: the session's limit, or the limit of the person who pays there. It is `undefined` when Pi can start.
 
 ### `onLimitsChanged`
 
 ```ts
-onLimitsChanged(listener: () => void): () => void
+onLimitsChanged(listener: () => void): () => void;
 ```
 
 Since 0.12.0 · Stable
 
-Call `listener` when the owner changes a spend limit; returns how to stop
+Calls `listener` each time the owner changes a spend limit. It returns a function: call it to stop.
+
+## Notices and text
+
+### `notice`
+
+```ts
+notice(level: NoticeLevel, message: string, conversationId?: ConversationId): void;
+```
+
+Since 0.1.0 · Stable
+
+Reports something to the server's log and to the app. `level` is `"info"`, `"warning"`, or `"error"`. With `conversationId`, only the tabs of that session show the notice. Pi Pocket 0.13.1 added `conversationId`.
+
+### `text`
+
+```ts
+readonly text: SafeText;
+```
+
+Since 0.14.0 · Stable
+
+Makes text from other places safe for Pi to read: from a web page, an issue, or a file that a person did not write. In the same place, tell Pi that the text is data.
+
+#### `text.quoted`
+
+```ts
+quoted(text: string, max?: number): string;
+```
+
+Since 0.14.0 · Stable
+
+Gives the text as one line in quotes that the text cannot close. It removes invisible characters and tags, and it cuts the line to `max` characters. [Limits](limits.md#host) gives the default `max`.
+
+#### `text.defang`
+
+```ts
+defang(text: string): string;
+```
+
+Since 0.14.0 · Stable
+
+Keeps the lines of the text, but leaves no closing tag in it. Use it for text that you put between tags of your own.
+
+## Linked sessions
 
 ### `linkedSessions`
 
 ```ts
-readonly linkedSessions: LinkedSessions
+readonly linkedSessions: LinkedSessions;
 ```
 
 Since 0.14.0 · Experimental
 
-Sessions that a session starts and messages, as Agent Teams does: `start`, `send`, `list` ([below](#starting-and-messaging-sessions))
+Lets a tool start sessions from the session that it runs in, and send messages between them, as Agent Teams does. A linked session is an ordinary session. [Starting and messaging sessions](../linked-sessions.md) tells you how they work, what they cannot do, and how to call them.
 
-Sessions that a session starts and messages (`linked-sessions.ts`): each one is an ordinary session, linked to the one that started it. The checks of the person Pi works for apply, and a call repeated with its key acts once.
+Each call acts as the person that Pi works for in `source`, and that person's checks apply. Give each call a `key` that stays the same when the call runs again, such as `${api.taskId}:${api.callId}`. A second call with the same `key` does nothing again: it returns what the first call returned.
 
 #### `linkedSessions.start`
 
@@ -143,12 +187,18 @@ start(
     source: ConversationId,
     request: { title?: string; message: string; model?: string; thinking?: string },
     key: string,
-): Promise<{ session: ConversationId; address: string }>
+): Promise<{ session: ConversationId; address: string }>;
 ```
 
 Since 0.14.0 · Experimental
 
-`start(source, { title?, message, model?, thinking? }, key)` makes the session and sends it `message` as its first message, and returns `{ session, address }`: its id, and the source's address for it. A title left out is the message's first line. `model` (`provider/modelId`) must be the source's own or one the owner allows for subagents (Menu → Providers → Models for subagents); left out, it is the source's. `thinking` is at most the source's level (left out, the source's), lowered to the highest the model has. A model that cannot be used now is refused before anything is made.
+Makes a session linked to `source` and sends it `message` as its first message. It returns the new session's id, and the address that `source` uses for it.
+
+- The new session works in the folder of `source`. It gets a copy of the agent settings of `source`, but not its history.
+- Without `title`, the title is the first line of `message`.
+- `model` is `provider/modelId`. It must be the model of `source`, or a model that the owner lets subagents use. Without it, the session uses the model of `source`.
+- `thinking` is a level no higher than the level of `source`. Without it, the session uses the level of `source`. Pi Pocket lowers it to the highest level that the model has.
+- When Pi cannot use the model now, `start` makes nothing and throws an error.
 
 #### `linkedSessions.send`
 
@@ -157,22 +207,24 @@ send(
     source: ConversationId,
     request: { to: string; message: string; steer?: boolean },
     key: string,
-): Promise<void>
+): Promise<void>;
 ```
 
 Since 0.14.0 · Experimental
 
-`send(source, { to, message, steer? }, key)` sends `message` to the linked session at address `to`, as a follow-up, or with `steer` at its next pause. It returns once the message is taken, not answered. The session that gets it reads it fenced, after words that say another session's agent wrote it and that it is a request, not a person's order, with the address to reply to.
+Sends `message` to the linked session at the address `to`. Without `steer`, the message is a follow-up. With `steer: true`, the session gets it at its next pause. `send` returns when the session takes the message, not when it answers.
+
+The session that gets the message reads it between tags. Words before it say that the agent of another session wrote it, and that it is a request, not a person's order. They also give the address to reply to.
 
 #### `linkedSessions.list`
 
 ```ts
-list(source: ConversationId): Promise<LinkedSession[]>
+list(source: ConversationId): Promise<LinkedSession[]>;
 ```
 
 Since 0.14.0 · Experimental
 
-`list(source)` gives the sessions linked to it, at any distance, that the person Pi works for sees: each with an `address` of the source's own (so no session's id goes into its transcript), and its title, folder, and state only when everyone who sees the source sees it too.
+The sessions linked to `source`, at any distance, that the person Pi works for can see. Each has an address of the `source` session's own, so no session id goes into its transcript.
 
 #### `LinkedSession`
 
@@ -188,42 +240,23 @@ interface LinkedSession {
 
 Since 0.14.0 · Experimental
 
-A session linked to another, as `host.linkedSessions.list` gives it to the session that asks. `address`: What the asking session calls it: an address of its own, never the session's id. `title`: Only when everyone who sees the asking session sees this one too.
+A linked session, as `list` gives it.
 
-### `text`
-
-```ts
-readonly text: {
-    quoted(text: string, max?: number): string;
-    defang(text: string): string;
-}
-```
-
-Since 0.14.0 · Stable
-
-Text from elsewhere made safe for Pi to read: `quoted(text, max)`, one line in quotes it cannot close; `defang(text)`, with no closing tag left in it, for text between tags of your own
-
-Text from elsewhere made safe for Pi to read (`fence.ts`): `quoted` gives one line, cut to `max`, without invisible characters or any tag, in quotes it cannot close; `defang` keeps the lines, but no closing tag survives, for text put between tags of your own. Tell Pi in the same place that it is data.
-
-### `thinkingLevels`
-
-```ts
-readonly thinkingLevels: readonly ModelThinkingLevel[]
-```
-
-Since 0.14.0 · Stable
-
-The thinking levels, lowest first, as models and sessions name them
+- `address`: the address that the asking session uses for it. It is never the session's id.
+- `title`, `cwd` (its folder), `busy` (Pi works in it now), and `archived`: these are there only when all the people who see the asking session see this session too.
 
 ## Internal members
 
-| Member                           | What it is                                                                                    |
-| -------------------------------- | --------------------------------------------------------------------------------------------- |
-| `approvals`, `guard`             | Calls waiting for a person to allow them; Lancet Guard                                        |
-| `schedules`, `goals`, `browsers` | Scheduled messages, Done when, and the built-in browser, as their extensions use them         |
-| `memory`                         | Lessons Pi keeps across sessions: their projects, the ones in force, saving and changing them |
-| `watches`                        | Sessions' PR watches: starting, stopping, and reading one, and the task that looks            |
-| `repoWatches`                    | Repository watches' task, which the triggers extension installs                               |
-| `gallery`                        | The extension gallery, which its extension's routes use ([below](#the-gallery))               |
-| `pip`                            | PiP, the owner's assistant: what its tools do, each as PiP's person (`pip.ts`).               |
-| `pipCompaction`                  | PiP's compactions: its extension's hook has PiP write its own summaries.                      |
+The host has more members, for Pi Pocket's built-in modules only. They are not in the types file, and they can change in any release without notice. Do not use them in a drop-in. [API stability](../policies/stability.md) tells you what this means.
+
+- `approvals`: tool calls that wait for a person to allow them.
+- `guard`: Lancet Guard.
+- `schedules`: scheduled messages, for the schedule tool.
+- `goals`: Done when, for the goals module.
+- `browsers`: the built-in browser, for the browser tool.
+- `memory`: the lessons that Pi keeps across sessions, for the memory tool.
+- `watches`: the pull request watches of sessions, for the `watch_pr` tool.
+- `repoWatches`: the task of repository watches, for the triggers module.
+- `pip`: what the tools of PiP, the owner's assistant, do.
+- `pipCompaction`: PiP's own summaries when its context is compacted.
+- `gallery`: the extension gallery, for its own routes.

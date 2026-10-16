@@ -1,31 +1,154 @@
 # Command context
 
-`web.command(name, { description, args, scope, handler })` adds `/name` to the message box's suggestions, for the people who may run it.
+A module adds a command with `web.command(name, command)`. This page gives the fields of `command`, the context that its handler gets, and what the handler returns. [Slash commands](../commands.md) tells you how runs are kept, how a person stops one, and how to refuse a run.
+
+The types are `Command`, `CommandContext`, and `CommandResult`, in [types/pocket.d.ts](../../../types/pocket.d.ts).
+
+```typescript
+web.command("acme-status", {
+    description: "Show this session's folder",
+    scope: "conversation",
+    handler: (_args, ctx) => ({ type: "card", output: ctx.cwd }),
+});
+```
 
 ## The command
 
-- `description` shows in the suggestions. `args` is an optional hint in words, such as `"[zone]"`. Each is 200 characters at most, and a module has 50 commands at most.
-- `handler(args, ctx)` gets everything after the name as one string (up to 4000 characters).
+### `description`
 
-## `ctx`
+```ts
+description: string;
+```
 
-`ctx.user` is who ran it (`{ id, name, role }`), `ctx.conversationId` and `ctx.cwd` the session and its folder. Read a document with `ctx.snapshot(Doc, ctx.conversationId, ctx.context)`, and change documents with `await ctx.commit(async (tx) => …)`, which answers what its function returns; keep work outside Pi Pocket out of the commit.
+Since 0.14.0 · Stable
 
-Stopping aborts `ctx.signal` and does not undo what the handler did.
+What the command does. The message box's suggestions show it.
 
-Who ran a command and where, with the durable task that runs it: read and change documents through it.
+### `args`
 
-## Results
+```ts
+args?: string;
+```
 
-What it returns:
+Since 0.14.0 · Stable
 
-- `{ type: "toast", level, message }`: a notice (`"info"`, `"warning"`, or `"error"`) for the person who ran it, in that tab alone. A message is cut to 500 characters.
-- `{ type: "card", output }`: plain text in the session the command was typed in, for everyone who sees it. Pi never gets it, and it does not change whom Pi works for. Find in session and export include it. Only its last 30,000 characters are kept, as for a `!` command. Put no secrets in it.
+A hint in words for the arguments, such as `"[zone]"`.
 
-## Scopes
+### `scope`
 
-Who may run it (`scope`):
+```ts
+scope: "conversation" | "global";
+```
 
-- `"conversation"`: anyone who may steer the session, and only whoever drives while people take turns. Guests invited to one session may run it there.
-- `"global"`: the owner alone, in any session they see. While someone else drives, the app shows the owner no message box there, so they run it from another session or take the wheel first. Use it for settings of the whole app. Its card still goes to the session it was typed in, for everyone there.
-- Viewers run none, and see none in the suggestions.
+Since 0.14.0 · Stable
+
+Who can run the command.
+
+- `"conversation"`: a person who can steer the session. When people take turns, only the person who has the turn. Guests invited to one session can run it in that session.
+- `"global"`: the owner alone, in any session that the owner sees. Use it for settings of the whole app. When another person has the turn, the app shows the owner no message box in that session. Then the owner runs the command from another session, or takes the turn first. The card goes to the session where the owner typed the command, for all the people there.
+
+Viewers can run no commands, and the suggestions show them none.
+
+A conversation command runs with the owner's rights, as all of the module does, also when a guest runs it. Its arguments are text from outside. Check them, and check `ctx.user.role` and `ctx.conversationId` before you change anything outside the session.
+
+### `handler`
+
+```ts
+handler(args: string, context: CommandContext): CommandResult | Promise<CommandResult>;
+```
+
+Since 0.14.0 · Stable
+
+Runs the command. `args` is all the text after the command's name, as one string. `context` is the [command context](#the-context).
+
+To refuse a run, throw `web.error(status, message)`: the person who ran the command reads `message`. Any other error tells them only "The command failed.", and the owner gets its words in a notice.
+
+## The context
+
+### `user`
+
+```ts
+readonly user: Person;
+```
+
+Since 0.14.0 · Stable
+
+The person who ran the command, as `{ id, name, role }`.
+
+### `conversationId`
+
+```ts
+readonly conversationId: ConversationId;
+```
+
+Since 0.14.0 · Stable
+
+The session where the person typed the command.
+
+### `cwd`
+
+```ts
+readonly cwd: string;
+```
+
+Since 0.14.0 · Stable
+
+The session's folder.
+
+### `signal`
+
+```ts
+readonly signal: AbortSignal;
+```
+
+Since 0.14.0 · Stable
+
+It aborts when a person stops the command in Menu → Running now. A command has no time limit: the handler must watch `signal`, and end when it aborts. Stopping does not undo what the handler did.
+
+### `snapshot`
+
+```ts
+readonly snapshot: DocumentReader["snapshot"];
+```
+
+Since 0.14.0 · Stable
+
+Reads a document: `ctx.snapshot(Doc, ctx.conversationId, ctx.context)`.
+
+### `context`
+
+```ts
+readonly context: Context;
+```
+
+Since 0.14.0 · Stable
+
+The context of the durable task that runs the command. Give it to `snapshot`, and to other calls into Pi Durable that need one.
+
+### `commit`
+
+```ts
+commit<T>(change: (tx: Tx) => T | Promise<T>): Promise<T>;
+```
+
+Since 0.14.0 · Stable
+
+Changes documents in one commit: `await ctx.commit(async (tx) => …)`. It returns what `change` returns. Do work outside Pi Pocket before or after the commit, not in it.
+
+## The result
+
+### `CommandResult`
+
+```ts
+type CommandResult =
+    { type: "toast"; level: NoticeLevel; message: string } | { type: "card"; output: string };
+```
+
+Since 0.14.0 · Stable
+
+What a handler returns.
+
+- `{ type: "toast", level, message }`: a notice for the person who ran the command, in that tab only. `level` is `"info"`, `"warning"`, or `"error"`. A long message is cut.
+- `{ type: "card", output }`: plain text in the session where the person typed the command, for all the people who see it. Pi never gets it, and it does not change the person Pi works for. Find in session and export include it. Only the end of a long card is kept, as for a `!` command. Put no secrets in it.
+
+[Limits](limits.md#commands) gives the lengths.

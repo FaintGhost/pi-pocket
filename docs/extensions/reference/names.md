@@ -1,40 +1,65 @@
 # Names
 
-Installing an extension with a name already installed replaces it, and a tool with the name of another replaces it in every session. So Pi Pocket refuses a drop-in that would take a name it keeps for itself, or one another module already has, and says so in Menu → Extensions:
+The rules for the names that a module gives. These are the names of its file, extensions, tools, routes, ids, commands, events, and stored data. [Limits](limits.md#names) gives the longest length of each name.
 
-- Extension names `coding-tools`, `pocket-core`, and anything starting with `pocket-` (`pocket-prompt`, `pocket-guard`, and the rest), whether that built-in is on or off.
-- The built-in tools: `read`, `write`, `edit`, `bash`, `artifact`, `browser`, `subagent`, `team`, `schedule`, `codemode`, and `memory`, and PiP's: `sessions`, `session_read`, `session_start`, `session_send`, `session_follow`, `session_stop`, `session_archive`, `session_schedule`, `approvals`, `repo_watch`, and `session_watch_pr`, and the triggers' `watch_pr`.
-- An extension or tool name another module installed: the first one in keeps it.
+## Extensions and tools
 
-Give every extension and tool a name of your own, with a prefix (`example-clock`, `acme_lookup`). To change how a built-in tool works, wrap it (`wrapTool` in Pi Durable's README) or check its calls with a hook, rather than replacing it.
+To install an extension with the name of an installed extension replaces that extension. A tool with the name of another tool replaces it in all sessions. Thus Pi Pocket refuses a drop-in that would take a name that Pi Pocket keeps, or a name that another module has. Menu → Extensions says why.
+
+- **Extension names that Pi Pocket keeps:** `coding-tools`, and all names that start with `pocket-`, such as `pocket-core`, `pocket-prompt`, and `pocket-guard`. This is true also when that built-in module is off.
+- **Built-in tools:** `read`, `write`, `edit`, `bash`, `artifact`, `browser`, `subagent`, `team`, `schedule`, `codemode`, and `memory`. PiP's tools: `sessions`, `session_read`, `session_start`, `session_send`, `session_follow`, `session_stop`, `session_archive`, `session_schedule`, `approvals`, `repo_watch`, and `session_watch_pr`. The triggers' tool: `watch_pr`.
+- **Names that another module has:** the first module to install an extension or tool keeps its name.
+
+Give each extension and tool a name of your own, with a prefix: `example-clock`, `acme_lookup`. To change how a built-in tool works, do not replace it. Wrap it (`wrapTool` in Pi Durable's README), or check its calls with a hook.
 
 ## Module files
 
-- has a file name no built-in module has (a drop-in named `browser.ts` is not loaded). Files that start with `_` or end in `.test.ts` are not modules: use them for helpers and tests.
+- A module is a `.ts` file in the drop-in folder.
+- Files that start with `_`, or that end in `.test.ts`, are not modules. Use them for helpers and tests.
+- A drop-in with the name of a built-in module does not load. The built-in modules are `prompt`, `artifacts`, `browser`, `subagents`, `agent-teams`, `schedules`, `goals`, `plan`, `guard`, `codemode`, `memory`, `pip`, `triggers`, and `gallery`.
+- `_pocket.d.ts` in the drop-in folder is Pi Pocket's link to its types. Do not use this name. See [Types for your editor](types.md).
 
-What a module adds to the app goes by its file's name: `server-status.ts` is `server-status`, at `/api/x/server-status/` and `/x/server-status/`. File names are unique across both folders, so these never collide; a module that adds to the app needs a name of up to 64 letters, digits, `-`, and `_`, starting with a letter or digit.
+What a module adds to the app uses the name of its file without `.ts`: `server-status.ts` is `server-status`, at `/api/x/server-status/` and `/x/server-status/`. File names are unique across the two folders of modules, so these addresses never collide. A module that adds to the app needs a name of letters, digits, `-`, and `_` that starts with a letter or digit.
 
 ## Routes
 
-Each part is letters, digits, and `. _ ~ -` (but not `.` or `..` alone), or `:name`.
+Each part of a route's path is one of these:
+
+- Letters, digits, and `.`, `_`, `~`, and `-`, but not `.` or `..` alone.
+- `:name`: a letter or `_`, then letters, digits, and `_`. One path cannot use the same `:name` two times.
 
 ## Browser modules
 
-`entry` is the name of a file or folder right beside the module (letters, digits, `.`, `_`, and `-`, starting with a letter, a digit, or `_`), not a link.
+The `entry` of `web.client(entry)` is the name of a file or folder immediately beside the module. It has letters, digits, `.`, `_`, and `-`, and starts with a letter, a digit, or `_`. It cannot be `node_modules`.
 
 ## What a browser module adds
 
-Each thing it adds has an `id` of its own (up to 64 letters, digits, and `. _ : -`, starting with a letter or digit), and adding one with the same `id` again replaces it.
+Each rail button, menu row, launcher action, page, and sheet has an `id` in its module. An id has letters, digits, and `.`, `_`, `:`, and `-`, and starts with a letter or digit. To add a thing with the `id` of a thing of the same kind replaces it.
 
 ## Commands
 
-- `name` is up to 64 lowercase letters, digits, `-`, and `_`, starting with a letter, without the `/`, and has at least one `-`: `acme-status`, not `status`. The app's own commands are one word each, so a new one never takes your name. Give it a prefix of your own. A name another module's command has is refused: the first one in keeps it. A prompt template with the same name wins in the message box.
+- A command's name has lowercase letters, digits, `-`, and `_`. It starts with a letter, and it has at least one `-`: `acme-status`, not `status`. Give it without the `/`.
+- The app's own commands are one word each. Thus a new command of the app never takes your name.
+- Give the name a prefix of your own. When another module has a command with the name, Pi Pocket refuses yours: the first module keeps the name.
+- When a prompt template has the same name, the template wins in the message box.
+
+## Events
+
+The name of an event of `web.send` has letters, digits, and `.`, `_`, `:`, and `-`.
 
 ## Documents, tasks, and entries
 
-- **Your documents are stored data.** Name a document kind after your module (`x.<module>.<name>`, as `x.word-count.totals`), so no other module's ever meets it, and your tasks' names and entries' kinds too. Once anyone has run it, never rename a kind or a name, or change what its fields mean: add new ones beside them.
+Your documents are stored data. Name a document kind after your module, as `x.<module>.<name>`: `x.word-count.totals`. Thus no other module uses the same kind. Name your tasks and the kinds of your entries the same way.
+
+After somebody has run your module, do not rename a kind or a name, and do not change what its fields mean. Add new ones beside them.
 
 ## Gallery entries
 
-- `<name>.ts`, the module. `<name>` is 2 to 64 lowercase letters, digits, `-`, and `_`, starting with a letter or digit, and is neither a built-in module's name nor starts with `pocket-`; its extensions and tools keep the [names rules](#names).
-- `<name>.js` or `<name>.mjs` beside it, or the folder `<name>/`, for its browser module (`web.client("<name>.js")`, or `web.client("<name>")`). Helpers go in that folder too (`import { zones } from "./<name>/zones.ts"`): the folder serves no `.ts` files. Four folders deep at most, with no hidden files and no `node_modules`.
+An entry's files are its drop-in's own, and they use the module's name. Thus they never collide with the files of another entry.
+
+- `<name>` has lowercase letters, digits, `-`, and `_`, and starts with a letter or digit. It cannot be the name of a built-in module, and it cannot start with `pocket-`. It cannot be a name that Windows keeps for a device, such as `con` or `nul`.
+- The module is `<name>.ts`.
+- Its browser module is `<name>.js` or `<name>.mjs` beside it, or the folder `<name>/`.
+- Helpers go in the folder `<name>/` too, such as `import { zones } from "./<name>/zones.ts"`. The folder serves no `.ts` files to browsers.
+- Each part of a path in the folder has letters, digits, `.`, `_`, and `-`, and starts with a letter, a digit, or `_`. A part cannot be `node_modules`, or a name that Windows reads as another name.
+- The extensions and tools of the module follow the rules in [Extensions and tools](#extensions-and-tools).

@@ -1,5 +1,57 @@
 # API versions
 
-`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet. `web.command` is newer than the rest of `web`: a module that should also load on Pi Pocket before 0.14.0 checks `typeof web.command === "function"` first.
+This page tells how Pi Pocket marks the age and the stability of each part of the extension API. It also tells how a module works with an older or a newer Pi Pocket. [API stability](../policies/stability.md) gives the rules for changes and for removals.
 
-Modules reload into the running server, but the server's own part (the host among it) changes only with a restart. A module that uses a member new to the host must work without it until then: check that it is there (`typeof host.heldBack === "function"`) and do as before when it is not. A module that called a missing member would fail at its first use, in every session.
+## The API version
+
+`web.api` on the server and `pocket.version` in the browser give the version of the extension API. It is 1 now.
+
+The version goes up only when a change breaks something that modules use. Additions do not change it.
+
+## `pocketApi`
+
+A module can export `pocketApi`: the server module, the browser module, or both.
+
+```typescript
+export const pocketApi = 1;
+```
+
+A Pi Pocket with an older API version does not set up such a module. It says why in the Extensions sheet.
+
+The browser reads `pocketApi` after it imports the browser module. Thus keep the browser module's top level to declarations, and do its work in the default export.
+
+## Since, Stable, Experimental, and Internal
+
+Each member in the reference and in [types/pocket.d.ts](../../../types/pocket.d.ts) has two marks:
+
+- **Since 0.14.0**: the first release of Pi Pocket that has the member. A pre-release counts as its release. In the types file, this is `@since`.
+- **Stable**: the member changes only as the stability policy says.
+- **Experimental**: the member can change, or go, in any release. In the types file, this is `@experimental`. In 0.14.0, `host.linkedSessions` is the only experimental member.
+
+Some members of the host are **internal**: only Pi Pocket's built-in modules use them. They are not in the types file. They can change in any release. [host](host.md#internal-members) lists them.
+
+## Older and newer Pi Pocket
+
+### Members that are new
+
+Pi Pocket reloads a module when you edit it, but the host changes only when the server restarts. A module that uses a member that is new to the host must work without it until then. Check that the member is there, and do as before when it is not:
+
+```typescript
+if (typeof host.heldBack === "function") {
+    // Use host.heldBack.
+}
+```
+
+A module that calls a member that is not there fails at its first use, in all sessions.
+
+### Pi Pocket before 0.14.0
+
+A Pi Pocket before 0.14.0 knows neither `pocketApi` nor `web`. There, a module that adds to the app fails at its first `web.route` or `web.client`. The Extensions sheet shows the error.
+
+### Betas of 0.14.0
+
+Betas of 0.14.0 before beta.7 have `web` without `command`. A module that must also load on them checks `typeof web.command === "function"` first.
+
+### Gallery entries
+
+A gallery entry gives `pocketApi` and `minPocket`: the API version and the oldest Pi Pocket that the extension needs. The gallery hides an entry that needs a newer API or a newer Pi Pocket. See [Gallery entry](gallery-entry.md#pocketapi).
