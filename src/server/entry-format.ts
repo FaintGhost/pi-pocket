@@ -25,6 +25,16 @@ export const FROM_PI_ENTRY = "pocket.from-pi";
 
 /** What that entry holds: the Pi session's id, its title, and its file. */
 export type FromPiData = { session: string; title: string; file: string };
+/** A native extension command's read-only result, shown to people but not added to model context. */
+export const COMMAND_ENTRY = "pocket.command";
+
+export type CommandData = {
+    command: string;
+    by: string;
+    name: string;
+    output: string;
+    taskId: number;
+};
 
 /** What a command's entry holds. */
 export type ShellData = {

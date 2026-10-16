@@ -23,7 +23,7 @@ Some state lives in this process alone, and a restart forgets it. For example:
 
 **Its parts:**
 
-- `commands`, `collab`, `alerts`, `providers`, `schedules`, `goals`, `shell`, `spend`
+- `commands`, `extensionCommands`, `collab`, `alerts`, `providers`, `schedules`, `goals`, `shell`, `spend`
 - `workspace`, `transcripts`, `attribution`, `piSessions`, `pip`, `watches`, `hooks`, `memory`, `gallery`
 - `browsers`
 
@@ -156,6 +156,18 @@ Each browser tab is a `Client` (`room.ts`), fed by an event stream or by long po
 2. the session list;
 3. then, when it shows a conversation, the room's full view;
 4. then only what changed.
+
+## Extensions' commands
+
+A module registers its commands with `web.command` while it loads. `ExtensionWebs` keeps them with the module's version, as it keeps routes: they count once the version installs, a version that fails leaves the ones before, and turning the module off removes them. Each registration has an id that is new with each version. `hello` lists the commands a person may run (`server.extensionCommands`: viewers none, guests the conversation ones), and a change to them sends everyone's tabs `hello` again.
+
+`POST /api/c/:id/extension-commands` goes to `app.extensionCommands` (`extension-commands.ts`), not to `app.commands`, which sends messages to Pi. It checks seeing and steering, then driving for a conversation command or the owner for a global one, and checks the person again just before the handler runs.
+
+A run is a `pocket.command` task, made in one commit with its `pocket.command-request` document (`CommandRequestDoc`), whose key is the person and the request's id. A retry finds that task and waits for its result; the same id with other arguments or another registration is a 409. The handler the request chose is kept in memory for its task alone. The task marks that it started before the handler runs, and keeps the result in a memo: after a restart, a task with no result reports that it was cut off, and its handler never runs again.
+
+A card is a `pocket.command` entry with only `kind` and `data`: no `model`, `head`, or `edits`, so Pi never gets it. Its write's request id is the task's, with no person's prefix (`requests.ts`), so it does not change whom Pi works for. A notice goes back only in the answer to the person who ran it.
+
+In the browser, `commands.js` puts a command's request (its registration and request id) in the tab's session storage until a result comes, so sending the same text again retries the same run, after a reload too. Running now names the command from its task, never its arguments, and shows global ones to the owner alone.
 
 ## The web app
 

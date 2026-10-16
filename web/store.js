@@ -993,6 +993,9 @@ export const actions = {
     shell: (command, context, requestId = uid()) =>
         api(`c/${current()}/shell`, { command, context, requestId }),
     stopShell: (taskId) => api(`c/${current()}/shell/${taskId}/stop`, {}),
+    /** Invoke one native extension registration; a retry keeps the same request id. */
+    extensionCommand: (id, commandId, args, requestId = uid()) =>
+        api(`c/${id}/extension-commands`, { commandId, args, requestId }),
     /** A file or folder for the viewer. */
     view: (path) => api(`c/${current()}/view?path=${encodeURIComponent(path)}`),
     /** What changed in the session's folder: git's uncommitted changes, and Pi's edits. */
@@ -1027,7 +1030,7 @@ export const actions = {
     resend: (entryId, change = {}) => api(`c/${current()}/resend`, { entryId, ...change }),
     setPlan: (on) => api(`c/${current()}/plan`, { on }),
     approvePlan: () => api(`c/${current()}/plan`, { approve: true }),
-    prompts: () => api(`c/${current()}/prompts`),
+    prompts: (id = current()) => api(`c/${id}/prompts`),
     trust: () => api(`c/${current()}/trust`),
     /** `trust`, `trust-parent`, or `distrust`, as Pi's `/trust` offers them. */
     setTrust: (choice) => api(`c/${current()}/trust`, { choice }),
@@ -1061,7 +1064,9 @@ export const actions = {
 
 /** Entries that show as transcript rows. Tool results show inside their call's card instead. */
 export const isRow = (entry) =>
-    ["user", "assistant", "compaction", "reset", "shell", "note", "fromPi"].includes(entry.kind);
+    ["user", "assistant", "compaction", "reset", "shell", "command", "note", "fromPi"].includes(
+        entry.kind,
+    );
 
 /**
  * Show the transcript from this entry down when it is above the rows shown now, as for a jump to a pinned or quoted

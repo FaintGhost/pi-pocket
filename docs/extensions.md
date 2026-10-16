@@ -1,6 +1,6 @@
 # Writing extensions
 
-An extension gives Pi something new: a **tool** it can call, a **section** of its system prompt, a **hook** that checks or changes its tool calls and answers, or a durable **task**. It can also add to the app itself: **routes** on the server, and a **browser module** with rail buttons, pages, sheets, menu rows, and launcher actions ([Adding to the app](#adding-to-the-app)). Pi Pocket's own features are built this way (`src/server/extensions/`), and the owner can add their own without touching Pi Pocket's code.
+An extension gives Pi something new: a **tool** it can call, a **section** of its system prompt, a **hook** that checks or changes its tool calls and answers, or a durable **task**. It can also add to the app itself: **routes** on the server, a **browser module** with rail buttons, pages, sheets, menu rows, and launcher actions, and **commands** people run from the message box without asking Pi ([Adding to the app](#adding-to-the-app)). Pi Pocket's own features are built this way (`src/server/extensions/`), and the owner can add their own without touching Pi Pocket's code.
 
 Extensions are Pi Durable's. Its README covers the parts in depth: `node_modules/@earendil-works/pi-durable/README.md` in Pi Pocket's folder (Extensions, Tools, System Prompt, Hooks, Your Own State). This page is what Pi Pocket adds, and how to write one that holds up.
 
@@ -16,7 +16,7 @@ Drop-ins other people wrote come from the gallery, and the owner's own go to it 
 
 ## A module
 
-One `.ts` file that default-exports a function. Pi Pocket calls it with the host (below) and `web` (what it adds to the app, [below](#adding-to-the-app)), and installs what it returns: one extension, a list, or nothing, for a module that only adds to the app. It may be `async`: the module is loaded once it settles, and may register with `web` until then. It installs all it returns or none of it: when one extension is refused, the version before stays as it was. An extension without a name, or two of one name, are refused, and so is a module that returns nothing and adds nothing to the app (no route, browser module, or cleanup), as it most likely forgot to return its extensions.
+One `.ts` file that default-exports a function. Pi Pocket calls it with the host (below) and `web` (what it adds to the app, [below](#adding-to-the-app)), and installs what it returns: one extension, a list, or nothing, for a module that only adds to the app. It may be `async`: the module is loaded once it settles, and may register with `web` until then. It installs all it returns or none of it: when one extension is refused, the version before stays as it was. An extension without a name, or two of one name, are refused, and so is a module that returns nothing and adds nothing to the app (no route, browser module, command, or cleanup), as it most likely forgot to return its extensions.
 
 ```typescript
 /**
@@ -48,7 +48,7 @@ export default function createClock() {
 
 Working examples, tested with every `npm test` (`test/docs-examples.test.ts`):
 
-- [examples/clock.ts](examples/clock.ts): a tool.
+- [examples/clock.ts](examples/clock.ts): a tool, and a command (`/clock-zone`) that sets the time zone it uses in a session.
 - [examples/no-force-push.ts](examples/no-force-push.ts): a hook that blocks some bash calls, and a prompt section that says so.
 - [examples/server-status.ts](examples/server-status.ts) with [examples/server-status.js](examples/server-status.js): a page on the rail, with a route that reads the machine's load and memory, and events that keep it live.
 
@@ -151,10 +151,11 @@ To type it, import the type by the absolute path of `src/server/host.ts`: `impor
 
 ## Adding to the app
 
-A module can add to the app what a tool cannot: a page that shows something without asking Pi, a button on the rail, a row in the menu. Its default export's second argument, `web`, registers two parts while the module loads:
+A module can add to the app what a tool cannot: a page that shows something without asking Pi, a button on the rail, a row in the menu. Its default export's second argument, `web`, registers three parts while the module loads:
 
 - **Routes** on the server, under `/api/x/<module>/`: what the browser module calls. Credentials and other secrets stay here.
 - A **browser module**: a `.js` file the app loads in the tabs of the people it is for. It adds rail buttons, pages, sheets, menu rows, and launcher actions through `pocket`, the app's API for extensions.
+- **Commands** for the message box (`/name`), which run on the server and need no browser module ([below](#commands)).
 
 They install and go with the module's extensions: an edit swaps them in one step, a version that fails keeps the one before, and turning the module off removes them, closing a page of it that is open. [examples/server-status.ts](examples/server-status.ts) and [examples/server-status.js](examples/server-status.js) are a whole one.
 
@@ -166,6 +167,16 @@ export default function createUsage(_host: unknown, web: ExtensionWeb) {
     web.client("usage.js"); // the browser module beside this file
 }
 ```
+
+| `web`                                 | What it is                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------ |
+| `api`, `module`                       | The version of this API (1); the module's name, its file's without `.ts` |
+| `route(method, path, handle, access)` | A route under `/api/x/<module>/` ([Routes](#routes))                     |
+| `client(entry, access)`               | The browser module ([The browser module](#the-browser-module))           |
+| `command({ name, … })`                | A command for the message box ([Commands](#commands))                    |
+| `send(event, data, { to })`           | An event to the browser module ([Events](#events))                       |
+| `error(status, message)`              | An error a route throws to answer with its status and words              |
+| `onDispose(run)`                      | Run `run` when this version goes ([Cleanups](#cleanups))                 |
 
 ### Routes
 
@@ -277,6 +288,38 @@ Someone invited to one session never may: these belong to the whole app. Each ro
 
 At most 100 events, and 1 MB of them, go out each second for a version of a module; the rest of that second's are dropped. Send what changed, or a summary, not every tick. A tab more than 8 MB behind that takes nothing for 30 s (it does not read its stream, or polls and acknowledges nothing), or any tab more than 128 MB behind, is cut off, and connects again with a fresh view: events are not kept for it. Under 128 MB, a tab that keeps taking is not cut off for being behind, so a slow phone gets everything. `web.send` never throws, as it is mostly called from timers, where a throw would stop the server: an event it cannot send goes to the server's log, once for each kind of mistake in a version.
 
+### Commands
+
+`web.command({ name, description, args, scope, handler })` adds `/name` to the message box's suggestions, for the people who may run it. It runs on the server and does not ask Pi. The [clock example](examples/clock.ts) has one: `/clock-zone Europe/Berlin` sets the session's time zone, and `/clock-zone` shows it.
+
+```typescript
+web.command({
+    name: "acme-status",
+    description: "Show this session's folder",
+    scope: "conversation",
+    handler: (_args, ctx) => ({ type: "card", output: ctx.cwd }),
+});
+```
+
+- `name` is up to 64 lowercase letters, digits, `-`, and `_`, starting with a letter, without the `/`. Give it a prefix of your own. A name the message box has already (`/model`, `/find`, and the rest) is refused, and so is one another module's command has: the first one in keeps it. A prompt template with the same name wins in the message box.
+- `description` shows in the suggestions. `args` is an optional hint in words, such as `"[zone]"`; the handler gets everything after the name as one string (up to 4000 characters) and checks it itself.
+- `handler(args, ctx)` returns what to show, or throws an `Error`, whose message the person who ran it sees. `ctx.user` is who ran it (`{ id, name, role }`), `ctx.conversationId` and `ctx.cwd` the session and its folder. Read a document with `ctx.snapshot(Doc, ctx.conversationId, ctx.context)`, and change documents with `await ctx.commit(async (tx) => …)`; keep work outside Pi Pocket out of the commit. `ctx.signal` is aborted when someone stops it.
+
+What it returns:
+
+- `{ type: "toast", level, message }`: a notice (`"info"`, `"warning"`, or `"error"`) for the person who ran it, in that tab alone.
+- `{ type: "card", output }`: plain text in the conversation, for everyone who sees it. Pi never gets it, and it does not change whom Pi works for. Find in session and export include it. Put no secrets in it.
+
+Who may run it:
+
+- `scope: "conversation"`: anyone who may steer the session, and only whoever drives while people take turns. Guests invited to one session may run it there.
+- `scope: "global"`: the owner alone, in any session they see, also while someone else drives. Use it for settings of the whole app. Its card still shows to everyone in the session.
+- Viewers run none, and see none in the suggestions.
+
+Each run is a durable task, kept by who ran it, the session, and the request's id. When a reply gets lost, sending the same text again from the same tab finds the first run and gets its result: the handler runs once. A server restart never runs a handler again: the person hears that it was cut off, as it may have done part of its work. Menu → **Running now** shows a command while it runs, and stops it: steerers stop conversation commands, the owner global ones. Stopping aborts `ctx.signal` and does not undo what the handler did. The arguments and the result are stored with the task, so a command is no place to type a password.
+
+Commands install and go with the module's version, as routes do: an edit swaps them in one step, a version that fails keeps the ones before, and turning the module off removes them. A run that started keeps the handler it started with. Menu → **Extensions** lists a module's commands.
+
 ### Cleanups
 
 `web.onDispose(run)` runs `run` when this version of the module goes: an edit replaces it, the owner turns it off, or the server stops. Stop timers and close connections there: a reload starts the module over, and the old version's timers would otherwise run on. One registered after the module loaded (from a timer) runs too, and one registered after the version went runs at once. `run` may return a promise: when the server stops, it waits up to 3 s for those, the cleanups of versions still going (replaced or turned off a moment before) and of a version still loading included. `pocket.onDispose` does the same in the browser, but a browser cleanup is not waited for: do what must finish at once.
@@ -285,11 +328,13 @@ The new version starts before the old one's cleanups run, so that an edit that f
 
 ### Versions
 
-`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet.
+`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet. `web.command` is newer than the rest of `web`: a module that should also load on a Pi Pocket without it checks `typeof web.command === "function"` first.
 
 ## Testing
 
 Copy the module into a test app's data folder and turn it on, as `test/docs-examples.test.ts` does: `openApp` with a scripted model (`test/helpers.ts`), the file in `<dataDir>/extensions/`, `app.setExtensionEnabled(owner, file, true)`, then a session whose scripted model calls the tool. Nothing reaches a real provider, and nothing touches the live data.
+
+`test/extension-commands.test.ts` runs a module's commands as different people, across a restart and a reload.
 
 For a drop-in, run the test from Pi Pocket's folder with the module copied in, or check it by hand: turn it on, ask Pi to use it in a session made for the purpose, and watch Menu → Extensions and the app's notices for errors.
 

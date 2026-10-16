@@ -2,10 +2,17 @@ import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Skill } from "@earendil-works/pi-coding-agent";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
-import type { ConversationId, Extension, ModelRef, TaskId } from "@earendil-works/pi-durable";
+import type {
+    ConversationId,
+    DocumentReader,
+    Extension,
+    ModelRef,
+    TaskId,
+    Tx,
+} from "@earendil-works/pi-durable";
 import type { Browsers } from "./browser.ts";
 import type { Gallery } from "./gallery.ts";
-import type { Role } from "./config.ts";
+import type { Role, User } from "./config.ts";
 import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
 import type { Memory } from "./memory.ts";
@@ -111,6 +118,34 @@ export class Approvals {
         }
     }
 }
+
+/** What a command gives back: a notice for the person who ran it alone, or a card of plain text for everyone here. */
+export type CommandResult =
+    | { type: "toast"; level: "info" | "warning" | "error"; message: string }
+    | { type: "card"; output: string };
+
+/** Who ran a command and where, with the durable task that runs it: read and change documents through it. */
+export interface CommandContext {
+    readonly user: Readonly<Pick<User, "id" | "name" | "role">>;
+    readonly conversationId: ConversationId;
+    readonly cwd: string;
+    readonly signal: AbortSignal;
+    readonly snapshot: DocumentReader["snapshot"];
+    readonly context: Context;
+    commit(change: (tx: Tx) => void | Promise<void>): Promise<void>;
+}
+
+/** A command people run from the message box (`web.command`), without asking Pi. */
+export interface ExtensionCommand {
+    name: string;
+    description: string;
+    args?: string;
+    scope: "conversation" | "global";
+    handler(args: string, context: CommandContext): CommandResult | Promise<CommandResult>;
+}
+
+/** What browsers know about a command. The id changes with each version of its module. */
+export type CommandInfo = Omit<ExtensionCommand, "handler"> & { id: string; file: string };
 
 /** What the app gives its extensions. Extensions are reloaded on edit; the host is not. */
 export interface PocketHost {
@@ -248,8 +283,9 @@ export type WebHandler = (request: WebRequest) => unknown;
 
 /**
  * A module's own part of the app, the second argument of its default export: routes under `/api/x/<module>/`, a browser
- * module that adds to the app's screens, and events from here to that browser module. Routes and the browser module
- * are registered while the module loads; they go with it when it reloads or is turned off.
+ * module that adds to the app's screens, events from here to that browser module, and commands for the message box.
+ * Routes, the browser module, and commands are registered while the module loads; they go with it when it reloads or
+ * is turned off.
  */
 export interface ExtensionWeb {
     /** The version of this API (`POCKET_API` in `extension-web.ts`). */
@@ -280,6 +316,11 @@ export interface ExtensionWeb {
      * may return a promise: a stopping server waits for it, up to 3 s.
      */
     onDispose(dispose: () => unknown): void;
+    /**
+     * A command people run from the message box as `/name`, while the module loads. It goes with this version of the
+     * module, as routes do. `scope: "conversation"` is for whoever may drive the session; `"global"` is the owner's.
+     */
+    command(command: ExtensionCommand): void;
 }
 
 /** The shape of every module in `src/server/extensions/`: a default export building one or more extensions. */
