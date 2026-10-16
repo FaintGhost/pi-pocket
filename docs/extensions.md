@@ -4,6 +4,8 @@ An extension gives Pi something new: a **tool** it can call, a **section** of it
 
 Extensions are Pi Durable's. Its README covers the parts in depth: `node_modules/@earendil-works/pi-durable/README.md` in Pi Pocket's folder (Extensions, Tools, System Prompt, Hooks, Your Own State). This page is what Pi Pocket adds, and how to write one that holds up.
 
+The rules are in [the policies](policies/index.md): what goes in core and what in an extension, which interfaces are public and how they change, the security model, and the gallery's review.
+
 ## Drop-in or built-in
 
 - **Drop-in**: a file in `~/.pi-pocket/extensions/` (the data folder's `extensions/`). It survives updates to Pi Pocket, starts off, and the owner turns it on in Menu → Extensions. Use this for anything one person or one machine wants.

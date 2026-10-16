@@ -1,0 +1,174 @@
+# The security model for extension authors
+
+> **Draft for the owner's review.** Items marked **OWNER DECISION** are proposals. They are not rules yet.
+
+This page collects, for authors, what [SECURITY.md](../../SECURITY.md) and [extensions.md](../extensions.md) say about extensions. It adds rules for authors. Each section names its sources. When this page and a source do not agree, the source is correct. Tell us in an issue.
+
+## Who is who
+
+- **The owner** runs Pi Pocket. The server runs as the owner's user on the machine.
+- **Guests** are people who came in through an invite. A guest can steer or only view, in every session or in only one session.
+- **Viewers** are guests who can only view. They read, react, and chat. They cannot make Pi do anything.
+- **Pi** is the model. It does what people ask. It can also do what text from outside asks, if that text gets into its context (prompt injection).
+- **Other modules** run in the same server, with the same rights as yours.
+
+Anyone who can steer a session can make Pi call every tool that is on there. That includes guests who were invited to only that session.
+
+## S1. A drop-in runs with the owner's rights
+
+Sources: SECURITY.md, "Drop-in extensions"; extensions.md, "Drop-in or built-in".
+
+A module's server part runs inside the server. It can read `config.json` (with the owner's token), every session, Pi's sign-ins, and every file that the owner's user can read. It can start processes and open network connections. There is no sandbox. A drop-in starts off, and only the owner turns it on.
+
+- **S1.1. Do only what the description says.**\
+  _Reason:_ the description is how the owner decides to trust the module.
+- **S1.2. Read only the data that the module needs. Name, in the description, each secret and each file outside the module's own data that it reads, and why.**\
+  _Reason:_ the owner cannot see what the code reads unless they read all of it.
+- **S1.3. Do not read the owner's token to call the app's own API.**\
+  _Reason:_ then the module acts as the owner, past every check of who may act.
+
+## S2. A browser module runs with the viewer's rights
+
+Sources: SECURITY.md, "Drop-in extensions"; extensions.md, "The browser module" and "Who may use it"; architecture.md, "Extensions' browser modules".
+
+A browser module runs in the app's own page, in the tab of each person whom its `access` lets in. It has that person's rights. In a guest's tab, it can do nothing that the guest cannot do. In the owner's tab, it can do all that the owner can do. The page's content security policy stops it from loading scripts and styles from other sites, and from requests to other sites. It does not stop all ways out: code in the page can send the page to another address, for example.
+
+- **S2.1. Use `pocket` and the module's own routes only.** Do not call the app's own API, and do not read or change the app's page.\
+  _Reason:_ nothing stops a browser module from doing more, so this rule is the only limit. The app's API is internal, too.
+- **S2.2. Do not send the page, or data from it, to another site.**\
+  _Reason:_ it can send what the person sees to someone else.
+- **S2.3. Keep nothing secret in the browser module's folder.** Everyone whom the module is for can read each file of a web type (`.js`, `.css`, `.json`, images, fonts) in it.\
+  _Reason:_ the server serves these files to each of those people.
+- **S2.4. Keep keys on the server. Call other services from a route, not from the browser.**\
+  _Reason:_ the content security policy blocks those calls in the browser, and a key in the browser is a key for everyone whom the module is for.
+
+## S3. Who reaches routes and the browser module
+
+Sources: extensions.md, "Routes" and "Who may use it"; architecture.md, "A request".
+
+| `access`            | Who                                                 |
+| ------------------- | --------------------------------------------------- |
+| `"owner"` (default) | The owner                                           |
+| `"steer"`           | The owner, and guests who can steer every session   |
+| `"view"`            | The owner, guests, and viewers who see all sessions |
+
+People who were invited to one session never reach a module's routes or its browser module. Each route has its own `access`. To a person whom its `access` does not let in, a route is not there (404). Every call needs the `X-Pocket` header, a GET too, so a link or a form on another site cannot call a route.
+
+- **S3.1. Give `"owner"` or `"steer"` to a route that changes something.** `access` applies to every method. A POST route with `"view"` lets viewers change something, but viewers must not make anything happen.\
+  _Reason:_ a viewer must not be able to act.
+- **S3.2. Give routes with paths that overlap the same `access`, or check `user.role` in the handler.**\
+  _Reason:_ when a person cannot use one route, another route with a matching path can answer them (`items/:id` for `items/new`).
+- **S3.3. Check each `:name` part before you make a file path with it.** The server refuses `..`, `\`, and NUL, but nothing else.\
+  _Reason:_ a path part is text from outside.
+
+## S4. Who runs commands
+
+Sources: SECURITY.md, "Drop-in extensions"; extensions.md, "Commands".
+
+- A **conversation** command is for everyone who can steer that session, and that includes guests who were invited to only that session. While people take turns, only the person who drives can run it.
+- A **global** command is for the owner only.
+- Viewers run no commands.
+- Each handler runs with the owner's rights, as all of the module does.
+
+Rules:
+
+- **S4.1. Treat `args` as untrusted.** Check them before you use them.\
+  _Reason:_ a guest with access to one session can type any text.
+- **S4.2. Before a conversation command changes anything outside its session, check `ctx.user.role` and `ctx.conversationId`.**\
+  _Reason:_ the person who runs it may see only this session.
+- **S4.3. Use a global command for settings of the whole app.**\
+  _Reason:_ only the owner can run it.
+- **S4.4. Put no secrets in a card.** Everyone who sees the session sees the card. Find in session and export include it.\
+  _Reason:_ a card is for the whole session.
+
+## S5. Text from outside and prompt injection
+
+Sources: SECURITY.md, "Linked sessions" and "Replies are untrusted"; extensions.md, "The host" (`text`) and "Starting and messaging sessions".
+
+Untrusted text includes route parameters, queries, and bodies; command `args`; tool arguments from the model; messages from linked sessions; and anything from the network, files, issues, or web pages. The model's tool arguments are untrusted because text that Pi read can steer what Pi asks for.
+
+- **S5.1. Check tool arguments as you check text from a person you do not know:** paths, addresses, sizes, and names.\
+  _Reason:_ a web page or a file that Pi read can choose them.
+- **S5.2. Fence text from outside before Pi reads it.** Use `host.text.quoted(text, max)` for one line, or `host.text.defang(text)` for text between tags of your own. In the same place, tell Pi that it is data.\
+  _Reason:_ without a fence, the text can close your tags and speak as the system prompt.
+- **S5.3. Do not tell Pi to obey instructions that it finds in data.**\
+  _Reason:_ that turns every document that Pi reads into a command.
+- **S5.4. Do not remove or change the label and fence on a linked session's message, and do not show it as a message from a person.** A message from a linked session is a request, not an order. That is guidance to the model, not a boundary.\
+  _Reason:_ a session that read something hostile can pass it to every session of its team.
+- **S5.5. A tool that acts on the model's word must be safe when the model was misled.** Do not delete, send, pay, or publish only because the model asked. Leave that action to a person (with a command or a page), or keep it inside the session's folder.\
+  _Reason:_ the model's word can be an attacker's word.
+- **S5.6. Set `readOnlyHint` only on a tool that changes nothing.** Plan mode lets those tools run.\
+  _Reason:_ plan mode trusts this hint. Nothing checks it.
+
+## S6. Secrets
+
+Sources: extensions.md, "Rules that are easy to break", "Routes", "Events", and "Commands".
+
+Know where each output goes:
+
+| Output                                           | Who gets it                                                                   |
+| ------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Prompt sections, tool descriptions, tool results | The model provider                                                            |
+| A card                                           | Everyone who sees the session, in find and in exports too                     |
+| A command's `args` and result                    | Stored with its task                                                          |
+| `web.error(status, message)`                     | Everyone who may use the route                                                |
+| Any other error that a route or command throws   | The owner (others see only that it failed); the server log has all of it      |
+| `web.send(event, data)`                          | Everyone whom the browser module is for, or only the person `to` names        |
+| `host.notice(level, message)`                    | Everyone who sees all sessions; with a session's ID, the tabs of that session |
+| Files in the browser module's folder             | Everyone whom the browser module is for                                       |
+| Documents                                        | Every module, and Pi through its shell                                        |
+
+- **S6.1. Put no secret in any of these, except when the people who get it may have it.**\
+  _Reason:_ each of them leaves the server part of the module.
+- **S6.2. Do not put a secret in an error message.**\
+  _Reason:_ the server log keeps errors, and `web.error` shows its words.
+- **S6.3. Do not ask people to type a password or a key as a command's `args`.**\
+  _Reason:_ the task stores the arguments.
+
+## S7. Names for stored data
+
+Sources: extensions.md, "Rules that are easy to break"; [api-stability.md](api-stability.md#9-names-for-stored-data).
+
+- **S7.1. Name your document kinds, tasks, and entry kinds `x.<module>.<name>`.**\
+  _Reason:_ then no other module's data meets yours.
+- **S7.2. Do not rename them after people used them.**\
+  _Reason:_ stored data with the old name stays, and nothing reads it.
+- The name stops collisions. It does not keep data private: any module can read any document.
+
+## S8. What Lancet Guard does not see
+
+Sources: SECURITY.md, "Approvals", "The built-in browser", and "Drop-in extensions"; extensions.md, "Drop-in or built-in" and "Hooks".
+
+Lancet Guard is off by default. When it is on, it judges each `bash`, `write`, and `edit` call before it runs, codemode's calls included. Risky calls wait for a person to approve them. It does not see:
+
+- what a module's own code does: its file reads, processes, and network calls;
+- what an extension's tool does inside, even when the tool runs a shell command;
+- routes, commands, and browser modules;
+- the built-in browser.
+
+Rules:
+
+- **S8.1. Do not make a tool that runs a command or writes a file that the model chose.** Let Pi use `bash`, `write`, and `edit` for that.\
+  _Reason:_ the guard sees those tools, and it does not see yours.
+- **S8.2. Do not get around a block.** Do not answer, skip, or turn off the guard or an approval from a module.\
+  _Reason:_ a guard or a person said no for a reason.
+- **S8.3. When a tool must run a program, name the program and its use in the tool's description and in the module's description.**\
+  _Reason:_ the owner knows then what runs with no guard.
+
+## Report a problem
+
+- **A problem in Pi Pocket:** read [SECURITY.md](../../SECURITY.md). Report it in private. Do not open a public issue.
+- **A problem in a gallery extension:** see [gallery-review.md](gallery-review.md#revoke-withdraw-and-remove).
+
+> **OWNER DECISION D11:** Where people report a security problem in a gallery extension. **Proposed:** turn on private vulnerability reporting in [TannerMidd/pi-pocket-extensions](https://github.com/TannerMidd/pi-pocket-extensions), and tell people to report there, and to its author. Until then, the Pi Pocket repository's private report is the place.
+
+## Before you share a module
+
+- [ ] The description says what the module does, each secret and outside file it reads, and each host it contacts (S1.2).
+- [ ] Routes that change something are `"owner"` or `"steer"` (S3.1).
+- [ ] Conversation commands check `args`, the person, and the session (S4).
+- [ ] Text from outside is fenced before Pi reads it (S5.2).
+- [ ] `readOnlyHint` is only on tools that change nothing (S5.6).
+- [ ] No secret goes to the model, to cards, to events for everyone, or to errors (S6).
+- [ ] Stored data is named `x.<module>.<name>` (S7.1).
+- [ ] No tool runs a command or writes a file that the model chose (S8.1).
