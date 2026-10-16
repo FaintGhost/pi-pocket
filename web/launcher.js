@@ -554,6 +554,7 @@ export function Launcher({ leaving, returnTo }) {
         store.state.appearance,
         store.state.me,
         store.state.server,
+        store.state.folderFavorites,
         store.state.extensionsRev,
     ]);
 
