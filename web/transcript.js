@@ -1142,11 +1142,16 @@ function ActivityGroup({
     const open =
         chosen ??
         (lone ? reading && !lone.streaming && Boolean(lone.block.text?.trim()) : live || newest);
-    // Calls that failed, said on the line too: folded, "edited 1" alone would read as done.
+    // Calls that failed, said on the line too: folded, "edited 1" alone would read as done. A call someone denied did
+    // not fail: its line says who denied it.
     const failed = all.filter((step) => {
         const result = step.block.type === "toolCall" ? results.get(step.block.id) : undefined;
 
-        return result?.isError === true && !STOPPED.test(result.text ?? "");
+        return (
+            result?.isError === true &&
+            !STOPPED.test(result.text ?? "") &&
+            store.state.view.decisions?.[step.block.id]?.allow !== false
+        );
     }).length;
     const first = all[0];
     let start = first.entry?.at === undefined ? undefined : fromServer(first.entry.at);
