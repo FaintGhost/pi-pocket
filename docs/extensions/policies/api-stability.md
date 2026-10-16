@@ -78,7 +78,8 @@ The host's members do not change while modules reload. A new member comes only a
 
 - The variables `--text`, `--muted`, `--accent`, `--bg`, `--card`, `--line`, `--err`, `--warn`, and `--ok`. They follow the theme.
 - The classes `button` (with `primary`), `error-box`, `muted`, `small`, `mono`, and `setting`.
-- All other CSS is internal: other classes, other variables, the structure of the page, and the IDs of its elements. The planned themes can add to this list.
+- All other CSS is internal: other classes, other variables, the structure of the page, and the IDs of its elements.
+- Themes, new in 0.14.0, have a public surface of their own: the tokens, `data-part` names, and states in the theme surface reference.
 
 ### 8. Events
 

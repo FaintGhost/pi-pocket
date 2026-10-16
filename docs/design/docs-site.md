@@ -38,7 +38,7 @@ Guides
   Cleanups .......................... extensions/cleanups.md ← "Cleanups"
   Testing ........................... extensions/testing.md ← "Testing", with more steps
   Publishing to the gallery ......... extensions/publishing.md ← "The gallery", "Sharing yours"
-  Themes ............................ extensions/themes.md (new, from the 0.15 theming work; shows once 0.15 ships)
+  Themes ............................ extensions/themes.md (new, from the theming work of 0.14.0)
   Making it built in ................ extensions/built-in.md ← "A built-in extension"
 Reference
   Types for your editor ............. extensions/reference/types.md (new) and types/pocket.d.ts
@@ -147,7 +147,7 @@ Each phase is one pull request, useful alone.
 1. **Site and deploy** (about 1 day): `docs-site/` from the proof of concept, today's docs unchanged, the two workflows, a "Docs" link in `site/index.html`. The owner switches the Pages source.
 2. **The split** (1 to 2 days): the index and guides from today's text, links fixed, `prompt.ts`, `AGENTS.md`, and `index.md` updated. Then a live check: Pi writes an extension, and we see which pages it reads.
 3. **Types and reference** (about 2 days): the types file, its checks, the reference pages. Optional: the `_pocket.d.ts` link.
-4. **New content** (2 to 3 days): tutorial, testing, limits, glossary, API versions; the policies placed; an STE pass over every public page; themes when 0.15 ships.
+4. **New content** (2 to 3 days): tutorial, testing, limits, glossary, API versions; the policies placed; an STE pass over every public page; themes with the theming work of 0.14.0.
 5. **Later, if wanted**: an npm package for the types, `/docs/next/`, `llms.txt` for other agents, an STE linter (Vale).
 
 ## Risks

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import { satteri } from "@astrojs/markdown-satteri";
-import { idOf, isPending, pages, REPO, repoMarkdown, VERSION } from "./src/repo-docs.mjs";
+import { idOf, pages, REPO, repoMarkdown, VERSION } from "./src/repo-docs.mjs";
 import { SIDEBAR } from "./src/sidebar.mjs";
 
 const listed = new Set(SIDEBAR.flatMap((group) => group.items.map(([path]) => path)));
@@ -17,7 +17,7 @@ for (const path of pages()) {
 }
 
 for (const path of listed) {
-    if (!existsSync(join(REPO, path)) && !isPending(path)) {
+    if (!existsSync(join(REPO, path))) {
         problems.push(`${path} is in the sidebar, but not in the repository`);
     }
 }
@@ -29,9 +29,7 @@ if (problems.length > 0) {
 const sidebar = SIDEBAR.map(({ label, collapsed, items }) => ({
     label,
     collapsed: collapsed ?? false,
-    items: items
-        .filter(([path]) => existsSync(join(REPO, path)))
-        .map(([path, text]) => ({ slug: idOf(path), label: text })),
+    items: items.map(([path, text]) => ({ slug: idOf(path), label: text })),
 }));
 
 export default defineConfig({

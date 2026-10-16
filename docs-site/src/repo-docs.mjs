@@ -17,14 +17,11 @@ import GithubSlugger from "github-slugger";
 import { glob } from "astro/loaders";
 import { markdownToMdast } from "satteri";
 import { checkLimits, checkReference } from "./reference-check.mjs";
-import { LATER, MOVED, PENDING } from "./sidebar.mjs";
+import { MOVED } from "./sidebar.mjs";
 
 export const REPO = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 export const GITHUB = "https://github.com/TannerMidd/pi-pocket";
 export const BASE = "/pi-pocket/docs";
-
-/** In strict mode (CI), pages that other branches add (PENDING) must be there too. */
-export const STRICT = process.env.DOCS_STRICT === "1";
 
 /** The commit code links point at: DOCS_REF, or this checkout's. */
 export const REF =
@@ -73,11 +70,6 @@ export function idOf(repoPath) {
 }
 
 export const urlOf = (repoPath) => `${BASE}/${idOf(repoPath)}/`;
-
-/** Whether a page may be missing: one that another branch adds (until strict mode), or one of a coming release. */
-export const isPending = (repoPath) =>
-    LATER.includes(repoPath) ||
-    (!STRICT && PENDING.some((prefix) => repoPath === prefix || repoPath.startsWith(prefix)));
 
 /** Every page there is, as repository paths. */
 export function pages() {
@@ -230,7 +222,7 @@ export function rewrite(from, url) {
 
     const path = to.path.replace(/\/$/, "");
 
-    if (isPagePath(path) && (existsSync(join(REPO, path)) || isPending(path))) {
+    if (isPagePath(path) && existsSync(join(REPO, path))) {
         return `${urlOf(path)}${to.hash}`;
     }
 
@@ -255,7 +247,6 @@ const withoutTypeImports = (text) =>
  */
 export function checkLinks() {
     const errors = [];
-    const warnings = [];
 
     for (const from of pages()) {
         const page = parse(from);
@@ -300,16 +291,7 @@ export function checkLinks() {
             }
 
             if (!existsSync(join(REPO, path))) {
-                if (isPending(path)) {
-                    warnings.push(
-                        `${where}: "${url}" waits for ${path}, which another branch adds`,
-                    );
-                } else {
-                    errors.push(
-                        `${where}: "${url}" leads to ${path}, which is not in the repository`,
-                    );
-                }
-
+                errors.push(`${where}: "${url}" leads to ${path}, which is not in the repository`);
                 continue;
             }
 
@@ -328,7 +310,7 @@ export function checkLinks() {
         }
     }
 
-    return { errors, warnings };
+    return errors;
 }
 
 export function repoDocsLoader() {
@@ -341,7 +323,7 @@ export function repoDocsLoader() {
     return {
         name: "pi-pocket-docs",
         load: async (context) => {
-            const { errors, warnings } = checkLinks();
+            const errors = checkLinks();
 
             errors.unshift(
                 ...links().map(
@@ -351,10 +333,6 @@ export function repoDocsLoader() {
             );
 
             errors.push(...checkReference(REPO), ...checkLimits(REPO));
-
-            for (const warning of warnings) {
-                context.logger.warn(warning);
-            }
 
             if (errors.length > 0) {
                 throw new Error(`The docs have broken links or headings:\n${errors.join("\n")}`);

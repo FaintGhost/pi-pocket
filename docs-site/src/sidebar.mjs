@@ -1,5 +1,5 @@
 // The site's sidebar, by repository path. A page that is in the repository but not here fails the build, so no page
-// is lost; a page here that is not in the repository fails it too, unless it is PENDING.
+// is lost; a page here that is not in the repository fails it too. A new page is one row here.
 
 export const SIDEBAR = [
     {
@@ -26,7 +26,7 @@ export const SIDEBAR = [
             ["docs/extensions/tool-calls.md", "How tool calls show"],
             ["docs/extensions/events.md", "Events"],
             ["docs/extensions/cleanups.md", "Cleanups"],
-            ["docs/extensions/themes.md", "Themes"],
+            // Themes (0.14.0): the theming work adds ["docs/extensions/themes.md", "Themes"] here.
             ["docs/extensions/testing.md", "Testing"],
             ["docs/extensions/publishing.md", "Publishing to the gallery"],
             ["docs/extensions/built-in.md", "Making it built in"],
@@ -40,7 +40,7 @@ export const SIDEBAR = [
             ["docs/extensions/reference/web.md", "web"],
             ["docs/extensions/reference/pocket.md", "pocket"],
             ["docs/extensions/reference/command-context.md", "Command context"],
-            ["docs/extensions/reference/theme-surface.md", "Theme surface"],
+            // Themes (0.14.0): the theming work adds ["docs/extensions/reference/theme-surface.md", "Theme surface"] here.
             ["docs/extensions/reference/gallery-entry.md", "Gallery entry"],
             ["docs/extensions/reference/names.md", "Names"],
             ["docs/extensions/reference/limits.md", "Limits"],
@@ -72,19 +72,6 @@ export const SIDEBAR = [
         ],
     },
 ];
-
-/**
- * Path prefixes of pages that another branch adds, while work goes on in parallel. Until that branch is merged, a link
- * to one is a warning, and the sidebar leaves it out. `npm run check` (DOCS_STRICT=1, as CI runs it) ignores this
- * list. Empty it once they are merged.
- */
-export const PENDING = [];
-
-/**
- * Pages of a coming release, which may be missing even in strict mode: the theming guides of 0.15. The sidebar shows
- * each one once it is in the repository. Remove it from here then.
- */
-export const LATER = ["docs/extensions/themes.md", "docs/extensions/reference/theme-surface.md"];
 
 /** Where the sections of the one long extensions.md went, so the check can say where a stale link should go. */
 export const MOVED = {

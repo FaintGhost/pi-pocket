@@ -9,7 +9,7 @@ cd docs-site
 npm ci
 npm run dev -- --host 127.0.0.1 --port 4321   # http://127.0.0.1:4321/pi-pocket/docs/
 npm run build                                 # into dist/
-npm run check                                 # as CI builds it: strict, with no page left pending
+npm run check                                 # as CI builds it, with every check
 ```
 
 ## How it works

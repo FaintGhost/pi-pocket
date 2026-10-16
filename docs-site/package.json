@@ -9,7 +9,7 @@
     "scripts": {
         "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
         "build": "ASTRO_TELEMETRY_DISABLED=1 astro build --force",
-        "check": "DOCS_STRICT=1 ASTRO_TELEMETRY_DISABLED=1 astro build --force",
+        "check": "ASTRO_TELEMETRY_DISABLED=1 astro build --force",
         "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview"
     },
     "dependencies": {
