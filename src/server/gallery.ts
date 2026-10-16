@@ -12,25 +12,32 @@
  * entry as installed: its update and its removal go by that. The gallery's own data (its setting, the index it read
  * last) is in the data folder's `gallery/`.
  */
-import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { lstat, mkdir, readdir, readFile, rename, rm, rmdir, writeFile } from "node:fs/promises";
-import { basename, dirname, join, resolve, sep } from "node:path";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import type { PocketApp } from "./app.ts";
 import { APP_ROOT } from "./config.ts";
 import { describe, HttpError } from "./errors.ts";
 import { POCKET_API } from "./extension-web.ts";
 import { fileDiff } from "./gallery/diff.ts";
+import { download, type Fetcher } from "./gallery/fetch.ts";
+import {
+    exists,
+    place,
+    textOf,
+    prune,
+    readInstalled,
+    recover,
+    removable,
+} from "./gallery/files.ts";
 import {
     type Declares,
     type Entry,
     EntryError,
-    fileProblem,
     fileUrl,
     type Index,
     isRepo,
     LIMITS,
-    NAME,
     parseEntry,
     parseIndex,
     pinOf,
@@ -38,14 +45,12 @@ import {
     sha256,
     sourcePage,
 } from "./gallery/entry.ts";
-import { docDescription, importProblems, titleOf } from "./gallery/share.ts";
+import { shareDraft } from "./gallery/share.ts";
 
 /** The index Pi Pocket reads unless the owner picks another: the curated one. */
 export const DEFAULT_INDEX = "TannerMidd/pi-pocket-extensions";
 /** How long an index read counts as current. */
 const FRESH_MS = 60 * 60 * 1000;
-/** How long one request to another site may take. */
-const REQUEST_MS = 20_000;
 /** The provenance file's ending: `<name>.gallery.json`, beside the module. */
 const SIDECAR = ".gallery.json";
 const SIDECAR_FILE = /^([a-z0-9][a-z0-9_-]{1,63})\.gallery\.json$/;
@@ -99,23 +104,14 @@ export interface Installed {
     revoked: string | null;
     /** Whether the index read now lists it: false too when it came from another index. */
     listed: boolean;
+    /** Why the index read now does not list it, in words, or null when it does. */
+    unlisted: string | null;
     /** Its files that are not as installed: edited since, or gone. */
     changed: string[];
     declares: Declares;
 }
 
 type Fetched = { name: string; bytes: Uint8Array };
-
-/** A file's text, or undefined for one that is not UTF-8 text. */
-function textOf(bytes: Uint8Array): string | undefined {
-    try {
-        const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-
-        return text.includes("\0") ? undefined : text;
-    } catch {
-        return undefined;
-    }
-}
 
 /** Why an index address cannot be used, or undefined: `owner/name` on GitHub, or an https address. */
 function addressProblem(address: string): string | undefined {
@@ -164,15 +160,9 @@ const revokedIn = (read: Read, provenance: Provenance) =>
               ?.find((each) => each.commit === provenance.entry.source.commit)?.reason
         : undefined;
 
-const exists = (path: string) =>
-    lstat(path).then(
-        () => true,
-        () => false,
-    );
-
 export class Gallery {
     /** How the gallery reaches other sites: tests and local copies stand in for it. */
-    fetch: (url: string, init: RequestInit) => Promise<Response> = (url, init) => fetch(url, init);
+    fetch: Fetcher = (url, init) => fetch(url, init);
     readonly #app: PocketApp;
     #settings: { index: string } | undefined;
     #read: Read | undefined;
@@ -192,7 +182,7 @@ export class Gallery {
     }
 
     #dropIns(): string {
-        return join(this.#app.dataDir, "extensions");
+        return resolve(this.#app.dataDir, "extensions");
     }
 
     #exclusive<T>(work: () => Promise<T>): Promise<T> {
@@ -288,7 +278,7 @@ export class Gallery {
 
     async #fetchIndex(address: string): Promise<Read> {
         const url = indexUrl(address);
-        const bytes = await this.#get(url, LIMITS.index, "The index");
+        const bytes = await download(this.fetch, url, LIMITS.index, "The index");
         const text = textOf(bytes);
         let index: Index;
 
@@ -345,123 +335,6 @@ export class Gallery {
         }
     }
 
-    /**
-     * Get `url`'s body, `limit` bytes at most: https only, also where it redirects to (three times at most, and only on its
-     * own host when `sameHost`), each request within `REQUEST_MS`. `what` names it in errors; `large` is the error for a
-     * body past `limit`.
-     */
-    async #get(
-        url: string,
-        limit: number,
-        what: string,
-        options: { signal?: AbortSignal; large?: () => HttpError; sameHost?: boolean } = {},
-    ): Promise<Uint8Array> {
-        const { signal, sameHost = false } = options;
-        const large =
-            options.large ?? (() => new HttpError(502, `${what} is larger than ${limit} bytes`));
-        const host = new URL(url).host;
-        let address = url;
-
-        for (let hop = 0; ; hop++) {
-            const target = new URL(address);
-
-            if (sameHost && target.host !== host) {
-                throw new HttpError(502, `${what}: ${host} sends it on to ${target.host}`);
-            }
-
-            if (target.protocol !== "https:") {
-                throw new HttpError(
-                    502,
-                    `${what}: Pi Pocket reads only https addresses, not ${target.protocol}//${target.host}`,
-                );
-            }
-
-            const stop = AbortSignal.any([
-                AbortSignal.timeout(REQUEST_MS),
-                ...(signal === undefined ? [] : [signal]),
-            ]);
-            const late = () =>
-                new HttpError(502, `${what}: ${target.host} took too long to answer`);
-            let response: Response;
-
-            try {
-                response = await this.fetch(address, {
-                    redirect: "manual",
-                    signal: stop,
-                    headers: { "user-agent": `pi-pocket/${HERE.version}` },
-                });
-            } catch (error) {
-                const cause = (error as { cause?: unknown }).cause;
-
-                throw stop.aborted
-                    ? late()
-                    : new HttpError(
-                          502,
-                          `${what}: could not reach ${target.host} (${describe(cause ?? error)})`,
-                      );
-            }
-
-            if ([301, 302, 303, 307, 308].includes(response.status)) {
-                await response.body?.cancel().catch(() => {});
-                const location = response.headers.get("location");
-
-                if (location === null || hop >= 3) {
-                    throw new HttpError(502, `${what}: ${target.host} sends it on too many times`);
-                }
-
-                address = new URL(location, address).href;
-                continue;
-            }
-
-            if (!response.ok) {
-                await response.body?.cancel().catch(() => {});
-
-                throw new HttpError(
-                    502,
-                    `${what}: ${target.host} answered ${response.status} for ${target.pathname}`,
-                );
-            }
-
-            if (Number(response.headers.get("content-length")) > limit) {
-                await response.body?.cancel().catch(() => {});
-
-                throw large();
-            }
-
-            const chunks: Uint8Array[] = [];
-            let total = 0;
-            const reader = response.body?.getReader();
-
-            try {
-                for (;;) {
-                    const chunk = await reader?.read();
-
-                    if (chunk === undefined || chunk.done) {
-                        break;
-                    }
-
-                    total += chunk.value.byteLength;
-
-                    if (total > limit) {
-                        await reader?.cancel().catch(() => {});
-
-                        throw large();
-                    }
-
-                    chunks.push(chunk.value);
-                }
-            } catch (error) {
-                throw error instanceof HttpError
-                    ? error
-                    : stop.aborted
-                      ? late()
-                      : new HttpError(502, `${what}: the download broke off`);
-            }
-
-            return Buffer.concat(chunks);
-        }
-    }
-
     /** An entry the index lists now, with the read it came from. */
     async #listed(name: string): Promise<{ entry: Entry; read: Read }> {
         const read = await this.#index(false);
@@ -478,7 +351,7 @@ export class Gallery {
      * Download an entry's files from its pinned commit, each checked against the size and SHA-256 the index pins: one
      * that differs fails it all, before anything is written.
      */
-    async #download(entry: Entry, signal?: AbortSignal): Promise<Fetched[]> {
+    async #fetchFiles(entry: Entry, signal?: AbortSignal): Promise<Fetched[]> {
         const files: Fetched[] = [];
 
         for (const file of entry.files) {
@@ -487,11 +360,17 @@ export class Gallery {
                     502,
                     `${file.name} at the pinned commit does not match the size and SHA-256 the index pins for it, so nothing was written. Tell the index's maintainers.`,
                 );
-            const bytes = await this.#get(fileUrl(entry, file.name), file.size, file.name, {
-                ...(signal === undefined ? {} : { signal }),
-                large: mismatch,
-                sameHost: true,
-            });
+            const bytes = await download(
+                this.fetch,
+                fileUrl(entry, file.name),
+                file.size,
+                file.name,
+                {
+                    ...(signal === undefined ? {} : { signal }),
+                    large: mismatch,
+                    sameHost: true,
+                },
+            );
 
             if (bytes.byteLength !== file.size || sha256(bytes) !== file.sha256) {
                 throw mismatch();
@@ -563,71 +442,6 @@ export class Gallery {
         return found;
     }
 
-    /** A file of an extension in the drop-in folder: refused when its name is not one the extension may have. */
-    #target(name: string, file: string): string {
-        const problem = fileProblem(file, name);
-        const root = this.#dropIns();
-        const target = resolve(root, ...file.split("/"));
-
-        if (problem !== undefined || !target.startsWith(root + sep)) {
-            throw new HttpError(409, `${file} ${problem ?? "is outside the extensions folder"}`);
-        }
-
-        return target;
-    }
-
-    /**
-     * Refuse a link on the way to an extension's file, or at it, and anything there that is not a file: writing or
-     * removing through a link would reach past the drop-in folder.
-     */
-    async #plain(name: string, file: string): Promise<void> {
-        const parts = file.split("/");
-        let path = this.#dropIns();
-
-        for (let at = 0; at < parts.length; at++) {
-            path = join(path, parts[at]!);
-            const stat = await lstat(path).catch(() => undefined);
-            const shown = parts.slice(0, at + 1).join("/");
-
-            if (stat === undefined) {
-                return;
-            }
-
-            if (stat.isSymbolicLink()) {
-                throw new HttpError(
-                    409,
-                    `${shown} is a link: the gallery does not go through links`,
-                );
-            }
-
-            if (at < parts.length - 1 ? !stat.isDirectory() : !stat.isFile()) {
-                throw new HttpError(
-                    409,
-                    `${shown} in the extensions folder is not what it should be`,
-                );
-            }
-        }
-    }
-
-    /** An installed file's bytes, or undefined when it is not there. */
-    async #installedFile(name: string, file: string): Promise<Uint8Array | undefined> {
-        const target = this.#target(name, file);
-
-        await this.#plain(name, file);
-
-        const stat = await lstat(target).catch(() => undefined);
-
-        if (stat === undefined) {
-            return undefined;
-        }
-
-        if (stat.size > LIMITS.file) {
-            throw new HttpError(409, `${file} is larger than ${LIMITS.file} bytes now`);
-        }
-
-        return readFile(target);
-    }
-
     /** How an installed extension stands against the index read now. */
     async #state(provenance: Provenance, read: Read | undefined): Promise<Installed> {
         const { entry } = provenance;
@@ -638,7 +452,9 @@ export class Gallery {
         const changed: string[] = [];
 
         for (const file of entry.files) {
-            const bytes = await this.#installedFile(entry.name, file.name).catch(() => undefined);
+            const bytes = await readInstalled(this.#dropIns(), entry.name, file.name).catch(
+                () => undefined,
+            );
 
             if (bytes === undefined || sha256(bytes) !== file.sha256) {
                 changed.push(file.name);
@@ -647,6 +463,16 @@ export class Gallery {
 
         const next = listed?.source.commit;
         const revoked = read === undefined ? undefined : revokedIn(read, provenance);
+        const unlisted =
+            read === undefined
+                ? "the index could not be read"
+                : read.address !== provenance.index
+                  ? `it came from another index, ${provenance.index}`
+                  : listed !== undefined
+                    ? null
+                    : read.index.newer.has(entry.name)
+                      ? "its newer version needs a newer Pi Pocket"
+                      : "the index no longer lists it";
 
         return {
             name: entry.name,
@@ -667,6 +493,7 @@ export class Gallery {
                     : null,
             revoked: revoked ?? null,
             listed: listed !== undefined,
+            unlisted,
             changed,
             declares: entry.declares,
         };
@@ -773,7 +600,7 @@ export class Gallery {
             const files = [];
 
             for (const file of provenance.entry.files) {
-                const bytes = await this.#installedFile(name, file.name);
+                const bytes = await readInstalled(this.#dropIns(), name, file.name);
 
                 files.push(
                     shown(file.name, bytes, bytes !== undefined && sha256(bytes) === file.sha256),
@@ -784,7 +611,7 @@ export class Gallery {
         }
 
         const { entry } = await this.#listed(name);
-        const files = await this.#download(entry, signal);
+        const files = await this.#fetchFiles(entry, signal);
 
         return {
             name,
@@ -796,130 +623,30 @@ export class Gallery {
 
     // ─── Installing, updating, removing ──────────────────────────────────────────────
 
-    /**
-     * Put an extension's files in place, then its provenance beside them. Each is written next to where it goes first;
-     * then they move into place, the module last of its files, so that when it appears (and, when it is on, loads again)
-     * the files it imports are there, and the provenance after them all, so it never names a version that is not in
-     * place. What each move replaces is kept aside until all are done: when one fails, everything goes back as it was.
-     * `remove` are files of the version before that this one no longer has.
-     */
-    async #place(
-        name: string,
-        files: Fetched[],
-        remove: string[],
-        provenance: Provenance,
-    ): Promise<void> {
-        const module = `${name}.ts`;
-        // A name that starts with a dot: neither the loader nor a browser module's folder serves it.
-        const aside = (path: string, end: string) =>
-            join(dirname(path), `.${basename(path)}.${randomUUID()}.${end}`);
-        const staged: { from: string; to: string }[] = [];
-        /** What is in place so far, and what it replaced, to put back. */
-        const done: { to: string; old?: string }[] = [];
-
-        try {
-            for (const file of [...files].sort(
-                (a, b) => Number(a.name === module) - Number(b.name === module),
-            )) {
-                await this.#plain(name, file.name);
-                const to = this.#target(name, file.name);
-                const from = aside(to, "part");
-
-                await mkdir(dirname(to), { recursive: true });
-                await writeFile(from, file.bytes, { flag: "wx" });
-                staged.push({ from, to });
-            }
-
-            const sidecar = join(this.#dropIns(), `${name}${SIDECAR}`);
-            const from = aside(sidecar, "part");
-
-            await writeFile(from, `${JSON.stringify({ format: 1, ...provenance }, null, 2)}\n`, {
-                flag: "wx",
-            });
-            staged.push({ from, to: sidecar });
-
-            for (const { from, to } of staged) {
-                const old = (await exists(to)) ? aside(to, "old") : undefined;
-
-                if (old !== undefined) {
-                    await rename(to, old);
-                }
-
-                done.push(old === undefined ? { to } : { to, old });
-                await rename(from, to);
-            }
-
-            for (const file of remove) {
-                const to = await this.#removable(name, file);
-
-                if (to !== undefined) {
-                    const old = aside(to, "old");
-
-                    await rename(to, old);
-                    done.push({ to, old });
-                }
-            }
-        } catch (error) {
-            for (const step of done.reverse()) {
-                await rm(step.to, { force: true }).catch(() => {});
-
-                if (step.old !== undefined) {
-                    await rename(step.old, step.to).catch(() => {});
-                }
-            }
-
-            await Promise.all(staged.map((step) => rm(step.from, { force: true }).catch(() => {})));
-
-            throw error;
-        }
-
-        for (const step of done) {
-            if (step.old !== undefined) {
-                await rm(step.old, { force: true }).catch(() => {});
-            }
-        }
-
-        await this.#prune(join(this.#dropIns(), name));
+    /** Put a version in place (`gallery/files.ts`), its provenance after its files. */
+    #place(name: string, files: Fetched[], remove: string[], provenance: Provenance) {
+        return place(
+            this.#dropIns(),
+            name,
+            files,
+            {
+                path: join(this.#dropIns(), `${name}${SIDECAR}`),
+                text: `${JSON.stringify({ format: 1, ...provenance }, null, 2)}\n`,
+            },
+            remove,
+        );
     }
 
-    /**
-     * Where one of an extension's files is, to remove it: undefined when it is not there, or is reached through a folder
-     * that is a link (the file is elsewhere then). A link itself is removed, never what it leads to.
-     */
-    async #removable(name: string, file: string): Promise<string | undefined> {
-        const target = this.#target(name, file);
-        const parts = file.split("/");
-
-        for (let at = 1; at < parts.length; at++) {
-            const folder = await lstat(join(this.#dropIns(), ...parts.slice(0, at))).catch(
-                () => undefined,
+    /** Before extensions load: put back each version the server stopped in the middle of putting in place. */
+    async recover(): Promise<void> {
+        for (const { name, failed } of await recover(this.#dropIns())) {
+            this.#app.ownerNotice(
+                failed.length === 0 ? "warning" : "error",
+                failed.length === 0
+                    ? `The server stopped while it put ${name} from the gallery in place: its files are as they were before.`
+                    : `The server stopped while it put ${name} from the gallery in place, and putting its files back failed: ${failed.join("; ")}`,
             );
-
-            if (folder === undefined || !folder.isDirectory()) {
-                return undefined;
-            }
         }
-
-        const stat = await lstat(target).catch(() => undefined);
-
-        return stat === undefined || stat.isDirectory() ? undefined : target;
-    }
-
-    /** Remove the empty folders in an extension's own folder, and that folder when it is empty. */
-    async #prune(folder: string): Promise<void> {
-        const stat = await lstat(folder).catch(() => undefined);
-
-        if (stat === undefined || !stat.isDirectory()) {
-            return;
-        }
-
-        for (const each of await readdir(folder, { withFileTypes: true })) {
-            if (each.isDirectory()) {
-                await this.#prune(join(folder, each.name));
-            }
-        }
-
-        await rmdir(folder).catch(() => {});
     }
 
     /**
@@ -954,7 +681,7 @@ export class Gallery {
                 }
             }
 
-            const files = await this.#download(entry, signal);
+            const files = await this.#fetchFiles(entry, signal);
 
             // Off before its files appear, so the loader never loads it on its own.
             this.#app.config.setExtensionEnabled(`${name}.ts`, false);
@@ -1002,7 +729,7 @@ export class Gallery {
             throw new HttpError(409, "The index changed since you looked: look at it again");
         }
 
-        return { provenance, entry, read, files: await this.#download(entry, signal) };
+        return { provenance, entry, read, files: await this.#fetchFiles(entry, signal) };
     }
 
     /** What an update would change: a diff of each file against it as it is here, and what it declares before and after. */
@@ -1014,11 +741,23 @@ export class Gallery {
         ].sort();
         const diffs: string[] = [];
         const changes: { name: string; change: "added" | "removed" | "changed" | "same" }[] = [];
+        /** Files edited here since they were installed: the update replaces them, and the diff is against them. */
+        const edited: string[] = [];
 
         for (const file of names) {
-            const old = before.files.some((each) => each.name === file)
-                ? await this.#installedFile(name, file)
-                : undefined;
+            const installed = before.files.find((each) => each.name === file);
+            const old =
+                installed === undefined
+                    ? undefined
+                    : await readInstalled(this.#dropIns(), name, file);
+
+            if (
+                installed !== undefined &&
+                (old === undefined || sha256(old) !== installed.sha256)
+            ) {
+                edited.push(file);
+            }
+
             const next = files.find((each) => each.name === file)?.bytes;
             const change =
                 old === undefined
@@ -1059,29 +798,40 @@ export class Gallery {
             sourceUrl: sourcePage(entry),
             diff: diffs.join(""),
             files: changes,
+            edited,
             declares: { before: before.declares, after: entry.declares },
             enabled: this.#app.loader.enabled(`${name}.ts`),
         };
     }
 
     /**
-     * Apply the update the owner saw (`pin`). It stays on or off as it was: when on, the new module loads at once, and
-     * other code files it imports load at the next restart (`restart`).
+     * Apply the update the owner saw (`pin`), while it is on or off as they saw it (`enabled`): when on, the new module
+     * loads at once, which they agreed to, and other code files it imports load at the next restart (`restart`).
      */
     update(
         name: string,
         pin: unknown,
+        enabled: unknown,
         signal?: AbortSignal,
     ): Promise<Installed & { restart: boolean }> {
         return this.#exclusive(async () => {
-            if (typeof pin !== "string") {
-                throw new HttpError(400, "pin is the update's pin, from its preview");
+            if (typeof pin !== "string" || typeof enabled !== "boolean") {
+                throw new HttpError(
+                    400,
+                    "Send the update's pin, and whether it was on, from its preview",
+                );
+            }
+
+            if (enabled !== this.#app.loader.enabled(`${name}.ts`)) {
+                throw new HttpError(
+                    409,
+                    `It was turned ${enabled ? "off" : "on"} since you looked: look at the update again`,
+                );
             }
 
             const { provenance, entry, read, files } = await this.#offered(name, signal, pin);
             const before = provenance.entry.files;
-            // Where the file system ignores case, a file renamed only in case is the one written: it stays.
-            const kept = new Set(entry.files.map((file) => file.name.toLowerCase()));
+            const kept = new Set(entry.files.map((file) => file.name));
             const helpers = files.some(
                 (file) =>
                     /\.(ts|js|mjs)$/.test(file.name) &&
@@ -1093,7 +843,7 @@ export class Gallery {
             await this.#place(
                 name,
                 files,
-                before.map((file) => file.name).filter((file) => !kept.has(file.toLowerCase())),
+                before.map((file) => file.name).filter((file) => !kept.has(file)),
                 next,
             );
 
@@ -1129,14 +879,14 @@ export class Gallery {
                 .sort((a, b) => Number(b === `${name}.ts`) - Number(a === `${name}.ts`));
 
             for (const file of files) {
-                const target = await this.#removable(name, file);
+                const target = await removable(this.#dropIns(), name, file);
 
                 if (target !== undefined) {
                     await rm(target, { force: true });
                 }
             }
 
-            await this.#prune(join(this.#dropIns(), name));
+            await prune(join(this.#dropIns(), name));
             await rm(join(this.#dropIns(), `${name}${SIDECAR}`), { force: true });
             this.#app.ownerNotice(
                 "info",
@@ -1162,7 +912,9 @@ export class Gallery {
 
         // Names, files, and declarations only: each is checked to a narrow form. Free text from the index stays out.
         const prompt = [
-            `Review the drop-in extension ${entry.name} before I turn it on. It is off now. It runs inside Pi Pocket's server with my rights, and Lancet Guard does not see what its code does.`,
+            this.#app.loader.enabled(`${entry.name}.ts`)
+                ? `Review the drop-in extension ${entry.name}. It is on now: it runs inside Pi Pocket's server with my rights, and Lancet Guard does not see what its code does.`
+                : `Review the drop-in extension ${entry.name} before I turn it on. It is off now. Once on, it runs inside Pi Pocket's server with my rights, and Lancet Guard does not see what its code does.`,
             "",
             `Its files, in ${this.#dropIns()}:`,
             ...entry.files.map((file) => `- ${file.name}`),
@@ -1195,8 +947,8 @@ export class Gallery {
     // ─── Sharing the owner's own ─────────────────────────────────────────────────────
 
     /**
-     * Whether one of the owner's drop-ins stands on its own, and a draft of its index entry: metadata from its doc
-     * comment, its files' hashes, and what it declares when it is on. The owner opens the pull request.
+     * Whether one of the owner's drop-ins stands on its own, and a draft of its index entry (`gallery/share.ts`). The
+     * owner opens the pull request.
      */
     async share(file: string) {
         const module = this.#app.loader
@@ -1207,208 +959,21 @@ export class Gallery {
             throw new HttpError(404, `There is no drop-in ${file}`);
         }
 
-        const name = file.replace(/\.ts$/, "");
-        const problems: string[] = [];
-        const notes: string[] = [];
-
-        if (!NAME.test(name)) {
-            problems.push(
-                `Its name must be 2 to 64 lowercase letters, digits, - and _, starting with a letter or digit: rename ${file}.`,
-            );
-        }
-
-        if ((await this.#provenance(name).catch(() => undefined)) !== undefined) {
+        if (
+            (await this.#provenance(file.replace(/\.ts$/, "")).catch(() => undefined)) !== undefined
+        ) {
             throw new HttpError(409, `${file} came from the gallery: its index lists it already`);
         }
 
-        const files = NAME.test(name) ? await this.#ownFiles(name, problems, notes) : [];
-        const texts = files.map((each) => ({ name: each.name, text: textOf(each.bytes) }));
-        const packages = new Set(Object.keys(PACKAGE.dependencies ?? {}));
-
-        problems.push(...importProblems(name, texts, packages));
-
-        const source = texts.find((each) => each.name === file)?.text ?? "";
-        const description = docDescription(source);
-
-        if (description === "") {
-            problems.push(`Start ${file} with a /** … */ comment that says what it does.`);
-        }
-
-        // An entry's files are its module's name and folder: a browser module named otherwise would not come along.
-        const client = /\bweb\.client\(\s*(["'])([^"'\n]+)\1/.exec(source)?.[2];
-
-        if (client !== undefined && ![`${name}.js`, `${name}.mjs`, name].includes(client)) {
-            problems.push(
-                `Its browser module is ${client}: in the index it must be ${name}.js, ${name}.mjs, or the folder ${name}/. Rename it.`,
-            );
-        }
-
-        const loaded = module.enabled && module.error === undefined;
-        const declares: Declares = {
-            extensions: module.extensions.map((each) => each.name),
-            tools: module.extensions.flatMap((each) => each.tools),
-            readOnlyTools: module.extensions.flatMap((each) => each.readOnlyTools),
-            hooks: [...new Set(module.extensions.flatMap((each) => each.hooks))],
-            sections: module.extensions.flatMap((each) => each.sections),
-            wraps: module.extensions.flatMap((each) => each.wraps),
-            routes: module.web?.routes ?? [],
-            client: module.web?.client ?? null,
-            access: module.web?.access ?? "owner",
-        };
-
-        if (!loaded) {
-            notes.push(
-                "It is off, so what it declares is not known here: turn it on once to fill it in, or write it by hand. The index checks it.",
-            );
-        }
-
         const { index: address } = await this.#setting();
-        const repoUrl = repoUrlOf(address, this.#read?.index);
-        const entry = {
-            name,
-            title: titleOf(name),
-            description: description.slice(0, 600),
-            tags: [],
-            author: {
-                name: this.#app.config.users.find((each) => each.role === "owner")?.name ?? "",
-            },
-            version: "1.0.0",
-            source: { repo: "your-github-name/your-repository", commit: "", path: "" },
-            files: files.map((each) => ({
-                name: each.name,
-                sha256: sha256(each.bytes),
-                size: each.bytes.byteLength,
-            })),
-            pocketApi: POCKET_API,
-            minPocket: (PACKAGE.version ?? "0.0.0").replace(/[-+].*$/, ""),
-            declares,
-        };
 
-        // The draft as the index will read it, with what only the author can fill in stood in for.
-        try {
-            parseEntry({
-                ...entry,
-                author: { name: entry.author.name || "someone" },
-                source: { repo: "someone/something", commit: "0".repeat(40), path: "" },
-            });
-        } catch (error) {
-            if (error instanceof EntryError) {
-                problems.push(`The index would refuse it: ${error.message}.`);
-            } else {
-                throw error;
-            }
-        }
-
-        const text = `${JSON.stringify(entry, null, 4)}\n`;
-
-        return {
-            file,
-            name,
-            entry,
-            text,
-            problems,
-            notes,
-            declaresKnown: loaded,
-            repoUrl,
-            contributingUrl: repoUrl === null ? null : `${repoUrl}/blob/HEAD/CONTRIBUTING.md`,
-            newEntryUrl:
-                repoUrl === null
-                    ? null
-                    : `${repoUrl}/new/main/entries?filename=${encodeURIComponent(`${name}.json`)}&value=${encodeURIComponent(text)}`,
-        };
-    }
-
-    /**
-     * A drop-in's own files, as an entry names them: its module, a browser module beside it, and what its own folder
-     * holds (hidden files and `node_modules` left out). What keeps them from an entry goes in `problems`.
-     */
-    async #ownFiles(name: string, problems: string[], notes: string[]): Promise<Fetched[]> {
-        const root = this.#dropIns();
-        const found: Fetched[] = [];
-        const over = { files: false, total: false };
-        let total = 0;
-
-        const add = async (file: string, path: string) => {
-            const stat = await lstat(path);
-
-            if (stat.isSymbolicLink()) {
-                problems.push(`${file} is a link: put the file itself there.`);
-
-                return;
-            }
-
-            if (!stat.isFile()) {
-                problems.push(`${file} is not a file.`);
-
-                return;
-            }
-
-            // Past the limits nothing more is read: the problem is said once, below.
-            if (found.length >= LIMITS.files || total + stat.size > LIMITS.total) {
-                over.files ||= found.length >= LIMITS.files;
-                over.total ||= total + stat.size > LIMITS.total;
-
-                return;
-            }
-
-            const problem = fileProblem(file, name);
-
-            if (problem !== undefined) {
-                problems.push(`${file} ${problem}.`);
-
-                return;
-            }
-
-            if (stat.size > LIMITS.file) {
-                problems.push(`${file} is larger than ${LIMITS.file} bytes.`);
-
-                return;
-            }
-
-            total += stat.size;
-            found.push({ name: file, bytes: await readFile(path) });
-        };
-
-        const walk = async (folder: string, prefix: string, depth: number) => {
-            for (const each of (await readdir(folder, { withFileTypes: true })).sort((a, b) =>
-                a.name.localeCompare(b.name),
-            )) {
-                const file = `${prefix}/${each.name}`;
-
-                if (each.name.startsWith(".") || each.name === "node_modules") {
-                    notes.push(`Left out ${file}: hidden files and node_modules are not shared.`);
-                } else if (each.isDirectory() && depth < 4) {
-                    await walk(join(folder, each.name), file, depth + 1);
-                } else if (each.isDirectory()) {
-                    problems.push(`${file} is more than four folders deep.`);
-                } else {
-                    await add(file, join(folder, each.name));
-                }
-            }
-        };
-
-        for (const file of [`${name}.ts`, `${name}.js`, `${name}.mjs`]) {
-            if (await exists(join(root, file))) {
-                await add(file, join(root, file));
-            }
-        }
-
-        const folder = await lstat(join(root, name)).catch(() => undefined);
-
-        if (folder?.isSymbolicLink()) {
-            problems.push(`${name}/ is a link: put the folder itself there.`);
-        } else if (folder?.isDirectory()) {
-            await walk(join(root, name), name, 1);
-        }
-
-        if (over.files) {
-            problems.push(`It has more than ${LIMITS.files} files.`);
-        }
-
-        if (over.total) {
-            problems.push(`Its files are more than ${LIMITS.total} bytes together.`);
-        }
-
-        return found;
+        return shareDraft({
+            root: this.#dropIns(),
+            module,
+            owner: this.#app.config.users.find((each) => each.role === "owner")?.name ?? "",
+            repoUrl: repoUrlOf(address, this.#read?.index),
+            packages: new Set(Object.keys(PACKAGE.dependencies ?? {})),
+            version: HERE.version,
+        });
     }
 }

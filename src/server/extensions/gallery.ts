@@ -5,10 +5,9 @@
  */
 import { defineExtension } from "@earendil-works/pi-durable";
 import { HttpError } from "../errors.ts";
+import { NAME } from "../gallery/entry.ts";
 import type { ExtensionWeb, PocketHost, WebHandler, WebRequest } from "../host.ts";
 
-/** An extension's name in the index, as a route's `:name`. */
-const NAME = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 /** A drop-in's module file, as a route's `:file`. */
 const FILE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}\.ts$/;
 /** How often the index is read again while extensions from it are installed, so a revoked one is told soon. */
@@ -79,7 +78,9 @@ export default function createGallery(host: PocketHost, web: ExtensionWeb) {
     web.route(
         "POST",
         "update/:name",
-        handle((request) => gallery.update(name(request), request.body.pin, request.signal)),
+        handle((request) =>
+            gallery.update(name(request), request.body.pin, request.body.enabled, request.signal),
+        ),
     );
     web.route(
         "POST",

@@ -4,6 +4,7 @@
 //
 // Everything the index says is untrusted: it shows as text only, and links go only to addresses the server built.
 import { useEffect, useRef, useState } from "preact/hooks";
+import { planAvailable } from "../commands.js";
 import { DiffBlock } from "../diff.js";
 import { Highlighted } from "../rich.js";
 import {
@@ -24,8 +25,25 @@ export const galleryAvailable = () =>
     store.state.me?.role === "owner" &&
     store.state.server?.extensions?.includes("pocket-gallery") === true;
 
-/** The gallery's routes: GET without a body, POST with one. */
-export const galleryApi = (path, body) => api(`x/gallery/${path}`, body);
+/** The gallery's routes: GET without a body, POST with one; `options.signal` stops it. */
+export const galleryApi = (path, body, options) => api(`x/gallery/${path}`, body, options);
+
+/**
+ * Read a route while a sheet shows, and stop when it closes: a download of an extension's files goes no further, and
+ * its answer reaches no sheet that is gone.
+ */
+function useRoute(path, setData, setProblem) {
+    useEffect(() => {
+        const stop = new AbortController();
+
+        galleryApi(path, undefined, { signal: stop.signal }).then(
+            (result) => !stop.signal.aborted && setData(result),
+            (error) => !stop.signal.aborted && setProblem(error.message),
+        );
+
+        return () => stop.abort();
+    }, [path]);
+}
 
 const short = (commit) => (commit ?? "").slice(0, 7);
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -323,7 +341,7 @@ export function GallerySheet() {
                                     <span class="gallery-row-title">${each.title}</span>
                                     <span class="gallery-row-name mono">${each.name}</span>
                                 </span>
-                                <span class="gallery-row-meta">v${each.version} · from ${each.index}</span>
+                                <span class="gallery-row-meta">v${each.version} · ${each.unlisted}</span>
                                 <${StatePills} installed=${each} />
                             </span>
                             <${Icon} name="chevron" size=${14} />
@@ -410,17 +428,38 @@ function Declares({ declares }) {
     </dl>`;
 }
 
-/** Ask Pi to review an installed extension: a new session in the drop-in folder, in plan mode, with the review prompt. */
+/**
+ * Ask Pi to review an installed extension: a new session in the drop-in folder, in plan mode, with the review prompt.
+ * Pi reads code that may hold instructions to it: without plan mode, which blocks its edits and commands that change
+ * things, the review is not sent.
+ */
 async function askForReview(name) {
+    if (!planAvailable()) {
+        throw new Error(
+            "The review runs in plan mode, which is off: turn Plan mode on in Extensions first.",
+        );
+    }
+
     const { cwd, prompt } = await galleryApi(`review/${encodeURIComponent(name)}`);
     const { id } = await actions.createSession(cwd);
 
-    // Plan mode may be off in Extensions: the prompt itself asks Pi to change nothing.
-    await api(`c/${id}/plan`, { on: true }).catch(() => {});
+    try {
+        await api(`c/${id}/plan`, { on: true });
+    } catch (error) {
+        navigate(id);
+
+        throw new Error(
+            `Plan mode did not turn on (${error.message}), so the review was not sent.`,
+        );
+    }
+
     await api(`c/${id}/submit`, { text: prompt, requestId: uid() });
     closeSheet();
     navigate(id);
-    notify("info", "Pi reviews it in plan mode: it reads the files and changes nothing.");
+    notify(
+        "info",
+        "Pi reviews it in plan mode: it reads the files, and plan mode keeps it from changing them.",
+    );
 }
 
 /** Turn an installed extension on (after the owner confirms the risk) or off. */
@@ -581,7 +620,7 @@ export function GalleryEntrySheet({ name }) {
                 html`<div>
                     <dt>Installed</dt>
                     <dd>
-                        ${timeAgo(installed.installedAt)}${installed.listed ? "" : html` · from <span class="mono">${installed.index}</span>`}
+                        ${timeAgo(installed.installedAt)}${installed.unlisted ? ` · ${installed.unlisted}` : ""}
                     </dd>
                 </div>`
             }
@@ -673,11 +712,7 @@ export function GallerySourceSheet({ name }) {
     const [data, setData] = useState(null);
     const [problem, setProblem] = useState(null);
 
-    useEffect(() => {
-        galleryApi(`source/${encodeURIComponent(name)}`).then(setData, (error) =>
-            setProblem(error.message),
-        );
-    }, [name]);
+    useRoute(`source/${encodeURIComponent(name)}`, setData, setProblem);
 
     return html`<${Sheet} title=${data ? `Source: ${data.title}` : "Source"} onClose=${closeSheet} wide=${true} className="gallery">
         ${problem && html`<div class="error-box small">${problem}</div>`}
@@ -749,18 +784,18 @@ export function GalleryUpdateSheet({ name }) {
     const [busy, setBusy] = useState(false);
     const going = useRef(false);
 
-    const preview = () =>
-        galleryApi(`update/${encodeURIComponent(name)}`).then(
-            (result) => {
-                setData(result);
-                setProblem(null);
-            },
-            (error) => setProblem(error.message),
-        );
+    const path = `update/${encodeURIComponent(name)}`;
+    // Read again after the index changed: the sheet shows the update it offers now.
+    const [round, setRound] = useState(0);
 
-    useEffect(() => {
-        preview();
-    }, [name]);
+    useRoute(
+        `${path}?round=${round}`,
+        (result) => {
+            setData(result);
+            setProblem(null);
+        },
+        setProblem,
+    );
 
     const apply = () => {
         if (going.current) {
@@ -782,15 +817,13 @@ export function GalleryUpdateSheet({ name }) {
             let result;
 
             try {
-                // Bound to the manifest shown here (`pin`).
-                result = await galleryApi(`update/${encodeURIComponent(name)}`, {
-                    pin: data.to.pin,
-                });
+                // Bound to the manifest shown here (`pin`), and to whether it was on, as the question above said.
+                result = await galleryApi(path, { pin: data.to.pin, enabled: data.enabled });
             } catch (error) {
-                // The index changed since this preview: show the update it offers now instead.
+                // The index, or the switch, changed since this preview: show the update as it stands now instead.
                 if (error.status === 409) {
                     setData(null);
-                    await preview();
+                    setRound(round + 1);
                 }
 
                 throw error;
@@ -841,6 +874,12 @@ export function GalleryUpdateSheet({ name }) {
                 It now comes from another repository: <span class="mono">${data.from.repo}</span> → <span class="mono">${data.to.repo}</span>. Make sure you trust the new one.
             </div>`
         }
+        ${
+            data.edited.length > 0 &&
+            html`<div class="gallery-warn small" role="alert">
+                Edited here since it was installed: <span class="mono">${data.edited.join(", ")}</span>. The diff is against your edits, and the update replaces them.
+            </div>`
+        }
         <div class="group">
             <div class="group-title">What it declares</div>
             ${
@@ -887,11 +926,7 @@ export function GalleryShareSheet({ file }) {
     const [data, setData] = useState(null);
     const [problem, setProblem] = useState(null);
 
-    useEffect(() => {
-        galleryApi(`share/${encodeURIComponent(file)}`).then(setData, (error) =>
-            setProblem(error.message),
-        );
-    }, [file]);
+    useRoute(`share/${encodeURIComponent(file)}`, setData, setProblem);
 
     const fill = [
         ["source.repo", "the GitHub repository (owner/name) that holds its files"],
@@ -953,7 +988,10 @@ export function GalleryShareSheet({ file }) {
                     </div>
                     <button
                         class="button small"
-                        onClick=${() => copyText(data.text).then(() => notify("info", "Entry copied."))}
+                        onClick=${() =>
+                            attempt(() =>
+                                copyText(data.text).then(() => notify("info", "Entry copied.")),
+                            )}
                     >
                         <${Icon} name="copy" size=${14} /> Copy
                     </button>

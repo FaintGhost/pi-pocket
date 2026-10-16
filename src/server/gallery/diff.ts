@@ -1,6 +1,7 @@
 /**
  * What an update changes in a file, as a unified diff (`git diff`'s form, which the web app's diff viewer reads): Myers'
- * algorithm over lines, after the lines both versions start and end with are set aside.
+ * algorithm over lines, after the lines both versions start and end with are set aside. It compares lines only: a
+ * change of a file's last line break, or of CRLF to LF, shows as a file with no changed lines.
  */
 
 /** Unchanged lines shown around each change. */

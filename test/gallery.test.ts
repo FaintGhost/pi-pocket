@@ -2,7 +2,14 @@
 import { cleanUp, openApp, owner, root, scriptedModel } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
+import {
+    existsSync,
+    readdirSync,
+    readFileSync,
+    renameSync,
+    symlinkSync,
+    writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 
@@ -147,6 +154,37 @@ test("an install goes ahead only as the owner saw it, not as the index changed i
 
     await assert.rejects(app.gallery.install("seen", seen), { status: 409 });
     assert.ok(!existsSync(join(dropIns, "seen.ts")));
+});
+
+test("updates and removal never reach past an extension's own files: not through a link, nor to others", async () => {
+    await index(
+        entry(
+            "linked",
+            { "linked.ts": clock, "linked/util.ts": "export const one = 1;\n" },
+            "7".repeat(40),
+        ),
+    );
+    await app.gallery.install("linked", await pin("linked"));
+    // The owner's own file in its folder; then the folder moved elsewhere, with a link to it in its place.
+    writeFileSync(join(dropIns, "linked", "mine.txt"), "mine");
+    const outside = join(root, "outside");
+
+    renameSync(join(dropIns, "linked"), outside);
+    symlinkSync(outside, join(dropIns, "linked"));
+
+    await index(
+        entry(
+            "linked",
+            { "linked.ts": clock, "linked/util.ts": "export const two = 2;\n" },
+            "8".repeat(40),
+        ),
+    );
+    await assert.rejects(app.gallery.update("linked", await pin("linked"), false), { status: 409 });
+    assert.equal(readFileSync(join(outside, "util.ts"), "utf8"), "export const one = 1;\n");
+
+    await app.gallery.uninstall(owner(app), "linked");
+    assert.ok(!existsSync(join(dropIns, "linked.ts")));
+    assert.ok(existsSync(join(outside, "util.ts")) && existsSync(join(outside, "mine.txt")));
 });
 
 test("a revoked version is flagged where it is installed, and is never installed again", async () => {

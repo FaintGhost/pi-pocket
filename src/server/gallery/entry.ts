@@ -4,7 +4,7 @@
  * one drop-in at a pinned commit of a GitHub repository, with each file's SHA-256, and what the module installs.
  *
  * Pi Pocket reads it here, and the index repository's checks use these same functions, so an entry they let in is one
- * Pi Pocket reads. Text is kept to one plain line (no control, invisible, or direction characters), names to the
+ * Pi Pocket reads (they import this file from a Pi Pocket checkout, the loader's lists of reserved names with it). Text is kept to one plain line (no control, invisible, or direction characters), names to the
  * drop-in folder's rules, and sizes to `LIMITS`.
  */
 import { createHash } from "node:crypto";
@@ -96,6 +96,8 @@ export interface Index {
      * not valid otherwise, as a revocation is a warning for whoever has that commit, whatever else the entry says.
      */
     revoked: Map<string, Entry["revoked"]>;
+    /** The names of the entries for a newer Pi Pocket or extension API. */
+    newer: Set<string>;
 }
 
 /** Why something in the index is not valid. */
@@ -130,8 +132,6 @@ const ROUTE = /^(GET|POST|PUT|PATCH|DELETE) [A-Za-z0-9._~:/-]{1,200}$/;
  * `INVISIBLE_CLASS`, which keeps them out of memory lessons too): none of them belong in what the gallery draws.
  */
 const UNSAFE = new RegExp(`[\\p{Zl}\\p{Zp}${INVISIBLE_CLASS}]`, "u");
-
-/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/;
 
 /**
  * Why a file name is not one an extension called `extension` may have, or undefined when it may: its module
@@ -549,7 +549,13 @@ export function parseIndex(source: string, here: { api: number; version: string 
         throw new EntryError(`The index's extensions are not a list of ${LIMITS.entries} at most`);
     }
 
-    const index: Index = { entries: [], incompatible: 0, invalid: [], revoked: new Map() };
+    const index: Index = {
+        entries: [],
+        incompatible: 0,
+        invalid: [],
+        revoked: new Map(),
+        newer: new Set(),
+    };
 
     if (shape.name !== undefined) {
         index.name = text(shape.name, "The index's name", 80);
@@ -586,6 +592,11 @@ export function parseIndex(source: string, here: { api: number; version: string 
 
         if (compatibility(item, here) === "newer" && !twice) {
             index.incompatible++;
+
+            if (name !== undefined) {
+                index.newer.add(name);
+            }
+
             continue;
         }
 

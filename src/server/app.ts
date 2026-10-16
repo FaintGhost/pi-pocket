@@ -512,6 +512,10 @@ export class PocketApp {
             // What a module's load says can name the server's folders, or quote a provider: the owner's to read.
             { webs: this.webs, notify: (level, message) => this.ownerNotice(level, message) },
         );
+        // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one.
+        await this.gallery.recover().catch((error: unknown) => {
+            this.#log(`The extension gallery could not check its updates: ${describe(error)}`);
+        });
         await this.loader.loadAll();
 
         const storage = await openNodeSqliteStorage(join(this.dataDir, "pocket.sqlite"));
