@@ -34,6 +34,7 @@ import {
     Slide,
     timeAgo,
     usePresence,
+    useSide,
     useSlide,
 } from "./ui.js";
 
@@ -1411,6 +1412,10 @@ export const SIDEBAR_WIDTH = 324;
 
 /** Drag the sidebar's right edge to resize its list; a double click puts it back to its usual width. */
 export function ResizeHandle() {
+    const ref = useRef(null);
+    // A theme may put the sidebar on the right: the handle goes to its other edge, and drags the other way.
+    const side = useSide(ref, (handle) => handle.parentElement);
+
     const start = (event) => {
         if (event.button !== 0) {
             return;
@@ -1419,7 +1424,7 @@ export function ResizeHandle() {
         event.preventDefault();
         const root = document.documentElement;
         const sidebar = event.currentTarget.parentElement;
-        const left = sidebar.getBoundingClientRect().left;
+        const box = sidebar.getBoundingClientRect();
         // The rail and the borders, which keep their width.
         const rest = sidebar.offsetWidth - (sidebar.querySelector(".sessions")?.offsetWidth ?? 0);
         let width = prefs().sidebarWidth;
@@ -1430,7 +1435,9 @@ export function ResizeHandle() {
         const max = Math.min(LIST_MAX + rest, Math.max(SIDEBAR_WIDTH, innerWidth * 0.4));
 
         const move = (each) => {
-            width = Math.round(Math.min(max, Math.max(LIST_MIN + rest, each.clientX - left)));
+            const across = side === "right" ? box.right - each.clientX : each.clientX - box.left;
+
+            width = Math.round(Math.min(max, Math.max(LIST_MIN + rest, across)));
             root.style.setProperty("--sidebar-w", `${width}px`);
         };
 
@@ -1448,7 +1455,8 @@ export function ResizeHandle() {
     };
 
     return html`<div
-        class="resize-handle"
+        class=${`resize-handle ${side === "right" ? "at-left" : ""}`}
+        ref=${ref}
         role="separator"
         aria-orientation="vertical"
         title="Drag to resize"
@@ -1462,11 +1470,13 @@ export function Drawer() {
     const [open, leaving] = usePresence(store.state.drawer || null, 200);
     const ref = useRef(null);
     const close = () => store.set({ drawer: false });
+    // A theme may slide it in from the right: it is dragged back that way.
+    const side = useSide(ref);
 
     useBack(store.state.drawer === true, close);
     // Not under a row's actions, which a long press opens over it: the finger that opened them may still move.
     useDragToClose(ref, {
-        dir: "left",
+        dir: side,
         onClose: close,
         enabled: Boolean(open) && !leaving && !store.state.sheet,
     });

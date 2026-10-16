@@ -246,6 +246,7 @@ function loadSheets(urls) {
     if (urls.length === 0) {
         document.head.append(next);
         old();
+        requestAnimationFrame(() => document.dispatchEvent(new Event("pocket:theme")));
         sheetsLoaded = Promise.resolve();
 
         return sheetsLoaded;
@@ -256,7 +257,11 @@ function loadSheets(urls) {
         next.addEventListener("error", resolve, { once: true });
         // A server that does not answer: show what there is.
         setTimeout(resolve, 4000);
-    }).then(old);
+    }).then(() => {
+        old();
+        // What reads where things are laid out (`useSide`) looks again.
+        document.dispatchEvent(new Event("pocket:theme"));
+    });
     document.head.append(next);
 
     return sheetsLoaded;

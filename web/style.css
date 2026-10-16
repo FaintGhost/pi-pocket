@@ -848,6 +848,12 @@ kbd {
     touch-action: none;
 }
 
+/* A sidebar a theme put on the right: its handle is on its left edge (`useSide`). */
+.resize-handle.at-left {
+    left: 0;
+    right: auto;
+}
+
 .resize-handle::before {
     content: "";
     position: absolute;
