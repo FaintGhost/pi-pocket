@@ -191,7 +191,7 @@ From 0.14.0, the gallery lists themes with extensions: Menu → Extensions → *
 
 Where a theme came from is in `.gallery.json` in its folder. It is a hidden file, so it is never served.
 
-To share one of your own themes, choose it in Appearance and tap **Share…**. Pi Pocket checks it, and drafts its entry: the files the theme loads, with their sizes and SHA-256 hashes, and its name and description from `theme.json`. Put the folder in a public GitHub repository as `<id>/` (at the top, or in a folder that you name in the entry), and open the pull request as for an extension ([extensions.md](publishing.md#sharing-yours)). A theme's entry has `"kind": "theme"` and `themeApi`, and no `declares`.
+To share one of your own themes, choose it in Appearance and tap **Share…**. Pi Pocket checks it, and drafts its entry: the files the theme loads, with their sizes and SHA-256 hashes, and its name and description from `theme.json`. Put the folder in a public GitHub repository as `<id>/` (at the top, or in a folder that you name in the entry), and open the pull request as for an extension ([Sharing yours](publishing.md#sharing-yours)). A theme's entry has `"kind": "theme"` and `themeApi`, and no `declares`.
 
 ## Themes that come with Pi Pocket
 

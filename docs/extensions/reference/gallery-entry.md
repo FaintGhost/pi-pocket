@@ -1,6 +1,6 @@
 # Gallery entry
 
-The extension gallery reads an index: one JSON file, the `index.json` that the index repository makes. The index has an entry for each extension. An entry names the files of one drop-in at a pinned commit of a GitHub repository, with the SHA-256 of each file. It also declares what the module installs. [Publishing to the gallery](../publishing.md) tells you how to share yours.
+The extension gallery reads an index: one JSON file, the `index.json` that the index repository makes. The index has an entry for each extension and each theme. An entry names the files of one drop-in at a pinned commit of a GitHub repository, with the SHA-256 of each file. It also declares what the module installs. A theme's entry names the files of one theme folder in the same way ([A theme's entry](#a-themes-entry)). [Publishing to the gallery](../publishing.md) tells you how to share yours.
 
 Pi Pocket reads the index strictly, because all of it comes from other people. The code is `src/server/gallery/entry.ts`. The index repository's checks use the same code, so Pi Pocket can read each entry that the checks let in.
 
@@ -51,7 +51,7 @@ extensions: Entry[];
 
 Since 0.14.0 · Stable
 
-The entries. Two entries cannot have the same `name`.
+The entries: extensions, and themes (`kind: "theme"`). Two entries cannot have the same `name`.
 
 ## An entry
 
@@ -293,3 +293,59 @@ commands?: string[];
 Since 0.14.0 · Stable
 
 Its commands, each as its scope and name, as a route has its method: `conversation clock-zone`, `global clock-reset`. None can be a name of the app's own commands. Leave the field out when the module has no commands: betas of 0.14.0 before beta.7 do not read an entry that has it.
+
+## A theme's entry
+
+A theme's entry has the fields of an extension's entry, with these differences. It has no `pocketApi` and no `declares`, because a theme runs no code. When Pi Pocket installs it, it checks the files as it checks every theme folder ([Themes](../themes.md#themes-in-the-gallery)). A Pi Pocket before 0.14.0, and its betas, cannot read a theme's entry: they leave it out, and never install it as an extension.
+
+### `kind`
+
+```ts
+kind: "theme";
+```
+
+Since 0.14.0 · Stable
+
+What the entry is. An entry with no `kind` is an extension.
+
+### `name` (theme)
+
+```ts
+name: string;
+```
+
+Since 0.14.0 · Stable
+
+The theme's id: the name of its folder in `themes/`. 2 to 48 characters: lowercase letters, digits, and `-`, starting with a letter or digit. It cannot be an id that Pi Pocket keeps: `desktop`, a theme that comes with Pi Pocket (`pocket`, `lantern`), or one of its palettes (`tokyo-night`, `gruvbox`, and the others in `web/themes.js`).
+
+### `files` (theme)
+
+```ts
+files: {
+    name: string;
+    sha256: string;
+    size: number;
+}
+[];
+```
+
+Since 0.14.0 · Stable
+
+The theme folder's files, each as `<name>/<path>`. Pi Pocket installs them in `themes/<name>/`.
+
+- `theme.json`, `colors.toml`, and `colors-light.toml`, at the top of the folder, 8 KB each at most.
+- Stylesheets (`.css`), 256 KB together at most.
+- Fonts (`.woff2`) and images (`.png`, `.jpg`, `.jpeg`, `.webp`, `.avif`, `.gif`, `.svg`), 4 MB each at most.
+- Four folders deep at most, with no hidden files and no `node_modules`. 200 files at most, and 16 MB together at most.
+
+The files must include `<name>/theme.css`, `<name>/colors.toml`, or `<name>/colors-light.toml`, and `<name>/theme.json` when they include `theme.css`. `sha256` and `size` are as for an extension.
+
+### `themeApi`
+
+```ts
+themeApi: number;
+```
+
+Since 0.14.0 · Stable
+
+The version of the theme surface (tokens, parts, and states) that the theme needs, such as `1`. For a newer version than Pi Pocket's, the gallery hides the entry.
