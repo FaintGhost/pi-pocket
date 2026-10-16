@@ -270,7 +270,7 @@ The first release of Pi Pocket that has a member.
 
 ### Stable
 
-A member that changes only as [API stability](../policies/stability.md) says.
+A member that changes only as [API stability](../policies/api-stability.md) says.
 
 ### Experimental
 

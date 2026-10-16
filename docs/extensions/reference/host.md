@@ -247,7 +247,7 @@ A linked session, as `list` gives it.
 
 ## Internal members
 
-The host has more members, for Pi Pocket's built-in modules only. They are not in the types file, and they can change in any release without notice. Do not use them in a drop-in. [API stability](../policies/stability.md) tells you what this means.
+The host has more members, for Pi Pocket's built-in modules only. They are not in the types file, and they can change in any release without notice. Do not use them in a drop-in. [API stability](../policies/api-stability.md) tells you what this means.
 
 - `approvals`: tool calls that wait for a person to allow them.
 - `guard`: Lancet Guard.

@@ -1,6 +1,6 @@
 # API versions
 
-This page tells how Pi Pocket marks the age and the stability of each part of the extension API. It also tells how a module works with an older or a newer Pi Pocket. [API stability](../policies/stability.md) gives the rules for changes and for removals.
+This page tells how Pi Pocket marks the age and the stability of each part of the extension API. It also tells how a module works with an older or a newer Pi Pocket. [API stability](../policies/api-stability.md) gives the rules for changes and for removals.
 
 ## The API version
 
