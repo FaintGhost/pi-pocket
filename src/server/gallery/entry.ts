@@ -219,8 +219,8 @@ export function fileProblem(file: string, extension: string): string | undefined
 
 /**
  * Why a file name is not one a theme called `theme` may have, or undefined when it may: in its own folder (`<theme>/…`,
- * at most four folders deep), and one the theme format serves: `theme.json` and `colors.toml` at its top, stylesheets,
- * `.woff2` fonts, and images. So a theme's files never reach past its folder in `themes/`.
+ * at most four folders deep), and one the theme format serves: `theme.json`, `colors.toml`, and `colors-light.toml` at
+ * its top, stylesheets, `.woff2` fonts, and images. So a theme's files never reach past its folder in `themes/`.
  */
 export function themeFileProblem(file: string, theme: string): string | undefined {
     if (typeof file !== "string" || file.length > 200) {
@@ -250,16 +250,18 @@ export function themeFileProblem(file: string, theme: string): string | undefine
     const inner = parts.slice(1).join("/");
 
     if (
-        inner === "theme.json" ||
-        inner === "colors.toml" ||
+        SMALL_FILES.includes(inner) ||
         inner.toLowerCase().endsWith(".css") ||
         assetType(inner) !== undefined
     ) {
         return undefined;
     }
 
-    return "is not a file a theme serves: theme.json, colors.toml, .css, .woff2, or an image (.png, .jpg, .webp, .avif, .gif, .svg)";
+    return "is not a file a theme serves: theme.json, colors.toml, colors-light.toml, .css, .woff2, or an image (.png, .jpg, .webp, .avif, .gif, .svg)";
 }
+
+/** The files at the top of a theme's folder that say what it is: each is `THEME_LIMITS.small` at most. */
+const SMALL_FILES = ["theme.json", "colors.toml", "colors-light.toml"];
 
 // ─── Reading ───────────────────────────────────────────────────────────────────────
 
@@ -613,8 +615,10 @@ export function parseThemeEntry(value: unknown): ThemeEntry {
     const inner = (file: EntryFile) => file.name.slice(name.length + 1);
     const has = (path: string) => files.some((file) => inner(file) === path);
 
-    if (!has("theme.css") && !has("colors.toml")) {
-        throw new EntryError(`files has neither ${name}/theme.css nor ${name}/colors.toml`);
+    if (!has("theme.css") && !has("colors.toml") && !has("colors-light.toml")) {
+        throw new EntryError(
+            `files has no ${name}/theme.css, ${name}/colors.toml, or ${name}/colors-light.toml`,
+        );
     }
 
     if (has("theme.css") && !has("theme.json")) {
@@ -622,7 +626,7 @@ export function parseThemeEntry(value: unknown): ThemeEntry {
     }
 
     for (const file of files) {
-        if (["theme.json", "colors.toml"].includes(inner(file)) && file.size > THEME_LIMITS.small) {
+        if (SMALL_FILES.includes(inner(file)) && file.size > THEME_LIMITS.small) {
             throw new EntryError(`${file.name} is more than ${THEME_LIMITS.small} bytes`);
         }
     }
