@@ -12,6 +12,7 @@ import { modelRefreshAvailable, refreshModels } from "./model-refresh.js";
 import { openPip, pipAvailable } from "./pip.js";
 import { setArchived, workspaceOrder } from "./sessions.js";
 import { branchAvailable, headLabel } from "./sheets/branch.js";
+import { recentLabels } from "./sheets/folder.js";
 import { galleryAvailable } from "./sheets/gallery.js";
 import { piSessionsAvailable } from "./sheets/pi-sessions.js";
 import {
@@ -103,6 +104,8 @@ function actionItems() {
     const session = conversation?.kind === "session";
     const steer = canSteer();
     const canStart = steer && !scoped();
+    // As the folder picker names them: folders of one name get their parent's too.
+    const favoriteNames = recentLabels(folderFavorites, server?.home);
     const wide = matchMedia("(min-width: 960px)").matches;
     const list = [
         canStart && {
@@ -112,9 +115,9 @@ function actionItems() {
             run: () => openSheet({ type: "cwd", mode: "new" }),
         },
         ...(canStart
-            ? folderFavorites.map((path) => ({
+            ? folderFavorites.map((path, index) => ({
                   key: `action:new-favorite:${path}`,
-                  label: `New Session: ${path === server?.home ? "~" : path.replace(/\/+$/, "").split("/").pop() || "/"}`,
+                  label: `New session in ${favoriteNames[index]}`,
                   detail: shortPath(path, server?.home),
                   icon: "star",
                   run: () =>
