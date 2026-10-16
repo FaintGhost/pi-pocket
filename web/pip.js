@@ -417,24 +417,23 @@ function Item({ item, last, busy, conversationId }) {
         const entry = item.entry;
 
         if (entry.kind === "user") {
+            // Reports, posts, and scheduled messages whole: what came from outside may hold anything, an attachment
+            // heading too, and is read only as the plain data it is.
             const body = written(entry.text);
-            // The server trims image/file-only messages, including the attachment heading's leading newlines.
-            const stored = body.startsWith(ATTACHMENTS_HEADING.trimStart()) ? `\n\n${body}` : body;
-            const text = writtenText({ text: stored });
 
-            if (text.startsWith(REPORT)) {
+            if (body.startsWith(REPORT)) {
                 return html`<${Report}
-                    text=${text.slice(REPORT.length)}
+                    text=${body.slice(REPORT.length)}
                     conversationId=${conversationId}
                 />`;
             }
 
-            const hook = WEBHOOK.exec(text);
-            const watched = hook ? null : REPO_WATCH.exec(text);
+            const hook = WEBHOOK.exec(body);
+            const watched = hook ? null : REPO_WATCH.exec(body);
             const outside = hook ?? watched;
 
             if (outside) {
-                const posted = post(text.slice(outside[0].length));
+                const posted = post(body.slice(outside[0].length));
 
                 return html`<${Report}
                     label=${`${watched ? "GitHub" : "Webhook"}: ${outside[1]}`}
@@ -444,12 +443,16 @@ function Item({ item, last, busy, conversationId }) {
                 />`;
             }
 
-            if (text.startsWith(SCHEDULED)) {
+            if (body.startsWith(SCHEDULED)) {
                 return html`<div class="pip-event">
                     <${Icon} name="pulse" size=${13} />
-                    <span>${text.slice(SCHEDULED.length)}</span>
+                    <span>${body.slice(SCHEDULED.length)}</span>
                 </div>`;
             }
+
+            // The server trims image/file-only messages, including the attachment heading's leading newlines.
+            const stored = body.startsWith(ATTACHMENTS_HEADING.trimStart()) ? `\n\n${body}` : body;
+            const text = writtenText({ text: stored });
 
             // Uploaded pictures also remain readable when the chosen model cannot take inline images.
             const files = attachedFiles(stored);
