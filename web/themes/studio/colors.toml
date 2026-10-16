@@ -1,0 +1,24 @@
+# Studio: neutral charcoal with a muted blue accent, in Omarchy's colors.toml format. Every text color is 4.5:1 or
+# more on its surfaces (body 10.9:1, muted 5.3 to 6.6:1, faint 4.8 to 5.9:1).
+mode = "dark"
+
+accent = "#7d9fd6"
+selection = "#2c3a52"
+
+background = "#1d1e21"
+dark_background = "#18191b"
+darker_background = "#141517"
+lighter_background = "#26272b"
+
+foreground = "#cfd1d6"
+dark_foreground = "#7c7f87"
+light_foreground = "#d9dbdf"
+bright_foreground = "#e4e5e8"
+
+red = "#d9787a"
+yellow = "#d6b26b"
+orange = "#d99a6c"
+green = "#8fbf8a"
+cyan = "#79b8c4"
+blue = "#7d9fd6"
+magenta = "#b394d1"
