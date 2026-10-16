@@ -338,7 +338,7 @@ A conversation command is offered to everyone who can steer that session, people
 Who may run it (`scope`):
 
 - `"conversation"`: anyone who may steer the session, and only whoever drives while people take turns. Guests invited to one session may run it there.
-- `"global"`: the owner alone, in any session they see, also while someone else drives. Use it for settings of the whole app. Its card still goes to the session it was typed in, for everyone there.
+- `"global"`: the owner alone, in any session they see. While someone else drives, the app shows the owner no message box there, so they run it from another session or take the wheel first. Use it for settings of the whole app. Its card still goes to the session it was typed in, for everyone there.
 - Viewers run none, and see none in the suggestions.
 
 Each run is a durable task, kept by who ran it, the session, and the request's id. When a reply gets lost, sending the same text again from the same tab finds the first run and gets its result: the handler runs once. A server restart never runs a handler again: the person hears that it was cut off, as it may have done part of its work. Menu → **Running now** shows a command while it runs, and stops it: steerers stop conversation commands, the owner global ones. Stopping aborts `ctx.signal` and does not undo what the handler did; a stop that comes just after the card was written leaves the card, and the run says it was stopped.

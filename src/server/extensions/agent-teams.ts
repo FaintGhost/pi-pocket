@@ -101,7 +101,7 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
                 } catch (error) {
                     // Core says what went wrong; what Pi should do about it is this tool's to say.
                     throw new Error(
-                        `${error instanceof Error ? error.message : String(error)} Do not try another model or a way around it: stop and tell the person.`,
+                        `${error instanceof Error ? error.message : String(error)} Do not look for a way around it: stop and tell the person.`,
                     );
                 }
 
