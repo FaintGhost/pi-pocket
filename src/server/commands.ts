@@ -774,6 +774,12 @@ export class Commands {
 
         app.collab.setTyping(id, user, null);
         await this.#touched(id, typed, text === typed ? undefined : text);
+
+        // A person's own words: linked sessions may message each other again (`linked-sessions.ts`).
+        if (via === undefined) {
+            await app.linkedSessions.personWrote(id);
+        }
+
         this.#reportUnanswered(id, submission.wait(context));
 
         if (failure !== undefined) {

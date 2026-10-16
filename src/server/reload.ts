@@ -6,8 +6,8 @@
  * Modules come from two folders: Pi Pocket's own (`src/server/extensions/`), and the owner's drop-ins
  * (`extensions/` in the data folder), which load after them and stay off until the owner turns them on. The owner
  * can turn modules off and on from the app. A module that is off is not loaded, and turning one off uninstalls what
- * it installed; a tool call already running still finishes. What a module adds to the app (routes, a browser module)
- * is kept by `ExtensionWebs` and goes in and out with its extensions.
+ * it installed; a tool call already running still finishes. What a module adds to the app (routes, a browser module,
+ * commands) is kept by `ExtensionWebs` and goes in and out with its extensions.
  */
 import {
     existsSync,
@@ -42,6 +42,7 @@ const ORDER = [
     "artifacts.ts",
     "browser.ts",
     "subagents.ts",
+    "agent-teams.ts",
     "schedules.ts",
     "goals.ts",
     "plan.ts",
@@ -60,12 +61,13 @@ export const BUILT_IN_MODULES: ReadonlySet<string> = new Set(
 /** Modules the app cannot work without: always on. */
 const REQUIRED = new Set(["prompt.ts"]);
 /** Built-in modules that stay off until the owner turns them on. Drop-ins all do. */
-const OFF_BY_DEFAULT = new Set(["guard.ts"]);
+const OFF_BY_DEFAULT = new Set(["guard.ts", "agent-teams.ts"]);
 const TITLES: Record<string, string> = {
     "prompt.ts": "System prompt",
     "artifacts.ts": "Artifacts",
     "browser.ts": "Browser",
     "subagents.ts": "Subagents",
+    "agent-teams.ts": "Agent Teams",
     "schedules.ts": "Scheduled messages",
     "goals.ts": "Done when",
     "plan.ts": "Plan mode",
@@ -93,6 +95,7 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "artifact",
     "browser",
     "subagent",
+    "team",
     "schedule",
     "codemode",
     "memory",
@@ -136,10 +139,10 @@ export interface ExtensionInfo {
         wraps: string[];
     }[];
     /**
-     * What it adds to the app: its routes (`GET status`), who loads its browser module, when it has one, and the widest
-     * access of the two.
+     * What it adds to the app: its routes (`GET status`), who loads its browser module, when it has one, the widest
+     * access of the two, and its commands (`conversation /name`, `global /name`).
      */
-    web?: { routes: string[]; client?: WebAccess; access?: WebAccess };
+    web?: { routes: string[]; client?: WebAccess; access?: WebAccess; commands?: string[] };
     /** Why the module is not loaded, when it failed. */
     error?: string;
 }
@@ -557,6 +560,7 @@ export class ExtensionLoader {
                 this.#checkNames(file, extensions);
             }
 
+            this.#webs.check(part);
             this.#replace(extensions, this.#installed.get(file) ?? []);
             this.#installed.set(file, extensions);
             this.#errors.delete(file);

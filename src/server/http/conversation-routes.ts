@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import type { ConversationId } from "@earendil-works/pi-durable";
 import type { Attachment, SubmitRequest } from "../commands.ts";
 import { HttpError } from "../errors.ts";
+import type { CommandRequest } from "../extension-commands.ts";
 import { serveImage, TYPES } from "./assets.ts";
 import { type ApiRequest, json, readJson, send } from "./io.ts";
 
@@ -56,6 +57,22 @@ export async function conversationRoutes(
         });
 
         return json(response, 200, await app.commands.submit(id, user, { ...body, attachments }));
+    }
+
+    if (third === "extension-commands" && fourth === undefined && method === "POST") {
+        const body = await readJson<CommandRequest>(request);
+        const gone = new AbortController();
+
+        // The browser stopped waiting: so does this request. The run goes on, and a retry finds it.
+        response.on("close", () => gone.abort());
+
+        return json(response, 200, await app.extensionCommands.run(id, user, body, gone.signal));
+    }
+
+    if (third === "extension-commands" && parts[4] === "stop" && method === "POST") {
+        await app.extensionCommands.stop(id, user, Number(fourth));
+
+        return json(response, 200, { ok: true });
     }
 
     if (third === "chat" && method === "POST") {
