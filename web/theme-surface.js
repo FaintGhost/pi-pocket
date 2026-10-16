@@ -1,8 +1,9 @@
 // What themes may rely on: the CSS variables (tokens) and the `data-part` names of the app's regions, at theme API
-// version `THEME_API`. docs/extensions/reference/theme-surface.md describes each; test/theme-surface.test.ts checks
-// that style.css defines every token and that every part is on an element. Add to these lists freely. Rename or remove
-// a name only after a deprecation period, keeping the old one as an alias meanwhile (`--old: var(--new)`, or
-// `data-part="new old"`), and then with a new `THEME_API`.
+// version `THEME_API`. docs/extensions/reference/theme-surface.md describes each (the CSS names extensions may use are a
+// subset); test/theme-surface.test.ts checks that style.css defines every token and that every part is on an element.
+// Add to these lists freely. A rename or removal follows docs/extensions/policies/api-stability.md: the old name stays
+// as an alias (`--old: var(--new)`, or `data-part="new old"`) for at least one minor release and 90 days, and its
+// removal raises `THEME_API` (and `THEME_API` in src/server/themes/format.ts) by one.
 
 export const THEME_API = 1;
 

@@ -1,0 +1,179 @@
+# Themes
+
+A theme changes how Pi Pocket looks and how it is laid out, without a change to the app's code. A theme is a folder of CSS, colors, fonts, and images. It cannot run code. [reference/theme-surface.md](reference/theme-surface.md) lists every token and part a theme can use.
+
+## Theme and colors
+
+Appearance has two choices:
+
+- **Theme**: the look and the layout. **Pocket** is the app's own look. Each theme folder adds one.
+- **Colors**: the palette. The Omarchy palettes that come with the app, **Desktop** (the Omarchy theme of the machine Pi Pocket runs on), and each theme folder that has a `colors.toml`.
+
+They are separate, so a theme's layout stays when the colors change, as they do when you follow the desktop. A theme with colors of its own changes Colors to them when you choose it. You can choose other colors after.
+
+Each person chooses for each browser, as for the rest of Appearance. Guests choose too. Only the owner adds, changes, and removes themes.
+
+## Make a theme
+
+1. Open Appearance: the palette button on the rail, Menu → **Appearance**, or **Appearance** in the launcher (Ctrl/⌘+K).
+2. Choose the theme to start from, and tap **Duplicate**. Give it a name. Pi Pocket copies it into a folder of its own and chooses it. **Duplicate colors** does the same for the colors in use.
+3. Tap **Edit with Pi**. A session starts in the theme's folder, with a message ready that tells Pi where this guide is. Say what you want: "make my messages bubbles on the right", "a warmer accent", "a square message box".
+
+Each save shows at once in every tab that uses the theme. The page does not reload, so nothing you typed is lost.
+
+You can also edit the folder yourself: `~/.pi-pocket/themes/<id>/` (or `themes/` in `PI_POCKET_DIR`). It is the one place in the data folder, with `extensions/`, that you edit by hand. **Remove** moves a theme's folder to `themes/.removed/`, so you can get it back from there.
+
+A copy of Pocket starts with a `theme.css` that lists every token with its value, commented out. Take the comment marks off a token and change its value. Leave the others commented out, so they follow the app's updates.
+
+## The folder
+
+```
+~/.pi-pocket/themes/paper/
+    theme.json
+    theme.css
+    layout.css        (theme.css imports it)
+    colors.toml       (optional: its own colors)
+    fonts/Inter.woff2
+    images/grain.webp
+```
+
+The folder's name is the theme's id: 2 to 48 lowercase letters, digits, and `-`. A theme cannot take the name of one that comes with Pi Pocket, of a palette, or `desktop`.
+
+`theme.json` is needed when the folder has CSS:
+
+```json
+{
+    "themeApi": 1,
+    "name": "Paper",
+    "description": "Flat cards, your messages as bubbles, a wide message box.",
+    "author": "tanner",
+    "version": "1.0.0",
+    "minPocket": "0.15.0"
+}
+```
+
+| Field                   | What                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| `themeApi`              | Required. The version of the theme surface it uses: 1. A newer one is not loaded.           |
+| `name`                  | Required. Up to 60 characters.                                                              |
+| `description`, `author` | Optional. Up to 200 and 60 characters.                                                      |
+| `version`               | Optional. The theme's own version, for people.                                              |
+| `minPocket`             | Optional. The oldest Pi Pocket it works with, for parts and tokens added in later releases. |
+
+`colors.toml` is Omarchy's format, as it is: `key = "value"` lines, with `background` and `foreground` at least, and `mode = "light"` for a light palette. A folder with only a `colors.toml` needs no `theme.json`, so you can drop in an Omarchy theme folder and it shows under Colors. Its other files are not read.
+
+What a theme serves:
+
+- `theme.css`, and the `.css` files it imports (`@import "layout.css";`).
+- The fonts (`.woff2`) and images (`.png`, `.jpg`, `.webp`, `.avif`, `.gif`, `.svg`) its CSS loads.
+
+Nothing else in the folder is served. Hidden files, `node_modules`, and links are never read.
+
+Limits: all CSS together 256 KB; each font or image 4 MB; everything 16 MB and 200 files; folders 4 deep; `theme.json` and `colors.toml` 8 KB each.
+
+## Writing the CSS
+
+A theme changes the app in two ways: by **tokens**, the CSS variables the app's CSS is built from, and by **parts**, the `data-part` names on the app's main regions.
+
+Colors and type, with tokens:
+
+```css
+@import "layout.css";
+
+@font-face {
+    font-family: "Paper Sans";
+    src: url("fonts/Inter.woff2") format("woff2");
+}
+
+:root {
+    --sans: "Paper Sans", ui-sans-serif, system-ui, sans-serif;
+    --accent: #c2410c;
+    --r-card: 4px;
+    --shadow: none;
+    --wallpaper: url("images/grain.webp");
+}
+
+:root[data-mode="light"] {
+    --accent: #9a3412;
+}
+```
+
+Layout, with parts:
+
+```css
+/* Your messages as bubbles on the right; other people's stay on the left. */
+[data-part="prompt"][data-from="me"] {
+    margin-inline-start: auto;
+    max-width: 70%;
+    background: var(--accent-soft);
+}
+
+/* A wider conversation, with a flat message box. */
+:root {
+    --transcript-width: 880px;
+    --composer-width: 880px;
+}
+
+[data-part="message-box"] {
+    border-radius: 0;
+}
+
+/* Phones: no status line. */
+@media (max-width: 699px) {
+    [data-part="status-line"] {
+        display: none;
+    }
+}
+```
+
+Use the tokens and parts in [the reference](reference/theme-surface.md). The app's class names change from release to release; tokens and parts stay. Some tips:
+
+- **Set the named tokens.** `--bg`, `--body`, `--text`, and `--accent` move the surfaces, lines, and soft fills made from them. Set the palette's own variables (`--o-*`) only to change the colors themselves; a `colors.toml` is the better place for that.
+- **Light and dark.** The colors decide the mode. `<html data-mode="light">` is set for a light palette, so write `:root[data-mode="light"] { … }` for what differs.
+- **Phones.** Below 700 px wide is the phone layout. The sidebar shows from 960 px.
+- **States.** Session rows and tool calls say their state in `data-state`, and the open session's row has `aria-current="page"` on its button: `[data-part="session-row"]:has([aria-current="page"])`.
+- **Text, not words.** Never select on what an element says (`[aria-label="Send"]`, `[title=…]`): the app's words change, and will come in other languages. Put no words in `content:`.
+- **Right to left.** Prefer `margin-inline-start` to `margin-left`, and so on.
+- **Order.** `order` and `flex-direction: row-reverse` move what shows, not the order keys reach it. Move whole regions, not parts of a reading flow. A theme that moves the sidebar to the right keeps its resize handle on the left edge for now.
+- **Focus.** Keep a visible focus ring: change `--focus-ring`'s color, never take the ring away.
+
+Only the theme's own files load. `url()`, `image-set()`, `src()`, and `@import` may name a file in the theme's folder by a path from the CSS file (`fonts/a.woff2`, `../images/a.png`), an image written into the CSS (`data:image/…`), or something in the page (`url(#shadow)`). Anything else stops the theme from loading: another site, another address on this server (`/api/…`), a path out of the folder. Old ways for CSS to run code (`expression()`, `behavior`, `-moz-binding`) stop it too. The app's content security policy blocks every other site anyway, for the app and for extensions alike.
+
+## How it loads
+
+The app's CSS comes in three cascade layers: the app's own (with extensions' stylesheets), then the colors, then the theme. So:
+
+- A theme's rule wins over the app's, however specific the app's rule is. `[data-part="message-box"] { border-radius: 0; }` is enough.
+- The app's `!important` rules still win, such as Appearance's reduced motion. A theme cannot turn motion back on.
+- What people set themselves still wins: the text size, and the widths they drag (`--text-size` and `--sidebar-w` are theirs).
+- A theme's `@font-face` and `@keyframes` are in its layer too.
+
+Each browser keeps the theme's addresses, and the page loads them before it first draws, so a reload never flashes the app's own look.
+
+## When it breaks
+
+When a theme's files break a rule (a remote address, a file that is not there, `theme.json` that is not JSON), the theme keeps its last good version until the server restarts. The owner gets a notice that says what and where (`theme.css line 12: …`), and Appearance shows it on the theme's card. With no good version, at a start, the theme is not offered, and browsers that chose it use Pocket until it is mended.
+
+A theme that hides what you need to change it back: open the app with `?noext=1` on its address (safe mode). That tab loads no theme and no extensions' browser parts. Choose another theme in Appearance, or mend the folder.
+
+CSS that the browser cannot read is only skipped by the browser, as in any stylesheet: check your change in a tab, with the console open.
+
+## What a theme can and cannot do
+
+A theme is CSS. It runs no code, reads nothing, and sends nothing anywhere. It is still not harmless: CSS can hide parts of the app, or put other words on them (`content:`, an overlay, a font that draws other letters). A theme could make an approval card say the wrong thing. So:
+
+- Only the owner adds themes. Add only ones you trust, as you would an extension, and read their CSS first.
+- Everyone signed in can read a theme's files, as they load them. Keep nothing private in a theme folder.
+- What Pi writes in a reply never wears a part's look: replies keep no `data-` attributes.
+
+## Themes that come with Pi Pocket
+
+Built-in themes are folders in `web/themes/<id>/`, in the same format. They cannot be edited or removed from the app: duplicate one to change it. A change to one is a change to Pi Pocket's code ([self-editing.md](../self-editing.md)).
+
+## Stability
+
+`themeApi` is 1. New tokens, parts, and states come in new releases without changing it; a theme that needs one says so with `minPocket`. A name that must change keeps the old one as an alias for at least one minor release and 90 days, and its removal raises `themeApi` to 2: [reference/theme-surface.md](reference/theme-surface.md#changes) has the rules, after [the API policy](policies/api-stability.md#deprecation). `web/theme-surface.js` lists the names, and a test checks that each is still there.
+
+## Extensions
+
+An extension's stylesheet (`pocket.style()`) loads in the app's layer, so it wins and loses against the app's rules as before, and a theme's rules win over both. A theme can style what an extension adds through the documented tokens, which extensions use too. An extension that adds its own `<link>` instead of using `pocket.style()` would win over the app and the theme alike: use `pocket.style()`.

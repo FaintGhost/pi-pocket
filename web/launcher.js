@@ -128,7 +128,7 @@ function actionItems() {
         },
         {
             label: "Appearance",
-            detail: "theme, tiling, motion, text size, thinking, reply speed",
+            detail: "theme, colors, tiling, motion, text size, thinking, reply speed",
             icon: "palette",
             run: () => openSheet({ type: "appearance" }),
         },
