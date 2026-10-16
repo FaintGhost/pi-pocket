@@ -1203,11 +1203,6 @@ function firstCharacters(text, count) {
     return characters;
 }
 
-/**
- * A rail button's badge as it shows: as the app's own counts, none at 0 and "99+" above 99 (Infinity too); NaN and
- * -Infinity show nothing, other numbers as they are; text, trimmed, with "" and "0" as nothing, and long text cut whole
- * characters at a time.
- */
 /** What each button's badge shows, worked out once for each version of the button: a draw that changes none reads it. */
 const shownBadges = new WeakMap();
 
@@ -1222,6 +1217,11 @@ function badgeFor(spec) {
     return shown;
 }
 
+/**
+ * A rail button's badge as it shows: as the app's own counts, none at 0 and "99+" above 99 (Infinity too); NaN and
+ * -Infinity show nothing, other numbers as they are; text, trimmed, with "" and "0" as nothing, and long text cut whole
+ * characters at a time.
+ */
 function badgeOf(badge) {
     if (typeof badge === "number") {
         if (Number.isNaN(badge) || badge === 0 || badge === -Infinity) {
