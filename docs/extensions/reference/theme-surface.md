@@ -2,7 +2,7 @@
 
 What a theme may rely on, at theme API version 1: the tokens (CSS variables), the parts (`data-part` names), their states, and the page's own attributes. [../themes.md](../themes.md) is the guide. `web/theme-surface.js` lists the tokens and parts, and `test/theme-surface.test.ts` checks that each one is still there.
 
-This page is the one full list of the CSS names Pi Pocket keeps. Everything else in the app's CSS and markup (class names, the order of elements) may change in any release.
+This page is the one full list of the CSS names Pi Pocket keeps. Every name on it is there since 0.14.0, the first release with themes; a later one says since when. Everything else in the app's CSS and markup (class names, the order of elements) may change in any release.
 
 ## Extensions' CSS names
 
@@ -43,35 +43,41 @@ Set by Colors (`colors.toml`, an Omarchy palette, or the desktop's). A theme rea
 
 ### Accent and status
 
-| Token                                                                            | What                                                                         |
-| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `--accent`                                                                       | The accent (`--o-accent`)                                                    |
-| `--accent-fill`, `--accent-ink`                                                  | The accent under text (buttons, badges), and the text on it                  |
-| `--accent-soft`, `--accent-line`                                                 | The accent as a soft fill, and as a line                                     |
-| `--focus-ring`                                                                   | The keyboard's focus ring (`--accent`). Change its color; keep the ring      |
-| `--spark`, `--brand`                                                             | The second color of loaders and thoughts; the π mark                         |
-| `--ok`, `--ok-soft`                                                              | Done, worked                                                                 |
-| `--warn`, `--warn-soft`, `--warn-line`                                           | Waits for you, needs a look                                                  |
-| `--err`, `--err-soft`, `--err-line`                                              | Failed                                                                       |
-| `--hl-kw`, `--hl-str`, `--hl-num`, `--hl-fn`, `--hl-type`, `--hl-op`, `--hl-tag` | Code's colors: keywords, strings, numbers, functions, types, operators, tags |
+| Token                                                                            | What                                                                                 |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `--accent`                                                                       | The accent (`--o-accent`)                                                            |
+| `--accent-2`                                                                     | A second accent, for what a theme draws in two colors (`--spark`). The app uses none |
+| `--accent-fill`, `--accent-ink`                                                  | The accent under text (buttons, badges), and the text on it                          |
+| `--accent-soft`, `--accent-line`                                                 | The accent as a soft fill, and as a line                                             |
+| `--focus-ring`                                                                   | The keyboard's focus ring (`--accent`). Change its color; keep the ring              |
+| `--spark`, `--brand`                                                             | The second color of loaders and thoughts; the π mark                                 |
+| `--ok`, `--ok-soft`                                                              | Done, worked                                                                         |
+| `--warn`, `--warn-soft`, `--warn-line`                                           | Waits for you, needs a look                                                          |
+| `--err`, `--err-soft`, `--err-line`                                              | Failed                                                                               |
+| `--hl-kw`, `--hl-str`, `--hl-num`, `--hl-fn`, `--hl-type`, `--hl-op`, `--hl-tag` | Code's colors: keywords, strings, numbers, functions, types, operators, tags         |
 
 ### Type, corners, space, shadows, motion
 
-| Token                                                          | Default                                                                                                     |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `--sans`, `--mono`                                             | Geist for words; JetBrains Mono for code, paths, counts, keys                                               |
-| `--r-mark`, `--r-tag`, `--r-seg`, `--r-row`, `--r-control`     | 3, 5, 7, 9, 10 px: state squares, tags, segments, rows, fields                                              |
-| `--r-card`, `--r-window`, `--r-sheet`, `--r-float`, `--r-pill` | 12, 14, 18, 20, 999 px: cards, windows, sheets, PiP, pills                                                  |
-| `--radius`                                                     | A control's corner that names none (`--r-control`)                                                          |
-| `--gap-out`, `--gap-in`, `--border`                            | 8, 4, 1 px: the tiled windows' gaps and border                                                              |
-| `--space-x`, `--space-y`, `--leading`                          | Density's scale of room (1, 1) and the conversation's line height (1.65)                                    |
-| `--transcript-width`, `--composer-width`                       | 720 px and 768 px: the conversation and the message box at their widest                                     |
-| `--wallpaper`                                                  | `none`: what shows in the gaps between tiled windows. The desktop's wallpaper wins when Appearance shows it |
-| `--sh`, `--shadow`, `--pop`                                    | The shadow color; a soft lift; what floats (sheets, menus, the launcher)                                    |
-| `--ease-out`, `--ease-in-out`, `--ease-almost`                 | Hyprland's curves                                                                                           |
-| `--t-in`, `--t-out`, `--t-fade`, `--t-border`, `--t-hover`     | 410, 150, 175, 540, 140 ms                                                                                  |
+| Token                                                          | Default                                                                                                            |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `--sans`, `--mono`                                             | Geist for words; JetBrains Mono for code, paths, counts, keys                                                      |
+| `--ligatures`                                                  | `none`: no ligatures, as in a terminal. `contextual` turns on a font's `calt`; `normal`, all its usual ones        |
+| `--r-mark`, `--r-tag`, `--r-seg`, `--r-row`, `--r-control`     | 3, 5, 7, 9, 10 px: state squares, tags, segments, rows, fields                                                     |
+| `--r-card`, `--r-window`, `--r-sheet`, `--r-float`, `--r-pill` | 12, 14, 18, 20, 999 px: cards, windows, sheets, PiP, pills                                                         |
+| `--radius`                                                     | A control's corner that names none (`--r-control`)                                                                 |
+| `--gap-out`, `--gap-in`, `--border`                            | 8, 4, 1 px: the tiled windows' gaps and border                                                                     |
+| `--window-border`, `--window-border-active`                    | A tiled window's border color (`--hair`), and the one in focus (`--accent-line`)                                   |
+| `--window-ring`                                                | The shadow around the window in focus (`0 0 0 3px var(--accent-soft)`)                                             |
+| `--space-x`, `--space-y`, `--leading`                          | Density's scale of room (1, 1) and the conversation's line height (1.65)                                           |
+| `--transcript-width`, `--composer-width`                       | 720 px and 768 px: the conversation and the message box at their widest                                            |
+| `--transcript-gutter`                                          | `0px`: room before the conversation's turns, for a column of a theme's own                                         |
+| `--timeline-x`, `--step-mark-size`, `--step-gap`               | 22.5, 19, 10 px: where the timeline's rule and its marks' centers are, the marks' size, and the gap to their words |
+| `--wallpaper`                                                  | `none`: what shows in the gaps between tiled windows. The desktop's wallpaper wins when Appearance shows it        |
+| `--sh`, `--shadow`, `--pop`                                    | The shadow color; a soft lift; what floats (sheets, menus, the launcher)                                           |
+| `--ease-out`, `--ease-in-out`, `--ease-almost`                 | Hyprland's curves                                                                                                  |
+| `--t-in`, `--t-out`, `--t-fade`, `--t-border`, `--t-hover`     | 410, 150, 175, 540, 140 ms                                                                                         |
 
-Most corners in the app are these tokens, some a pixel or two from one (`calc(var(--r-row) - 1px)`), so they follow when a theme changes the scale.
+Most corners in the app are these tokens, some a pixel or two from one (`calc(var(--r-row) - 1px)`), so they follow when a theme changes the scale. The timeline's rule, marks, and what shows under each step all place themselves from `--timeline-x`, `--step-mark-size`, and `--step-gap`, so a theme that moves the marks moves them all.
 
 ### Set by the person
 
@@ -84,95 +90,136 @@ Read them; a theme cannot change them, as they are each person's choice in Appea
 
 ## Parts
 
-Each is a `data-part` attribute. Select one with `[data-part="name"]`.
+Each is a `data-part` attribute. Some elements have two (`data-part="composer-button stop-button"`), so select with `~=`: `[data-part~="name"]`.
 
 ### The frame
 
-| Part             | What                                                                                |
-| ---------------- | ----------------------------------------------------------------------------------- |
-| `app`            | The whole layout: the sidebar, the conversation, and the panels beside it, in a row |
-| `sidebar`        | The rail and the session list, on wide screens                                      |
-| `rail`           | The column of buttons: Pi, the tools, you                                           |
-| `rail-button`    | Each of its buttons, an extension's too                                             |
-| `session-list`   | The session list: its head, search, tabs, and rows                                  |
-| `session-search` | The search field                                                                    |
-| `session-tabs`   | Recent, Folders, Archived                                                           |
-| `session-group`  | A group of rows (a day, a folder)                                                   |
-| `session-row`    | One session's line                                                                  |
-| `home`           | The home screen on wide screens                                                     |
-| `home-list`      | The session list as a phone's home screen                                           |
-| `pane`           | The conversation's window (or the subagents board, or an extension's page)          |
-| `topbar`         | The conversation's title bar                                                        |
+| Part                                                                | What                                                                                                                                                                                           |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app`                                                               | The whole layout: the sidebar, the conversation, and the panels beside it, in a row                                                                                                            |
+| `boot`                                                              | The screen while the app starts                                                                                                                                                                |
+| `brand-mark`                                                        | The π: on the rail, and on the boot screen                                                                                                                                                     |
+| `sidebar`                                                           | The rail and the session list, on wide screens                                                                                                                                                 |
+| `drawer`                                                            | The rail and the session list sliding in, on narrow screens                                                                                                                                    |
+| `rail`, `rail-button`                                               | The column of buttons, and each of them (an extension's too)                                                                                                                                   |
+| `session-list`, `session-list-title`                                | The session list, and its title ("Sessions")                                                                                                                                                   |
+| `session-search`                                                    | The search field                                                                                                                                                                               |
+| `session-tabs`                                                      | Recent, Folders, Archived                                                                                                                                                                      |
+| `segment-thumb`                                                     | What slides under the chosen segment, in the session tabs and other segmented controls. The app sets its place and width (`transform` and `width`, or `height` in a column); leave those to it |
+| `session-group`, `session-group-head`                               | A group of rows (a day, a folder), and its head, which folds it                                                                                                                                |
+| `session-group-name`, `session-group-count`                         | The head's name, and its count                                                                                                                                                                 |
+| `session-row`                                                       | One session's line                                                                                                                                                                             |
+| `session-button`                                                    | The row's button: its square, title, and what is on its right                                                                                                                                  |
+| `session-mark`                                                      | A session's square, in its folder's color, in the shape of its state (the home screen's too)                                                                                                   |
+| `session-branches`                                                  | The lines to a session that another one started                                                                                                                                                |
+| `home`                                                              | The home screen on wide screens                                                                                                                                                                |
+| `home-facts`, `home-logo`, `home-title`, `home-fact`, `home-colors` | Its summary: the block, the logo, the first line, each fact, and the palette's colors                                                                                                          |
+| `home-actions`                                                      | Its buttons                                                                                                                                                                                    |
+| `home-recent`, `home-heading`, `home-recent-row`, `home-recent-key` | Jump back in: the list, its heading, each session, and the number that opens it                                                                                                                |
+| `home-list`                                                         | The session list as a phone's home screen                                                                                                                                                      |
+| `pane`                                                              | The conversation's window (or the subagents board, or an extension's page)                                                                                                                     |
+| `topbar`, `topbar-title`, `topbar-sub`                              | The conversation's title bar, its title, and the line under it (folder, branch)                                                                                                                |
 
 ### The conversation
 
-| Part            | What                                                |
-| --------------- | --------------------------------------------------- |
-| `transcript`    | The column of turns                                 |
-| `prompt`        | A person's message                                  |
-| `reply`         | Pi's answer                                         |
-| `reply-actions` | The row under an answer: react, discuss, pin, copy  |
-| `activity`      | A group of what Pi did: its thoughts and tool calls |
-| `thinking`      | A thought, in the group                             |
-| `tool-call`     | A tool call, in the group                           |
-| `approval`      | A call that waits for someone to allow it           |
-| `live-line`     | The line that says what Pi does now                 |
-| `code-block`    | A code block in a reply                             |
+| Part                                            | What                                                                                    |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `transcript`                                    | The column of turns                                                                     |
+| `prompt-row`                                    | The row a person's message stands in                                                    |
+| `prompt`                                        | A person's message                                                                      |
+| `prompt-head`, `author-mark`, `prompt-author`   | Its head: who sent it and when; their initials; their name                              |
+| `prompt-text`                                   | What it says (its skill chip, words, and files)                                         |
+| `reply`                                         | Pi's answer                                                                             |
+| `reply-actions`                                 | The row under an answer: react, discuss, pin, copy                                      |
+| `activity`, `activity-head`, `activity-chevron` | A group of what Pi did, its head (what it did, how long), and the chevron that opens it |
+| `timeline`                                      | The open group's steps, on a rule                                                       |
+| `thinking`, `tool-call`                         | A step: a thought, a tool call                                                          |
+| `step-head`, `step-mark`, `step-label`          | A step's line, its mark on the rule, and its name                                       |
+| `step-detail`                                   | What a step shows under its line: what it made, and its input and output                |
+| `approval`                                      | A call that waits for someone to allow it                                               |
+| `live-line`, `live-mark`                        | The line that says what Pi does now, and its dot                                        |
+| `code-block`, `code-head`                       | A code block in a reply, and its bar (language, Copy)                                   |
 
 ### The composer
 
-| Part             | What                                                    |
-| ---------------- | ------------------------------------------------------- |
-| `composer`       | All of it, under the conversation                       |
-| `dock`           | What sits above the message box: the queue and the bars |
-| `subagents-bar`  | The subagents' bar                                      |
-| `message-box`    | The box you type in, with its buttons                   |
-| `composer-tools` | The row of buttons in it                                |
-| `model-chip`     | The model's button                                      |
-| `send-button`    | Send                                                    |
-| `status-line`    | The line under the box: who is here, context, cost      |
+| Part                                      | What                                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------------------- |
+| `composer`                                | All of it, under the conversation                                             |
+| `dock`                                    | What sits above the message box: the queue and the bars                       |
+| `subagents-bar`                           | The subagents' bar                                                            |
+| `message-box`                             | The box you type in, with its buttons                                         |
+| `composer-tools`                          | The row of buttons in it                                                      |
+| `composer-button`                         | Each of its own buttons: Places, Attach, Plan, the mic, Steer and Queue, Stop |
+| `plan-chip`, `mode-switch`, `stop-button` | Plan, Steer and Queue, and Stop, each also a `composer-button`                |
+| `model-chip`                              | The model's button                                                            |
+| `send-button`                             | Send                                                                          |
+| `status-line`                             | The line under the box: who is here, context, cost                            |
 
 ### Layers over the app
 
-| Part                       | What                                                                                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `sheet`                    | A sheet: a bottom sheet on phones, a window on wide screens. `data-sheet` says which (`appearance`, `menu`, `model`, …; `ext` for an extension's) |
-| `sheet-head`, `sheet-body` | Its title bar, and what it holds                                                                                                                  |
-| `menu`                     | The menu, on wide screens (it is the sheet `menu` on phones)                                                                                      |
-| `launcher`                 | The launcher (Ctrl/⌘+K)                                                                                                                           |
-| `notices`, `notice`        | The notices, and each one                                                                                                                         |
+| Part                                 | What                                                                                                                                              |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scrim`                              | What a sheet, the launcher, or the drawer sits in, over the app. `data-for` says which: `sheet`, `launcher`, `drawer`                             |
+| `sheet`                              | A sheet: a bottom sheet on phones, a window on wide screens. `data-sheet` says which (`appearance`, `menu`, `model`, …; `ext` for an extension's) |
+| `sheet-head`, `sheet-body`           | Its title bar, and what it holds                                                                                                                  |
+| `menu`                               | The menu, on wide screens (it is the sheet `menu` on phones)                                                                                      |
+| `launcher`                           | The launcher (Ctrl/⌘+K)                                                                                                                           |
+| `launcher-input`, `launcher-filters` | Its search field, and the search types under it                                                                                                   |
+| `launcher-group`, `launcher-row`     | A group's heading, and each result                                                                                                                |
+| `notices`, `notice`                  | The notices, and each one                                                                                                                         |
 
 ## States
 
-| Where                               | Attribute                                        | Values                                                                                   |
-| ----------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `session-row`                       | `data-state`                                     | `working`, `waiting` (for you), `failed`, `done` (since you looked), `idle`              |
-| The open session's row (its button) | `aria-current`                                   | `page`                                                                                   |
-| `tool-call`                         | `data-state`                                     | `running`, `ok`, `failed`, `waiting` (for approval), `denied`, `stopped`                 |
-| `prompt`                            | `data-from`                                      | `me`, `person` (someone else), `other` (Pi's schedule, a linked session, the main agent) |
-| `sheet`                             | `data-sheet`                                     | The sheet's type                                                                         |
-| Buttons and tabs                    | `aria-pressed`, `aria-expanded`, `aria-selected` | As accessibility needs them                                                              |
+| Where                                              | Attribute                                        | Values                                                                                                                    |
+| -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `rail-button`                                      | `data-state`                                     | `open` while what it opens shows, `busy` while work it counts goes on; both, or none. Select with `~=`                    |
+| `session-row`                                      | `data-state`                                     | `working`, `waiting` (for you), `failed`, `done` (since you looked), `idle`                                               |
+| `session-button`                                   | `aria-current`                                   | `page` on the open session's                                                                                              |
+| `session-group-head`, `activity-head`, `step-head` | `aria-expanded`                                  | `true` while open                                                                                                         |
+| `activity`                                         | `data-state`                                     | `open` while open                                                                                                         |
+| `tool-call`                                        | `data-state`                                     | `running`, `ok`, `failed`, `waiting` (for approval), `denied`, `stopped`                                                  |
+| `prompt`                                           | `data-from`                                      | `me`, `person` (someone else), `linked` (a linked session), `other` (Pi's schedule, the main agent, a watch or a webhook) |
+| `send-button`                                      | `data-state`                                     | `ready` when there is something to send                                                                                   |
+| `sheet`                                            | `data-sheet`, `data-size`                        | The sheet's type; `wide` for a wide one                                                                                   |
+| `sheet`, `launcher`, `drawer`                      | `data-state`                                     | `closing` while it goes                                                                                                   |
+| `scrim`                                            | `data-for`                                       | `sheet`, `launcher`, `drawer`                                                                                             |
+| `launcher-row`                                     | `aria-selected`                                  | `true` on the one Enter opens                                                                                             |
+| Other buttons and tabs                             | `aria-pressed`, `aria-expanded`, `aria-selected` | As accessibility needs them                                                                                               |
 
 ## The page
 
 On `<html>`:
 
-| Attribute      | Values                                                                                             |
-| -------------- | -------------------------------------------------------------------------------------------------- |
-| `data-mode`    | `dark` or `light`: the colors' mode                                                                |
-| `data-theme`   | The theme in use: `pocket`, or a theme folder's id                                                 |
-| `data-colors`  | The colors in use: `desktop`, a palette's id, or a folder's                                        |
-| `data-tiling`  | `on` or `off`: tiled windows on wide screens                                                       |
-| `data-rail`    | `on` when the sidebar is folded to the rail                                                        |
-| `data-density` | `comfortable`, `compact`, or `tight`                                                               |
-| `data-motion`  | `full` or `reduced`                                                                                |
-| `data-focus`   | The window in focus on wide screens: `sidebar`, `pane`, `peeks`, `people`, `browser`, `files-tile` |
+| Attribute      | Values                                                                                                                                                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data-mode`    | `dark` or `light`: the colors' mode                                                                                                                                                                                                                       |
+| `data-theme`   | The theme in use: `pocket`, or a theme folder's id                                                                                                                                                                                                        |
+| `data-colors`  | The colors in use: `desktop`, a palette's id, or a folder's (`id`, `id@dark`, `id@light`)                                                                                                                                                                 |
+| `data-tiling`  | `on` or `off`: tiled windows on wide screens                                                                                                                                                                                                              |
+| `data-rail`    | `on` when the sidebar is folded to the rail                                                                                                                                                                                                               |
+| `data-density` | `comfortable`, `compact`, or `tight`                                                                                                                                                                                                                      |
+| `data-motion`  | `full` or `reduced`                                                                                                                                                                                                                                       |
+| `data-focus`   | The window in focus: `pane` (the conversation's, at first), `sidebar`, `peeks`, `people`, `browser`, or `files-tile`. The app draws the focus only on wide screens with tiling on: `:root[data-tiling="on"][data-focus="sidebar"] [data-part~="sidebar"]` |
 
 Widths: below 700 px is the phone layout (sheets from the bottom, one screen at a time); the sidebar shows from 960 px; from 1100 px the Files tile and the Browser panel sit beside the conversation.
 
+## Pseudo-elements the app uses
+
+A part's `::before` and `::after` are a theme's to use, except these, which the app draws (some are tap areas, larger than what shows). Use the other one, or a child:
+
+| Part                                           | The app's                                                                   |
+| ---------------------------------------------- | --------------------------------------------------------------------------- |
+| `session-group-head`                           | `::after`: its tap area on touch screens                                    |
+| `session-mark`                                 | `::before`: the square that steps while the session works                   |
+| `timeline`                                     | `::before`: the rule                                                        |
+| `composer-button`, `model-chip`, `send-button` | `::before`: their tap areas on phones; the mic's `::after` while it listens |
+| `notice`                                       | `::after`: the bar that counts down                                         |
+
+What is inside a part (its children without a part of their own) may use its pseudo-elements in any release.
+
 ## Layers
 
-`@layer pocket, palette, theme;`: the app's CSS and extensions' stylesheets, then the colors, then the theme. Later layers win over earlier ones, whatever the selectors' specificity. `!important` reverses that: the app's `!important` rules win over a theme's. Inline values win over all of them: the text size and the widths people drag.
+`@layer pocket, palette, theme;`: the app's CSS and extensions' stylesheets, then the colors, then the theme. Later layers win over earlier ones, whatever the selectors' specificity, and in every condition: a theme's rule for a property replaces the app's on phones, on touch screens, and on hover too. `!important` reverses that: the app's `!important` rules win over a theme's. There are three: reduced motion, `--ligatures` (so each `font` shorthand cannot reset it), and fields' 16px on touch screens (so iOS does not zoom into them). Inline values win over all of them: the text size and the widths people drag.
 
 ## Changes
 

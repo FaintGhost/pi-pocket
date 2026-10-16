@@ -11,6 +11,8 @@ Appearance has two choices:
 
 They are separate, so a theme's layout stays when the colors change, as they do when you follow the desktop. A theme with colors of its own changes Colors to them when you choose it. You can choose other colors after.
 
+A theme can bring a pair of palettes, dark and light. Colors then shows three cards for it: the pair, which follows the system's light or dark setting (the one a theme brings when you choose it), and each half alone.
+
 Each person chooses for each browser, as for the rest of Appearance. Guests choose too. Only the owner adds, changes, and removes themes.
 
 ## Make a theme
@@ -33,7 +35,9 @@ A copy of Pocket starts with a `theme.css` that lists every token with its value
     theme.css
     layout.css        (theme.css imports it)
     colors.toml       (optional: its own colors)
+    colors-light.toml (optional: a light half for them)
     fonts/Inter.woff2
+    fonts/OFL.txt     (the font's licence: kept, not served)
     images/grain.webp
 ```
 
@@ -48,7 +52,7 @@ The folder's name is the theme's id: 2 to 48 lowercase letters, digits, and `-`.
     "description": "Flat cards, your messages as bubbles, a wide message box.",
     "author": "tanner",
     "version": "1.0.0",
-    "minPocket": "0.15.0"
+    "minPocket": "0.14.0"
 }
 ```
 
@@ -60,14 +64,16 @@ The folder's name is the theme's id: 2 to 48 lowercase letters, digits, and `-`.
 | `version`               | Optional. The theme's own version, for people.                                              |
 | `minPocket`             | Optional. The oldest Pi Pocket it works with, for parts and tokens added in later releases. |
 
-`colors.toml` is Omarchy's format, as it is: `key = "value"` lines, with `background` and `foreground` at least, and `mode = "light"` for a light palette. A folder with only a `colors.toml` needs no `theme.json`, so you can drop in an Omarchy theme folder and it shows under Colors. Its other files are not read.
+`colors.toml` is Omarchy's format, as it is: `key = "value"` lines, with `background` and `foreground` at least, and `mode = "light"` for a light palette. A folder with only a `colors.toml` needs no `theme.json`, so you can drop in an Omarchy theme folder and it shows under Colors. Its other files are not read. `colors-light.toml` beside it, in the same format, is the light half of a pair; alone, it is the folder's palette.
 
 What a theme serves:
 
 - `theme.css`, and the `.css` files it imports (`@import "layout.css";`).
 - The fonts (`.woff2`) and images (`.png`, `.jpg`, `.webp`, `.avif`, `.gif`, `.svg`) its CSS loads.
 
-Nothing else in the folder is served. Hidden files, `node_modules`, and links are never read.
+Nothing else in the folder is served. Hidden files, `node_modules`, and links are never read. Duplicate copies the whole folder, so a font's licence goes with it.
+
+Fonts: many open fonts reserve their name (the SIL Open Font License's Reserved Font Name), so a cut-down copy (a subset) would have to be renamed. Ship the font files whole; a family name of your own in `@font-face` is not a change to the font. Keep the licence file beside the font.
 
 Limits: all CSS together 256 KB; each font or image 4 MB; everything 16 MB and 200 files; folders 4 deep; `theme.json` and `colors.toml` 8 KB each.
 
@@ -136,6 +142,10 @@ Use the tokens and parts in [the reference](reference/theme-surface.md). The app
 - **Right to left.** Prefer `margin-inline-start` to `margin-left`, and so on.
 - **Order.** `order` and `flex-direction: row-reverse` move what shows, not the order keys reach it. Move whole regions, not parts of a reading flow. A theme that moves the sidebar to the right keeps its resize handle on the left edge for now.
 - **Focus.** Keep a visible focus ring: change `--focus-ring`'s color, never take the ring away.
+- **Every condition.** A rule you write for a property replaces the app's rule for it on phones, on touch screens, and on hover too: the app's media queries are in the layer under yours. Write your own `@media` rules where the app has them. Text fields stay 16px on touch screens whatever you set, as iOS zooms into smaller ones.
+- **Pseudo-elements.** Most parts' `::before` and `::after` are yours; a few are the app's (tap areas, the timeline's rule): [the reference](reference/theme-surface.md#pseudo-elements-the-app-uses) lists them.
+- **Ligatures.** The app turns them off, as in a terminal. Set `--ligatures: contextual` (a font's `calt`) or `normal` to turn them on.
+- **The timeline.** Move its rule and marks with `--timeline-x`, `--step-mark-size`, and `--step-gap`, not with padding of your own: the app places all of the timeline's pieces from them.
 
 Only the theme's own files load. `url()`, `image-set()`, `src()`, and `@import` may name a file in the theme's folder by a path from the CSS file (`fonts/a.woff2`, `../images/a.png`), an image written into the CSS (`data:image/…`), or something in the page (`url(#shadow)`). Anything else stops the theme from loading: another site, another address on this server (`/api/…`), a path out of the folder. Old ways for CSS to run code (`expression()`, `behavior`, `-moz-binding`) stop it too. The app's content security policy blocks every other site anyway, for the app and for extensions alike.
 
@@ -148,7 +158,7 @@ The app's CSS comes in three cascade layers: the app's own (with extensions' sty
 - What people set themselves still wins: the text size, and the widths they drag (`--text-size` and `--sidebar-w` are theirs).
 - A theme's `@font-face` and `@keyframes` are in its layer too.
 
-Each browser keeps the theme's addresses, and the page loads them before it first draws, so a reload never flashes the app's own look.
+Each browser keeps the theme's addresses, and the page loads them before it first draws, so a reload never flashes the app's own look. It preloads the theme's fonts in place of the app's. A theme's addresses carry a hash of its files, so the browser keeps each file until the theme changes, and then fetches the new ones.
 
 ## When it breaks
 

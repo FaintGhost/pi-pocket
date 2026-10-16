@@ -1,4 +1,4 @@
-# Theming (design for 0.15)
+# Theming (design for 0.14.0)
 
 Status: a design for the owner to review. Nothing here is built yet.
 
@@ -59,7 +59,7 @@ The goal, from issue #90, point 3: "A theme should be a folder. Copy the main th
     "description": "Flat cards, your messages as bubbles, a wide message box.",
     "author": "tanner",
     "version": "1.0.0",
-    "minPocket": "0.15.0"
+    "minPocket": "0.14.0"
 }
 ```
 
