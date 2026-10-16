@@ -26,6 +26,7 @@ import { download, type Fetcher } from "./gallery/fetch.ts";
 import {
     exists,
     place,
+    plain,
     prune,
     readInstalled,
     recover,
@@ -899,7 +900,8 @@ export class Gallery {
             const installed = before.files.find((each) => each.name === file);
             const next = files.find((each) => each.name === file)?.bytes;
             // A file there that the version installed did not list: the owner's own, which the update replaces. It is
-            // read to diff against when it can be (a link, or a file too large, shows no diff, and still counts).
+            // read to diff against when it can be (a file too large shows no diff, and still counts); a link there, or
+            // anything that is no file, refuses the preview, as it would refuse the update.
             const unlisted =
                 installed === undefined &&
                 (await removable(this.#dropIns(), name, file)) !== undefined;
@@ -907,7 +909,9 @@ export class Gallery {
                 installed !== undefined
                     ? await readInstalled(this.#dropIns(), name, file)
                     : unlisted
-                      ? await readInstalled(this.#dropIns(), name, file).catch(() => undefined)
+                      ? await plain(this.#dropIns(), name, file).then(() =>
+                            readInstalled(this.#dropIns(), name, file).catch(() => undefined),
+                        )
                       : undefined;
             // Not the owner's: an installed file under another case of its name (where the file system ignores case),
             // or one already as the new version has it.
