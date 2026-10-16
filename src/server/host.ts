@@ -1,6 +1,7 @@
 import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Skill } from "@earendil-works/pi-coding-agent";
+import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { ConversationId, Extension, ModelRef, TaskId } from "@earendil-works/pi-durable";
 import type { Browsers } from "./browser.ts";
 import type { Gallery } from "./gallery.ts";
@@ -191,6 +192,14 @@ export interface PocketHost {
     readonly repoWatches: Pick<RepoWatches, "task">;
     /** Lessons Pi keeps across sessions (`memory.ts`): the memory tool saves them, and its section lists them. */
     readonly memory: Pick<Memory, "project" | "applying" | "inForce" | "add" | "change">;
+    /**
+     * Text from elsewhere made safe for Pi to read (`fence.ts`): `quoted` gives one line, cut to `max`, without
+     * invisible characters or any tag, in quotes it cannot close; `defang` keeps the lines, but no closing tag survives,
+     * for text put between tags of your own. Tell Pi in the same place that it is data.
+     */
+    readonly text: { quoted(text: string, max?: number): string; defang(text: string): string };
+    /** The thinking levels, lowest first, as a model and a session name them. */
+    readonly thinkingLevels: readonly ModelThinkingLevel[];
     /** The extension gallery (`gallery.ts`): its extension's routes are the owner's way to it. */
     readonly gallery: Pick<
         Gallery,

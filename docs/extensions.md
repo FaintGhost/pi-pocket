@@ -115,24 +115,26 @@ Sections render before every request, and only those that changed are sent again
 
 What the default export receives first. Extensions reach the app only through it (and add to it through `web`, [above](#adding-to-the-app)); it stays the same while modules reload.
 
-| Member                           | What it is                                                                                                                    |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `dataDir`, `agentDir`            | Pi Pocket's data folder; Pi's (`~/.pi/agent`)                                                                                 |
-| `notice(level, message, id?)`    | Report something to the server log and the app (`"info"`, `"warning"`, `"error"`); with a conversation's id, to its tabs only |
-| `resolveModel(spec)`             | `provider/modelId` (or a bare id) to a signed-in model whose sign-in works, or an error that names no other models            |
-| `subagentModels()`               | The models the owner allows subagents besides their session's own (`provider/modelId`); empty by default                      |
-| `modelProblem(ref, fresh?)`      | Why a model may not be used now (not signed in, its sign-in expired), or `undefined`; `fresh` asks its provider again         |
-| `requesterOf(conversationId)`    | The id of the person Pi works for in a session now                                                                            |
-| `skillPaths()`                   | The extra skill folders in Pi's settings                                                                                      |
-| `skills(cwd)`                    | Pi's skills for a session working in `cwd`, from every place Pi looks                                                         |
-| `heldBack(conversationId)`       | Why work Pi would start there with nobody asking may not start now (a spend limit), or `undefined`                            |
-| `onLimitsChanged(listener)`      | Call `listener` when the owner changes a spend limit; returns how to stop                                                     |
-| `approvals`, `guard`             | Calls waiting for a person to allow them; Lancet Guard                                                                        |
-| `schedules`, `goals`, `browsers` | Scheduled messages, Done when, and the built-in browser, as their extensions use them                                         |
-| `memory`                         | Lessons Pi keeps across sessions: their projects, the ones in force, saving and changing them                                 |
-| `watches`                        | Sessions' PR watches: starting, stopping, and reading one, and the task that looks                                            |
-| `repoWatches`                    | Repository watches' task, which the triggers extension installs                                                               |
-| `gallery`                        | The extension gallery, which its extension's routes use ([below](#the-gallery))                                               |
+| Member                           | What it is                                                                                                                                                                               |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataDir`, `agentDir`            | Pi Pocket's data folder; Pi's (`~/.pi/agent`)                                                                                                                                            |
+| `notice(level, message, id?)`    | Report something to the server log and the app (`"info"`, `"warning"`, `"error"`); with a conversation's id, to its tabs only                                                            |
+| `resolveModel(spec)`             | `provider/modelId` (or a bare id) to a signed-in model whose sign-in works, or an error that names no other models                                                                       |
+| `subagentModels()`               | The models the owner allows subagents besides their session's own (`provider/modelId`); empty by default                                                                                 |
+| `modelProblem(ref, fresh?)`      | Why a model may not be used now (not signed in, its sign-in expired), or `undefined`; `fresh` asks its provider again                                                                    |
+| `requesterOf(conversationId)`    | The id of the person Pi works for in a session now                                                                                                                                       |
+| `skillPaths()`                   | The extra skill folders in Pi's settings                                                                                                                                                 |
+| `skills(cwd)`                    | Pi's skills for a session working in `cwd`, from every place Pi looks                                                                                                                    |
+| `heldBack(conversationId)`       | Why work Pi would start there with nobody asking may not start now (a spend limit), or `undefined`                                                                                       |
+| `onLimitsChanged(listener)`      | Call `listener` when the owner changes a spend limit; returns how to stop                                                                                                                |
+| `approvals`, `guard`             | Calls waiting for a person to allow them; Lancet Guard                                                                                                                                   |
+| `schedules`, `goals`, `browsers` | Scheduled messages, Done when, and the built-in browser, as their extensions use them                                                                                                    |
+| `memory`                         | Lessons Pi keeps across sessions: their projects, the ones in force, saving and changing them                                                                                            |
+| `watches`                        | Sessions' PR watches: starting, stopping, and reading one, and the task that looks                                                                                                       |
+| `repoWatches`                    | Repository watches' task, which the triggers extension installs                                                                                                                          |
+| `gallery`                        | The extension gallery, which its extension's routes use ([below](#the-gallery))                                                                                                          |
+| `text`                           | Text from elsewhere made safe for Pi to read: `quoted(text, max)`, one line in quotes it cannot close; `defang(text)`, with no closing tag left in it, for text between tags of your own |
+| `thinkingLevels`                 | The thinking levels, lowest first, as models and sessions name them                                                                                                                      |
 
 Modules reload into the running server, but the server's own part (the host among it) changes only with a restart. A module that uses a member new to the host must work without it until then: check that it is there (`typeof host.heldBack === "function"`) and do as before when it is not. A module that called a missing member would fail at its first use, in every session.
 
@@ -142,6 +144,7 @@ To type it, import the type by the absolute path of `src/server/host.ts`: `impor
 
 - **Nothing twice.** A restart can run a hook or a safe tool again. Anything that must happen once (a message sent, money spent, a file appended to) goes behind `api.memo` or a key that makes a repeat find the first.
 - **No surprise state.** Keep state in Pi Durable documents or memos, not in variables: a reload starts the module over, and a restart starts the process over.
+- **Your documents are stored data.** Name a document kind after your module (`x.<module>.<name>`, as `x.word-count.totals`), so no other module's ever meets it. Once anyone has run it, never rename a kind or change what its fields mean: add new ones beside them.
 - **Do not block.** Tools run in the server process: use async file and process calls, never `execSync` or a busy loop. A slow tool holds up only its call; a blocked event loop holds up everyone.
 - **Do not get around a block.** A guard or a person said no for a reason.
 - **Secrets stay out.** Text in a section, a tool's description, or a result goes to the model provider.

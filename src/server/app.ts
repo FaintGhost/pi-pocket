@@ -66,6 +66,7 @@ import {
 } from "./docs.ts";
 import { describe, HttpError } from "./errors.ts";
 import { ExtensionWebs, mayUse } from "./extension-web.ts";
+import { defang, quoted } from "./fence.ts";
 import { FolderFavorites } from "./folder-favorites.ts";
 import { Gallery } from "./gallery.ts";
 import { Goals } from "./goals.ts";
@@ -492,6 +493,8 @@ export class PocketApp {
             repoWatches: this.repoWatches,
             memory: this.memory,
             gallery: this.gallery,
+            text: { quoted, defang },
+            thinkingLevels: THINKING_LEVELS,
         };
 
         this.host = host;
