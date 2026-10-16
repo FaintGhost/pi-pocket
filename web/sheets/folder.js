@@ -562,7 +562,17 @@ export function CwdSheet({ mode }) {
                         aria-selected=${dir.path === selected ? "true" : "false"}
                         data-path=${dir.path}
                         title=${touch ? undefined : "Double-click to open"}
-                        onClick=${() => (touch ? load(dir.path) : setSelected(dir.path))}
+                        onClick=${() => {
+                            if (touch) {
+                                load(dir.path);
+
+                                return;
+                            }
+
+                            // The list keeps the keys: a click gives the row the focus, which the list's keys ignore.
+                            setSelected(dir.path);
+                            list.current?.focus({ preventScroll: true });
+                        }}
                         onDblClick=${() => !touch && load(dir.path)}
                     >
                         <${Icon} name="folder" size=${16} />
