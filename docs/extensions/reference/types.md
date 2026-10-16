@@ -6,11 +6,11 @@
 
 Use one of these:
 
-1. **`_pocket.d.ts` in the drop-in folder.** Pi Pocket makes this link to its types file each time that it starts, beside the `node_modules` link. Its leading `_` keeps it from loading as a module. The same import then works on all machines.
+1. **`_pocket.d.ts` in the drop-in folder.** Pi Pocket makes this link to its types file each time that it starts, beside the `node_modules` link. Its leading `_` keeps it from loading as a module. The same import then works on all machines. If you point the link at another readable file, such as your own checkout's types, Pi Pocket leaves it as it is. A file of your own with this name also stays.
 2. **The path in Pi Pocket's folder:** `/path/to/pi-pocket/types/pocket.d.ts`.
 3. **The copy on the documentation site:** `https://tannermidd.github.io/pi-pocket/docs/pocket.d.ts`. It is for the latest release.
 
-When the system does not let Pi Pocket make links (Windows without developer mode), the server's log says so. Then use the path.
+Where Pi Pocket cannot make links (on Windows, or when the system refuses them), `_pocket.d.ts` is a copy of the types file instead. Its first line says so, and Pi Pocket refreshes it at each start when the types change. Do not edit it.
 
 ## Import the types
 
