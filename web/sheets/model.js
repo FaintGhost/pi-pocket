@@ -225,6 +225,7 @@ export function ModelPicker() {
             role="dialog"
             aria-modal="true"
             aria-label=${forDefault ? "Default model" : "Model"}
+            aria-keyshortcuts=${scopedModels.length > 0 ? "Tab" : undefined}
             tabindex="-1"
             onKeyDown=${onKeyDown}
         >
@@ -239,7 +240,6 @@ export function ModelPicker() {
                             class="model-scope"
                             role="group"
                             aria-label="Model scope"
-                            aria-keyshortcuts="Tab"
                             title="Tab switches between scoped and all models"
                         >
                             <span aria-hidden="true">[</span>
@@ -281,6 +281,7 @@ export function ModelPicker() {
                     <input
                         ref=${search}
                         placeholder="Search models"
+                        aria-keyshortcuts=${scopedModels.length > 0 ? "Tab" : undefined}
                         value=${query}
                         onInput=${(event) => {
                             setQuery(event.currentTarget.value);

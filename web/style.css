@@ -5522,18 +5522,22 @@ pre.diff .del {
     color: var(--accent);
 }
 
-/* On a touch screen scoped and all keep their size; each one's hit area reaches about 40px, away from the other. */
+/*
+ * On a touch screen scoped and all keep their size; each one's hit area reaches out to about 45px high, away from the
+ * other and within the header. Providers stays on top where the two meet on a narrow phone.
+ */
 @media (pointer: coarse) {
-    .model-scope button {
+    .model-scope button,
+    .model-menu .pop-menu-head > .pop-menu-link {
         position: relative;
     }
     .model-scope button::before {
         content: "";
         position: absolute;
-        inset: -11px -2px -11px -14px;
+        inset: -8px -1px -8px -14px;
     }
     .model-scope button:last-of-type::before {
-        inset: -11px -18px -11px -2px;
+        inset: -8px -18px -8px -1px;
     }
 }
 
