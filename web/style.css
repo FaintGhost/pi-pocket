@@ -107,6 +107,8 @@
     --focus-ring: var(--accent);
     /* The second color of loaders and thoughts. */
     --spark: var(--o-magenta);
+    /* A second accent, for what a theme draws in two colors (Hyprland's active border is a gradient): the app uses none. */
+    --accent-2: var(--spark);
     --brand: var(--o-orange);
     --ok: var(--o-green);
     --ok-soft: color-mix(in srgb, var(--o-green) 14%, transparent);
@@ -151,9 +153,19 @@
     --gap-out: 8px;
     --gap-in: 4px;
     --border: 1px;
-    /* The conversation's column, and the message box under it, at their widest. */
+    /* The conversation's column, and the message box under it, at their widest; room before the conversation's turns. */
     --transcript-width: 720px;
     --composer-width: 768px;
+    --transcript-gutter: 0px;
+    /* The timeline in an activity group: where its rule and the centers of its marks are, the marks' size, and the gap
+     * from a mark to its words (and to what a step shows under them). */
+    --timeline-x: 22.5px;
+    --step-mark-size: 19px;
+    --step-gap: 10px;
+    /* Tiled windows' border, the one in focus, and the ring around that one. */
+    --window-border: var(--hair);
+    --window-border-active: var(--accent-line);
+    --window-ring: 0 0 0 3px var(--accent-soft);
     /* What shows in the gaps between tiled windows: the desktop's wallpaper when Appearance asks for it (inline), else this. */
     --wallpaper: none;
     /*
@@ -175,6 +187,8 @@
     --t-border: 540ms; /* border */
     --t-hover: 140ms;
 
+    /* Ligatures: none, as in a terminal. A theme may turn on a font's own (`contextual`, `normal`). */
+    --ligatures: none;
     --mono:
         "Pocket Mono", "JetBrains Mono", "JetBrainsMono Nerd Font", ui-monospace, "SF Mono", Menlo,
         Consolas, monospace;
@@ -220,8 +234,8 @@
 * {
     box-sizing: border-box;
     /* No ligatures, as in a terminal: code shows the characters it has (=== stays three). Important, because each
-     * `font` shorthand would reset it. */
-    font-variant-ligatures: none !important;
+     * `font` shorthand would reset it; a theme changes it through --ligatures (`contextual` for a font's `calt`). */
+    font-variant-ligatures: var(--ligatures) !important;
 }
 
 html,
@@ -254,12 +268,13 @@ button {
     cursor: pointer;
 }
 
-/* iOS zooms into any text field smaller than 16px when it takes focus. */
+/* iOS zooms into any text field smaller than 16px when it takes focus. Important, so a theme's size for a field (in a
+ * later layer, which beats this one) does not bring the zoom back on touch screens. */
 @media (pointer: coarse) {
     input,
     textarea,
     select {
-        font-size: 16px;
+        font-size: 16px !important;
     }
 }
 
@@ -795,7 +810,7 @@ kbd {
     }
     /* Rounded, so what they hold is cut to their corners; the edges to drag sit inside them. */
     :root[data-tiling="on"] .window {
-        border: var(--border) solid var(--hair);
+        border: var(--border) solid var(--window-border);
         border-radius: var(--r-window);
         overflow: hidden;
         height: auto;
@@ -815,8 +830,8 @@ kbd {
             [data-focus="files-tile"]
         ):not([data-focus="people"]):not([data-focus="peeks"])
         .pane {
-        border-color: var(--accent-line);
-        box-shadow: 0 0 0 3px var(--accent-soft);
+        border-color: var(--window-border-active);
+        box-shadow: var(--window-ring);
     }
 }
 
@@ -1295,6 +1310,7 @@ kbd {
     max-width: var(--transcript-width);
     margin: 0 auto;
     padding: calc(28px * var(--space-y)) calc(28px * var(--space-x)) calc(24px * var(--space-y));
+    padding-inline-start: calc(28px * var(--space-x) + var(--transcript-gutter));
     display: flex;
     flex-direction: column;
     gap: calc(16px * var(--space-y));
@@ -1311,6 +1327,7 @@ kbd {
 @media (max-width: 699px) {
     .transcript {
         padding: calc(18px * var(--space-y)) calc(16px * var(--space-x)) calc(14px * var(--space-y));
+        padding-inline-start: calc(16px * var(--space-x) + var(--transcript-gutter));
     }
 }
 
@@ -1971,7 +1988,7 @@ kbd {
 .timeline::before {
     content: "";
     position: absolute;
-    left: 22px;
+    left: calc(var(--timeline-x) - 0.5px);
     top: 20px;
     bottom: 20px;
     width: 1px;
@@ -1994,9 +2011,9 @@ kbd {
     min-width: 0;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--step-gap);
     min-height: 34px;
-    padding: 0 14px 0 13px;
+    padding: 0 14px 0 calc(var(--timeline-x) - var(--step-mark-size) / 2);
     text-align: left;
     transition: background-color var(--t-hover) var(--ease-out);
 }
@@ -2024,8 +2041,8 @@ kbd {
     flex: none;
     display: grid;
     place-items: center;
-    width: 19px;
-    height: 19px;
+    width: var(--step-mark-size);
+    height: var(--step-mark-size);
     border-radius: 50%;
     background: linear-gradient(var(--tint), var(--tint)), var(--bg);
     box-shadow: 0 0 0 3px var(--bg);
@@ -2136,7 +2153,7 @@ kbd {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 0 14px 6px 42px;
+    padding: 0 14px 6px calc(var(--timeline-x) + var(--step-mark-size) / 2 + var(--step-gap));
     font-size: 12px;
     color: var(--muted);
 }
@@ -2156,7 +2173,7 @@ kbd {
     flex-direction: column;
     gap: 8px;
     min-width: 0;
-    margin: 2px 14px 10px 42px;
+    margin: 2px 14px 10px calc(var(--timeline-x) + var(--step-mark-size) / 2 + var(--step-gap));
 }
 
 .step-extras + .step-body {
@@ -5080,10 +5097,10 @@ pre.diff .del {
     }
 }
 
-/* The drawer: the session list sliding in from the left on narrow screens. */
-.drawer-overlay {
-    align-items: stretch !important;
-    justify-content: flex-start !important;
+/* The drawer: the session list sliding in from the left on narrow screens. Over `.overlay`'s place for sheets. */
+.overlay.drawer-overlay {
+    align-items: stretch;
+    justify-content: flex-start;
 }
 
 .drawer {
@@ -9525,7 +9542,7 @@ textarea.notes {
         background: none;
     }
     :root[data-tiling="on"][data-focus="peeks"] .peeks.window {
-        outline: 1px solid var(--accent-line);
+        outline: 1px solid var(--window-border-active);
         outline-offset: 2px;
     }
     :root[data-tiling="on"] .peeks-list {

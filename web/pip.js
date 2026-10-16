@@ -21,6 +21,7 @@ import {
     Icon,
     Markdown,
     modelLabel,
+    railState,
     readable,
     Spinner,
     Thumb,
@@ -1111,6 +1112,7 @@ export function PipRailButton() {
     return html`<button
         class=${`rail-button rail-pip ${pip?.busy ? "lit" : ""} ${pipOpen ? "open" : ""}`}
         data-part="rail-button"
+        data-state=${railState(pipOpen, Boolean(pip?.busy))}
         title="PiP, your assistant (Alt+A)"
         aria-label=${["PiP", pip?.busy && "working", unread && "something new"].filter(Boolean).join(", ")}
         aria-pressed=${pipOpen}

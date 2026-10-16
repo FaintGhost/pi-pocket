@@ -324,11 +324,26 @@ function UserEntry({ entry, view, users }) {
               ? "var(--muted)"
               : personColor(authorId);
 
-    return html`<div class=${`user-row ${fresh ? "enter" : ""}`} id=${`entry-${entry.id}`}>
+    // Who it is from, for themes: you, someone else, a linked session, or no one the app knows (Pi's schedule, the main
+    // agent, a watch or a webhook).
+    const from =
+        peerText !== undefined
+            ? "linked"
+            : authorId === undefined
+              ? "other"
+              : authorId === store.state.me?.id
+                ? "me"
+                : "person";
+
+    return html`<div
+        class=${`user-row ${fresh ? "enter" : ""}`}
+        data-part="prompt-row"
+        id=${`entry-${entry.id}`}
+    >
         <div
             class="prompt tappable"
             data-part="prompt"
-            data-from=${authorId === undefined ? "other" : authorId === store.state.me?.id ? "me" : "person"}
+            data-from=${from}
             title="Edit, send again, or copy"
             tabindex="0"
             onClick=${(event) => openMessage(event, entry.id)}
@@ -342,16 +357,21 @@ function UserEntry({ entry, view, users }) {
                 }
             }}
         >
-            <span class="prompt-head">
-                <span class="prompt-avatar" style=${`--who:${mark}`} aria-hidden="true">
+            <span class="prompt-head" data-part="prompt-head">
+                <span
+                    class="prompt-avatar"
+                    data-part="author-mark"
+                    style=${`--who:${mark}`}
+                    aria-hidden="true"
+                >
                     ${name ? initials(name) : "›"}
                 </span>
-                ${name && html`<b class="prompt-author">${name}</b>`}
+                ${name && html`<b class="prompt-author" data-part="prompt-author">${name}</b>`}
                 ${entry.at && html`<span class="prompt-time">${clock(entry.at)}</span>`}
                 ${scheduled && html`<span class="prompt-time">· scheduled</span>`}
                 ${via && html`<span class="prompt-time">· via ${peerText === undefined ? via[1] : "a linked session"}</span>`}
             </span>
-            <div class="prompt-body">
+            <div class="prompt-body" data-part="prompt-text">
                 ${
                     skill &&
                     html`<button
@@ -438,7 +458,11 @@ function StepMark({ status, kind }) {
     const look = kind === "thought" ? "thought" : agent ? "agent" : status;
     const mark = kind === "thought" ? "✦" : agent ? "⑂" : MARKS[status];
 
-    return html`<span class=${`step-mark ${look}`} aria-hidden=${spinning ? undefined : "true"}>
+    return html`<span
+        class=${`step-mark ${look}`}
+        data-part="step-mark"
+        aria-hidden=${spinning ? undefined : "true"}
+    >
         ${spinning ? html`<${Spinner} />` : mark}
     </span>`;
 }
@@ -675,9 +699,14 @@ function ThoughtStep({ block, streaming, reading }) {
         data-status=${streaming ? "running" : "done"}
     >
         <div class="step-line">
-            <button class="step-head" aria-expanded=${open} onClick=${() => setChosen(!open)}>
+            <button
+                class="step-head"
+                data-part="step-head"
+                aria-expanded=${open}
+                onClick=${() => setChosen(!open)}
+            >
                 <${StepMark} status=${streaming ? "running" : "done"} kind="thought" />
-                <span class="step-label">
+                <span class="step-label" data-part="step-label">
                     ${streaming ? "Thinking" : block.redacted ? "Thought (redacted)" : "Thought"}
                 </span>
                 <span class="step-subject"></span>
@@ -686,7 +715,7 @@ function ThoughtStep({ block, streaming, reading }) {
         </div>
         ${
             open &&
-            html`<div class="step-body">
+            html`<div class="step-body" data-part="step-detail">
                 <div class="thought-body">${block.text}</div>
             </div>`
         }
@@ -879,7 +908,7 @@ function ToolStep({
             parts.push(html`<button class="link" onClick=${loadFull}>Load everything</button>`);
         }
 
-        body = html`<div class="step-body">${parts}</div>`;
+        body = html`<div class="step-body" data-part="step-detail">${parts}</div>`;
     }
 
     const artifact = call.name === "artifact" && details?.id ? details : null;
@@ -920,9 +949,14 @@ function ToolStep({
         data-status=${status}
     >
         <div class="step-line">
-            <button class="step-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+            <button
+                class="step-head"
+                data-part="step-head"
+                aria-expanded=${open}
+                onClick=${() => setOpen(!open)}
+            >
                 <${StepMark} status=${status} kind=${call.name === "subagent" ? "agent" : ""} />
-                <span class="step-label">${label}</span>
+                <span class="step-label" data-part="step-label">${label}</span>
                 <span class="step-subject">${subject}</span>
                 ${
                     said &&
@@ -957,7 +991,7 @@ function ToolStep({
         }
         ${
             extras &&
-            html`<div class="step-extras">
+            html`<div class="step-extras" data-part="step-detail">
                 ${
                     lesson &&
                     html`<${LessonCall} lessonId=${lesson} conversationId=${conversationId} />`
@@ -1165,19 +1199,24 @@ function ActivityGroup({
         return () => document.removeEventListener("pocket:reveal", reveal);
     }, [anchors, id]);
 
-    return html`<div class=${`activity ${open ? "open" : ""} ${fresh ? "enter" : ""}`} data-part="activity">
+    return html`<div
+        class=${`activity ${open ? "open" : ""} ${fresh ? "enter" : ""}`}
+        data-part="activity"
+        data-state=${open ? "open" : undefined}
+    >
         ${item.anchors.map(
             (entryId) => html`<span class="entry-anchor" id=${`entry-${entryId}`}></span>`,
         )}
         <button
             class="activity-head"
+            data-part="activity-head"
             aria-expanded=${open}
             onClick=${() => {
                 keep(openedGroups, id, !open);
                 redraw((n) => n + 1);
             }}
         >
-            <${Icon} name="chevron" size=${14} class="chev" />
+            <${Icon} name="chevron" size=${14} class="chev" part="activity-chevron" />
             <span class="activity-summary">${summarize(all, thinking)}</span>
             ${failed > 0 && html`<span class="activity-failed">${failed} failed</span>`}
             <${GroupTime} id=${id} start=${start} end=${end} live=${live} />
@@ -1192,7 +1231,7 @@ function ActivityGroup({
         ${
             open &&
             !lone &&
-            html`<div class="timeline">
+            html`<div class="timeline" data-part="timeline">
                 ${item.steps.map(({ block, entry, streaming, canRun }, index) => {
                     // A call is named by its id, the same streamed and stored; a thought by the call before it. Not by
                     // place: earlier steps join the front when earlier messages show.
@@ -2202,7 +2241,7 @@ function LiveLine({ live, approvals, start, entries, conversationId }) {
                 onClick=${fold}
             ><${Icon} name="chevron" size=${14} class="chev" /></button>`
         }
-        <span class="live-dot" aria-hidden="true"></span>
+        <span class="live-dot" data-part="live-mark" aria-hidden="true"></span>
         <span class="live-state" role="status">
             ${state}${retry && !waiting && seconds > 0 && html`<span aria-hidden="true"> in ${seconds}s</span>`}
         </span>

@@ -147,8 +147,8 @@ function Topbar() {
                 disabled=${!conversation}
                 onClick=${() => openSheet({ type: "menu" })}
             ></button>
-            <span class="title-main" aria-hidden="true">${title}</span>
-            <span class="title-sub">
+            <span class="title-main" data-part="topbar-title" aria-hidden="true">${title}</span>
+            <span class="title-sub" data-part="topbar-sub">
                 ${
                     folder &&
                     html`<span
@@ -533,6 +533,8 @@ function focusWindow(event) {
     }
 }
 
+// The conversation's window has the focus until another takes it: `data-focus` always names one, for themes too.
+document.documentElement.dataset.focus ??= "pane";
 document.addEventListener("pointerover", focusWindow, true);
 document.addEventListener("pointerdown", focusWindow, true);
 document.addEventListener("focusin", focusWindow, true);

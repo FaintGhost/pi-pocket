@@ -20,7 +20,8 @@ test("every documented token is defined in style.css, and every documented part 
         .map((file) => readFileSync(join(web, file), "utf8"))
         .join("\n");
     const named = new Set(
-        [...code.matchAll(/data-part="([a-z -]+)"|dataset\.part = "([a-z-]+)"/g)].flatMap((match) =>
+        // `data-part="…"` in markup; `part="…"` for a component that passes it on (`Icon`); `dataset.part` in the DOM.
+        [...code.matchAll(/\bpart="([a-z -]+)"|dataset\.part = "([a-z-]+)"/g)].flatMap((match) =>
             (match[1] ?? match[2]!).split(" "),
         ),
     );

@@ -18,7 +18,7 @@ import { describersChanged, setCallDescriber } from "./calls.js";
 import { leaveSafeMode, onSafeModeEnd, safeMode } from "./safe-mode.js";
 import { api, closeSheet, notify, onExtensionEvent, openSheet, store } from "./store.js";
 import { setCallSummary } from "./turns.js";
-import { html, Icon, iconPath, Loader, Markdown, Sheet, Spinner, Switch } from "./ui.js";
+import { html, Icon, iconPath, Loader, Markdown, railState, Sheet, Spinner, Switch } from "./ui.js";
 
 /**
  * The version of `pocket`. It goes up only when something extensions use changes in a way that breaks them; additions
@@ -1275,6 +1275,7 @@ export function ExtensionRailButtons() {
                 key=${`${record.module}:${spec.id}`}
                 class=${`rail-button rail-ext ${open ? "open" : ""}`}
                 data-part="rail-button"
+                data-state=${railState(open)}
                 title=${spec.title}
                 aria-label=${badge === "" ? spec.title : `${spec.title}, ${badge}`}
                 aria-pressed=${spec.page === undefined ? undefined : open}

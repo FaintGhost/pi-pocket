@@ -1325,6 +1325,7 @@ export function Composer() {
                         <${PlacesButton} />
                         <button
                             class="icon-button attach-button"
+                            data-part="composer-button"
                             aria-label="Attach files"
                             title="Attach files"
                             onClick=${() => picker.current?.click()}
@@ -1358,6 +1359,7 @@ export function Composer() {
                             view.conversation?.kind !== "subagent" &&
                             html`<button
                                 class=${`plan-chip ${view.plan?.on ? "on" : ""}`}
+                                data-part="composer-button plan-chip"
                                 aria-pressed=${view.plan?.on === true}
                                 title="Plan mode: Pi reads and proposes, and changes nothing until you approve"
                                 onMouseDown=${(event) => event.preventDefault()}
@@ -1371,6 +1373,7 @@ export function Composer() {
                             busy &&
                             html`<div
                                 class="mode-switch"
+                                data-part="composer-button mode-switch"
                                 role="radiogroup"
                                 aria-label="Send as"
                                 onKeyDown=${(event) => {
@@ -1404,10 +1407,15 @@ export function Composer() {
                                 )}
                             </div>`
                         }
-                        <${MicButton} dictation=${dictation} class="composer-mic" />
+                        <${MicButton}
+                            dictation=${dictation}
+                            class="composer-mic"
+                            part="composer-button"
+                        />
                         <button
                             class=${`send-button ${canSend ? "ready" : ""}`}
                             data-part="send-button"
+                            data-state=${canSend ? "ready" : undefined}
                             aria-label="Send"
                             title=${coarse ? "Send" : "Send (Enter)"}
                             disabled=${!canSend}
@@ -1452,6 +1460,7 @@ const shortModel = (agent) =>
 function StopButton() {
     return html`<button
         class="stop-button"
+        data-part="composer-button stop-button"
         aria-label="Stop"
         title="Stop (Esc twice)"
         onClick=${() => attempt(actions.abort)}
@@ -1472,6 +1481,7 @@ function PlacesButton() {
 
     return html`<button
         class="icon-button places-button badge-host"
+        data-part="composer-button"
         aria-label="Places: Files, Changes, Browser, and more"
         title="Places (or swipe up here)"
         onClick=${() => openSheet({ type: "places" })}
