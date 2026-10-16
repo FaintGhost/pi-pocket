@@ -6,7 +6,7 @@
 
 /* Quiet text that still reads with this palette: muted and faint text 4.5:1 or more on every surface. */
 :root {
-    --muted: color-mix(in oklab, var(--body) 74%, var(--bg));
+    --muted: color-mix(in oklab, var(--body) 78%, var(--bg));
     --faint: color-mix(in oklab, var(--body) 70%, var(--bg));
 }
 
