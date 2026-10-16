@@ -119,12 +119,12 @@ export class Approvals {
     }
 }
 
-/** Feedback from a command: a private notification, or text shared in the conversation. */
+/** What a command gives back: a notice for the person who ran it alone, or a card of plain text for everyone here. */
 export type CommandResult =
     | { type: "toast"; level: "info" | "warning" | "error"; message: string }
     | { type: "card"; output: string };
 
-/** The person invoking a command and the durable task that runs it. */
+/** Who ran a command and where, with the durable task that runs it: read and change documents through it. */
 export interface CommandContext {
     readonly user: Readonly<Pick<User, "id" | "name" | "role">>;
     readonly conversationId: ConversationId;
@@ -135,7 +135,7 @@ export interface CommandContext {
     commit(change: (tx: Tx) => void | Promise<void>): Promise<void>;
 }
 
-/** A command registered while the module builds its extensions. */
+/** A command people run from the message box (`web.command`), without asking Pi. */
 export interface ExtensionCommand {
     name: string;
     description: string;
@@ -144,12 +144,11 @@ export interface ExtensionCommand {
     handler(args: string, context: CommandContext): CommandResult | Promise<CommandResult>;
 }
 
-/** What browsers know about a command. The id changes when its module reloads successfully. */
+/** What browsers know about a command. The id changes with each version of its module. */
 export type CommandInfo = Omit<ExtensionCommand, "handler"> & { id: string; file: string };
 
 /** What the app gives its extensions. Extensions are reloaded on edit; the host is not. */
 export interface PocketHost {
-    readonly commands: { register(command: ExtensionCommand): void };
     readonly guard: LancetGuard;
     readonly approvals: Approvals;
     readonly agentDir: string;
@@ -284,8 +283,9 @@ export type WebHandler = (request: WebRequest) => unknown;
 
 /**
  * A module's own part of the app, the second argument of its default export: routes under `/api/x/<module>/`, a browser
- * module that adds to the app's screens, and events from here to that browser module. Routes and the browser module
- * are registered while the module loads; they go with it when it reloads or is turned off.
+ * module that adds to the app's screens, events from here to that browser module, and commands for the message box.
+ * Routes, the browser module, and commands are registered while the module loads; they go with it when it reloads or
+ * is turned off.
  */
 export interface ExtensionWeb {
     /** The version of this API (`POCKET_API` in `extension-web.ts`). */
@@ -316,6 +316,11 @@ export interface ExtensionWeb {
      * may return a promise: a stopping server waits for it, up to 3 s.
      */
     onDispose(dispose: () => unknown): void;
+    /**
+     * A command people run from the message box as `/name`, while the module loads. It goes with this version of the
+     * module, as routes do. `scope: "conversation"` is for whoever may drive the session; `"global"` is the owner's.
+     */
+    command(command: ExtensionCommand): void;
 }
 
 /** The shape of every module in `src/server/extensions/`: a default export building one or more extensions. */

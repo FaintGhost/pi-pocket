@@ -16,7 +16,7 @@ import { CommandRequestDoc } from "./docs.ts";
 import { COMMAND_ENTRY } from "./entry-format.ts";
 import { describe, HttpError } from "./errors.ts";
 import type { CommandResult } from "./host.ts";
-import type { RegisteredCommand } from "./reload.ts";
+import type { RegisteredCommand } from "./extension-web.ts";
 
 const context = BACKGROUND_CONTEXT;
 const TASK = "pocket.command";
@@ -78,13 +78,16 @@ export class ExtensionCommands {
                         const started = await runtime.memo<boolean>("started", context);
                         const command = this.#selected.get(task.input.selection);
 
+                        // After a restart the handler is gone: a command never runs again, as it may have changed
+                        // something before the restart cut it off.
                         if (started || command === undefined) {
                             result = {
                                 status: "interrupted",
                                 type: "toast",
                                 level: "warning",
-                                message:
-                                    "The command was interrupted by a server restart; it may have done part of its work. It was not run again.",
+                                message: started
+                                    ? "A server restart cut the command off, and it was not run again: it may have done part of its work."
+                                    : "A server restart came before the command ran: it did not run. Run it again.",
                             };
                         } else {
                             await runtime.memo("started", true, context);
@@ -236,7 +239,7 @@ export class ExtensionCommands {
             throw new HttpError(413, `Command arguments are limited to ${MAX_ARGS} characters.`);
         }
 
-        const command = app.loader.command(commandId);
+        const command = app.webs.command(commandId);
         const selection = randomUUID();
 
         if (command !== undefined) {
@@ -271,7 +274,7 @@ export class ExtensionCommands {
                     return request.taskId as TaskId<CommandOutcome>;
                 }
 
-                if (command === undefined || app.loader.command(commandId) !== command) {
+                if (command === undefined || app.webs.command(commandId) !== command) {
                     throw new HttpError(
                         404,
                         "This extension command is no longer available. Refresh the command list.",

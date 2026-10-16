@@ -34,8 +34,8 @@ const Runs = defineDoc({
     initial: () => ({ count: 0 }),
 });
 const count = (ctx) => ctx.commit(async (tx) => { (await tx.doc(Runs, ctx.conversationId)).count++; });
-export default (host) => {
-    host.commands.register({
+export default (_host, web) => {
+    web.command({
         name: "count", description: "Count", scope: "conversation",
         handler: async (args, ctx) => {
             await count(ctx);
@@ -47,7 +47,7 @@ export default (host) => {
                 : { type: "toast", level: "info", message: "Counted." };
         },
     });
-    host.commands.register({
+    web.command({
         name: "count-all", description: "Count for the owner", scope: "global",
         handler: async (_args, ctx) => {
             await count(ctx);
@@ -71,7 +71,7 @@ after(async () => {
     cleanUp();
 });
 
-const commandId = (name: string) => app.loader.commands().find((each) => each.name === name)?.id;
+const commandId = (name: string) => app.webs.commands().find((each) => each.name === name)?.id;
 const runs = async (id: Parameters<App["conversation"]>[0]) =>
     (await app.harness.snapshot(Runs, id, context))?.count ?? 0;
 const request = (name: string, args = "") => ({
@@ -145,8 +145,8 @@ test("a failed reload keeps the commands, and turning the module off takes them 
     // A version that registers, then fails: what it registered never counts.
     writeFileSync(
         join(app.dataDir, "extensions", FILE),
-        `export default (host) => {
-            host.commands.register({ name: "count", description: "Count", scope: "global", handler() {} });
+        `export default (_host, web) => {
+            web.command({ name: "count", description: "Count", scope: "global", handler() {} });
             throw new Error("broken");
         };`,
     );
@@ -155,7 +155,7 @@ test("a failed reload keeps the commands, and turning the module off takes them 
 
     writeFileSync(join(app.dataDir, "extensions", FILE), MODULE);
     await app.setExtensionEnabled(owner(app), FILE, false);
-    assert.deepEqual(app.loader.commands(), []);
+    assert.deepEqual(app.webs.commands(), []);
 
     const id = await newSession(app);
 

@@ -254,7 +254,7 @@ export class PocketApp {
     models!: ModelRuntime;
     settings!: SettingsManager;
     /** What extension modules get (`PocketHost`): kept for tests that stand in for an older server's. */
-    host!: Omit<PocketHost, "commands">;
+    host!: PocketHost;
     loader!: ExtensionLoader;
     readonly commands = new Commands(this);
     readonly extensionCommands = new ExtensionCommands(this);
@@ -296,6 +296,8 @@ export class PocketApp {
     #websTimer: NodeJS.Timeout | undefined;
     /** Whose tabs the next `hello` for browser modules goes to: those who may use any of these. */
     readonly #websFor = new Set<WebAccess>();
+    /** Whether everyone's tabs must hear `hello` again, for a change to the modules' commands. */
+    #websAll = false;
     readonly #clients = new Set<Client>();
     readonly #rooms = new Map<ConversationId, Promise<Room>>();
     readonly #envs = new Map<string, NodeExecutionEnv>();
@@ -385,6 +387,8 @@ export class PocketApp {
                     }
                 }
             },
+            // Everyone's tabs hear the new list in `hello`: commands are for guests too, not by a browser module's access.
+            commandsChanged: () => this.#websChanged("all"),
             log: (line) => this.#log(line),
             // Something about a module only the owner can mend: their tabs, as what it says can name the server's folders.
             warn: (message) => this.ownerNotice("warning", message),
@@ -395,13 +399,17 @@ export class PocketApp {
      * Browser modules came, went, or changed: the tabs of the people they are for hear which to load, once for changes
      * that come together.
      */
-    #websChanged(access: readonly WebAccess[]): void {
+    #websChanged(access: readonly WebAccess[] | "all"): void {
         if (this.#closing !== undefined) {
             return;
         }
 
-        for (const each of access) {
-            this.#websFor.add(each);
+        if (access === "all") {
+            this.#websAll = true;
+        } else {
+            for (const each of access) {
+                this.#websFor.add(each);
+            }
         }
 
         if (this.#websTimer !== undefined) {
@@ -410,10 +418,12 @@ export class PocketApp {
 
         this.#websTimer = setTimeout(() => {
             const changed = [...this.#websFor];
+            const all = this.#websAll;
 
             this.#websTimer = undefined;
             this.#websFor.clear();
-            void this.#refreshClients((user) => changed.some((each) => mayUse(user, each)));
+            this.#websAll = false;
+            void this.#refreshClients((user) => all || changed.some((each) => mayUse(user, each)));
         }, 50);
     }
 
@@ -471,7 +481,7 @@ export class PocketApp {
                 ],
             }),
         );
-        const host: Omit<PocketHost, "commands"> = {
+        const host: PocketHost = {
             guard: this.guard,
             approvals: this.approvals,
             agentDir: getAgentDir(),
@@ -520,11 +530,7 @@ export class PocketApp {
             { builtIn: join(APP_ROOT, "src", "server", "extensions"), dropIn },
             (file) => this.config.extensionChoice(file),
             // What a module's load says can name the server's folders, or quote a provider: the owner's to read.
-            {
-                webs: this.webs,
-                notify: (level, message) => this.ownerNotice(level, message),
-                commandsChanged: () => this.#refreshClients(),
-            },
+            { webs: this.webs, notify: (level, message) => this.ownerNotice(level, message) },
         );
         // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one.
         await this.gallery.recover().catch((error: unknown) => {
@@ -1673,7 +1679,8 @@ export class PocketApp {
                 extensions: this.loader.extensionNames(),
                 // The browser modules this person's tabs load (`extension-ui.js`).
                 ui: this.webs.clients(user),
-                extensionCommands: this.loader
+                // The commands this person may run: viewers none, guests the ones for conversations.
+                extensionCommands: this.webs
                     .commands()
                     .filter(
                         (command) =>

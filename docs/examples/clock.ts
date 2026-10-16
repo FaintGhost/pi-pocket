@@ -1,13 +1,15 @@
 /**
- * A clock tool with a preferred time zone for each session. Copy it into `~/.pi-pocket/extensions/`,
- * turn it on in Menu → Extensions, then use /clock-zone to see or change the preference without asking Pi.
+ * A clock tool, and a /clock-zone command that sets the time zone it uses in a session. An example drop-in extension:
+ * copy it into `~/.pi-pocket/extensions/`, then turn it on in Menu → Extensions.
  */
 import { Type } from "@earendil-works/pi-ai";
 import { defineDoc, defineExtension, defineTool } from "@earendil-works/pi-durable";
-import type { PocketHost } from "../../src/server/host.ts";
+// A type import is gone when the module runs: copied elsewhere, only the type checker misses this path.
+import type { ExtensionWeb } from "../../src/server/host.ts";
 
+/** Each session's time zone, as /clock-zone set it. A document kind is stored data: named after the module. */
 const ClockSettings = defineDoc<{ zone?: string }>({
-    kind: "example.clock-settings",
+    kind: "x.clock.settings",
     version: 1,
     scope: "conversation",
     history: "latest",
@@ -18,7 +20,7 @@ const ClockSettings = defineDoc<{ zone?: string }>({
 const clock = defineTool({
     name: "clock",
     description:
-        "The date and time now, in a time zone such as Europe/Berlin (by default, this session's preference or the server's).",
+        "The date and time now, in a time zone such as Europe/Berlin (by default, the session's or the server's).",
     parameters: Type.Object({
         zone: Type.Optional(
             Type.String({ description: "An IANA time zone, such as America/Chicago" }),
@@ -48,10 +50,22 @@ const clock = defineTool({
     },
 });
 
-export default function createClock(host: PocketHost) {
-    host.commands.register({
+/** A time zone's name, when the clock knows it. */
+function known(zone: string): boolean {
+    try {
+        new Intl.DateTimeFormat("en-US", { timeZone: zone });
+
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export default function createClock(_host: unknown, web: ExtensionWeb) {
+    // `/clock-zone` shows the session's time zone, and `/clock-zone Europe/Berlin` sets it, without asking Pi.
+    web.command({
         name: "clock-zone",
-        description: "Show or set this session's preferred time zone",
+        description: "Show or set this session's time zone for the clock",
         args: "[zone]",
         scope: "conversation",
         handler: async (args, ctx) => {
@@ -59,21 +73,19 @@ export default function createClock(host: PocketHost) {
 
             if (zone === "") {
                 const settings = await ctx.snapshot(ClockSettings, ctx.conversationId, ctx.context);
-                const current = settings?.zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-                return { type: "card", output: `Clock time zone: ${current}` };
+                return {
+                    type: "card",
+                    output: `Clock time zone: ${settings?.zone ?? Intl.DateTimeFormat().resolvedOptions().timeZone}`,
+                };
             }
 
-            try {
-                new Intl.DateTimeFormat("en-US", { timeZone: zone }).format();
-            } catch {
+            if (!known(zone)) {
                 throw new Error(`There is no time zone ${zone}.`);
             }
 
             await ctx.commit(async (tx) => {
-                const settings = await tx.doc(ClockSettings, ctx.conversationId);
-
-                settings.zone = zone;
+                (await tx.doc(ClockSettings, ctx.conversationId)).zone = zone;
             });
 
             return { type: "toast", level: "info", message: `Clock time zone set to ${zone}.` };
