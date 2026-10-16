@@ -119,10 +119,20 @@ test("a viewer runs no command, and a global command is the owner's alone", asyn
     await assert.rejects(app.extensionCommands.run(id, guest, request("count-all")), {
         status: 403,
     });
+    // While people take turns, a guest who does not drive runs no conversation command.
+    await app.collab.turns(id, owner(app), { action: "on" });
+    await assert.rejects(app.extensionCommands.run(id, guest, request("count-here")), {
+        status: 409,
+    });
+    await app.collab.turns(id, owner(app), { action: "off" });
     assert.equal(await runs(id), 0);
     // A handler's own error words are the owner's to read, not the guest's.
     assert.equal(
-        (await app.extensionCommands.run(id, guest, request("count-here", "throw"))).message,
+        (
+            (await app.extensionCommands.run(id, guest, request("count-here", "throw"))) as {
+                message?: string;
+            }
+        ).message,
         "The command failed.",
     );
     assert.equal(

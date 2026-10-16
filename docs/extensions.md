@@ -144,7 +144,7 @@ To type it, import the type by the absolute path of `src/server/host.ts`: `impor
 
 - **Nothing twice.** A restart can run a hook or a safe tool again. Anything that must happen once (a message sent, money spent, a file appended to) goes behind `api.memo` or a key that makes a repeat find the first.
 - **No surprise state.** Keep state in Pi Durable documents or memos, not in variables: a reload starts the module over, and a restart starts the process over.
-- **Your documents are stored data.** Name a document kind after your module (`x.<module>.<name>`, as `x.word-count.totals`), so no other module's ever meets it. Once anyone has run it, never rename a kind or change what its fields mean: add new ones beside them.
+- **Your documents are stored data.** Name a document kind after your module (`x.<module>.<name>`, as `x.word-count.totals`), so no other module's ever meets it, and your tasks' names and entries' kinds too. Once anyone has run it, never rename a kind or a name, or change what its fields mean: add new ones beside them.
 - **Do not block.** Tools run in the server process: use async file and process calls, never `execSync` or a busy loop. A slow tool holds up only its call; a blocked event loop holds up everyone.
 - **Do not get around a block.** A guard or a person said no for a reason.
 - **Secrets stay out.** Text in a section, a tool's description, or a result goes to the model provider.
@@ -311,6 +311,8 @@ What it returns:
 
 To refuse, throw `web.error(status, message)` (or let the app's own errors through): the person who ran it reads `message`. Any other throw tells them only "The command failed.", and the owner gets its words in a notice, as they can name the server's folders or quote a secret.
 
+A conversation command is offered to everyone who can steer that session, people invited to only that session included, and its handler runs with the owner's rights, as all of the module does. Its `args` are untrusted text: check them, and check `ctx.user.role` and `ctx.conversationId` before you change anything beyond that session.
+
 Who may run it (`scope`):
 
 - `"conversation"`: anyone who may steer the session, and only whoever drives while people take turns. Guests invited to one session may run it there.
@@ -331,7 +333,7 @@ The new version starts before the old one's cleanups run, so that an edit that f
 
 ### Versions
 
-`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet. `web.command` is newer than the rest of `web`: a module that should also load on a Pi Pocket without it checks `typeof web.command === "function"` first.
+`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet. `web.command` is newer than the rest of `web`: a module that should also load on Pi Pocket before 0.14.0 checks `typeof web.command === "function"` first.
 
 ## Testing
 
