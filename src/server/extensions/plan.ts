@@ -269,6 +269,10 @@ export function blockedInPlanMode(
         return undefined;
     }
 
+    if (tool === "agent_chat" && args.action === "list") {
+        return undefined;
+    }
+
     // Asking how a subagent does, or stopping it, changes nothing.
     if (tool === "subagent" && (args.action === "status" || args.action === "stop")) {
         return undefined;
