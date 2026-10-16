@@ -8,6 +8,7 @@
  * drop-in folder's rules, and sizes to `LIMITS`.
  */
 import { createHash } from "node:crypto";
+import { INVISIBLE_CLASS } from "../fence.ts";
 import { BUILT_IN_MODULES, BUILT_IN_TOOLS, RESERVED_EXTENSIONS } from "../reload.ts";
 
 /** The index format this Pi Pocket reads. */
@@ -113,10 +114,13 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
 const HOOK = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
 const WRAP = /^(tool|section) [A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
 const ROUTE = /^(GET|POST|PUT|PATCH|DELETE) [A-Za-z0-9._~:/-]{1,200}$/;
-/** Control characters, and characters that hide or reorder text: none of these show in what the gallery draws. */
+/**
+ * Controls, line breaks, and characters that show as nothing or reorder text (zero-width, bidi, tags: `fence.ts`'s
+ * `INVISIBLE_CLASS`, which keeps them out of memory lessons too): none of them belong in what the gallery draws.
+ */
+const UNSAFE = new RegExp(`[\\p{Zl}\\p{Zp}${INVISIBLE_CLASS}]`, "u");
 
-const UNSAFE =
-    /[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/;
+/[\u0000-\u001f\u007f-\u009f\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u206f\ufeff]/;
 
 /**
  * Why a file name is not one an extension called `extension` may have, or undefined when it may: its module
@@ -346,15 +350,8 @@ export function parseEntry(value: unknown): Entry {
     const author = object(shape.author, "author", ["name"], ["github"]);
     const source = object(shape.source, "source", ["repo", "commit"], ["path"]);
     const repo = text(source.repo, "source.repo", 140);
-    const [owner, repository, ...rest] = repo.split("/");
 
-    if (
-        rest.length > 0 ||
-        !OWNER.test(owner ?? "") ||
-        !REPO.test(repository ?? "") ||
-        repository === "." ||
-        repository === ".."
-    ) {
+    if (!isRepo(repo)) {
         throw new EntryError(`source.repo is not a GitHub repository as owner/name: ${repo}`);
     }
 
@@ -524,21 +521,23 @@ export function parseIndex(source: string, here: { api: number; version: string 
     for (const item of shape.extensions) {
         const named = (item as Shape | null)?.name;
         const name = typeof named === "string" && NAME.test(named) ? named : undefined;
+        const twice = name !== undefined && taken.has(name);
 
-        if (compatibility(item, here) === "newer") {
+        if (name !== undefined) {
+            taken.add(name);
+        }
+
+        if (compatibility(item, here) === "newer" && !twice) {
             index.incompatible++;
             continue;
         }
 
         try {
-            const entry = parseEntry(item);
-
-            if (taken.has(entry.name)) {
-                throw new EntryError(`a second entry is named ${entry.name}`);
+            if (twice) {
+                throw new EntryError(`a second entry is named ${name}`);
             }
 
-            taken.add(entry.name);
-            index.entries.push(entry);
+            index.entries.push(parseEntry(item));
         } catch (error) {
             if (!(error instanceof EntryError)) {
                 throw error;
@@ -552,6 +551,19 @@ export function parseIndex(source: string, here: { api: number; version: string 
 }
 
 // ─── Addresses ─────────────────────────────────────────────────────────────────────
+
+/** Whether `text` names a GitHub repository as `owner/name`. */
+export function isRepo(text: string): boolean {
+    const [owner, repo, ...rest] = text.split("/");
+
+    return (
+        rest.length === 0 &&
+        OWNER.test(owner ?? "") &&
+        REPO.test(repo ?? "") &&
+        repo !== "." &&
+        repo !== ".."
+    );
+}
 
 /** A GitHub repository's page from its address (`https://github.com/owner/name`), or undefined for any other. */
 export function repoPage(address: string): string | undefined {
@@ -569,9 +581,10 @@ export function repoPage(address: string): string | undefined {
         url.host === "github.com" &&
         url.username === "" &&
         url.password === "" &&
+        url.search === "" &&
+        url.hash === "" &&
         rest.length === 0 &&
-        OWNER.test(owner ?? "") &&
-        REPO.test(repo ?? "")
+        isRepo(`${owner}/${repo}`)
         ? `https://github.com/${owner}/${repo}`
         : undefined;
 }

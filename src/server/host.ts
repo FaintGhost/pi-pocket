@@ -3,6 +3,7 @@ import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Skill } from "@earendil-works/pi-coding-agent";
 import type { ConversationId, Extension, ModelRef, TaskId } from "@earendil-works/pi-durable";
 import type { Browsers } from "./browser.ts";
+import type { Gallery } from "./gallery.ts";
 import type { Role } from "./config.ts";
 import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
@@ -190,6 +191,22 @@ export interface PocketHost {
     readonly repoWatches: Pick<RepoWatches, "task">;
     /** Lessons Pi keeps across sessions (`memory.ts`): the memory tool saves them, and its section lists them. */
     readonly memory: Pick<Memory, "project" | "applying" | "inForce" | "add" | "change">;
+    /** The extension gallery (`gallery.ts`): its extension's routes are the owner's way to it. */
+    readonly gallery: Pick<
+        Gallery,
+        | "settings"
+        | "setIndex"
+        | "listing"
+        | "installed"
+        | "check"
+        | "source"
+        | "install"
+        | "updatePreview"
+        | "update"
+        | "uninstall"
+        | "review"
+        | "share"
+    >;
 }
 
 /**
