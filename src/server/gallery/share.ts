@@ -28,20 +28,29 @@ import { readThemeFile } from "./themes.ts";
 const BROWSER_PACKAGES = new Set(["preact", "preact/hooks", "htm", "marked", "dompurify"]);
 
 /**
- * What a file imports when it runs: `import … from`, `export … from`, `import "…"`, and `import("…")`, but not
- * `import type`, which is erased. Read from the text, so it can only be a first check: the index loads the module.
+ * What a file imports when it runs: `import … from`, `export … from`, `import "…"`, `import("…")`, and `require("…")`,
+ * but not `import type`, which is erased; each with whether only `require` names it (CommonJS finds a file without its
+ * ending). Read from the text, so it can only be a first check: the index loads the module.
  */
-function specifiers(source: string): Set<string> {
+function specifiers(source: string): Map<string, boolean> {
     // Comments first, so a `from "…"` in one is not read as an import.
     const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     const found = (pattern: RegExp) => [...code.matchAll(pattern)].map((match) => match[2]!);
+    const specs = new Map<string, boolean>();
 
-    return new Set([
+    for (const spec of [
         ...found(/\b(?:import|export)\s+(?!type\s)[^;]*?\bfrom\s*(["'])([^"'\n]+)\1/g),
         ...found(/\bimport\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g),
         ...found(/(?:^|[;\s])import\s*(["'])([^"'\n]+)\1/g),
-        ...found(/\brequire\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g),
-    ]);
+    ]) {
+        specs.set(spec, false);
+    }
+
+    for (const spec of found(/\brequire\s*\(\s*(["'])([^"'\n]+)\1\s*\)/g)) {
+        specs.set(spec, specs.get(spec) ?? true);
+    }
+
+    return specs;
 }
 
 /** A package's name from a specifier: `@scope/name` or `name`, without the path in it. */
@@ -71,11 +80,17 @@ export function importProblems(
         // A browser module's files are .js and .mjs (`WEB_FILE_TYPES`); the rest is server code.
         const browser = /\.m?js$/i.test(file.name);
 
-        for (const spec of specifiers(file.text)) {
+        for (const [spec, required] of specifiers(file.text)) {
             if (spec.startsWith("./") || spec.startsWith("../")) {
                 const target = posix.normalize(posix.join(posix.dirname(file.name), spec));
+                // What `require` would find too: the name with an ending, or a folder's index.
+                const found = required
+                    ? ["", ".js", ".cjs", ".json", "/index.js", "/index.json"].some((end) =>
+                          names.has(`${target}${end}`),
+                      )
+                    : names.has(target);
 
-                if (!names.has(target)) {
+                if (!found) {
                     problems.push(
                         `${file.name} imports ${spec}, which is not one of its own files. Move it into ${name}/.`,
                     );
