@@ -131,7 +131,8 @@ const READERS: Readonly<Record<string, ArgsCheck>> = {
     pwd: anyArgs,
     readlink: anyArgs,
     realpath: anyArgs,
-    rg: refuses("", "--pre"),
+    // A hostname program runs to fill in hyperlinks.
+    rg: refuses("", "--pre", "--hostname-bin"),
     sha1sum: anyArgs,
     sha256sum: anyArgs,
     // A compress program runs when sort spills to temporary files.

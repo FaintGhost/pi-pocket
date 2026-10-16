@@ -53,6 +53,7 @@ test("only commands that read pass, with arguments that keep them reading", () =
         "find . -name x -delete",
         "sort -o out.txt in.txt",
         "rg --pre ./run.sh foo",
+        "rg --hostname-bin ./run.sh foo",
         // Long options shortened, as getopt and git accept them.
         "git log --outp=log.txt",
         "sort --compress=sh big.txt",
