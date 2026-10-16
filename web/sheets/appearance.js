@@ -21,6 +21,7 @@ import {
     prefs,
     preview,
     setPrefs,
+    themeDefault,
     themeIds,
     themeVars,
     varsStyle,
@@ -249,6 +250,41 @@ function ColorsTools() {
     </div>`;
 }
 
+/**
+ * The owner's default: the theme and colors of every browser whose person has not chosen their own, guests' included.
+ * It takes the ones in use here.
+ */
+function DefaultTools() {
+    const current = themeDefault();
+    const p = prefs();
+    const same = current?.look === p.look && current?.colors === p.theme;
+    const name = (look, colors) =>
+        `${lookInfo(look)?.name ?? look} with ${colors === "desktop" ? "the desktop's colors" : paletteOf(colors).name}`;
+    const set = (value) =>
+        attempt(async () => {
+            await api("themes/default", { default: value }, { method: "PUT" });
+            notify(
+                "info",
+                value
+                    ? `Browsers that have not chosen start with ${name(value.look, value.colors)}.`
+                    : "Browsers that have not chosen start with Pocket.",
+            );
+        });
+
+    return html`<div class="look-tools">
+        <span class="muted small grow">
+            ${current ? `For new browsers: ${name(current.look, current.colors)}.` : "New browsers start with Pocket and the desktop's colors."}
+        </span>
+        ${
+            !same &&
+            html`<button class="button" onClick=${() => set({ look: p.look, colors: p.theme })}>
+                Use these for new browsers
+            </button>`
+        }
+        ${current && html`<button class="button ghost" onClick=${() => set(null)}>Reset</button>`}
+    </div>`;
+}
+
 /** A new density, with the choice tapped kept where it was: the rows above it grow or shrink with the change. */
 function chooseDensity(density, event) {
     const button = event.currentTarget;
@@ -294,6 +330,7 @@ export function AppearanceSheet() {
             )}
         </div>
         ${store.state.me?.role === "owner" && html`<${ColorsTools} />`}
+        ${store.state.me?.role === "owner" && html`<${DefaultTools} />`}
         ${
             !desktop &&
             html`<p class="muted small">

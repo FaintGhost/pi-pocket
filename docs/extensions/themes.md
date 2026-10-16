@@ -13,7 +13,9 @@ They are separate, so a theme's layout stays when the colors change, as they do 
 
 A theme can bring a pair of palettes, dark and light. Colors then shows three cards for it: the pair, which follows the system's light or dark setting (the one a theme brings when you choose it), and each half alone.
 
-Each person chooses for each browser, as for the rest of Appearance. Guests choose too. Only the owner adds, changes, and removes themes.
+Each person chooses for each browser, as for the rest of Appearance. Guests choose too. Only the owner adds, changes, and removes themes. The owner can also choose the theme and colors that browsers start with: in Appearance, **Use these for new browsers** makes the ones in use the default for every browser whose person has not chosen their own, guests' included (**Reset** goes back to Pocket and the desktop's colors).
+
+Besides Appearance: the launcher's **Themes** (Ctrl/⌘+K, then `#`) lists the themes before the colors, and `/theme <name>` in the message box chooses a theme by its name (`/theme paper`), or else colors (`/theme gruvbox`, `/theme desktop`).
 
 ## Make a theme
 
@@ -140,7 +142,7 @@ Use the tokens and parts in [the reference](reference/theme-surface.md). The app
 - **States.** Session rows and tool calls say their state in `data-state`, and the open session's row has `aria-current="page"` on its button: `[data-part="session-row"]:has([aria-current="page"])`.
 - **Text, not words.** Never select on what an element says (`[aria-label="Send"]`, `[title=…]`): the app's words change, and will come in other languages. Put no words in `content:`.
 - **Right to left.** Prefer `margin-inline-start` to `margin-left`, and so on.
-- **Order.** `order` and `flex-direction: row-reverse` move what shows, not the order keys reach it. Move whole regions, not parts of a reading flow. A theme that moves the sidebar to the right keeps its resize handle on the left edge for now.
+- **Order.** `order` and `flex-direction: row-reverse` move what shows, not the order keys reach it. Move whole regions, not parts of a reading flow. The app reads where the sidebar and the drawer are: a sidebar a theme puts on the right gets its resize handle on its left edge, and a drawer on the right closes with a swipe to the right. Other panels (Files, Browser, PiP) and phones' bottom sheets keep their place and their gestures: keep them where they are.
 - **Focus.** Keep a visible focus ring: change `--focus-ring`'s color, never take the ring away.
 - **Every condition.** A rule you write for a property replaces the app's rule for it on phones, on touch screens, and on hover too: the app's media queries are in the layer under yours. Write your own `@media` rules where the app has them. Text fields stay 16px on touch screens whatever you set, as iOS zooms into smaller ones.
 - **Pseudo-elements.** Most parts' `::before` and `::after` are yours; a few are the app's (tap areas, the timeline's rule): [the reference](reference/theme-surface.md#pseudo-elements-the-app-uses) lists them.

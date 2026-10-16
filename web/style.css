@@ -95,7 +95,8 @@
     --hair-2: color-mix(in srgb, var(--body) 17%, transparent);
     --text: var(--o-fg-bright);
     --body: var(--o-fg);
-    --muted: color-mix(in oklab, var(--body) 64%, var(--bg));
+    /* Quieter text at 4.5:1 or more on the ground (WCAG AA) with every palette that comes with the app. */
+    --muted: color-mix(in oklab, var(--body) 76%, var(--bg));
     --faint: color-mix(in oklab, var(--body) 42%, var(--bg));
     --accent: var(--o-accent);
     --accent-ink: var(--bg);
@@ -215,7 +216,7 @@
     --accent-ink: #fff;
     --scrim: color-mix(in srgb, var(--desk) 55%, transparent);
     --line: color-mix(in srgb, var(--body) 15%, var(--bg));
-    --muted: color-mix(in oklab, var(--body) 78%, var(--bg));
+    --muted: color-mix(in oklab, var(--body) 87%, var(--bg));
     --faint: color-mix(in oklab, var(--body) 58%, var(--bg));
     --warn: color-mix(in oklab, var(--o-yellow) 62%, var(--o-fg));
     --ok: color-mix(in oklab, var(--o-green) 78%, var(--o-fg));
@@ -845,6 +846,12 @@ kbd {
     cursor: col-resize;
     z-index: 7;
     touch-action: none;
+}
+
+/* A sidebar a theme put on the right: its handle is on its left edge (`useSide`). */
+.resize-handle.at-left {
+    left: 0;
+    right: auto;
 }
 
 .resize-handle::before {

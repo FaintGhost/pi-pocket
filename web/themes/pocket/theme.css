@@ -49,7 +49,7 @@
     /* Text */
     /* --text: var(--o-fg-bright); */
     /* --body: var(--o-fg); */
-    /* --muted: color-mix(in oklab, var(--body) 64%, var(--bg)); */
+    /* --muted: color-mix(in oklab, var(--body) 76%, var(--bg)); */
     /* --faint: color-mix(in oklab, var(--body) 42%, var(--bg)); */
 
     /* Accent and status */
@@ -58,6 +58,7 @@
     /* --accent-fill: var(--accent); */
     /* --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent); */
     /* --accent-line: color-mix(in srgb, var(--accent) 50%, transparent); */
+    /* --accent-2: var(--spark); */
     /* --focus-ring: var(--accent); */
     /* --spark: var(--o-magenta); */
     /* --brand: var(--o-orange); */
@@ -82,6 +83,7 @@
     /* Type */
     /* --sans: "Pocket Sans", "Geist", ui-sans-serif, system-ui, sans-serif; */
     /* --mono: "Pocket Mono", "JetBrains Mono", "JetBrainsMono Nerd Font", ui-monospace, "SF Mono", Menlo, Consolas, monospace; */
+    /* --ligatures: none; */
 
     /* Corners */
     /* --r-mark: 3px; */
@@ -105,7 +107,16 @@
     /* --leading: 1.65; */
     /* --transcript-width: 720px; */
     /* --composer-width: 768px; */
+    /* --transcript-gutter: 0px; */
+    /* --timeline-x: 22.5px; */
+    /* --step-mark-size: 19px; */
+    /* --step-gap: 10px; */
     /* --wallpaper: none; */
+
+    /* Windows */
+    /* --window-border: var(--hair); */
+    /* --window-border-active: var(--accent-line); */
+    /* --window-ring: 0 0 0 3px var(--accent-soft); */
 
     /* Shadows */
     /* --sh: rgba(0, 0, 0, 0.5); */
@@ -129,7 +140,7 @@
     /* --accent-ink: #fff; */
     /* --scrim: color-mix(in srgb, var(--desk) 55%, transparent); */
     /* --line: color-mix(in srgb, var(--body) 15%, var(--bg)); */
-    /* --muted: color-mix(in oklab, var(--body) 78%, var(--bg)); */
+    /* --muted: color-mix(in oklab, var(--body) 87%, var(--bg)); */
     /* --faint: color-mix(in oklab, var(--body) 58%, var(--bg)); */
     /* --warn: color-mix(in oklab, var(--o-yellow) 62%, var(--o-fg)); */
     /* --ok: color-mix(in oklab, var(--o-green) 78%, var(--o-fg)); */

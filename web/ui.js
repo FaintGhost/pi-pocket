@@ -1173,6 +1173,41 @@ export function Slide({ box, axis = "y" }) {
 }
 
 /**
+ * Which side of the screen an element stands on, `left` or `right`, as it is laid out now: a theme may move the sidebar
+ * or the drawer to the right, and what is dragged by its edge must follow. Looked at again as the window resizes and
+ * when a theme's stylesheets load (`pocket:theme`, from `theme.js`). `of` gives the element from the ref's.
+ */
+export function useSide(ref, of = (element) => element) {
+    const [side, setSide] = useState("left");
+    const look = useRef(null);
+
+    look.current = () => {
+        const element = ref.current && of(ref.current);
+        const box = element?.getBoundingClientRect();
+
+        if (box && box.width > 0) {
+            setSide(box.left + box.width / 2 > innerWidth / 2 ? "right" : "left");
+        }
+    };
+
+    // After each draw (the element may have only now come), and when the window or the theme changes.
+    useLayoutEffect(() => look.current());
+    useLayoutEffect(() => {
+        const again = () => look.current();
+
+        addEventListener("resize", again);
+        document.addEventListener("pocket:theme", again);
+
+        return () => {
+            removeEventListener("resize", again);
+            document.removeEventListener("pocket:theme", again);
+        };
+    }, []);
+
+    return side;
+}
+
+/**
  * A rail button's state for themes (`data-state`): `open` while what it opens shows, `busy` while it counts work that
  * goes on; both, or neither (undefined).
  */
