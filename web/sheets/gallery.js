@@ -921,106 +921,269 @@ export function GalleryUpdateSheet({ name }) {
     <//>`;
 }
 
-/** Share one of your own drop-ins: the checks, a draft of its index entry, and where to open the pull request. */
+/** The rules an index entry keeps for what only its author fills in (`gallery/entry.ts`, which the index checks with). */
+const OWNER = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/;
+const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/;
+const PART = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}$/;
+const TAG = /^[a-z0-9][a-z0-9-]{0,23}$/;
+/** Past this, GitHub's page would refuse the link with the entry in it: the owner copies the entry instead. */
+const LINK_LIMIT = 6000;
+
+/** Why what the owner typed for each of the author's fields would not pass the index's checks, by field. */
+function fieldProblems({ repo, commit, path, tags, github, name }) {
+    const [owner, repository, ...rest] = repo.split("/");
+    const parts = path === "" ? [] : path.split("/");
+
+    return {
+        repo:
+            repo === ""
+                ? "Give the GitHub repository with its files."
+                : rest.length > 0 ||
+                    !OWNER.test(owner ?? "") ||
+                    !REPO_NAME.test(repository ?? "") ||
+                    repository === "." ||
+                    repository === ".."
+                  ? "Write it as owner/name, such as tannermidd/pocket-clock."
+                  : null,
+        commit:
+            commit === ""
+                ? "Give the commit with its files."
+                : /^[0-9a-f]{40}$/.test(commit)
+                  ? null
+                  : "Write the full commit ID: 40 letters and digits, from a to f and 0 to 9.",
+        path:
+            parts.length > 4 || parts.some((part) => !PART.test(part))
+                ? "Write a folder of the repository, such as extension, four deep at most."
+                : null,
+        tags:
+            tags.length > 10 || tags.some((tag) => !TAG.test(tag))
+                ? "Use up to 10 tags of lowercase letters, digits, and -."
+                : null,
+        github: github === "" || OWNER.test(github) ? null : "Write your GitHub name only.",
+        name: name === "" || name.length > 60 ? "Give your name, 60 characters at most." : null,
+    };
+}
+
+/** One of the author's fields, with what is wrong with it once something is typed. */
+function Field({ id, label, hint, value, onInput, problem, placeholder, mono = true }) {
+    return html`<div class="field gallery-field">
+        <label class="label" for=${id}>${label}</label>
+        <input
+            id=${id}
+            class=${mono ? "mono" : ""}
+            value=${value}
+            placeholder=${placeholder}
+            spellcheck=${false}
+            autocapitalize="off"
+            autocomplete="off"
+            aria-invalid=${problem !== null && value !== ""}
+            onInput=${(event) => onInput(event.currentTarget.value)}
+        />
+        ${
+            problem !== null && value !== ""
+                ? html`<div class="small warn">${problem}</div>`
+                : hint && html`<div class="muted small">${hint}</div>`
+        }
+    </div>`;
+}
+
+/**
+ * Share one of your own drop-ins: the checks, where its files are on GitHub (only its author knows), its index entry
+ * made from both, and the pull request, which opens only once the entry can pass the index's checks.
+ */
 export function GalleryShareSheet({ file }) {
     const [data, setData] = useState(null);
     const [problem, setProblem] = useState(null);
+    const [form, setForm] = useState({
+        repo: "",
+        commit: "",
+        path: "",
+        tags: "",
+        github: "",
+        name: null,
+    });
 
     useRoute(`share/${encodeURIComponent(file)}`, setData, setProblem);
 
-    const fill = [
-        ["source.repo", "the GitHub repository (owner/name) that holds its files"],
-        ["source.commit", "the full commit those files are at"],
-        ["source.path", "the folder they are in, when not the top (or leave it out)"],
-        ["tags", "a few words people search for"],
-        ["author.github", "your GitHub name (optional)"],
-        ...(data?.declaresKnown === false
-            ? [
-                  [
-                      "declares",
-                      "what it registers: turn it on once and look again, or write it by hand",
-                  ],
-              ]
-            : []),
-    ];
+    if (!data) {
+        return html`<${Sheet} title=${`Share ${file}`} onClose=${closeSheet} wide=${true} className="gallery">
+            ${problem ? html`<div class="error-box small">${problem}</div>` : html`<${Loader} label="Checking it" />`}
+        <//>`;
+    }
+
+    const set = (field) => (value) => setForm({ ...form, [field]: value });
+    const typed = {
+        repo: form.repo
+            .trim()
+            .replace(/^https:\/\/github\.com\//, "")
+            .replace(/(\.git)?\/*$/, ""),
+        commit: form.commit.trim().toLowerCase(),
+        path: form.path.trim().replace(/^\/+|\/+$/g, ""),
+        tags: form.tags
+            .split(/[\s,]+/)
+            .map((tag) => tag.trim().toLowerCase())
+            .filter(Boolean),
+        github: form.github.trim().replace(/^@/, ""),
+        name: (form.name ?? data.entry.author.name).trim(),
+    };
+    const wrong = fieldProblems(typed);
+    const entry = {
+        ...data.entry,
+        tags: typed.tags,
+        author: { name: typed.name, ...(typed.github === "" ? {} : { github: typed.github }) },
+        source: {
+            repo: typed.repo,
+            commit: typed.commit,
+            ...(typed.path === "" ? {} : { path: typed.path }),
+        },
+    };
+    const text = `${JSON.stringify(entry, null, 4)}\n`;
+    // What keeps the pull request closed, first to last: the drop-in itself, then what is still to fill in.
+    const blocked =
+        data.problems.length > 0
+            ? "Fix the problems above first."
+            : !data.declaresKnown
+              ? "Turn it on once, so what it declares is known, then look again."
+              : (Object.values(wrong).find((each) => each !== null) ?? null);
+    const filled = data.newEntryPage && `${data.newEntryPage}&value=${encodeURIComponent(text)}`;
+    const link = filled && filled.length <= LINK_LIMIT ? filled : data.newEntryPage;
 
     return html`<${Sheet} title=${`Share ${file}`} onClose=${closeSheet} wide=${true} className="gallery">
-        ${problem && html`<div class="error-box small">${problem}</div>`}
-        ${!data && !problem && html`<${Loader} label="Checking it" />`}
+        <p class="muted small">
+            To share it, add its entry to the gallery's index with a pull request. Pi Pocket makes no GitHub calls: you put its files on GitHub and open the pull request yourself.
+        </p>
         ${
-            data &&
-            html`<p class="muted small">
-                To share it, add an entry for it to the gallery's index with a pull request. Pi Pocket makes no GitHub calls: you open the pull request yourself.
+            data.problems.length > 0
+                ? html`<div class="gallery-warn small" role="alert">
+                      <strong>Fix these first:</strong>
+                      <ul>
+                          ${data.problems.map((each, index) => html`<li key=${index}>${each}</li>`)}
+                      </ul>
+                  </div>`
+                : html`<p class="ok small">
+                      <${Icon} name="check" size=${14} /> It stands on its own.
+                  </p>`
+        }
+        ${
+            data.notes.length > 0 &&
+            html`<ul class="muted small gallery-notes">
+                ${data.notes.map((each, index) => html`<li key=${index}>${each}</li>`)}
+            </ul>`
+        }
+        <div class="group">
+            <div class="group-title">1. Put its files on GitHub</div>
+            <p class="small">
+                Make a public GitHub repository, and commit these files to it with the same names, at its top or in one folder:
             </p>
-            ${
-                data.problems.length > 0
-                    ? html`<div class="gallery-warn small" role="alert">
-                          <strong>Fix these first:</strong>
-                          <ul>
-                              ${data.problems.map((each, index) => html`<li key=${index}>${each}</li>`)}
-                          </ul>
-                      </div>`
-                    : html`<p class="ok small">
-                          <${Icon} name="check" size=${14} /> It stands on its own.
-                      </p>`
-            }
-            ${
-                data.notes.length > 0 &&
-                html`<ul class="muted small gallery-notes">
-                    ${data.notes.map((each, index) => html`<li key=${index}>${each}</li>`)}
-                </ul>`
-            }
-            <div class="group">
-                <div class="group-title">Fill in</div>
-                <dl class="pi-facts">
-                    ${fill.map(
-                        ([key, words]) => html`<div key=${key}>
-                            <dt class="mono">${key}</dt>
-                            <dd>${words}</dd>
-                        </div>`,
-                    )}
-                </dl>
+            <div class="sheet-list gallery-files">
+                ${data.entry.files.map(
+                    (each) => html`<div class="gallery-file" key=${each.name}>
+                        <span class="mono">${each.name}</span>
+                        <span class="muted small">${formatBytes(each.size)}</span>
+                    </div>`,
+                )}
             </div>
-            <div class="group">
-                <div class="gallery-entry-head">
-                    <div class="group-title">
-                        Its entry, <span class="mono">entries/${data.name}.json</span>
-                    </div>
-                    <button
-                        class="button small"
-                        onClick=${() =>
-                            attempt(() =>
-                                copyText(data.text).then(() => notify("info", "Entry copied.")),
-                            )}
-                    >
-                        <${Icon} name="copy" size=${14} /> Copy
-                    </button>
+        </div>
+        <div class="group">
+            <div class="group-title">2. Say where they are</div>
+            <div class="gallery-form">
+                <${Field}
+                    id="share-repo"
+                    label="Repository"
+                    placeholder="owner/name"
+                    value=${form.repo}
+                    onInput=${set("repo")}
+                    problem=${wrong.repo}
+                />
+                <${Field}
+                    id="share-commit"
+                    label="Commit"
+                    hint="The full ID of the commit with these files (git rev-parse HEAD)."
+                    placeholder="40 letters and digits"
+                    value=${form.commit}
+                    onInput=${set("commit")}
+                    problem=${wrong.commit}
+                />
+                <${Field}
+                    id="share-path"
+                    label="Folder (optional)"
+                    hint="Only when the files are not at the top of the repository."
+                    placeholder="extension"
+                    value=${form.path}
+                    onInput=${set("path")}
+                    problem=${wrong.path}
+                />
+                <${Field}
+                    id="share-tags"
+                    label="Tags"
+                    hint="A few words people search for, such as usage, time."
+                    placeholder="usage, limits"
+                    value=${form.tags}
+                    onInput=${set("tags")}
+                    problem=${wrong.tags}
+                />
+                <${Field}
+                    id="share-name"
+                    label="Your name"
+                    value=${form.name ?? data.entry.author.name}
+                    onInput=${set("name")}
+                    problem=${wrong.name}
+                    mono=${false}
+                />
+                <${Field}
+                    id="share-github"
+                    label="Your GitHub name (optional)"
+                    placeholder="octocat"
+                    value=${form.github}
+                    onInput=${set("github")}
+                    problem=${wrong.github}
+                />
+            </div>
+        </div>
+        <div class="group">
+            <div class="gallery-entry-head">
+                <div class="group-title">
+                    3. Its entry, <span class="mono">entries/${data.name}.json</span>
                 </div>
-                <${Highlighted} class="gallery-code" text=${data.text} lang="json" />
+                <button
+                    class="button small"
+                    onClick=${() =>
+                        attempt(() => copyText(text).then(() => notify("info", "Entry copied.")))}
+                >
+                    <${Icon} name="copy" size=${14} /> Copy
+                </button>
             </div>
-            <div class="gallery-actions">
-                ${
-                    data.newEntryUrl &&
-                    html`<${Out}
-                        class=${`button ${data.problems.length === 0 ? "primary" : ""}`}
-                        href=${data.newEntryUrl}
-                    >
-                        Open a pull request <${Icon} name="external" size=${14} />
-                    <//>`
-                }
-                ${
-                    data.contributingUrl &&
-                    html`<${Out} class="button" href=${data.contributingUrl}>
-                        How to submit <${Icon} name="external" size=${14} />
-                    <//>`
-                }
-            </div>
+            <${Highlighted} class="gallery-code" text=${text} lang="json" />
+        </div>
+        <div class="gallery-actions">
             ${
-                !data.repoUrl &&
-                html`<p class="muted small">
-                    This index does not say where to submit: ask whoever keeps it.
-                </p>`
-            }`
+                link &&
+                (blocked === null
+                    ? html`<${Out} class="button primary" href=${link}>
+                          Open a pull request <${Icon} name="external" size=${14} />
+                      <//>`
+                    : html`<button class="button primary" disabled=${true}>Open a pull request</button>`)
+            }
+            ${
+                data.contributingUrl &&
+                html`<${Out} class="button" href=${data.contributingUrl}>
+                    How to submit <${Icon} name="external" size=${14} />
+                <//>`
+            }
+        </div>
+        ${blocked !== null && link && html`<p class="muted small">${blocked}</p>`}
+        ${
+            blocked === null &&
+            link !== filled &&
+            html`<p class="muted small">
+                Its entry is too long for the link: copy it, and paste it on GitHub's page.
+            </p>`
+        }
+        ${
+            !data.repoUrl &&
+            html`<p class="muted small">
+                This index does not say where to submit: ask whoever keeps it.
+            </p>`
         }
     <//>`;
 }
