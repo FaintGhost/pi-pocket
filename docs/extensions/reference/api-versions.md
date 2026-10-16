@@ -48,10 +48,6 @@ A module that calls a member that is not there fails at its first use, in all se
 
 A Pi Pocket before 0.14.0 knows neither `pocketApi` nor `web`. There, a module that adds to the app fails at its first `web.route` or `web.client`. The Extensions sheet shows the error.
 
-### Betas of 0.14.0
-
-Betas of 0.14.0 before beta.7 have `web` without `command`. A module that must also load on them checks `typeof web.command === "function"` first.
-
 ### Gallery entries
 
 A gallery entry gives `pocketApi` and `minPocket`: the API version and the oldest Pi Pocket that the extension needs. The gallery hides an entry that needs a newer API or a newer Pi Pocket. See [Gallery entry](gallery-entry.md#pocketapi).

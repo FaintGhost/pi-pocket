@@ -1,6 +1,15 @@
 # Design: a documentation site for extensions
 
-Status: design and proof of concept, for the owner's review. Nothing is built in the repository yet.
+Status: **built**, on branch `pocket/docs-site` for 0.14.0: `docs-site/`, the two workflows, the split guides, the reference (`docs-reference`), and the policies (`extension-guidelines`). This page is the design as the owner approved it; where the build differs, a note says so. `docs-site/README.md` tells how the site works now.
+
+Built differently, after the security and quality reviews:
+
+- A run of `pages.yml` by hand publishes `main` only, and both workflows install with `npm ci --ignore-scripts`. The owner adds required reviewers to the `github-pages` environment.
+- Each limit is written once, in `reference/limits.md`; the guides link to it. There is no check of the limits against the guides.
+- The root `npm run check` also checks the reference against `types/pocket.d.ts`.
+- The docs build fails on a symbolic link in `docs/`.
+- Pi Pocket shows no deprecation warnings until the first release that deprecates a member.
+- Theming ships in 0.14.0, with its own guide and reference page.
 
 ## The decisions
 
@@ -120,7 +129,7 @@ Today, `gh-pages` is `git subtree split --prefix site`, pushed by hand (`npm run
 The recommended workflow, `.github/workflows/pages.yml`:
 
 - Runs on a push to `main` that changes `site/`, `docs/`, `docs-site/`, `types/`, or `SECURITY.md`. `main` only gets releases and site changes, so the docs show the latest release; pre-releases never reach it.
-- Runs by hand (`gh workflow run pages.yml -f ref=<branch>`) for a site change that must go out before its merge. The run is on `main`, so the `github-pages` environment's branch rule allows it.
+- Runs by hand (`gh workflow run pages.yml`). _Built differently:_ a run by hand publishes `main` only, as the security review asked; a site change goes out after its merge. The owner adds required reviewers to the `github-pages` environment.
 - Checks out the ref, builds `docs-site/` (`npm ci`, `npm run build`, with the commit for code links), copies `site/` to `_site/` and the build to `_site/docs/`, uploads, and deploys. Actions pinned by SHA; no secrets.
 - The first run is by hand, and its `_site/` (without `docs/`) is compared with `gh-pages` before the source is switched.
 
