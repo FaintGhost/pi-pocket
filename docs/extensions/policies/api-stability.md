@@ -1,6 +1,6 @@
 # The public API and how it changes
 
-This page tells which interfaces of Pi Pocket are for extensions, what Pi Pocket promises about them, and how they change. [extensions.md](../../extensions.md) tells how each interface works. This page does not repeat it.
+This page tells which interfaces of Pi Pocket are for extensions, what Pi Pocket promises about them, and how they change. [The reference](../reference/host.md) and the exact types in [types/pocket.d.ts](../../../types/pocket.d.ts) tell what each interface is, and the guides tell how to use it. This page does not repeat them.
 
 ## Terms
 
@@ -14,7 +14,7 @@ This page tells which interfaces of Pi Pocket are for extensions, what Pi Pocket
 
 ## What is public
 
-Each item below is public as [extensions.md](../../extensions.md) describes it: its names, its shapes, its behavior, and the limits that the docs give.
+Each item below is public as the reference and the guides describe it: its names, its shapes, its behavior, and the [limits](../reference/limits.md).
 
 ### 1. The module
 
@@ -23,8 +23,9 @@ Each item below is public as [extensions.md](../../extensions.md) describes it: 
 - `export const pocketApi`.
 - The first sentence of the module's `/** … */` comment, which is its description.
 - Files that start with `_` or end in `.test.ts` are not modules.
-- Loading, reloading, and errors ([Modules, loading, and errors](../modules.md)), with the times there: 300 ms, 30 s, and 2 s.
-- These types from `src/server/host.ts`: `PocketHost` (only its public members, below), `ExtensionWeb`, `ExtensionModule`, `ExtensionCommand`, `CommandContext`, `CommandResult`, `WebRequest`, `WebHandler`, `WebAccess`, `WebMethod`, `LinkedSessionsApi`, and `LinkedSession`. The types are public. The path of the file is not: import them with `import type`, which goes away at run time.
+- Loading, reloading, and errors ([Modules, loading, and errors](../modules.md)), with the times in [Limits](../reference/limits.md#loading).
+- The types in [types/pocket.d.ts](../../../types/pocket.d.ts): `Module`, `Host`, `SafeText`, `LinkedSessions`, `LinkedSession`, `Web`, `WebRequest`, `WebHandler`, `WebAccess`, `WebMethod`, `Command`, `CommandContext`, `CommandResult`, `BrowserModule`, `Pocket`, the specs and props of what a browser module adds, `Person`, `Role`, and `NoticeLevel`. Import them with `import type` from `./_pocket.d.ts` in the drop-in folder ([Types for your editor](../reference/types.md)): the import goes away at run time.
+- `src/server/host.ts` is internal. Its types (`PocketHost`, `ExtensionWeb`, and the others) are Pi Pocket's own, and can change in any release. `test/public-types.ts` checks that they fit the public types.
 
 ### 2. Names
 
@@ -67,10 +68,10 @@ The host's members do not change while modules reload. A new member comes only a
 
 - `version`, `module`, `title`.
 - `h`, `html`, `Fragment`, and the hooks: `useState`, `useEffect`, `useLayoutEffect`, `useRef`, `useMemo`, `useCallback`, and `useReducer`.
-- The pieces `Icon`, `Loader`, `Spinner`, `Markdown`, and `Switch`, with the props that extensions.md gives.
+- The pieces `Icon`, `Loader`, `Spinner`, `Markdown`, and `Switch`, with the props that [pocket](../reference/pocket.md) gives.
 - `api`, `on`, `rail`, `menu`, `launcher`, `page`, `sheet`, `toolCall`, `openPage`, `closePage`, `openSheet`, `closeSheet`, `notify`, `me`, `conversationId`, `style`, and `onDispose`.
 - What a page's or a sheet's component gets: `pocket`, `close`, and a sheet's `props`.
-- The icon names that extensions.md lists. Other icon names can go. An unknown name shows `grid`, so a module does not fail.
+- The icon names that [pocket](../reference/pocket.md) lists. Other icon names can go. An unknown name shows `grid`, so a module does not fail.
 - Safe mode: `?noext=1` and `?noext=0` on the app's address.
 
 ### 7. CSS
@@ -100,7 +101,7 @@ The host's members do not change while modules reload. A new member comes only a
 
 ## What is internal
 
-- All files under `src/` and `web/`, and what they export, except the types in [The module](#1-the-module).
+- All files under `src/` and `web/`, and what they export, `src/server/host.ts` too. The public types are in `types/pocket.d.ts` ([The module](#1-the-module)).
 - The app's HTTP API, other than a module's own routes under `/api/x/<module>/`.
 - The events between the server and its tabs, and the `pocket.*` keys in browser storage.
 - Pi Pocket's document kinds (`pocket.*`), and the shapes of its documents, entries, and tasks. A module can read them with `api.snapshot`, but their fields can change.
@@ -117,7 +118,7 @@ Extensions import `@earendil-works/pi-durable`, `@earendil-works/pi-ai`, and the
 
 - **A1. The release notes name each update of a pinned package** in "For extension authors".\
   _Reason:_ an author can then find the cause when a module breaks after an update.
-- **A2. When an update breaks a use that extensions.md documents** (`defineTool`, `section`, `hook`, `api.memo`, `api.snapshot`, `wrapTool`, and the others), the notes tell what changed and how to change a module, and `pocketApi` goes up (A7).\
+- **A2. When an update breaks a use that the guides document** (`defineTool`, `section`, `hook`, `api.memo`, `api.snapshot`, `wrapTool`, and the others), the notes tell what changed and how to change a module, and `pocketApi` goes up (A7).\
   _Reason:_ authors learn these uses from Pi Pocket's docs, and they check one number for all that a module uses.
 
 ## Stability levels
@@ -128,7 +129,7 @@ All public interfaces are stable, unless the docs mark them experimental or depr
 
 ### Experimental
 
-- **A3. The docs mark an experimental member.** extensions.md writes "**Experimental.**" at the member. In `host.ts`, its comment has `@experimental`.\
+- **A3. The docs mark an experimental member.** The reference writes "Since … · Experimental" under the member. In `types/pocket.d.ts`, its comment has `@experimental`. The docs build checks that the two agree.\
   _Reason:_ authors must know before they use it.
 - **A4. An experimental member can change or go in any minor release, with no deprecation.** The release notes say so.\
   _Reason:_ a new interface must be able to change while its first users find its problems.
