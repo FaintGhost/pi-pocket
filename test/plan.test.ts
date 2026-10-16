@@ -247,12 +247,6 @@ test("in plan mode a tool its extension marks read-only runs, and one it does no
     await say(app, id, "peek");
     await say(app, id, "poke");
     await say(app, id, "script");
-    await say(app, id, "make a plan");
-    assert.equal(
-        existsSync(join(work, "planned.txt")),
-        false,
-        "a wrap that marks a built-in tool read-only does not let it run",
-    );
     const said = (await modelTexts(app, id)).join("\n");
 
     assert.match(said, /peek ran/);

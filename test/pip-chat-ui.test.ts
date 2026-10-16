@@ -102,7 +102,7 @@ async function close(): Promise<void> {
     await see(`document.querySelector('.pip-panel') === null`, "PiP closed");
 }
 
-async function fresh(viewport: Viewport = VIEWPORTS.desktop, home = false): Promise<void> {
+async function fresh(viewport: Viewport = VIEWPORTS.desktop): Promise<void> {
     if (
         await inPage<boolean>(
             `return JSON.stringify(document.querySelector(${JSON.stringify(BOX)}) !== null)`,
@@ -122,13 +122,8 @@ async function fresh(viewport: Viewport = VIEWPORTS.desktop, home = false): Prom
     await settle();
     await page.setViewport(viewport);
     // Reload after a touch/desktop change so the composer reads the right media queries.
-    await page.navigate(`${base}/${home ? "" : `s/${background}`}`);
-    await see(
-        home
-            ? `document.querySelector('.home-list') !== null`
-            : `document.querySelector('.composer textarea') !== null`,
-        "the background screen",
-    );
+    await page.navigate(`${base}/s/${background}`);
+    await see(`document.querySelector('.composer textarea') !== null`, "the background screen");
     await settle();
     await page.evaluate(`
         window.pipTestFetch = window.fetch;
