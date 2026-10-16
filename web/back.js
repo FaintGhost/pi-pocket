@@ -220,7 +220,16 @@ const tooSoon = (event) =>
     event.isTrusted && event.detail > 0 && performance.now() - movedAt < SETTLING_MS;
 
 // Held back from the press too: a field that slid in under the finger does not take the focus (and the keyboard).
-addEventListener("mousedown", (event) => tooSoon(event) && event.preventDefault(), true);
+addEventListener(
+    "mousedown",
+    (event) => {
+        if (tooSoon(event)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    },
+    true,
+);
 addEventListener(
     "click",
     (event) => {

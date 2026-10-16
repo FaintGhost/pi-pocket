@@ -263,7 +263,7 @@ export function BranchPicker() {
 
     return html`<div
         class="overlay pop-overlay"
-        onClick=${(event) => event.target === event.currentTarget && closeSheet()}
+        onMouseDown=${(event) => event.target === event.currentTarget && closeSheet()}
     >
         <section
             class=${`pop-menu branch-picker ${anchor ? (anchor.down ? "down" : "") : "free"}`}
