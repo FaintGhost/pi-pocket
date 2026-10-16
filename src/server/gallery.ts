@@ -280,21 +280,24 @@ export class Gallery {
 
     /**
      * The index, read again when the last read is an hour old, or when `fresh`. When reading it fails, the last read
-     * still counts, with why, and is not read again for an hour unless `fresh`; with none, the failure is the answer.
+     * still counts, with why; with none, the failure is the answer. A failure stands for an hour unless `fresh`.
      */
     async #index(fresh: boolean): Promise<Read> {
         const { index: address } = await this.#setting();
         const last = this.#read?.address === address ? this.#read : await this.#saved(address);
         const failed = this.#failed?.address === address ? this.#failed : undefined;
 
-        if (last !== undefined && !fresh) {
-            if (Date.now() - last.fetchedAt < FRESH_MS) {
-                return last;
+        if (last !== undefined && !fresh && Date.now() - last.fetchedAt < FRESH_MS) {
+            return last;
+        }
+
+        // A read that failed lately is not tried again until it is old, or asked for: each request would wait for it.
+        if (!fresh && failed !== undefined && Date.now() - failed.at < FRESH_MS) {
+            if (last === undefined) {
+                throw new HttpError(502, failed.error);
             }
 
-            if (failed !== undefined && Date.now() - failed.at < FRESH_MS) {
-                return { ...last, error: failed.error };
-            }
+            return { ...last, error: failed.error };
         }
 
         if (this.#reading?.address !== address) {
