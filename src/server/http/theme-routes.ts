@@ -3,18 +3,13 @@
  * its fonts and images from disk, opened as they were checked. Any version in the address serves the files as they are
  * now: the version is there so a changed theme gets a new address.
  */
-import { closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PocketApp } from "../app.ts";
 import type { User } from "../config.ts";
 import { HttpError } from "../errors.ts";
 import { THEME_LIMITS } from "../themes/format.ts";
 import { sniffImage } from "./assets.ts";
-import { opened } from "./extension-routes.ts";
-import { send } from "./io.ts";
-
-/** Opened on its own, an SVG could run script with the app's origin: give it an opaque one. */
-const SVG_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'";
+import { readChecked, send, SVG_CSP } from "./io.ts";
 
 export function themeFile(
     app: PocketApp,
@@ -70,28 +65,7 @@ export function themeFile(
         return;
     }
 
-    let body: Buffer;
-    let fd: number;
-
-    try {
-        fd = openSync(found.file, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
-    } catch {
-        throw new HttpError(404, "Not found");
-    }
-
-    try {
-        const stats = fstatSync(fd);
-
-        if (!stats.isFile() || !opened(fd, found, stats) || stats.size > THEME_LIMITS.asset) {
-            throw new HttpError(404, "Not found");
-        }
-
-        body = readFileSync(fd);
-    } catch (error) {
-        throw error instanceof HttpError ? error : new HttpError(404, "Not found");
-    } finally {
-        closeSync(fd);
-    }
+    const body = readChecked(found, THEME_LIMITS.asset);
 
     // What it holds must be what its name says: a font, or an image of that kind.
     const sniffed =

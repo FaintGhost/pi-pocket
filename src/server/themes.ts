@@ -25,7 +25,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { APP_ROOT } from "./config.ts";
 import { describe, HttpError } from "./errors.ts";
-import { opened } from "./http/extension-routes.ts";
+import { opened } from "./http/io.ts";
 import { desktopTheme } from "./omarchy.ts";
 import { watchTree } from "./reload.ts";
 import { cssReferences, themeFile } from "./themes/css.ts";

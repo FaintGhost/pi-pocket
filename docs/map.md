@@ -100,7 +100,7 @@ A module split into parts keeps its name for the part others import, with the re
 | `http/sign-in.ts`             | `/login`, `/join/:code`, and `/share` before the service worker takes shares                                                                                                                                                                    |
 | `http/artifacts.ts`           | `/a/…`: an artifact as its own page, in a sandbox; `/a/frame`, the page a reply's HTML runs in once someone taps Run                                                                                                                            |
 | `http/extension-routes.ts`    | `/api/x/:module/…`, extension modules' routes (after the API's checks), and `/x/:module/:rev/…`, their browser modules' files                                                                                                                   |
-| `http/io.ts`                  | What every route uses: reading a body, writing JSON, `ApiRequest`                                                                                                                                                                               |
+| `http/io.ts`                  | What every route uses: reading a body, writing JSON, `ApiRequest`; a file to serve, read as it was checked (`readChecked`, `opened`); the policy an SVG is served with                                                                          |
 
 ### The built-in browser: `browser.ts` and `browser/`
 
