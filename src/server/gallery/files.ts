@@ -25,7 +25,7 @@ type Step = { to: string; old?: string; from?: string };
 
 const JOURNAL = /^\.([a-z0-9][a-z0-9_-]{1,63})\.gallery-undo\.json$/;
 
-const journalOf = (root: string, name: string) => join(root, `.${name}.gallery-undo.json`);
+export const journalOf = (root: string, name: string) => join(root, `.${name}.gallery-undo.json`);
 
 export const exists = (path: string) =>
     lstat(path).then(

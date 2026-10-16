@@ -25,12 +25,14 @@ import { fileDiff } from "./gallery/diff.ts";
 import { download, type Fetcher } from "./gallery/fetch.ts";
 import {
     exists,
+    journalOf,
     place,
     plain,
     prune,
     readInstalled,
     recover,
     removable,
+    target,
     textOf,
 } from "./gallery/files.ts";
 import {
@@ -885,6 +887,15 @@ export class Gallery {
 
         const { provenance, entry, files } = await this.#offered(name, signal);
         const before = provenance.entry;
+
+        // As the update would refuse: a change that could not be put back waits for the next start.
+        if (await exists(journalOf(this.#dropIns(), name))) {
+            throw new HttpError(
+                409,
+                `An earlier change to ${name} was not put back yet: restart the server, then try again`,
+            );
+        }
+
         const names = [
             ...new Set([...before.files, ...entry.files].map((file) => file.name)),
         ].sort();
@@ -906,16 +917,25 @@ export class Gallery {
                 await plain(this.#dropIns(), name, file);
             }
 
-            // A file there that the version installed did not list: the owner's own, which the update replaces.
-            const unlisted =
-                installed === undefined &&
-                (await removable(this.#dropIns(), name, file)) !== undefined;
+            // What the update replaces or removes there: an installed file, or one the version installed did not list
+            // (the owner's own, which the update replaces).
+            const there = (await removable(this.#dropIns(), name, file)) !== undefined;
+            const unlisted = installed === undefined && there;
+
+            // A file the update drops that it cannot reach (behind a link, or a folder now) stays as it is: no change.
+            if (
+                next === undefined &&
+                !there &&
+                (await exists(target(this.#dropIns(), name, file)))
+            ) {
+                continue;
+            }
+
             // What is there now, to diff against when it can be read: a file too large, or a link the update removes,
-            // shows no diff.
-            const old =
-                installed !== undefined || unlisted
-                    ? await readInstalled(this.#dropIns(), name, file).catch(() => undefined)
-                    : undefined;
+            // shows as changed, without its lines.
+            const old = there
+                ? await readInstalled(this.#dropIns(), name, file).catch(() => undefined)
+                : undefined;
             // Not the owner's: an installed file under another case of its name (where the file system ignores case),
             // or one already as the new version has it.
             const ours =
@@ -935,7 +955,9 @@ export class Gallery {
                 next === undefined
                     ? "removed"
                     : old === undefined
-                      ? "added"
+                      ? there
+                          ? "changed"
+                          : "added"
                       : sha256(old) === sha256(next)
                         ? "same"
                         : "changed";
@@ -946,7 +968,7 @@ export class Gallery {
                 diffs.push(
                     fileDiff(
                         file,
-                        old === undefined ? null : textOf(old),
+                        old === undefined ? (there ? undefined : null) : textOf(old),
                         next === undefined ? null : textOf(next),
                     ),
                 );
@@ -1383,10 +1405,10 @@ export class Gallery {
 
             const next = files.find((each) => each.name === file)?.bytes;
             const change =
-                old === undefined
-                    ? "added"
-                    : next === undefined
-                      ? "removed"
+                next === undefined
+                    ? "removed"
+                    : old === undefined
+                      ? "added"
                       : sha256(old) === sha256(next)
                         ? "same"
                         : "changed";
