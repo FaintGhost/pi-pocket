@@ -207,6 +207,14 @@ export class Spend {
         return spent;
     }
 
+    /**
+     * What counts against a session's own limit, to show beside it: itself and its subagents, and, for a session that
+     * started linked sessions, theirs too, as `#reached` counts it.
+     */
+    budgetSpent(root: ConversationId): number {
+        return this.#teamRoot(root) === root ? this.#teamSpent(root) : this.sessionSpent(root);
+    }
+
     personSpent(userId: string): number {
         return this.#people[userId] ?? 0;
     }
@@ -394,7 +402,7 @@ export class Spend {
             return {
                 id: session.id,
                 title: session.title ?? "New session",
-                spent: byRoot.get(id) ?? 0,
+                spent: budget === undefined ? (byRoot.get(id) ?? 0) : this.budgetSpent(id),
                 ...(budget === undefined ? {} : { budget }),
             };
         });

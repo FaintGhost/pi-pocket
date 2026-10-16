@@ -165,3 +165,16 @@ test("an unavailable model creates no session", async (t) => {
         undefined,
     );
 });
+
+test("a session that started others shows what counts against its limit: theirs too", async () => {
+    const id = await source();
+    const { session: child } = await start(id);
+
+    await app.spend.setSessionBudget(owner(app), id, 1);
+    await recordCost(app, id, 0.25);
+    await recordCost(app, child, 0.5);
+
+    const row = app.spend.summary(owner(app)).sessions.find((each) => each.id === Number(id));
+
+    assert.equal(row?.spent, 0.75);
+});
