@@ -57,6 +57,10 @@ export interface ThemeInfo {
     css: string[];
     /** Its palette, by `colors.toml`'s keys, when it has one. */
     colors?: Record<string, string>;
+    /** A light palette beside it (`colors-light.toml`): the theme's colors follow the system's light or dark. */
+    colorsLight?: Record<string, string>;
+    /** The fonts its stylesheets load, to preload with them. */
+    fonts: string[];
     /** Changes when any of its files do. */
     rev?: string;
     extends?: string;
@@ -82,6 +86,7 @@ interface Version {
     builtIn: boolean;
     manifest?: Manifest;
     colors?: Record<string, string>;
+    colorsLight?: Record<string, string>;
     /** Its stylesheets' text, by their path in the folder, `theme.css` first. */
     css: Map<string, string>;
     /** Its fonts and images, by their path in the folder. */
@@ -103,6 +108,10 @@ function pocketVersion(): string {
         return "0.0.0";
     }
 }
+
+/** A theme's file's address: its path in the folder, each part escaped, under the theme's id and version. */
+const themeAddress = (id: string, rev: string, path: string) =>
+    `/themes/${id}/${rev}/${path.split("/").map(encodeURIComponent).join("/")}`;
 
 /** A theme folder found, in the order listed. */
 interface Listed {
@@ -223,6 +232,8 @@ export class Themes {
                 builtIn,
                 css: good === undefined || id === BASE_THEME ? [] : this.#chain(good),
                 ...(good?.colors === undefined ? {} : { colors: good.colors }),
+                ...(good?.colorsLight === undefined ? {} : { colorsLight: good.colorsLight }),
+                fonts: good === undefined || id === BASE_THEME ? [] : this.#fonts(good),
                 ...(good === undefined ? {} : { rev: good.rev }),
                 ...(manifest?.extends === undefined ? {} : { extends: manifest.extends }),
                 ...(problem === undefined ? {} : { problem }),
@@ -231,8 +242,15 @@ export class Themes {
         });
     }
 
-    /** A file a theme serves now, by its path in the folder; none for anything else. */
-    file(id: string, path: readonly string[]): ThemeFile | undefined {
+    /**
+     * A file a theme serves now, by its path in the folder, and whether `rev` is the version it is now (an address that
+     * will never serve anything else); none for anything else.
+     */
+    file(
+        id: string,
+        rev: string | undefined,
+        path: readonly string[],
+    ): { file: ThemeFile; current: boolean } | undefined {
         const good = this.#good.get(id);
         const key = path.join("/");
 
@@ -241,8 +259,9 @@ export class Themes {
         }
 
         const css = good.css.get(key);
+        const file = css === undefined ? good.assets.get(key) : { css };
 
-        return css === undefined ? good.assets.get(key) : { css };
+        return file === undefined ? undefined : { file, current: rev === good.rev };
     }
 
     /** Whether a theme is the owner's, and so may be changed or removed here. */
@@ -251,10 +270,12 @@ export class Themes {
     }
 
     /**
-     * A new theme of the owner's called `name`, from `from`: a copy of a theme's files, or a palette (a built-in one, or
-     * `desktop`, the desktop's as it is now) as a theme of colors alone. Answers its id.
+     * A new theme of the owner's called `name`. Of a theme (`colors` false): a copy of its whole folder, with a new name.
+     * Of colors (`colors` true): a theme of colors alone, from a palette that comes with the app, `desktop` (the
+     * desktop's, as it is now), or a theme folder's (`<id>`, both halves of a pair; `<id>@dark` or `<id>@light`, one).
+     * Answers its id.
      */
-    async duplicate(from: string, name: unknown): Promise<string> {
+    async duplicate(from: string, name: unknown, colorsOnly = false): Promise<string> {
         const title = (() => {
             try {
                 return plainLine(name, "The name", 60);
@@ -262,47 +283,74 @@ export class Themes {
                 throw new HttpError(400, describe(error));
             }
         })();
-        const id = newThemeId(title, (each) => this.#taken(each));
-        const target = join(this.dir, id);
-        const source = this.#good.get(from);
-        let manifest: Record<string, unknown> | undefined;
-        let colors: Record<string, string> | undefined;
+        const [base, half] = from.split("@") as [string, string | undefined];
+        const source = this.#good.get(base);
+        /** What to write, by file name, besides the copied files. */
+        const write = new Map<string, string>();
+        let copy: Map<string, FileStat> | undefined;
+        let manifest: Record<string, unknown> = { themeApi: 1, name: title };
 
-        if (source !== undefined) {
+        if (!colorsOnly) {
+            if (source === undefined || half !== undefined) {
+                throw new HttpError(404, "No such theme to copy");
+            }
+
+            copy = walk(source.dir);
             // Its own now: what the copy says of itself is the owner's to write.
-            manifest = { ...(source.manifest ?? { themeApi: 1 }), name: title };
+            manifest = {
+                ...(source.manifest ?? {}),
+                themeApi: source.manifest?.themeApi ?? 1,
+                name: title,
+            };
             delete manifest.description;
             delete manifest.author;
             delete manifest.version;
-            colors = source.colors;
-        } else if (from === "desktop") {
-            colors = (await desktopTheme())?.colors;
+        } else if (source !== undefined) {
+            const dark = half === "light" ? undefined : source.colors;
+            const light = half === "dark" ? undefined : source.colorsLight;
+
+            if (dark === undefined && light === undefined) {
+                throw new HttpError(404, "That theme has no such colors");
+            }
+
+            if (dark !== undefined) {
+                write.set("colors.toml", colorsToml(dark));
+            }
+
+            if (light !== undefined) {
+                write.set(
+                    dark === undefined ? "colors.toml" : "colors-light.toml",
+                    colorsToml(light),
+                );
+            }
         } else {
-            colors = this.#palettes[from]?.colors;
+            const colors =
+                from === "desktop" ? (await desktopTheme())?.colors : this.#palettes[from]?.colors;
+
+            if (colors === undefined) {
+                throw new HttpError(404, "No such colors to copy");
+            }
+
+            write.set("colors.toml", colorsToml(colors));
         }
 
-        if (source === undefined && colors === undefined) {
-            throw new HttpError(404, "No such theme or colors to copy");
-        }
+        write.set("theme.json", `${JSON.stringify(manifest, null, 4)}\n`);
+        const id = newThemeId(title, (each) => this.#taken(each));
+        const target = join(this.dir, id);
 
         mkdirSync(this.dir, { recursive: true });
         mkdirSync(target);
 
         try {
-            // Its files as they are written, not as they are served.
-            for (const path of [...(source?.css.keys() ?? []), ...(source?.assets.keys() ?? [])]) {
+            // Every file of its folder, as written (its fonts' licences too), not as served.
+            for (const [path, stat] of copy ?? []) {
                 mkdirSync(dirname(join(target, path)), { recursive: true });
-                cpSync(join(source!.dir, path), join(target, path), { dereference: false });
+                cpSync(stat.file, join(target, path), { dereference: false });
             }
 
-            if (colors !== undefined) {
-                writeFileSync(join(target, "colors.toml"), colorsToml(colors));
+            for (const [file, text] of write) {
+                writeFileSync(join(target, file), text);
             }
-
-            writeFileSync(
-                join(target, "theme.json"),
-                `${JSON.stringify(manifest ?? { themeApi: 1, name: title }, null, 4)}\n`,
-            );
         } catch (error) {
             this.#options.log(`Theme ${id} was not copied whole: ${describe(error)}`);
 
@@ -363,6 +411,17 @@ export class Themes {
         } catch {
             return false;
         }
+    }
+
+    /** The fonts a theme's stylesheets load, the ones of the themes it extends too. */
+    #fonts(version: Version): string[] {
+        const own = [...version.assets]
+            .filter(([, asset]) => asset.type === "font/woff2")
+            .map(([path]) => themeAddress(version.id, version.rev, path));
+        const base = version.manifest?.extends;
+        const parent = base === undefined || base === BASE_THEME ? undefined : this.#good.get(base);
+
+        return parent === undefined ? own : [...this.#fonts(parent), ...own];
     }
 
     /** The stylesheets of a theme, the ones of the themes it extends first. */
@@ -603,9 +662,11 @@ export function readTheme(
     const hash = createHash("sha256");
     const manifestFile = files.get("theme.json");
     const colorsFile = files.get("colors.toml");
+    const lightFile = files.get("colors-light.toml");
     const entry = files.get("theme.css");
     let manifest: Manifest | undefined;
     let colors: Record<string, string> | undefined;
+    let colorsLight: Record<string, string> | undefined;
 
     if (manifestFile !== undefined) {
         const text = readListed(manifestFile, THEME_LIMITS.small, "theme.json");
@@ -621,8 +682,26 @@ export function readTheme(
         hash.update(`colors.toml\0${text}\0`);
     }
 
+    if (lightFile !== undefined) {
+        const text = readListed(lightFile, THEME_LIMITS.small, "colors-light.toml");
+        const light = parseThemeColors(text);
+
+        if ((light.mode ?? "light") !== "light") {
+            throw new ThemeProblem('colors-light.toml says mode = "dark"');
+        }
+
+        // Alone, it is the theme's palette; beside colors.toml, the light half of a pair.
+        if (colors === undefined) {
+            colors = { ...light, mode: "light" };
+        } else {
+            colorsLight = { ...light, mode: "light" };
+        }
+
+        hash.update(`colors-light.toml\0${text}\0`);
+    }
+
     if (entry === undefined && colors === undefined) {
-        throw new ThemeProblem("it has neither a theme.css nor a colors.toml");
+        throw new ThemeProblem("it has no theme.css, colors.toml, or colors-light.toml");
     }
 
     if (entry !== undefined && manifest === undefined) {
@@ -760,6 +839,7 @@ export function readTheme(
         builtIn,
         ...(manifest === undefined ? {} : { manifest }),
         ...(colors === undefined ? {} : { colors }),
+        ...(colorsLight === undefined ? {} : { colorsLight }),
         css: new Map(
             [...css].map(([path, text]) => [path, served(text, loads.get(path)!, id, rev)]),
         ),
@@ -783,7 +863,7 @@ function served(
 
     for (const load of [...loads].sort((a, b) => b.start - a.start)) {
         const [file, fragment] = load.to.split("#");
-        const address = `/themes/${id}/${rev}/${file!.split("/").map(encodeURIComponent).join("/")}${fragment === undefined ? "" : `#${fragment}`}`;
+        const address = `${themeAddress(id, rev, file!)}${fragment === undefined ? "" : `#${fragment}`}`;
 
         out = `${out.slice(0, load.start)}${load.quoted ? `"${address}"` : `url("${address}")`}${out.slice(load.end)}`;
     }

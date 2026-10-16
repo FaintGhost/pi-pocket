@@ -18,7 +18,7 @@ test("a theme's CSS may load only files in its own folder", () => {
     const css = (rule: string) => {
         writeFileSync(join(dir, "theme.css"), `@font-face { src: url(fonts/a.woff2); }\n${rule}\n`);
 
-        return () => readTheme(dir, "mine", false, "0.15.0");
+        return () => readTheme(dir, "mine", false, "0.14.0");
     };
 
     assert.equal(css(":root { --x: 1px; }")().assets.size, 1);

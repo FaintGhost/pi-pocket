@@ -359,13 +359,17 @@ export function createApi(options: HttpOptions, auth: Auth) {
 
         if (first === "themes" && second === "duplicate" && method === "POST") {
             requireOwner(user);
-            const body = await readJson<{ from?: unknown; name?: unknown }>(request);
+            const body = await readJson<{ from?: unknown; name?: unknown; colors?: unknown }>(
+                request,
+            );
 
             if (typeof body.from !== "string") {
                 throw new HttpError(400, "Say which theme or colors to copy");
             }
 
-            return json(response, 200, { id: await app.themes.duplicate(body.from, body.name) });
+            return json(response, 200, {
+                id: await app.themes.duplicate(body.from, body.name, body.colors === true),
+            });
         }
 
         if (first === "themes" && second !== undefined && third === "edit" && method === "GET") {

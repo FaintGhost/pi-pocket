@@ -58,6 +58,8 @@ function readJson(key, fallback) {
 }
 
 const reduceQuery = matchMedia("(prefers-reduced-motion: reduce)");
+/** The system's light or dark, which a theme's pair of palettes follows. */
+const lightQuery = matchMedia("(prefers-color-scheme: light)");
 
 /** Set once this browser's saved look has the sidebar's width for the rail beside the list. */
 const RAIL_KEY = "pocket.railBeside";
@@ -154,11 +156,27 @@ export function paletteOf(id = prefs().theme) {
 
 /** A theme folder's palette, when the server lists one by that id that can be used. */
 function folderColors(id) {
+    const [base, half] = id.split("@");
     const folder = store.state.themeList?.find(
-        (each) => each.id === id && each.usable && each.colors,
+        (each) => each.id === base && each.usable && each.colors,
     );
 
-    return folder ? { id, name: folder.name, colors: folder.colors, folder: true } : undefined;
+    if (!folder) {
+        return undefined;
+    }
+
+    // A pair (colors.toml and colors-light.toml): the half asked for, or the one the system's light or dark asks for.
+    const light =
+        folder.colorsLight !== undefined &&
+        (half === "light" || (half === undefined && lightQuery.matches));
+
+    return {
+        id,
+        name: folder.colorsLight && half ? `${folder.name} · ${half}` : folder.name,
+        colors: light ? folder.colorsLight : folder.colors,
+        folder: true,
+        pair: folder.colorsLight !== undefined && half === undefined,
+    };
 }
 
 /**
@@ -286,7 +304,9 @@ const colorsOnly = (each) => each.css.length === 0 && each.colors !== undefined 
 export function folderPaletteIds() {
     return (store.state.themeList ?? [])
         .filter((each) => each.usable && each.colors && each.id !== BASE_LOOK)
-        .map((each) => each.id);
+        .flatMap((each) =>
+            each.colorsLight ? [each.id, `${each.id}@dark`, `${each.id}@light`] : [each.id],
+        );
 }
 
 /** CSS variables for a palette. Everything else in style.css mixes from these. */
@@ -416,10 +436,31 @@ export function apply() {
     document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", attrs.mode);
     // In safe mode, or before the list, the theme's stylesheets stay as the cache has them, for the next load.
     const css = sheets === null || safeMode() ? (cached.css ?? []) : sheets;
+    const fonts = sheets === null || safeMode() ? (cached.fonts ?? []) : (lookOf()?.fonts ?? []);
+    // A pair of palettes: both halves, so the first paint takes the one the system's light or dark asks for.
+    const pair = palette?.pair
+        ? Object.fromEntries(
+              ["dark", "light"].map((half) => {
+                  const each = themeVars(paletteOf(`${palette.id}@${half}`));
+
+                  return [half, { palette: each, color: each["--o-bg"] }];
+              }),
+          )
+        : palette
+          ? undefined
+          : cached.pair;
 
     localStorage.setItem(
         CACHE,
-        JSON.stringify({ palette: vars, vars: inline, attrs, color: vars["--o-bg"], css }),
+        JSON.stringify({
+            palette: vars,
+            vars: inline,
+            attrs,
+            color: vars["--o-bg"],
+            css,
+            fonts,
+            ...(pair ? { pair } : {}),
+        }),
     );
 }
 
@@ -544,6 +585,7 @@ export function startTheme() {
 
     started = true;
     reduceQuery.addEventListener?.("change", apply);
+    lightQuery.addEventListener?.("change", apply);
     onSafeModeEnd(apply);
     // The server's list of theme folders came or changed: a theme's new version, or one that went.
     let list = store.state.themeList;

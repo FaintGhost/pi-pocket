@@ -33,17 +33,23 @@ export function themeFile(
         throw new HttpError(405, "Files are only read");
     }
 
-    const [id, _rev, ...path] = parts;
-    const found = id === undefined ? undefined : app.themes.file(id, path);
+    const [id, rev, ...path] = parts;
+    const served = id === undefined ? undefined : app.themes.file(id, rev, path);
+
+    if (served === undefined) {
+        throw new HttpError(404, "Not found");
+    }
+
+    const found = served.file;
     const headers = {
-        "cache-control": "private, no-cache",
+        // The version in the address is the files' hash: under the current one, nothing else will ever be served, so the
+        // browser keeps it. An older address serves what is there now, and asks each time.
+        "cache-control": served.current
+            ? "private, max-age=31536000, immutable"
+            : "private, no-cache",
         // Another site's page may not use it: the sign-in cookie would go along with the request.
         "cross-origin-resource-policy": "same-origin",
     };
-
-    if (found === undefined) {
-        throw new HttpError(404, "Not found");
-    }
 
     if ("css" in found) {
         send(response, 200, found.css, "text/css; charset=utf-8", headers);

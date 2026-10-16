@@ -45,7 +45,7 @@ function ThemeCard({ id, desktop = false }) {
     </div>`;
     const name = html`<div class="tc-name">
         ${desktop ? `Desktop · ${palette.name}` : palette.name}
-        ${palette.colors.mode === "light" && html`<small>light</small>`}
+        ${palette.pair ? html`<small>light and dark</small>` : palette.colors.mode === "light" && html`<small>light</small>`}
     </div>`;
 
     return html`<button
@@ -132,14 +132,14 @@ function listed(id) {
 }
 
 /** Ask for a new theme's name, and make it from `from`: its id, or a palette's. */
-function Duplicate({ from, label, onDone }) {
+function Duplicate({ from, label, colors = false, onDone }) {
     const [name, setName] = useState(`My ${label}`);
     const [busy, setBusy] = useState(false);
 
     const make = async (event) => {
         event.preventDefault();
         setBusy(true);
-        const made = await attempt(() => api("themes/duplicate", { from, name }));
+        const made = await attempt(() => api("themes/duplicate", { from, name, colors }));
 
         setBusy(false);
 
@@ -231,6 +231,7 @@ function ColorsTools() {
         return html`<${Duplicate}
             from=${id === "desktop" ? "desktop" : palette.id}
             label=${palette.name}
+            colors=${true}
             onDone=${(made) => {
                 setNaming(false);
 
