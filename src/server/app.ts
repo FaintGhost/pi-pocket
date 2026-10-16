@@ -87,13 +87,7 @@ import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./p
 import { measureModelStreams } from "./timing.ts";
 import { Providers } from "./providers.ts";
 import { PushStore } from "./push.ts";
-import {
-    BUILT_IN_MODULES,
-    BUILT_IN_TOOLS,
-    type ExtensionInfo,
-    ExtensionLoader,
-    prepareDropInFolder,
-} from "./reload.ts";
+import { type ExtensionInfo, ExtensionLoader, prepareDropInFolder } from "./reload.ts";
 import { ResendTask } from "./resend.ts";
 import { type Client, reportingOf, Room, ROOM_DOCS, subagentView } from "./room.ts";
 import { Schedules } from "./schedules.ts";
@@ -1669,14 +1663,9 @@ export class PocketApp {
                 home: homedir(),
                 defaultCwd: this.defaultCwd,
                 extensions: this.loader.extensionNames(),
-                // The browser modules this person's tabs load (`extension-ui.js`), Pi Pocket's own marked.
-                ui: this.webs
-                    .clients(user)
-                    .map((each) =>
-                        BUILT_IN_MODULES.has(each.module) ? { ...each, builtIn: true } : each,
-                    ),
-                // Tools whose calls only Pi Pocket's own browser modules may describe (`pocket.toolCall`).
-                builtInTools: [...BUILT_IN_TOOLS],
+                // The browser modules this person's tabs load (`extension-ui.js`), each with the tools its module
+                // installs: the only ones whose calls it may describe (`pocket.toolCall`).
+                ui: this.#browserModules(user),
                 // Tells the web app this server has people chat and typing indicators.
                 chat: true,
                 // Manual refresh reloads shared model configuration and catalogs; only the owner may start it.
@@ -1703,6 +1692,21 @@ export class PocketApp {
             // Read after the guard's wait, so a connecting device does not replace a live update with an older list.
             folderFavorites: await this.folderFavorites.list(user),
         };
+    }
+
+    #browserModules(user: User) {
+        const tools = new Map(
+            this.loader
+                .list()
+                .map((each) => [
+                    each.file.replace(/\.ts$/, ""),
+                    each.extensions.flatMap((extension) => extension.tools),
+                ]),
+        );
+
+        return this.webs
+            .clients(user)
+            .map((each) => ({ ...each, tools: tools.get(each.module) ?? [] }));
     }
 
     /** A tab's hello: what everyone gets, and the id of its own connection, which its peek lists name. */
