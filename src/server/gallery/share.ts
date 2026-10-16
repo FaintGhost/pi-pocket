@@ -387,12 +387,21 @@ export async function shareThemeDraft(options: {
         problems.push(`The theme check refuses it: ${describe(error)}.`);
     }
 
+    // Its palettes by the files that are there: `colors-light.toml` alone is its palette too.
+    const palettes: string[] = [];
+
+    for (const path of ["colors.toml", "colors-light.toml"]) {
+        if (theme !== undefined && (await readThemeFile(dir, id, path)) !== undefined) {
+            palettes.push(path);
+        }
+    }
+
     const paths =
         theme === undefined
             ? []
             : [
                   ...(theme.manifest === undefined ? [] : ["theme.json"]),
-                  ...(theme.colors === undefined ? [] : ["colors.toml"]),
+                  ...palettes,
                   ...theme.css.keys(),
                   ...theme.assets.keys(),
               ];

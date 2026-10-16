@@ -11,6 +11,7 @@
  * sizes to `LIMITS`.
  */
 import { createHash } from "node:crypto";
+import { readdirSync } from "node:fs";
 import { BUILT_IN_COMMANDS } from "../extension-web.ts";
 import { INVISIBLE_CLASS } from "../fence.ts";
 import { BUILT_IN_MODULES, BUILT_IN_TOOLS, RESERVED_EXTENSIONS } from "../reload.ts";
@@ -219,8 +220,8 @@ export function fileProblem(file: string, extension: string): string | undefined
 
 /**
  * Why a file name is not one a theme called `theme` may have, or undefined when it may: in its own folder (`<theme>/…`,
- * at most four folders deep), and one the theme format serves: `theme.json` and `colors.toml` at its top, stylesheets,
- * `.woff2` fonts, and images. So a theme's files never reach past its folder in `themes/`.
+ * at most four folders deep), and one the theme format serves: `theme.json`, `colors.toml`, and `colors-light.toml` at
+ * its top, stylesheets, `.woff2` fonts, and images. So a theme's files never reach past its folder in `themes/`.
  */
 export function themeFileProblem(file: string, theme: string): string | undefined {
     if (typeof file !== "string" || file.length > 200) {
@@ -250,16 +251,18 @@ export function themeFileProblem(file: string, theme: string): string | undefine
     const inner = parts.slice(1).join("/");
 
     if (
-        inner === "theme.json" ||
-        inner === "colors.toml" ||
+        SMALL_FILES.includes(inner) ||
         inner.toLowerCase().endsWith(".css") ||
         assetType(inner) !== undefined
     ) {
         return undefined;
     }
 
-    return "is not a file a theme serves: theme.json, colors.toml, .css, .woff2, or an image (.png, .jpg, .webp, .avif, .gif, .svg)";
+    return "is not a file a theme serves: theme.json, colors.toml, colors-light.toml, .css, .woff2, or an image (.png, .jpg, .webp, .avif, .gif, .svg)";
 }
+
+/** The files at the top of a theme's folder that say what it is: each is `THEME_LIMITS.small` at most. */
+const SMALL_FILES = ["theme.json", "colors.toml", "colors-light.toml"];
 
 // ─── Reading ───────────────────────────────────────────────────────────────────────
 
@@ -569,8 +572,22 @@ export function parseEntry(value: unknown): Entry {
     };
 }
 
-/** Ids a theme in the index may not have: the app's own look, and the desktop's colors. */
-const RESERVED_THEMES = new Set(["pocket", "desktop"]);
+/**
+ * Ids a theme in the index may not have, as Pi Pocket keeps them for itself: `desktop` (the desktop's colors), the
+ * themes that come with it (`web/themes/`), and its palettes (`web/themes.js`). Read from this checkout, as the index's
+ * checks import this file from one.
+ */
+export const RESERVED_THEMES: ReadonlySet<string> = await (async () => {
+    const web = new URL("../../../web/", import.meta.url);
+    const builtIn = readdirSync(new URL("themes/", web), { withFileTypes: true })
+        .filter((each) => each.isDirectory())
+        .map((each) => each.name);
+    const { THEMES } = (await import(new URL("themes.js", web).href)) as {
+        THEMES: Record<string, unknown>;
+    };
+
+    return new Set(["desktop", "pocket", ...builtIn, ...Object.keys(THEMES)]);
+})();
 
 /**
  * A theme's entry, checked whole: its files keep to the theme format's names and limits (`themes/format.ts`). What
@@ -613,8 +630,10 @@ export function parseThemeEntry(value: unknown): ThemeEntry {
     const inner = (file: EntryFile) => file.name.slice(name.length + 1);
     const has = (path: string) => files.some((file) => inner(file) === path);
 
-    if (!has("theme.css") && !has("colors.toml")) {
-        throw new EntryError(`files has neither ${name}/theme.css nor ${name}/colors.toml`);
+    if (!has("theme.css") && !has("colors.toml") && !has("colors-light.toml")) {
+        throw new EntryError(
+            `files has no ${name}/theme.css, ${name}/colors.toml, or ${name}/colors-light.toml`,
+        );
     }
 
     if (has("theme.css") && !has("theme.json")) {
@@ -622,7 +641,7 @@ export function parseThemeEntry(value: unknown): ThemeEntry {
     }
 
     for (const file of files) {
-        if (["theme.json", "colors.toml"].includes(inner(file)) && file.size > THEME_LIMITS.small) {
+        if (SMALL_FILES.includes(inner(file)) && file.size > THEME_LIMITS.small) {
             throw new EntryError(`${file.name} is more than ${THEME_LIMITS.small} bytes`);
         }
     }

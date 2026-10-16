@@ -259,6 +259,8 @@ test("a theme installs into the themes folder only as pinned, and only when its 
         const files = {
             [`${name}/theme.json`]: '{ "themeApi": 1, "name": "Test theme" }\n',
             [`${name}/theme.css`]: css,
+            // A light palette beside the theme: part of the format, so part of an entry.
+            [`${name}/colors-light.toml`]: 'background = "#fafafa"\nforeground = "#222222"\n',
         };
         const { pocketApi: _api, declares: _declares, ...rest } = entry(name, files, commit);
 

@@ -94,6 +94,8 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **The index:** 4 MB at most, with 2000 entries at most.
 - **The index's `name`:** 80 characters at most. Its `repo`: 160 characters at most.
 - **An extension's files:** 50 at most, of 512 KB each at most, and 2 MB together at most.
+- **A theme's files:** 200 at most, and 16 MB together at most. `theme.json`, `colors.toml`, and `colors-light.toml`: 8 KB each at most. Its CSS: 256 KB together at most. A font or an image: 4 MB at most.
+- **A theme's `name`:** 2 to 48 characters.
 - **A file's name:** 200 characters at most, and four folders deep at most, with `<name>/` as the first folder. Each part of it is 100 characters at most.
 - **`title`:** 60 characters at most. **`description`:** 600 characters at most.
 - **`tags`:** 10 at most, of 24 characters each at most.
