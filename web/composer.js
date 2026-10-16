@@ -1329,7 +1329,9 @@ export function Composer() {
                             view.conversation?.kind !== "subagent" &&
                             html`<button
                                 class=${`plan-chip ${view.plan?.on ? "on" : ""}`}
+                                aria-pressed=${view.plan?.on === true}
                                 title="Plan mode: Pi reads and proposes, and changes nothing until you approve"
+                                onMouseDown=${(event) => event.preventDefault()}
                                 onClick=${() => attempt(() => actions.setPlan(!view.plan?.on))}
                             >
                                 Plan
@@ -1365,6 +1367,7 @@ export function Composer() {
                                         tabindex=${steer === value ? "0" : "-1"}
                                         class=${steer === value ? "on" : ""}
                                         title=${tip}
+                                        onMouseDown=${(event) => event.preventDefault()}
                                         onClick=${() => setSteer(value)}
                                     >
                                         ${label}

@@ -163,6 +163,23 @@ test("on a computer, a session opens with the caret in its message box", real, a
     await until(boxFocused, "the box, after Alt and the session's number");
 });
 
+// Issue #83, reported by @vitalNohj: Enter after a click on Plan pressed it again, and plan mode went back off.
+test("a click on Plan leaves the focus in the message box", real, async () => {
+    await home(VIEWPORTS.desktop);
+    await page.click({ selector: `.sidebar .session-row[data-id="${Number(one)}"] > .session` });
+    await opened(one);
+    await until(boxFocused, "the box");
+    await page.click({ selector: ".composer .plan-chip" });
+    await until(
+        async () =>
+            await inPage<boolean>(
+                `return JSON.stringify((await import("/store.js")).store.state.view.plan?.on === true)`,
+            ),
+        "plan mode on",
+    );
+    assert.equal(await boxFocused(), true, "Enter goes on to send, not to the chip");
+});
+
 test(
     "on a touch screen, a session opens with its message box waiting for a tap",
     real,
