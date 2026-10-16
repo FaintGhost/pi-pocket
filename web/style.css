@@ -8673,6 +8673,82 @@ textarea.notes {
     color: var(--body);
 }
 
+/* The theme: a card for each theme folder, in the app's own colors (a theme cannot be drawn small, as colors can). */
+.look-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 10px;
+}
+
+.look-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-height: 64px;
+    padding: 10px 12px;
+    text-align: left;
+    border-radius: var(--r-card);
+    background: var(--card);
+    border: 1px solid var(--hair-2);
+    transition: border-color var(--t-hover) var(--ease-out);
+}
+
+@media (hover: hover) {
+    .look-card:not(:disabled):hover {
+        border-color: var(--accent-line);
+    }
+}
+
+.look-card.on {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+}
+
+.look-card.broken {
+    cursor: default;
+    opacity: 0.8;
+}
+
+.look-name {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text);
+}
+
+.look-name small {
+    font: 10.5px var(--mono);
+    color: var(--faint);
+}
+
+.look-detail {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.look-problem {
+    font-size: 12px;
+    color: var(--err);
+}
+
+.look-tools,
+.look-duplicate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 4px;
+}
+
+.look-duplicate input {
+    flex: 1;
+    min-width: 160px;
+}
+
 /* ─── Sign in: the app's screen (the server's pages are under Notices) ─── */
 
 .signin {

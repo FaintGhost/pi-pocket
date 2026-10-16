@@ -1,7 +1,9 @@
-// Appearance: Omarchy palettes as CSS variables, "Follow desktop" (the Omarchy theme this machine runs), tiled windows,
-// motion, text size, density, and the sidebar's shape. Saved per browser. index.html applies the last look before the first
-// paint from `pocket.themeCache`, so a reload never flashes another theme.
+// Appearance: the theme (a folder of CSS the server lists, `themes.ts`), the colors (Omarchy palettes as CSS variables,
+// a theme folder's own, or "Follow desktop": the Omarchy theme this machine runs), tiled windows, motion, text size,
+// density, and the sidebar's shape. Saved per browser. index.html applies the last look before the first paint from
+// `pocket.themeCache`, the theme's stylesheets included, so a reload never flashes another look.
 import { THEMES } from "./themes.js";
+import { onSafeModeEnd, safeMode } from "./safe-mode.js";
 import { api, store } from "./store.js";
 
 const KEY = "pocket.appearance";
@@ -10,9 +12,17 @@ const DESKTOP_CACHE = "pocket.desktopTheme";
 const PINNED = "pocket.pinned";
 const FALLBACK = "tokyo-night";
 
+/** The app's own look, which every theme builds on: it loads no stylesheet. */
+export const BASE_LOOK = "pocket";
+
 const DEFAULTS = {
-    /** "desktop" follows the Omarchy theme of the machine Pi Pocket runs on; otherwise a key of THEMES. */
+    /**
+     * The colors: "desktop" follows the Omarchy theme of the machine Pi Pocket runs on; otherwise a key of THEMES, or the
+     * id of a theme folder with a colors.toml. (Its name is from before themes were folders.)
+     */
     theme: "desktop",
+    /** The theme: a theme folder's id, or "pocket", the app's own look. */
+    look: BASE_LOOK,
     /** Wide screens: the sidebar and the conversation as Hyprland windows, with gaps and borders. */
     tiling: true,
     /** The desktop's wallpaper in the gaps, when following the desktop. */
@@ -133,7 +143,150 @@ export function paletteOf(id = prefs().theme) {
         return { id: FALLBACK, ...THEMES[FALLBACK] };
     }
 
-    return THEMES[id] ? { id, ...THEMES[id] } : { id: FALLBACK, ...THEMES[FALLBACK] };
+    if (THEMES[id]) {
+        return { id, ...THEMES[id] };
+    }
+
+    const folder = folderColors(id);
+
+    return folder ?? { id: FALLBACK, ...THEMES[FALLBACK] };
+}
+
+/** A theme folder's palette, when the server lists one by that id that can be used. */
+function folderColors(id) {
+    const folder = store.state.themeList?.find(
+        (each) => each.id === id && each.usable && each.colors,
+    );
+
+    return folder ? { id, name: folder.name, colors: folder.colors, folder: true } : undefined;
+}
+
+/**
+ * Whether the palette `id` names is known here yet: one that comes with the app, the desktop's, or any once the server
+ * listed its theme folders. Until then, the palette index.html put on the page from the cache stays.
+ */
+const paletteKnown = (id) => id === "desktop" || THEMES[id] !== undefined || themesListed();
+
+/** The server listed its theme folders (`hello`). */
+const themesListed = () => Array.isArray(store.state.themeList);
+
+// ─── Theme folders ──────────────────────────────────────────────────────────────
+
+/** The theme folder this browser uses: the one it chose, if the server offers it; else the app's own look. */
+export function lookOf(id = prefs().look) {
+    if (safeMode() || id === BASE_LOOK) {
+        return null;
+    }
+
+    return (
+        store.state.themeList?.find(
+            (each) => each.id === id && each.usable && each.css.length > 0,
+        ) ?? null
+    );
+}
+
+/** The stylesheets of the theme this tab shows, or null while the server has not listed them yet. */
+function themeSheets() {
+    if (safeMode() || prefs().look === BASE_LOOK) {
+        return [];
+    }
+
+    return themesListed() ? (lookOf()?.css ?? []) : null;
+}
+
+/** Settles once the newest theme's stylesheets loaded (or failed to). */
+let sheetsLoaded = Promise.resolve();
+
+/**
+ * Put a theme's stylesheets in the theme layer: the new ones load beside the old, which go once they did, so nothing
+ * shows the app without a theme between two. The element holding them is `#pocket-theme`, as index.html names the one
+ * it writes before the first paint.
+ */
+function loadSheets(urls) {
+    const key = JSON.stringify(urls);
+    const current = document.getElementById("pocket-theme");
+
+    if ((current?.dataset.urls ?? "[]") === key) {
+        return sheetsLoaded;
+    }
+
+    const next = document.createElement("style");
+
+    next.dataset.urls = key;
+    next.textContent = urls.map((url) => `@import url("${url}") layer(theme);`).join("\n");
+    current?.removeAttribute("id");
+    next.id = "pocket-theme";
+
+    const old = () => {
+        for (const each of document.querySelectorAll("style[data-urls]")) {
+            if (each !== document.getElementById("pocket-theme")) {
+                each.remove();
+            }
+        }
+    };
+
+    if (urls.length === 0) {
+        document.head.append(next);
+        old();
+        sheetsLoaded = Promise.resolve();
+
+        return sheetsLoaded;
+    }
+
+    sheetsLoaded = new Promise((resolve) => {
+        next.addEventListener("load", resolve, { once: true });
+        next.addEventListener("error", resolve, { once: true });
+        // A server that does not answer: show what there is.
+        setTimeout(resolve, 4000);
+    }).then(old);
+    document.head.append(next);
+
+    return sheetsLoaded;
+}
+
+/** Switch to the theme folder `id` (or "pocket"), with the reveal; a theme with colors of its own brings them too. */
+export function chooseLook(id, event) {
+    const at =
+        event && "clientX" in event && (event.clientX || event.clientY)
+            ? { x: event.clientX, y: event.clientY }
+            : undefined;
+
+    if (id === prefs().look) {
+        return;
+    }
+
+    const look = store.state.themeList?.find((each) => each.id === id);
+
+    transition(() => {
+        setPrefs({ look: id, ...(look?.colors ? { theme: id } : {}) });
+
+        return sheetsLoaded;
+    }, at);
+}
+
+/** Theme folders that change the look, in the order the server lists them: the app's own first. */
+export function lookIds() {
+    return [
+        BASE_LOOK,
+        ...(store.state.themeList ?? [])
+            .filter(
+                (each) =>
+                    each.id !== BASE_LOOK &&
+                    (each.css.length > 0 || !each.usable) &&
+                    !colorsOnly(each),
+            )
+            .map((each) => each.id),
+    ];
+}
+
+/** A theme folder with colors and no CSS: it shows under Colors only. */
+const colorsOnly = (each) => each.css.length === 0 && each.colors !== undefined && each.usable;
+
+/** Theme folders' palettes, after the app's own: their ids. */
+export function folderPaletteIds() {
+    return (store.state.themeList ?? [])
+        .filter((each) => each.usable && each.colors && each.id !== BASE_LOOK)
+        .map((each) => each.id);
 }
 
 /** CSS variables for a palette. Everything else in style.css mixes from these. */
@@ -211,11 +364,22 @@ const reducedMotion = () => {
 /** Put the current look on the page: variables, mode, and the switches style.css reads from data attributes. */
 export function apply() {
     const root = document.documentElement;
-    const palette = paletteOf();
-    const vars = themeVars(palette);
-
-    setPalette(vars);
     const p = prefs();
+    const cached = readJson(CACHE, {});
+    // Colors of a theme folder before the server listed them: keep what index.html put on the page from the cache.
+    const palette = paletteKnown(p.theme) ? paletteOf() : null;
+    const vars = palette ? themeVars(palette) : (cached.palette ?? themeVars(paletteOf(FALLBACK)));
+
+    if (palette) {
+        setPalette(vars);
+    }
+
+    const sheets = themeSheets();
+
+    if (sheets !== null) {
+        loadSheets(sheets);
+    }
+
     const desktop = store.state.desktopTheme;
     // The desktop's wallpaper is the person's choice, so it stays inline and wins; without it, the app's default (none)
     // or the theme's own shows.
@@ -238,7 +402,9 @@ export function apply() {
     }
 
     const attrs = {
-        mode: modeOf(palette),
+        mode: palette ? modeOf(palette) : (cached.attrs?.mode ?? "dark"),
+        theme: lookOf()?.id ?? BASE_LOOK,
+        colors: palette?.id ?? cached.attrs?.colors ?? p.theme,
         tiling: p.tiling ? "on" : "off",
         motion: reducedMotion() ? "reduced" : "full",
         rail: p.sidebar === "rail" ? "on" : "off",
@@ -248,9 +414,12 @@ export function apply() {
     Object.assign(root.dataset, attrs);
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", vars["--o-bg"]);
     document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", attrs.mode);
+    // In safe mode, or before the list, the theme's stylesheets stay as the cache has them, for the next load.
+    const css = sheets === null || safeMode() ? (cached.css ?? []) : sheets;
+
     localStorage.setItem(
         CACHE,
-        JSON.stringify({ palette: vars, vars: inline, attrs, color: vars["--o-bg"] }),
+        JSON.stringify({ palette: vars, vars: inline, attrs, color: vars["--o-bg"], css }),
     );
 }
 
@@ -286,7 +455,7 @@ function transition(change, at) {
     // A second change while one runs skips the first; only the newest one takes the class off when it ends.
     const mine = ++transitions;
     const run = document.startViewTransition(async () => {
-        change();
+        await change();
         // The store renders in a microtask; let it finish before the new look is captured.
         await new Promise((resolve) => setTimeout(resolve, 0));
     });
@@ -375,6 +544,16 @@ export function startTheme() {
 
     started = true;
     reduceQuery.addEventListener?.("change", apply);
+    onSafeModeEnd(apply);
+    // The server's list of theme folders came or changed: a theme's new version, or one that went.
+    let list = store.state.themeList;
+
+    store.subscribe((state) => {
+        if (state.themeList !== list) {
+            list = state.themeList;
+            apply();
+        }
+    });
     const look = () =>
         document.visibilityState === "visible" && prefs().theme === "desktop" && checkDesktop();
 

@@ -13,8 +13,9 @@ import {
     useRef,
     useState,
 } from "preact/hooks";
-import { replaceAddress, useBack } from "./back.js";
+import { useBack } from "./back.js";
 import { describersChanged, setCallDescriber } from "./calls.js";
+import { leaveSafeMode, onSafeModeEnd, safeMode } from "./safe-mode.js";
 import { api, closeSheet, notify, onExtensionEvent, openSheet, store } from "./store.js";
 import { setCallSummary } from "./turns.js";
 import { html, Icon, iconPath, Loader, Markdown, Sheet, Spinner, Switch } from "./ui.js";
@@ -266,65 +267,13 @@ function cleanUp(record, dispose) {
 
 // ─── Safe mode ───────────────────────────────────────────────────────────────
 
-/** Where a tab keeps that it is in safe mode: in its session storage, so reloads and reconnects keep it. */
-const SAFE_KEY = "pocket.noext";
-
-/** What `?noext=` turns safe mode off with; any other value (`1`, or none) turns it on. */
-const SAFE_OFF = new Set(["0", "false", "off", "no"]);
-
-/**
- * Read `?noext=1` (safe mode on) or `?noext=0` (off) from the address, keep it for the tab, and take it out of the
- * address, so a link copied from here does not pass it on.
- */
-function startSafeMode() {
-    const query = new URLSearchParams(location.search);
-    const asked = query.has("noext")
-        ? !SAFE_OFF.has(query.get("noext").trim().toLowerCase())
-        : null;
-    let on = false;
-
-    try {
-        if (asked === true) {
-            sessionStorage.setItem(SAFE_KEY, "1");
-        } else if (asked === false) {
-            sessionStorage.removeItem(SAFE_KEY);
-        }
-
-        on = sessionStorage.getItem(SAFE_KEY) === "1";
-    } catch {
-        // No session storage: safe mode holds for this page only.
-        on = asked === true;
-    }
-
-    if (query.has("noext")) {
-        query.delete("noext");
-        const rest = query.toString();
-
-        replaceAddress(`${location.pathname}${rest ? `?${rest}` : ""}${location.hash}`);
-    }
-
-    return on;
-}
-
-let safe = startSafeMode();
 /** Safe mode was told once in this page: a reconnect does not tell it again. */
 let safeTold = false;
 
-/** This tab loads no browser modules of extensions (it was opened with `?noext=1`). */
-export const safeMode = () => safe;
+export { leaveSafeMode, safeMode };
 
-/** Leave safe mode: the tab loads its browser modules again. */
-export function leaveSafeMode() {
-    safe = false;
-
-    try {
-        sessionStorage.removeItem(SAFE_KEY);
-    } catch {
-        // Nothing kept, nothing to take away.
-    }
-
-    follow(store.state);
-}
+// Leaving safe mode loads the browser modules again.
+onSafeModeEnd(() => follow(store.state));
 
 // ─── Loading ─────────────────────────────────────────────────────────────────
 
@@ -337,7 +286,7 @@ function follow(state) {
     const list = Array.isArray(listed) ? listed : [];
     // Signed in or not counts too: safe mode says so once someone is.
     const key = [
-        safe ? "safe" : "",
+        safeMode() ? "safe" : "",
         state.me ? "in" : "",
         ...list.map(
             (each) =>
@@ -369,7 +318,7 @@ export function onExtensionsGone(listener) {
 /** Load what the server lists, and unload what it no longer does or lists at a new address (a new version). */
 function sync(list) {
     order = list.map((each) => each.module);
-    const wanted = new Map(safe ? [] : list.map((each) => [each.module, each]));
+    const wanted = new Map(safeMode() ? [] : list.map((each) => [each.module, each]));
 
     for (const record of [...modules.values()]) {
         const entry = wanted.get(record.module);
@@ -412,11 +361,11 @@ function sync(list) {
         }
     }
 
-    if (safe && !safeTold && store.state.me) {
+    if (safeMode() && !safeTold && store.state.me) {
         safeTold = true;
         notify(
             "warning",
-            "Extensions' browser parts are off in this tab. Menu → Extensions turns them back on.",
+            "Extensions' browser parts and the theme are off in this tab. Menu → Extensions turns them back on.",
             () => openSheet({ type: "extensions" }),
         );
     }
@@ -1296,7 +1245,7 @@ export function browserModuleState(module) {
     const record = modules.get(module);
 
     if (record === undefined) {
-        return safe && order.includes(module) ? { status: "off", error: null } : undefined;
+        return safeMode() && order.includes(module) ? { status: "off", error: null } : undefined;
     }
 
     return { status: record.status, error: record.error };

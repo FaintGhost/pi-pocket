@@ -43,6 +43,28 @@
                     palette.id = "pocket-palette";
                     palette.textContent = "@layer palette{:root{" + colors + "}}";
                     document.head.appendChild(palette);
+                    // The theme's stylesheets, written into the page so it waits for them as for a <link>. Not in
+                    // safe mode (safe-mode.js), and only addresses of theme files.
+                    var query = new URLSearchParams(location.search);
+                    var safe = query.has("noext")
+                        ? !/^(0|false|off|no)$/i.test(query.get("noext").trim())
+                        : sessionStorage.getItem("pocket.noext") === "1";
+                    var sheets = (look.css || []).filter(function (url) {
+                        return /^\/themes\/[a-z0-9-]+\/[A-Za-z0-9_-]+\/theme\.css$/.test(url);
+                    });
+                    if (!safe && sheets.length > 0) {
+                        document.write(
+                            "<style id='pocket-theme' data-urls='" +
+                                JSON.stringify(sheets) +
+                                "'>" +
+                                sheets
+                                    .map(function (url) {
+                                        return '@import url("' + url + '") layer(theme);';
+                                    })
+                                    .join("") +
+                                "</style>",
+                        );
+                    }
                     for (var each in look.vars) root.style.setProperty(each, look.vars[each]);
                     for (var key in look.attrs) root.dataset[key] = look.attrs[key];
                     document
