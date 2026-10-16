@@ -283,7 +283,7 @@ export async function shareDraft(options: {
         routes: module.web?.routes ?? [],
         client: module.web?.client ?? null,
         access: module.web?.access ?? "owner",
-        // Only when it has some: an entry with the field is one only Pi Pocket 0.14.0 beta 7 and newer read.
+        // Only when it has some: a Pi Pocket before 0.14.0 does not read an entry with the field.
         ...((module.web?.commands ?? []).length === 0
             ? {}
             : { commands: module.web!.commands!.map((command) => command.replace(" /", " ")) }),
