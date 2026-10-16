@@ -96,8 +96,7 @@ export const LATER = ["docs/extensions/themes.md", "docs/extensions/reference/th
 export const MOVED = {
     "docs/extensions.md#a-module": "docs/extensions/modules.md",
     "docs/extensions.md#names": "docs/extensions/reference/names.md",
-    "docs/extensions.md#loading-reloading-and-errors":
-        "docs/extensions/modules.md#loading-reloading-and-errors",
+    "docs/extensions.md#loading-reloading-and-errors": "docs/extensions/modules.md",
     "docs/extensions.md#tools": "docs/extensions/tools.md",
     "docs/extensions.md#prompt-sections": "docs/extensions/prompt-sections.md",
     "docs/extensions.md#hooks": "docs/extensions/hooks.md",

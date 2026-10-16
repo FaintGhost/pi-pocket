@@ -4,7 +4,7 @@ The gallery lists drop-ins that other people wrote. Each entry in the index, [Ta
 
 1. **The index's checks (CI)** check the entry, the files, and that the module loads and declares the truth.
 2. **A maintainer** reads all the code at the pinned commit.
-3. **Pi Pocket** checks each file's size and SHA-256 when it installs, installs everything off, and never updates by itself ([extensions.md](../../extensions.md#the-gallery)).
+3. **Pi Pocket** checks each file's size and SHA-256 when it installs, installs everything off, and never updates by itself ([Publishing to the gallery](../publishing.md)).
 
 None of them replaces the owner's own read. SECURITY.md says so too ("The extension gallery").
 
@@ -18,7 +18,7 @@ Sources: the index's [README](https://github.com/TannerMidd/pi-pocket-extensions
   _Reason:_ one entry for each review keeps the review small.
 - **G2. Give every field.** Only `author.github`, `source.path`, `revoked`, and `declares.commands` are optional. Other fields are not permitted. Each text field is one line, with no spaces at its start or end, and no control, invisible, or direction characters.\
   _Reason:_ Pi Pocket refuses an entry that does not obey these rules.
-- **G3. Use a name of your own.** The module's `name` has 2 to 64 characters: `a-z`, `0-9`, `-`, and `_`, and starts with a letter or a digit. It does not start with `pocket-`, and it is not the name of a built-in module. Its extensions and tools obey the rules in [extensions.md](../../extensions.md#names). No other entry has the same module, extension, or tool name: the first entry keeps a name.\
+- **G3. Use a name of your own.** The module's `name` has 2 to 64 characters: `a-z`, `0-9`, `-`, and `_`, and starts with a letter or a digit. It does not start with `pocket-`, and it is not the name of a built-in module. Its extensions and tools obey the rules in [Names](../reference/names.md). No other entry has the same module, extension, or tool name: the first entry keeps a name.\
   _Reason:_ two modules with one name replace each other.
 - **G4. Pin the files.** `source.repo` is a public GitHub repository. `source.commit` is a full commit ID (40 hex characters). `source.path` is at most four folders deep. The files have the names that they have in the drop-in folder: `<name>.ts` (necessary), and `<name>.js`, `<name>.mjs`, or files in `<name>/`. No hidden files, no `node_modules`, no names that end with a dot, no Windows device names (such as `con`), no file with the name of a folder, and no two names that differ only in case.\
   _Reason:_ the code that the owner installs must be the code that the maintainer read.

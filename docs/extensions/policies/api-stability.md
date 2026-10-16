@@ -23,12 +23,12 @@ Each item below is public as [extensions.md](../../extensions.md) describes it: 
 - `export const pocketApi`.
 - The first sentence of the module's `/** … */` comment, which is its description.
 - Files that start with `_` or end in `.test.ts` are not modules.
-- Loading, reloading, and errors ([extensions.md](../../extensions.md#loading-reloading-and-errors)), with the times there: 300 ms, 30 s, and 2 s.
+- Loading, reloading, and errors ([Modules, loading, and errors](../modules.md)), with the times there: 300 ms, 30 s, and 2 s.
 - These types from `src/server/host.ts`: `PocketHost` (only its public members, below), `ExtensionWeb`, `ExtensionModule`, `ExtensionCommand`, `CommandContext`, `CommandResult`, `WebRequest`, `WebHandler`, `WebAccess`, `WebMethod`, `LinkedSessionsApi`, and `LinkedSession`. The types are public. The path of the file is not: import them with `import type`, which goes away at run time.
 
 ### 2. Names
 
-- The names that Pi Pocket keeps for itself ([extensions.md](../../extensions.md#names)): extension names that start with `pocket-`, the extension name `coding-tools`, the names of built-in modules, and the names of built-in tools.
+- The names that Pi Pocket keeps for itself ([Names](../reference/names.md)): extension names that start with `pocket-`, the extension name `coding-tools`, the names of built-in modules, and the names of built-in tools.
 - The rules for the names of modules, tools, commands, routes, and the IDs of what a browser module adds.
 - The paths of a module's routes, `/api/x/<module>/`, and of its browser files, `/x/<module>/`.
 - **Promises:** the names of Pi Pocket's own extensions start with `pocket-` (or are `coding-tools`). Its own commands never have a `-`. Its own document kinds, task names, and browser storage keys never start with `x.`.
@@ -49,7 +49,7 @@ These members are public:
 
 These members are on `host` for Pi Pocket's own built-in extensions: `guard`, `approvals`, `schedules`, `goals`, `browsers`, `memory`, `watches`, `repoWatches`, `gallery`, `pip`, and `pipCompaction`. They are **internal**. A drop-in can read them, but their shapes can change in any release. One of them becomes public only through a request for an extension point ([core-or-extension.md](core-or-extension.md#ask-for-a-new-extension-point)).
 
-The host's members do not change while modules reload. A new member comes only after a restart, so a module that uses a new member must check that it is there ([extensions.md](../../extensions.md#the-host)).
+The host's members do not change while modules reload. A new member comes only after a restart, so a module that uses a new member must check that it is there ([Using the host](../host.md)).
 
 ### 4. `web`
 
@@ -191,7 +191,7 @@ These can change in any release: the words of errors and notices, timing that th
 ### Reserved names
 
 - **A12. Pi Pocket can keep a new name for itself in any minor release:** a module, an extension, a tool, or a command. The release notes list it.\
-  _Reason:_ new built-in features need names. A module with its own prefix ([extensions.md](../../extensions.md#names)) never meets them.
+  _Reason:_ new built-in features need names. A module with its own prefix ([Names](../reference/names.md)) never meets them.
 - When a new reserved name is the name of a drop-in, Pi Pocket refuses the drop-in, and the Extensions sheet says why. For example, 0.14 keeps the tool `team` and the module `agent-teams`.
 
 ### Security fixes
