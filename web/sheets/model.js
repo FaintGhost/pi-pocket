@@ -47,6 +47,16 @@ export function defaultLabel(chosen, models) {
     return `${model.name}${model.reasoning ? ` · ${chosen.thinkingLevel ?? "off"}` : ""}${model.signIn ? " (needs sign-in)" : ""}`;
 }
 
+/** Whether a model is one the picker's search finds. */
+const matches = (model, query) => {
+    const needle = query.trim().toLowerCase();
+
+    return (
+        needle === "" ||
+        `${model.provider}/${model.id} ${model.name}`.toLowerCase().includes(needle)
+    );
+};
+
 /**
  * The model picker: a menu that opens up from the message box's model chip, with the current model first and checked,
  * and how hard Pi thinks below, then, for the owner, Make default. Arrows and Enter pick, and Tab switches between the
@@ -71,7 +81,10 @@ export function ModelPicker() {
     const [query, setQuery] = useState(store.state.sheet?.query ?? "");
     const [forDefault] = useState(() => store.state.sheet?.forDefault === true);
     const scopedModels = models.filter((model) => model.scoped);
-    const [showAll, setShowAll] = useState(false);
+    // Opened already searching (`/model gem`) for models only outside the scope: it starts with all of them.
+    const [showAll, setShowAll] = useState(
+        () => query.trim() !== "" && !scopedModels.some((model) => matches(model, query)),
+    );
     const choices = showAll || scopedModels.length === 0 ? models : scopedModels;
     // Decided once: a search box that went away when emptied would take the caret with it.
     const [searchable] = useState(() => models.length > MODEL_SEARCH_AT || query !== "");
@@ -107,13 +120,8 @@ export function ModelPicker() {
         ? (chosen?.thinkingLevel ?? agent?.thinkingLevel ?? "off")
         : agent?.thinkingLevel;
     const reasoning = forDefault ? defaultModel?.reasoning : agent?.reasoning;
-    const needle = query.trim().toLowerCase();
     const shown = choices
-        .filter(
-            (model) =>
-                needle === "" ||
-                `${model.provider}/${model.id} ${model.name}`.toLowerCase().includes(needle),
-        )
+        .filter((model) => matches(model, query))
         .sort((a, b) => Number(isCurrent(b)) - Number(isCurrent(a)));
     // The list can change while the picker is open.
     const active = Math.max(0, Math.min(picked, shown.length - 1));
