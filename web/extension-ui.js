@@ -1632,6 +1632,7 @@ export function ExtensionPage() {
     // A page that keeps sideways swipes (`swipe: false`) starts no swipe back anywhere on it (`gestures.js`).
     return html`<section
         class="ext-page"
+        data-part="extension-page"
         aria-label=${title}
         data-module=${target?.module}
         data-no-swipe=${spec?.swipe === false ? "" : undefined}

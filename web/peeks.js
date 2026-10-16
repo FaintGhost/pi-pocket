@@ -566,7 +566,12 @@ class PeekTile extends Component {
         // The last few lines, which the tile gives two lines of text each.
         const shown = compact ? (lines ?? []).slice(-1) : lines?.slice(-3);
 
-        return html`<div class=${`peek ${status}`} data-peek=${session.id}>
+        return html`<div
+            class=${`peek ${status}`}
+            data-part="peek-tile"
+            data-state=${status}
+            data-peek=${session.id}
+        >
             <button class="peek-head" title=${`Open ${title}`} onClick=${open}>
                 <span class="peek-name">
                     <span
@@ -709,6 +714,8 @@ function PeekColumn({ tiles, leaving = false }) {
 
     return html`<aside
         class=${`peeks window ${leaving ? "leaving" : ""}`}
+        data-part="peeks"
+        data-state=${leaving ? "closing" : undefined}
         aria-label="Peeks"
         inert=${leaving}
     >

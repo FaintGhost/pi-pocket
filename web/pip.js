@@ -909,6 +909,8 @@ function PipPanel({ leaving, scrim }) {
 
     return html`<section
         class=${`pip-panel ${leaving ? "leaving" : ""}`}
+        data-part="pip"
+        data-state=${leaving ? "closing" : undefined}
         ref=${ref}
         role="dialog"
         aria-modal=${NARROW.matches ? "true" : undefined}
