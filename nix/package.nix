@@ -41,6 +41,9 @@ stdenv.mkDerivation {
       ../web
       ../test
       ../docs
+      # The reference check in `npm run check`; the rest of the docs site stays out.
+      ../docs-site/check-reference.mjs
+      ../docs-site/src/reference-check.mjs
       ../types
       ../package.json
       ../package-lock.json
