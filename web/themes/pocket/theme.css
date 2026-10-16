@@ -105,8 +105,8 @@
     /* --space-x: 1; */
     /* --space-y: 1; */
     /* --leading: 1.65; */
-    /* --transcript-width: 720px; */
-    /* --composer-width: 768px; */
+    /* --transcript-width: clamp(720px, 72%, 1200px); */
+    /* --composer-width: calc(var(--transcript-width) + 48px); */
     /* --transcript-gutter: 0px; */
     /* --timeline-x: 22.5px; */
     /* --step-mark-size: 19px; */
@@ -169,8 +169,8 @@
  * A wider conversation:
  *
  *     :root {
- *         --transcript-width: 880px;
- *         --composer-width: 880px;
+ *         --transcript-width: clamp(720px, 80%, 1400px);
+ *         --composer-width: var(--transcript-width);
  *     }
  *
  * A square message box:

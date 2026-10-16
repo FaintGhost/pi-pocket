@@ -155,8 +155,8 @@
     --gap-in: 4px;
     --border: 1px;
     /* The conversation's column, and the message box under it, at their widest; room before the conversation's turns. */
-    --transcript-width: 720px;
-    --composer-width: 768px;
+    --transcript-width: clamp(720px, 72%, 1200px);
+    --composer-width: calc(var(--transcript-width) + 48px);
     --transcript-gutter: 0px;
     /* The timeline in an activity group: where its rule and the centers of its marks are, the marks' size, and the gap
      * from a mark to its words (and to what a step shows under them). */
