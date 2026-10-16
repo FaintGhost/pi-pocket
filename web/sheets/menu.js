@@ -235,8 +235,18 @@ function MenuFrame({ title, children }) {
 
             const focused = document.activeElement;
             const back = opener?.isConnected ? opener : button;
+            // As sheets.js does: not behind a sheet the menu opened, and not into a text field on a touch screen,
+            // where its keyboard would pop up.
+            const field =
+                matchMedia("(pointer: coarse)").matches &&
+                back?.matches("input, textarea, [contenteditable]");
 
-            if ((focused === document.body || element.contains(focused)) && back?.isConnected) {
+            if (
+                !store.state.sheet &&
+                !field &&
+                (focused === document.body || element.contains(focused)) &&
+                back?.isConnected
+            ) {
                 back.focus({ preventScroll: true });
             }
         };
