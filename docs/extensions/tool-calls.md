@@ -1,5 +1,40 @@
 # How tool calls show
 
-A browser module can say how calls of its tools show in transcripts and peek tiles.
+A browser module can say how the calls of its own tools show in transcripts and peek tiles. Without this, a call shows as the name of the tool, and its arguments as JSON.
 
-`toolCall({ tool, icon or iconPath, label, subject, summary })` says how calls of one of the module's own tools show, by their arguments. Without it, a tool's call shows as its name and its arguments as JSON. `label(args)` gives the call's line its words (`"start session"`), `subject(args)` what it acts on, and `summary(args)` how a group of calls counts it, as `{ verb, noun, by }`: calls count by the value of their `by` argument, so `{ verb: "messaged", noun: "session", by: "to" }` makes "messaged 2 sessions" for calls to two addresses, however many there are; a kind without `noun` is only its verb ("checked linked sessions"). `icon` or `iconPath` is its icon in peek tiles, as a rail button's. Each gets a copy of the arguments, and what it gives shows as one line of text, never HTML. One that throws, or gives something else than text (or such a kind), leaves the call to the default display; its error is in the browser's console. `tool` must be one the module's own extensions install, by the exact name Pi runs it by (the server lists them with the browser module): any other is refused, so no module changes how another's calls show. From a server older than that list, it does nothing, and calls show the default way. It goes with the version that added it.
+## Describe a tool's calls
+
+Call `pocket.toolCall({ tool, icon or iconPath, label, subject, summary })` in the browser module:
+
+```javascript
+pocket.toolCall({
+    tool: "my_word_count",
+    icon: "search",
+    label: () => "count words",
+    subject: (args) => `${args.text.length} characters`,
+    summary: () => ({ verb: "counted", noun: "text" }),
+});
+```
+
+- `tool` is the exact name by which Pi runs the tool.
+- `label(args)` gives the words of the call's line, for example `"start session"`. It is required.
+- `subject(args)` gives what the call acts on. It is optional, as `summary` and the icon are.
+- `summary(args)` tells how a group of calls counts this call, as `{ verb, noun, by }`. See below.
+- `icon` or `iconPath` is its icon in peek tiles, as for a rail button ([Browser modules](browser-modules.md)).
+
+It returns `{ remove() }`. It goes with the version of the module that added it.
+
+## Groups of calls
+
+When Pi makes many calls, the app counts them in a group's summary, for example "messaged 2 sessions".
+
+- Calls count by the value of their `by` argument. `{ verb: "messaged", noun: "session", by: "to" }` makes "messaged 2 sessions" for calls to two addresses, for any number of calls.
+- A kind without `noun` is only its verb, for example "checked linked sessions".
+
+## Rules
+
+- Each function gets a copy of the arguments.
+- What it gives shows as one line of text, never as HTML.
+- When a function throws, or gives something that is not text (or not such a kind), the call shows the default way. The error is in the browser's console.
+- `tool` must be a tool that the module's own extensions install. The server lists them with the browser module. Pi Pocket refuses any other name, so no module changes how the calls of another module show.
+- A server older than that list does nothing with `toolCall`, and the calls show the default way.

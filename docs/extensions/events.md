@@ -1,9 +1,47 @@
 # Events
 
-A module sends events from the server to its browser module.
+An event is a message from a module on the server to its browser module in the tabs. Use events to keep a page live, for example to show a new value when it changes.
 
-`web.send(event, data, { to })` sends `data` (JSON, up to 256 KB) to the tabs of everyone the browser module's `access` lets in, or only to the tabs of the person whose id is `to`; there `pocket.on(event, run)` hears it. A tab whose browser module has not set up yet misses it. Send once the module has loaded (from a route, a timer, or a watcher), and only from a module with a browser module: events sent while it loads, or by one without, go nowhere. A version that was replaced or turned off sends nothing.
+## Send an event
 
-At most 100 events, and 1 MB of them, go out each second for a version of a module; the rest of that second's are dropped. Send what changed, or a summary, not every tick. A tab more than 8 MB behind that takes nothing for 30 s (it does not read its stream, or polls and acknowledges nothing), or any tab more than 128 MB behind, is cut off, and connects again with a fresh view: events are not kept for it. Under 128 MB, a tab that keeps taking is not cut off for being behind, so a slow phone gets everything. `web.send` never throws, as it is mostly called from timers, where a throw would stop the server: an event it cannot send goes to the server's log, once for each kind of mistake in a version.
+On the server, `web.send(event, data, { to })` sends `data` as JSON, of 256 KB at most:
 
-Events are not kept for a page that was closed: one that opens fetches what is now, then listens, as the example does.
+- without `to`, to the tabs of each person that the browser module's `access` lets in;
+- with `to`, only to the tabs of the person whose id is `to`.
+
+In the browser, `pocket.on(event, run)` gets it. It returns a function that stops it.
+
+```typescript
+// On the server: each minute, the new load.
+const timer = setInterval(() => web.send("load", { load: os.loadavg() }), 60_000);
+
+web.onDispose(() => clearInterval(timer));
+```
+
+```javascript
+// In the browser module: show it.
+const stop = pocket.on("load", ({ load }) => setLoad(load));
+```
+
+## When events get lost
+
+- A tab whose browser module has not set up yet does not get the event.
+- Send only after the module loaded: from a route, a timer, or a watcher. Events sent while the module loads go nowhere.
+- Send only from a module that has a browser module. The events of a module without one go nowhere.
+- A version that was replaced, or turned off, sends nothing.
+- The app does not keep events for a page that was closed. A page that opens gets the current state first, and then listens. [examples/server-status.js](../examples/server-status.js) does this.
+
+## Limits
+
+A version of a module can send 100 events, and 1 MB of events, in each second. Pi Pocket drops the rest of that second's events. Send what changed, or a summary, not each tick.
+
+Pi Pocket cuts off a tab that is far behind, and the tab connects again with a new view. It does not keep the events for it. It cuts off:
+
+- a tab more than 8 MB behind that takes nothing for 30 s: it does not read its stream, or it polls and acknowledges nothing;
+- any tab more than 128 MB behind.
+
+Under 128 MB, Pi Pocket does not cut off a tab that continues to take events. So a slow phone gets all of them.
+
+## Errors
+
+`web.send` never throws: modules call it mostly from timers, where a throw would stop the server. An event that it cannot send goes to the server's log, one time for each kind of mistake in a version.

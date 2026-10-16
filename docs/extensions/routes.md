@@ -1,21 +1,63 @@
 # Routes
 
-A route answers requests from your browser module, on the server.
+A route is a function on the server that answers requests from your browser module. Keys and other secrets stay on the server, in the route.
 
-`web.route(method, path, handle, { access })`. `method` is GET, POST, PUT, PATCH, or DELETE. `path` is relative to the module's own: `"status"`, or `"items/:id"`, where `:id` matches one part of the address. Each part is letters, digits, and `. _ ~ -` (but not `.` or `..` alone), or `:name`. Where paths overlap, the most specific wins, whatever the order they were registered in: a fixed part before a `:name` part, from the left (`items/new` before `items/:id`).
+## Add a route
 
-`handle(request)` gets `{ method, params, query, body, user, signal }`: the `:name` parts, the query string (`URLSearchParams`, from `pocket.api("usage?days=7")`), the JSON object sent (empty for GET and DELETE), who asked (`{ id, name, role }`), and a signal aborted when the browser stops waiting. What it returns goes back as JSON (`undefined` as `{}`).
+`web.route(method, path, handle, { access })` adds a route at `/api/x/<module>/<path>`.
 
-- Throw `web.error(status, message)` (a status from 400 to 599) to answer with it and its message, as they are, to whoever asked, guests and viewers too when the route is theirs: `throw web.error(404, "No such item")`. Put nothing in it you would not show them.
-- Any other throw is a 500, even an error that carries a `status` of its own (as a provider's SDK's do, with words that can quote a key). The owner sees its message; anyone else sees only that the extension failed. The server log has it whole.
-- The app's own checks come first: a sign-in, and the `X-Pocket` header, which a link or form on another site cannot send. A module's routes need it on GET too, so a GET can never be made from elsewhere; `pocket.api` always sends it, and so must anything else that calls them (`curl -H 'X-Pocket: 1'`). Without it, nothing is looked up.
-- A route answers only the people its `access` lets in. To anyone else it is not there: the same 404 as a path the module lacks, and a 405 names only the methods they may use. So another route whose path matches may answer them instead (`items/:id` for `items/new`, with `id` `"new"`): give routes whose paths overlap the same `access`, or check `user.role` in the handler.
-- A `:name` part is text from outside. The address is decoded before it is split, so the server answers 400 for a part that decodes to `..` (`..%2F`), or has a `\` or NUL in it (`.` and `..` written as they are never reach it: the address resolves them first). Still check a part before you make a file's path of it.
-- A handler has no time limit: one that waits holds its request until it answers or the browser stops waiting, which aborts `signal`. Pass `signal` to what it waits for.
+```typescript
+web.route("GET", "items/:id", ({ params }) => {
+    const item = items.get(params.id);
+
+    if (item === undefined) {
+        throw web.error(404, "No such item");
+    }
+
+    return item;
+});
+```
+
+- `method` is `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.
+- `path` is relative to the module's own address, for example `"status"` or `"items/:id"`. A part written `:id` matches any one part of the address.
+- Each other part has letters, digits, and `.`, `_`, `~`, and `-`, but is not `.` or `..` alone.
+- When two paths match, the more specific one answers, in any order of registration: a fixed part wins over a `:name` part, from the left. So `items/new` wins over `items/:id`.
+
+## The request
+
+`handle(request)` gets `{ method, params, query, body, user, signal }`:
+
+- `params`: the `:name` parts of the path.
+- `query`: the query string, as `URLSearchParams`. For example, `pocket.api("usage?days=7")` sends `days`.
+- `body`: the JSON object that the browser sent. It is empty for `GET` and `DELETE`.
+- `user`: who asked, as `{ id, name, role }`.
+- `signal`: aborted when the browser stops waiting.
+
+What the handler returns goes back as JSON. `undefined` goes back as `{}`.
+
+## Errors
+
+- To answer with an error, throw `web.error(status, message)`, with a status from 400 to 599. The person who asked gets the status and the message as they are. This includes guests and viewers, when the route is for them. Do not put in the message what you would not show them.
+- Any other error is a 500, also an error that has a `status` of its own, as a provider's SDK gives. Such words can quote a key. The owner sees its message; other people see only that the extension failed. The server log has all of it.
+
+## The app's own checks
+
+The app checks each request before your route gets it:
+
+- The person must be signed in.
+- The request must have the `X-Pocket` header. A link or a form on another site cannot send it. Your routes need it for `GET` too, so no other site can make a `GET` to them. `pocket.api` always sends it. Anything else that calls your routes must send it too, for example `curl -H 'X-Pocket: 1'`. Without the header, Pi Pocket looks up nothing.
+
+## Text from outside
+
+A `:name` part is text from outside. Pi Pocket decodes the address before it splits it. So it answers 400 for a part that decodes to `..` (for example `..%2F`), or that has a `\` or a NUL in it. A `.` or `..` written as it is never gets to your route: the address resolves it first. But still check a part before you make a file path from it.
+
+## Time
+
+A route has no time limit. A handler that waits keeps its request open until it answers, or until the browser stops waiting, which aborts `signal`. Give `signal` to what the handler waits for.
 
 ## Who may use it
 
-Routes and the browser module are the owner's alone unless their `access` says more:
+Routes and the browser module are for the owner alone, unless their `access` says more:
 
 | `access`            | Who                                                  |
 | ------------------- | ---------------------------------------------------- |
@@ -23,4 +65,9 @@ Routes and the browser module are the owner's alone unless their `access` says m
 | `"steer"`           | The owner, and guests who can steer every session    |
 | `"view"`            | The owner, guests, and viewers who see every session |
 
-Someone invited to one session never may: these belong to the whole app. Each route checks its own `access`, so a browser module for everyone can have a route for the owner alone. `access` holds for every method: a POST route open to `"view"` lets viewers change something through it, though they may not steer a session. Give a route that changes things `"owner"` or `"steer"`. A browser module runs with the rights of whoever's tab loads it, so it can do nothing in a guest's tab that the guest could not.
+- A person invited to one session never may use them: these parts belong to the whole app.
+- Each route checks its own `access`. So a browser module for everyone can have a route for the owner alone.
+- `access` is the same for each method. A `POST` route open to `"view"` lets viewers change something through it, though they cannot steer a session. Give a route that changes things `"owner"` or `"steer"`.
+- A browser module runs with the rights of the person whose tab loads it. So it can do nothing in a guest's tab that the guest cannot do.
+
+To other people, a route is not there. They get the same 404 as for a path that the module does not have, and a 405 names only the methods that they may use. So another route whose path matches can answer them: `items/:id` answers `items/new`, with `id` `"new"`. Give routes whose paths overlap the same `access`, or check `user.role` in the handler.

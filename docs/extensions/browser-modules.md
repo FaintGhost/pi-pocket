@@ -1,12 +1,19 @@
 # Browser modules
 
-A browser module adds rail buttons, pages, sheets, menu rows, and launcher actions to the app.
+A browser module is JavaScript that the app loads in the tabs of the people that it is for. It adds rail buttons, pages, sheets, menu rows, and launcher actions to the app. It gets `pocket`, the app's API for extensions. The members of `pocket` are in [the pocket reference](reference/pocket.md).
 
-`web.client(entry, { access })`. `entry` is the name of a file or folder right beside the module (letters, digits, `.`, `_`, and `-`, starting with a letter, a digit, or `_`), not a link: a `.js` or `.mjs` file, served alone, or a folder, whose `index.js` loads first and may import the folder's other files. A folder serves its `.js`, `.mjs`, `.css`, `.json`, images, and fonts, never `.ts` files, hidden files, `node_modules`, or anything reached through a link (a link could lead to any of those, or out of the folder). A stylesheet or any other file needs a folder: a file alone serves only itself. A file is served up to 8 MB. When the file or folder goes, or becomes a link, the owner is told: tabs cannot load it until it is back. Everyone the browser module is for can read every file of those types in its folder: keep nothing secret there, and keep a module's own data (a cache, settings) elsewhere, such as beside the module or in its own folder under the data folder.
+## Add a browser module
 
-Saving a file the folder serves, in it or in a folder made in it later, gives the browser module a new address, and tabs load it again. Files of other types (`.log`, `.txt`) do not count, so writing one loads nothing again; a `.json` or an image does count. The version in the address is only for that: any version serves the files as they are now. The first 2000 files it serves, in up to 500 folders, count; an edit past those gives no new address, so open tabs keep the version they loaded until the page reloads. Its first 64 folders are watched; an edit deeper is seen at the next look, when something watched changes or the module loads again.
+On the server, `web.client(entry, { access })` gives the module a browser module. `access` says who loads it ([Who may use it](routes.md#who-may-use-it)).
 
-The app imports it and calls its default export with `pocket`. What that returns, if a function, runs when the module goes, as `pocket.onDispose` does.
+`entry` is the name of a file or a folder beside the module, not a link. The name has letters, digits, `.`, `_`, and `-`, and starts with a letter, a digit, or `_`.
+
+- **A `.js` or `.mjs` file.** Pi Pocket serves this file alone.
+- **A folder.** Its `index.js` loads first, and can import the other files of the folder. A stylesheet, or any other file, needs a folder.
+
+## The default export
+
+The app imports the browser module, and calls its default export with `pocket`. When the default export returns a function, that function runs when the module goes, as `pocket.onDispose` does.
 
 ```javascript
 export const pocketApi = 1;
@@ -42,25 +49,117 @@ export default function setup(pocket) {
 }
 ```
 
-The members of `pocket` are in [the reference](reference/pocket.md).
+Keep the top level of the module to declarations, and do its work in the default export: the app checks `pocketApi` after it imports the module ([API versions](reference/api-versions.md)).
 
-Each thing it adds has an `id` of its own (up to 64 letters, digits, and `. _ : -`, starting with a letter or digit), and adding one with the same `id` again replaces it. `update(patch)` takes an object. Adding the same again, or an update that changes nothing, draws nothing again; values count as the same only when they are the very same (a new array or function is a change), and many changes at once draw once. What a module changes draws at the next frame, once for all its changes since, so its changes cost the app at most one redraw a frame, at any refresh rate, as an animation does; a hidden tab, which draws no frames, draws them by a 100 ms timer, which the browser may slow there. Change what it added from an event, a timer, or an effect, not while a component draws, and give effects their dependencies: a module that changes what it added each time it draws, or each time an effect of its drawing runs, is not stopped, and redraws the app every frame until it is turned off. A module is stopped in that browser as one that failed ("was stopped in this browser: it redraws without end"), until the page reloads or the module is edited, when:
+## What the folder serves
 
-- one task makes more than 1000 calls to `pocket` (any of it but `h`, `html`, `Fragment`, the hooks, and the components) over more than a second: a loop of microtasks, which holds the page, and a long batch with heavy work between its calls alike. Its calls then throw until the next task, `pocket.api` too, so an `await` loop rejects and a `.then` chain stops;
-- it opens and closes its pages or sheets more than 300 times in a second, or over and over with no task between (more than 1000 times, or 5 or more over more than a second).
+- A folder serves its `.js`, `.mjs`, `.css`, and `.json` files, its images, and its fonts.
+- It never serves `.ts` files, hidden files, `node_modules`, or a file through a link. A link could lead to such a file, or out of the folder.
+- It serves a file of 8 MB at most.
+- All the people that the browser module is for can read each file of those types in the folder. Keep no secret there. Keep the module's own data, such as a cache or settings, in another place: beside the module, or in a folder of its own in the data folder.
+- When the file or the folder goes, or becomes a link, Pi Pocket tells the owner. Tabs cannot load the browser module until it is back.
 
-A new function or array given each time counts as a change each time. A loop that never yields and calls nothing of `pocket` holds the tab, as does one that catches the error a stopped module's calls throw, and nothing outside it can stop either.
+## New versions
 
-- `rail({ id, title, icon or iconPath, badge, … })`: a button on the rail after the app's own tools, in the sidebar, the drawer, and a phone's home screen. They take at most four buttons' height, and scroll past that. `icon` is one of the app's (`pulse`, `grid`, `globe`, `key`, `chat`, `folder`, `search`, …; an unknown name shows `grid`); `iconPath` is a 24×24 stroked SVG path of its own. `badge` is a short count or word on it: `0`, `NaN`, `-Infinity`, `""`, `"0"`, `null`, and `false` show none, as the app's own counts hide at 0; a count past 99 (and `Infinity`) shows "99+", other numbers (negative, or with decimals) show as they are, and text past 24 characters is cut to 23 and "…", in its label too, without cutting a character in two.
-- `menu({ id, label, hint, … })` is a row in the menu's App group; `launcher({ id, label, detail, icon or iconPath, keywords, … })` an action in the launcher (Ctrl/⌘+K).
-- Each of those three does one thing when used: `page: "id"` opens a page, `sheet: "id"` a sheet (the id of one the module adds), `run: () => …` runs a function. A rail button that opens a page shows it is open, and closes it on a second tap. Modules' buttons, rows, and actions show in the order the server lists the modules, and an edit keeps a module's place.
-- `page({ id, title, component, escape, swipe })` shows in the conversation's place, as the subagents board does, with its title and a close button; Esc and back close it, and on a phone it fills the screen. On a touch screen up to 699 px wide a swipe to the right on it goes back (not in a field or a sideways scroller), and in an app added to an iPhone's or iPad's home screen so does a swipe in from the left edge. `escape: false` keeps Esc for the page (Esc still closes a sheet, the launcher, or PiP over it; the close button and back still close the page). `swipe: false` starts no back swipe anywhere on the page, the edge's included, and a `data-no-swipe` attribute on an element starts none on it or in it (a slider, a canvas you draw on). Esc never closes it while an input method composes a character.
-- `sheet({ id, title, component, wide })` is a sheet like the app's. Their components get `pocket` and `close`, and a sheet's the `props` it was opened with. `close` closes only that page or sheet, of that version, while it shows: kept for later, it closes nothing else (`pocket.closePage()` closes whichever page of the module shows). A page or sheet whose module never added that id says the module no longer has it.
+When you save a file that the folder serves, the browser module gets a new address, and the tabs load it again. This also applies to a folder that you make in it later.
 
-The pieces take what the app's own do: `Icon({ name or path, size })`, `Loader({ label })`, `Spinner({ label })`, `Markdown({ text })`, `Switch({ on, label, onChange, disabled })`. To look like the app, use its colors, `var(--text)`, `var(--muted)`, `var(--accent)`, `var(--bg)`, `var(--card)`, `var(--line)`, `var(--err)`, `var(--warn)`, and `var(--ok)`, which follow the theme, and these classes: `button` (with `primary`), `error-box`, `muted`, `small`, `mono`, and `setting` (a row with a label and a control). Pi Pocket keeps those names; the rest of its CSS may change.
+- Only the types that the folder serves count. A `.log` or `.txt` file does not count, so a write to one loads nothing again. A `.json` file or an image counts.
+- The version in the address is only for this. Each version serves the files as they are now.
+- The first 2000 files that the folder serves, in up to 500 folders, count. An edit past those gives no new address, so open tabs keep their version until the page loads again.
+- Pi Pocket watches the first 64 folders. It sees an edit in a deeper folder at its next look: when something that it watches changes, or when the module loads again.
 
-It fails alone. A module that throws while it loads or sets up says so in a notice and in Menu → Extensions ("In this browser: …"), and what it added goes; what it tries later (a timer it left) adds and opens nothing, and its `onDispose` runs at once. A page or sheet whose component, or a component in it, throws, whatever it throws (nothing at all shows "it gave no reason"; throw an `Error` all the same: nothing thrown from a class's constructor, a method that is a getter, or an effect's cleanup when it goes may escape that, and from a lifecycle method that is a class field, such as `componentWillMount = () => …`, as the component first draws, the box shows Preact's own words), shows "… failed:" and why in its place until it is closed or its component is replaced (added again, or `update({ component })`), and a `run` that throws or rejects says so in a notice. What an event handler in a component throws is caught by nothing but the browser's console: catch it there, and show what went wrong. The rest of the app goes on. An edit loads it again; a module that failed to import for another reason (the network) loads again when the page reloads. Turning a module off closes its page and sheet, and back does not bring its sheets back.
+## Rail buttons, menu rows, and launcher actions
 
-**Safe mode.** A browser module that hangs or breaks the tab would keep you from the Extensions sheet, where you turn it off. Open the app with `?noext=1` on its address (any of its pages: `https://…/?noext=1`; on a sign-in link, as where to go next: `/login?token=…&next=/?noext=1`) and that tab loads no browser modules: a notice says so, and the Extensions sheet, where each module this tab would load says "off in this tab", has a button to load them again. The tab keeps it through reloads (in its session storage, `pocket.noext`), other tabs do not, and `?noext=0` (or `false`, `off`, `no`) ends it. An app added to a home screen has no address bar: open the address in the browser instead. The server part of each module still runs: turn the bad one off there, then leave safe mode.
+- **`rail({ id, title, icon or iconPath, badge, … })`** adds a button on the rail, after the app's own tools. It shows in the sidebar, in the drawer, and on a phone's home screen. The buttons of modules take the height of four buttons at most, and scroll past that.
+    - `icon` is the name of one of the app's icons: `pulse`, `grid`, `globe`, `key`, `chat`, `folder`, `search`, and more. An unknown name shows `grid`. `iconPath` is a 24×24 stroked SVG path of your own.
+    - `badge` is a short count or word on the button. `0`, `NaN`, `-Infinity`, `""`, `"0"`, `null`, and `false` show no badge, as the app's own counts hide at 0. A count above 99, and `Infinity`, show "99+". Other numbers, negative or with decimals, show as they are. Text longer than 24 characters is cut to 23 and "…", in the button's label too, without cutting a character in two.
+- **`menu({ id, label, hint, … })`** adds a row to the menu's App group.
+- **`launcher({ id, label, detail, icon or iconPath, keywords, … })`** adds an action to the launcher (Ctrl+K or ⌘+K).
 
-The page allows nothing from another site (the app's content security policy: scripts and requests only to the app itself). To show what another service knows, fetch it in a route, on the server, where its key stays.
+Each of these does one thing when a person uses it:
+
+- `page: "id"` opens a page that the module adds. A rail button that opens a page shows that the page is open, and closes it on a second tap.
+- `sheet: "id"` opens a sheet that the module adds.
+- `run: () => …` runs a function.
+
+The buttons, rows, and actions of modules show in the order that the server lists the modules. An edit keeps a module's place.
+
+## Pages and sheets
+
+**`page({ id, title, component, escape, swipe })`** shows in the place of the conversation, as the subagents board does, with its title and a close button. On a phone, it fills the screen.
+
+- Esc and back close it. Esc never closes it while an input method composes a character.
+- `escape: false` keeps Esc for the page. Esc still closes a sheet, the launcher, or PiP over it, and the close button and back still close the page.
+- On a touch screen up to 699 px wide, a swipe to the right on the page goes back. A swipe in a field or in a sideways scroller does not. In an app on an iPhone's or iPad's home screen, a swipe in from the left edge also goes back.
+- `swipe: false` starts no back swipe on the page, at the edge too. A `data-no-swipe` attribute on an element starts no swipe on it or in it: use it on a slider, or a canvas that people draw on.
+
+**`sheet({ id, title, component, wide })`** adds a sheet like the app's own.
+
+The components of pages and sheets get `pocket` and `close`. A sheet's component also gets the `props` that it was opened with (`pocket.openSheet(id, props)`).
+
+- `close` closes only that page or sheet, of that version, while it shows. When you keep it for later, it closes nothing else. `pocket.closePage()` closes the module's page that shows.
+- A page or sheet with an `id` that the module never added says that the module no longer has it.
+
+## Ids and updates
+
+- Each thing that a module adds has an `id` of its own: up to 64 letters, digits, `.`, `_`, `:`, and `-`, that starts with a letter or a digit.
+- To add a thing with the same `id` again replaces it.
+- Each `rail`, `menu`, `launcher`, `page`, and `sheet` returns `{ update(patch), remove() }`. `update` takes an object.
+
+## Redraws
+
+The app draws what a module changed at the next frame, one time for all its changes. So a module costs the app one redraw in each frame at most, at any refresh rate, as an animation does. A hidden tab draws no frames, so it draws by a 100 ms timer, which the browser can slow.
+
+- Adding the same thing again, or an update that changes nothing, draws nothing.
+- Values are the same only when they are the very same value. A new array or function is a change, each time.
+- Many changes at the same time draw one time.
+
+Change what the module added from an event, a timer, or an effect, not while a component draws. Give each effect its dependencies. A module that changes what it added each time it draws, or each time an effect of its drawing runs, redraws the app in each frame until the owner turns it off. Pi Pocket does not stop it.
+
+Pi Pocket stops a module in that browser, as one that failed ("was stopped in this browser: it redraws without end"), until the page loads again or the module changes, when:
+
+- One task makes more than 1000 calls to `pocket` over more than one second. All of `pocket` counts, but not `h`, `html`, `Fragment`, the hooks, and the components. This stops a loop of microtasks, which holds the page, and also a long batch with heavy work between its calls. Then its calls throw until the next task, `pocket.api` too, so an `await` loop rejects and a `.then` chain stops.
+- It opens and closes its pages or sheets more than 300 times in one second. Or it does this again and again with no task between: more than 1000 times, or 5 or more times over more than one second.
+
+Nothing outside a module can stop a loop that never yields and calls nothing of `pocket`. This is also true for a loop that catches the error that the calls of a stopped module throw. Such a loop holds the tab.
+
+## Look like the app
+
+- The pieces take what the app's own pieces take: `Icon({ name or path, size })`, `Loader({ label })`, `Spinner({ label })`, `Markdown({ text })`, and `Switch({ on, label, onChange, disabled })`.
+- Use the app's colors, which follow the theme: `var(--text)`, `var(--muted)`, `var(--accent)`, `var(--bg)`, `var(--card)`, `var(--line)`, `var(--err)`, `var(--warn)`, and `var(--ok)`.
+- Use these classes: `button` (with `primary`), `error-box`, `muted`, `small`, `mono`, and `setting` (a row with a label and a control).
+
+Pi Pocket keeps these names. The rest of its CSS can change. To load a stylesheet of your own, put it in the module's folder, and call `pocket.style(path)`.
+
+## When it fails
+
+A browser module fails alone, and the rest of the app continues.
+
+- A module that throws while it loads or sets up says so in a notice, and in Menu → Extensions ("In this browser: …"). What it added goes. What it tries later, such as a timer that it left, adds and opens nothing, and its `onDispose` runs at once.
+- When the component of a page or sheet throws, or a component in it, its place shows "… failed:" and the reason. This stays until the page or sheet closes, or until the module replaces the component (adds it again, or calls `update({ component })`). An error with no value shows "it gave no reason". Always throw an `Error`.
+- Some throws can escape this: from a class's constructor, from a method that is a getter, and from an effect's cleanup when the component goes. From a lifecycle method that is a class field, such as `componentWillMount = () => …`, the box shows Preact's own words when the component first draws.
+- A `run` that throws or rejects says so in a notice.
+- Only the browser's console catches what an event handler in a component throws. Catch it in the handler, and show what went wrong.
+
+An edit loads the module again. A module that did not import for another reason, such as the network, loads again when the page loads again. When the owner turns a module off, its page and sheet close, and back does not open its sheets again.
+
+## Safe mode
+
+A browser module that hangs or breaks the tab can keep you from the Extensions sheet, where you turn it off. Safe mode loads no browser modules in one tab.
+
+1. Open the app with `?noext=1` at the end of its address, for example `https://…/?noext=1`. On a sign-in link, put it in the page to go to next: `/login?token=…&next=/?noext=1`.
+2. A notice says that the tab is in safe mode. In the Extensions sheet, each module that the tab would load says "off in this tab".
+3. Turn off the module that breaks the app. Its server part still runs until you turn it off.
+4. To leave safe mode, use the button in the Extensions sheet, or open the app with `?noext=0` (or `false`, `off`, or `no`).
+
+The tab keeps safe mode when it loads again (in its session storage, `pocket.noext`). Other tabs do not. An app on a home screen has no address bar: open the address in the browser.
+
+## Other sites
+
+The page allows nothing from another site. The app's content security policy allows scripts and requests only to the app itself. To show data from another service, get it in a route on the server, where its key stays.
+
+## See also
+
+- [How tool calls show](tool-calls.md): `pocket.toolCall`.
+- [Events](events.md): live updates from the server.
+- [examples/server-status.js](../examples/server-status.js): a page on the rail, with a route and events.

@@ -1,23 +1,46 @@
 # Modules, loading, and errors
 
-An extension module is one file. This page tells what the file must be, and how Pi Pocket loads it, loads it again, and reports its errors.
+A module is one file that Pi Pocket loads. This page tells what the file must be, and how Pi Pocket loads it, loads it again, and reports its errors. For the default export and what it returns, see [A module](../extensions.md#a-module).
 
 ## The file
 
-The file:
+- **TypeScript that Node runs as it is.** Use only erasable syntax: no `enum`, no `namespace`, and no constructor parameter properties. A local import ends in `.ts`.
+- **Packages by name.** Import `@earendil-works/pi-durable`, `@earendil-works/pi-ai`, and the other packages of Pi Pocket by name. The drop-in folder has a `node_modules` link to Pi Pocket's own packages, so a drop-in gets the same modules that the server runs.
+- **A name of its own.** The file name must be different from the name of each built-in module. For example, Pi Pocket does not load a drop-in named `browser.ts`. Give each extension and tool in it a name with a prefix of your own, for example `my-words` and `my_word_count`. Pi Pocket does not load a module that takes a name that Pi Pocket keeps (such as `pocket-…`, or a built-in tool's), or a name that another module has. See [Names](reference/names.md).
+- **A description.** Start the file with a `/** … */` comment. Its first sentence says what the module does. The Extensions sheet shows it.
 
-- is TypeScript that Node runs as it is: only erasable syntax (no `enum`, no `namespace`, no constructor parameter properties). Imports of local files end in `.ts`.
-- imports `@earendil-works/pi-durable`, `@earendil-works/pi-ai`, and the rest of Pi Pocket's packages by name. The drop-in folder has a `node_modules` link to Pi Pocket's own, so a drop-in gets the very modules the server runs.
-- has a file name no built-in module has (a drop-in named `browser.ts` is not loaded). Files that start with `_` or end in `.test.ts` are not modules: use them for helpers and tests. A helper is not reloaded when it changes, even when the module that imports it is: a change to it takes a restart. Keep what you will change often in the module itself.
-- starts with a `/** … */` comment whose first sentence says what it does.
+Files that start with `_`, or end in `.test.ts`, are not modules. Use them for helpers and tests. Pi Pocket does not load a helper again when it changes, even when it loads the module that imports it again: a change to a helper needs a restart. Keep the code that you change often in the module itself.
 
-## Loading, reloading, and errors
+## Turning it on and off
 
-- A drop-in shows in Menu → Extensions as soon as its file is there, off. Turning it on loads it; turning it off uninstalls what it installed, its routes and browser module too.
-- Saving a module that is on reloads it about 300 ms later. A tool call already running finishes on the old code; the next one gets the new code. Saving a browser module's file has tabs load its new version ([Browser modules](browser-modules.md)).
-- The latest choice and the latest version win. A module turned off, removed, or saved again while it still loads (it may wait at its top level, or in an `async` default export) installs nothing when that load ends, and a failure of that load is not reported. A file that is gone for a moment, as some editors save, is no removal: only one still gone 300 ms later is taken away.
-- A load may take 30 s at most (the import, and an `async` default export): one that takes longer fails. At the server's start the modules share those 30 s, and each one after has 2 s, so modules that hang hold up the start by 30 s and 2 s for each module after, not 30 s each. A load that fails so is not stopped: what it started (a timer, a connection) runs on until the server restarts, though nothing it registers counts. Do slow work after it loads.
-- A module that fails to load (a syntax error, a throw while building) is reported to the owner: in the Extensions sheet, and in a notice when it failed at the server's start or after an edit. Others see only that it failed, as the error can name the server's folders or quote a provider. An edit that fails keeps the previous version running, its routes and browser module included.
-- A restart installs every module that is on again. Work an extension's tasks left pending resumes once it is installed.
+- A drop-in shows in Menu → Extensions when its file is there. It is off.
+- When the owner turns it on, Pi Pocket loads it.
+- When the owner turns it off, Pi Pocket removes all that it installed, its routes and browser module too.
 
-You cannot turn a drop-in on yourself: ask the owner to, in Menu → Extensions.
+You cannot turn on a drop-in yourself. Ask the owner to turn it on in Menu → Extensions.
+
+## Loading it again
+
+- When you save a module that is on, Pi Pocket loads it again about 300 ms later.
+- A tool call that runs at that time finishes with the old version. The next call uses the new version.
+- When you save a file of the browser module, the tabs load its new version ([Browser modules](browser-modules.md)).
+- The latest choice and the latest version win. A load can wait, at the top level of the module or in an `async` default export. When the owner turns the module off, removes it, or saves it again during that wait, the load installs nothing when it ends. Pi Pocket does not report a failure of that load.
+- Some editors remove a file for a moment when they save it. This does not remove the module: Pi Pocket removes a module only when its file is still gone 300 ms later.
+
+## Time limits
+
+- A load can take 30 s at most: the import, and an `async` default export. A load that takes longer fails.
+- When the server starts, all the modules share those 30 s. After them, each module has 2 s. So modules that hang delay the start by 30 s, and by 2 s for each module after them.
+- Pi Pocket does not stop a load that fails this way. What it started, such as a timer or a connection, continues until the server restarts, but nothing that it registers counts.
+
+Do slow work after the module loads, not while it loads.
+
+## Errors
+
+- When a module does not load (a syntax error, or an error that it throws while it sets up), Pi Pocket tells the owner. The Extensions sheet shows the error. A notice also shows it, when the module failed at the server's start or after an edit.
+- Other people see only that the module failed. The error can name the server's folders, or quote a model provider.
+- When an edit does not load, the previous version continues to run, with its routes and browser module.
+
+## Restarts
+
+A restart installs again each module that is on. Work that the module's tasks did not finish continues when the module is installed.

@@ -1,9 +1,52 @@
 # Hooks
 
-A hook checks or changes Pi's tool calls and answers.
+A hook runs before or after Pi's tool calls and answers. It can stop a tool call, or send Pi on with another message.
 
-`hook(ToolTask, { beforeTool, afterTool })` and `hook(GenerationTask, { beforeRequest, afterResponse, onYield, afterTools })`.
+## Define a hook
 
-- `beforeTool(call, api, context)` sees `call.name` and `call.arguments` before the call runs. Return `{ block: "why" }` to stop it (the model gets the reason as an error), or `undefined` to let it run. Codemode scripts' calls go through it too.
-- `onYield(answer, api, context)` runs after Pi's final answer. Return `{ continue: "message" }` to send Pi on with another message, as Done when does (`extensions/goals.ts`).
-- A hook can run again after a restart. Keep what must happen once in `api.memo`, as `extensions/guard.ts` does with an approval.
+Use `hook` from `@earendil-works/pi-durable`. This hook stops each bash call that force-pushes with git:
+
+```typescript
+const noForcePush = hook(ToolTask, {
+    beforeTool: (call) => {
+        const command = (call.arguments as { command?: unknown }).command;
+
+        return call.name === "bash" && typeof command === "string" && FORCE_PUSH.test(command)
+            ? { block: "Force-pushing is turned off here." }
+            : undefined;
+    },
+});
+
+export default function createNoForcePush() {
+    return defineExtension({ name: "my-no-force-push", hooks: [noForcePush] });
+}
+```
+
+There are two kinds of hooks:
+
+- `hook(ToolTask, { beforeTool, afterTool })` runs around tool calls.
+- `hook(GenerationTask, { beforeRequest, afterResponse, onYield, afterTools })` runs around the model's requests and answers.
+
+## Stop a tool call
+
+`beforeTool(call, api, context)` gets `call.name` and `call.arguments` before the call runs.
+
+- To stop the call, return `{ block: "the reason" }`. The model gets the reason as an error.
+- To let the call run, return `undefined`.
+
+The calls of codemode scripts also go through `beforeTool`.
+
+## Send Pi on
+
+`onYield(answer, api, context)` runs after Pi's last answer. To send Pi on with another message, return `{ continue: "the message" }`. Done when does this ([goals.ts](../../src/server/extensions/goals.ts)).
+
+## Restarts
+
+A hook can run again after a restart. Keep work that must occur one time in `api.memo`. Lancet Guard does this with an approval ([guard.ts](../../src/server/extensions/guard.ts)).
+
+A hook that guards something must return `{ block: … }` to stop a call. Do not throw an error to stop it: Pi Durable reports the error, and lets the call run.
+
+## See also
+
+- [examples/no-force-push.ts](../examples/no-force-push.ts) is the hook above, with a prompt section that tells Pi about it.
+- Do not get around a block of another hook, or of a person: see [Rules that are easy to break](../extensions.md#rules-that-are-easy-to-break).

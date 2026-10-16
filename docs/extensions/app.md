@@ -1,20 +1,36 @@
 # Adding to the app
 
-A module can add routes, a browser module, and slash commands to the app. The members of `web` are in [the reference](reference/web.md).
+A module can add to the app what a tool cannot: a page that shows something without Pi, a button on the rail, or a row in the menu. This page tells about the three parts that it can add. The members of `web` are in [the web reference](reference/web.md).
 
-A module can add to the app what a tool cannot: a page that shows something without asking Pi, a button on the rail, a row in the menu. Its default export's second argument, `web`, registers three parts while the module loads:
+## The three parts
 
-- **Routes** on the server, under `/api/x/<module>/`: what the browser module calls. Credentials and other secrets stay here.
-- A **browser module**: a `.js` file the app loads in the tabs of the people it is for. It adds rail buttons, pages, sheets, menu rows, and launcher actions, and says how its tools' calls show, through `pocket`, the app's API for extensions.
-- **Commands** for the message box (`/name`), which run on the server and need no browser module ([Slash commands](commands.md)).
+The second argument of the default export, `web`, registers these parts while the module loads:
 
-They install and go with the module's extensions: an edit swaps them in one step, a version that fails keeps the one before, and turning the module off removes them, closing a page of it that is open. [examples/server-status.ts](../examples/server-status.ts) and [examples/server-status.js](../examples/server-status.js) are a whole one.
+- **Routes** on the server, under `/api/x/<module>/`. The browser module calls them. Keys and other secrets stay on the server. See [Routes](routes.md).
+- **A browser module**: a `.js` file that the app loads in the tabs of the people that it is for. Through `pocket`, the app's API for extensions, it adds rail buttons, pages, sheets, menu rows, and launcher actions, and says how its tools' calls show. See [Browser modules](browser-modules.md).
+- **Commands** for the message box (`/name`). They run on the server, and need no browser module. See [Slash commands](commands.md).
 
 ```typescript
-import type { ExtensionWeb } from "/path/to/pi-pocket/src/server/host.ts";
+import type { Host, Web } from "./_pocket.d.ts";
 
-export default function createUsage(_host: unknown, web: ExtensionWeb) {
+export default function createUsage(_host: Host, web: Web) {
     web.route("GET", "usage", async ({ signal }) => fetchUsage(signal)); // GET /api/x/usage/usage
     web.client("usage.js"); // the browser module beside this file
 }
 ```
+
+[examples/server-status.ts](../examples/server-status.ts) and [examples/server-status.js](../examples/server-status.js) are a complete module with a route, a page, and events.
+
+## The module's name
+
+What a module adds to the app goes by the name of its file. For example, `server-status.ts` has the name `server-status`. Its routes are at `/api/x/server-status/`, and its browser module at `/x/server-status/`.
+
+File names are different across the drop-in folder and the built-in modules, so these addresses never collide. A module that adds to the app must have a name of up to 64 letters, digits, `-`, and `_`, that starts with a letter or a digit.
+
+## Versions
+
+The three parts install and go with the module's extensions:
+
+- An edit replaces them in one step.
+- When a new version does not load, the parts of the version before stay.
+- When the owner turns the module off, Pi Pocket removes them, and closes a page of the module that is open.
