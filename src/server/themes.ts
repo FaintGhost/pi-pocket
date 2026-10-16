@@ -28,6 +28,7 @@ import { opened } from "./http/extension-routes.ts";
 import { desktopTheme } from "./omarchy.ts";
 import { watchTree } from "./reload.ts";
 import { cssReferences, themeFile } from "./themes/css.ts";
+import { reservedThemeIds } from "./themes/reserved.ts";
 import {
     assetType,
     colorsToml,
@@ -147,6 +148,8 @@ export class Themes {
     #found: Listed[] = [];
     /** The palettes that come with the app (`web/themes.js`), by id: their ids are taken. */
     #palettes: Record<string, { name: string; colors: Record<string, string> }> = {};
+    /** The ids the app keeps (`reservedThemeIds`): no folder of the owner's may take one. */
+    #reserved = new Set<string>(["pocket", "desktop"]);
     #failure: string | undefined;
     /** Folders not read for their names, with why: told once. */
     #misnamed = new Map<string, string>();
@@ -173,6 +176,8 @@ export class Themes {
         } catch (error) {
             this.#options.log(`The app's palettes could not be read: ${describe(error)}`);
         }
+
+        this.#reserved = await reservedThemeIds();
 
         try {
             mkdirSync(this.dir, { recursive: true });
@@ -424,7 +429,7 @@ export class Themes {
 
     /** Whether an id is a theme's, a built-in palette's, or a word the app keeps. */
     #taken(id: string): boolean {
-        if (id === "desktop" || id === BASE_THEME || this.#palettes[id] !== undefined) {
+        if (this.#reserved.has(id)) {
             return true;
         }
 
@@ -492,10 +497,7 @@ export class Themes {
                 continue;
             }
 
-            if (
-                seen.has(id) ||
-                (!builtIn && (this.#palettes[id] !== undefined || id === "desktop"))
-            ) {
+            if (seen.has(id) || (!builtIn && this.#reserved.has(id))) {
                 misnamed.set(
                     dir,
                     "its folder has the name of a theme or colors that come with Pi Pocket",
