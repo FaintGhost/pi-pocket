@@ -62,6 +62,9 @@ export function ModelPicker() {
     // While the picker animates out, the store has no sheet any more.
     const [query, setQuery] = useState(store.state.sheet?.query ?? "");
     const [forDefault] = useState(() => store.state.sheet?.forDefault === true);
+    const scopedModels = models.filter((model) => model.scoped);
+    const [showAll, setShowAll] = useState(false);
+    const choices = showAll || scopedModels.length === 0 ? models : scopedModels;
     // Decided once: a search box that went away when emptied would take the caret with it.
     const [searchable] = useState(() => models.length > MODEL_SEARCH_AT || query !== "");
     const [picked, setPicked] = useState(0);
@@ -97,7 +100,7 @@ export function ModelPicker() {
         : agent?.thinkingLevel;
     const reasoning = forDefault ? defaultModel?.reasoning : agent?.reasoning;
     const needle = query.trim().toLowerCase();
-    const shown = models
+    const shown = choices
         .filter(
             (model) =>
                 needle === "" ||
@@ -218,6 +221,35 @@ export function ModelPicker() {
                     <${Icon} name="key" size=${13} /> Providers
                 </button>
             </header>
+            ${
+                scopedModels.length > 0 &&
+                html`<div class="pop-menu-foot">
+                    <div class="segmented model-scope" role="group" aria-label="Model scope">
+                        <button
+                            class=${!showAll ? "on" : ""}
+                            aria-pressed=${!showAll}
+                            title="Models from Pi’s enabledModels setting"
+                            onClick=${() => {
+                                setShowAll(false);
+                                setPicked(0);
+                            }}
+                        >
+                            Scoped · ${scopedModels.length}
+                        </button>
+                        <button
+                            class=${showAll ? "on" : ""}
+                            aria-pressed=${showAll}
+                            title="All models with a configured sign-in"
+                            onClick=${() => {
+                                setShowAll(true);
+                                setPicked(0);
+                            }}
+                        >
+                            All · ${models.length}
+                        </button>
+                    </div>
+                </div>`
+            }
             ${
                 searchable &&
                 html`<label class="search pop-menu-search">
