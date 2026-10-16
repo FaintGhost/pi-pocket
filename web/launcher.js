@@ -128,7 +128,7 @@ function actionItems() {
         },
         {
             label: "Appearance",
-            detail: "theme, tiling, motion, text size, thinking, reply speed",
+            detail: "theme, colors, tiling, motion, text size, thinking, reply speed",
             icon: "palette",
             run: () => openSheet({ type: "appearance" }),
         },
@@ -762,18 +762,22 @@ export function Launcher({ leaving, returnTo }) {
 
     return html`<div
         class=${`launcher-overlay ${leaving ? "leaving" : ""}`}
+        data-part="scrim"
+        data-for="launcher"
         inert=${leaving}
         onMouseDown=${(event) => event.target === event.currentTarget && close()}
     >
         <section
             class="launcher"
+            data-part="launcher"
+            data-state=${leaving ? "closing" : undefined}
             role="dialog"
             aria-modal="true"
             aria-label="Launcher"
             onKeyDown=${onKey}
             onMouseDown=${(event) => event.target !== input.current && event.preventDefault()}
         >
-            <div class="launcher-input">
+            <div class="launcher-input" data-part="launcher-input">
                 <span class="prompt" aria-hidden="true">❯</span>
                 <input
                     ref=${input}
@@ -795,7 +799,12 @@ export function Launcher({ leaving, returnTo }) {
                     <${Icon} name="close" size=${18} />
                 </button>
             </div>
-            <div class="launcher-types" role="group" aria-label="Search type">
+            <div
+                class="launcher-types"
+                data-part="launcher-filters"
+                role="group"
+                aria-label="Search type"
+            >
                 ${[
                     ["", "All"],
                     ["@", "Sessions"],
@@ -817,7 +826,7 @@ export function Launcher({ leaving, returnTo }) {
                     role="group"
                     aria-label="Recent session options"
                 >
-                    <div class="launcher-group">
+                    <div class="launcher-group" data-part="launcher-group">
                         <span id="launcher-group-session">Recent sessions</span>
                         <span class="launcher-count">
                             ${recent.items.length} of ${recent.total}
@@ -840,7 +849,7 @@ export function Launcher({ leaving, returnTo }) {
                         <div role="group" aria-labelledby=${`launcher-group-${group.kind}`}>
                             ${
                                 !(group.kind === "session" && limitedRecent) &&
-                                html`<div class="launcher-group">
+                                html`<div class="launcher-group" data-part="launcher-group">
                                     <span id=${`launcher-group-${group.kind}`}>
                                         ${
                                             group.kind === "session" && recent
@@ -875,6 +884,7 @@ export function Launcher({ leaving, returnTo }) {
                                     key=${item.key}
                                     id=${optionId(item)}
                                     class=${`launcher-item ${on ? "on" : ""}`}
+                                    data-part="launcher-row"
                                     role="option"
                                     tabindex="-1"
                                     aria-label=${description}

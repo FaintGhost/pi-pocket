@@ -351,6 +351,45 @@ export function createApi(options: HttpOptions, auth: Auth) {
             });
         }
 
+        // Theme folders (`themes.ts`): everyone signed in lists them, as everyone chooses one for their own browsers;
+        // only the owner adds, edits, and removes them.
+        if (first === "themes" && second === undefined && method === "GET") {
+            return json(response, 200, { themes: app.themes.list() });
+        }
+
+        if (first === "themes" && second === "duplicate" && method === "POST") {
+            requireOwner(user);
+            const body = await readJson<{ from?: unknown; name?: unknown; colors?: unknown }>(
+                request,
+            );
+
+            if (typeof body.from !== "string") {
+                throw new HttpError(400, "Say which theme or colors to copy");
+            }
+
+            return json(response, 200, {
+                id: await app.themes.duplicate(body.from, body.name, body.colors === true),
+            });
+        }
+
+        if (first === "themes" && second !== undefined && third === "edit" && method === "GET") {
+            requireOwner(user);
+
+            return json(response, 200, app.themes.edit(second));
+        }
+
+        if (
+            first === "themes" &&
+            second !== undefined &&
+            third === undefined &&
+            method === "DELETE"
+        ) {
+            requireOwner(user);
+            app.themes.remove(second);
+
+            return json(response, 200, { ok: true });
+        }
+
         if (first === "theme" && second === "wallpaper" && method === "GET") {
             if (user.role !== "owner") {
                 throw new HttpError(403, "Only the owner sees the desktop's wallpaper");

@@ -20,7 +20,7 @@ import {
     workspaceOrder,
 } from "./store.js";
 import { prefs, setPrefs } from "./theme.js";
-import { html, Icon, shortPath, usePresence } from "./ui.js";
+import { html, Icon, railState, shortPath, usePresence } from "./ui.js";
 
 /** Wide enough for the column beside the conversation: where People and the Browser panel dock too. */
 export const PEEK_WIDE = matchMedia("(min-width: 1100px)");
@@ -155,6 +155,8 @@ export function PeeksRailButton() {
 
     return html`<button
         class=${`rail-button rail-peeks ${on ? "open" : ""}`}
+        data-part="rail-button"
+        data-state=${railState(on)}
         title=${on ? "Hide peek tiles (Alt+P)" : "Peek at other sessions (Alt+P)"}
         aria-label="Peek tiles"
         aria-pressed=${on}
