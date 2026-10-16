@@ -151,6 +151,7 @@ export const PARTS = [
     "home-title",
     "home-fact",
     "home-colors",
+    "home-color",
     "home-actions",
     "home-heading",
     "home-recent",
@@ -186,6 +187,7 @@ export const PARTS = [
     "live-mark",
     "code-block",
     "code-head",
+    "inline-code",
     // The composer
     "composer",
     "dock",

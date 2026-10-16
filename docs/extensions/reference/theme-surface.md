@@ -113,7 +113,7 @@ Each is a `data-part` attribute. Some elements have two (`data-part="composer-bu
 | `session-mark`                                                      | A session's square, in its folder's color, in the shape of its state (the home screen's too)                                                                                                   |
 | `session-branches`                                                  | The lines to a session that another one started                                                                                                                                                |
 | `home`                                                              | The home screen on wide screens                                                                                                                                                                |
-| `home-facts`, `home-logo`, `home-title`, `home-fact`, `home-colors` | Its summary: the block, the logo, the first line, each fact, and the palette's colors                                                                                                          |
+| `home-facts`, `home-logo`, `home-title`, `home-fact`, `home-colors` | Its summary: the block, the logo, the first line, each fact, the palette's colors (each a `home-color`)                                                                                        |
 | `home-actions`                                                      | Its buttons                                                                                                                                                                                    |
 | `home-recent`, `home-heading`, `home-recent-row`, `home-recent-key` | Jump back in: the list, its heading, each session, and the number that opens it                                                                                                                |
 | `home-list`                                                         | The session list as a phone's home screen                                                                                                                                                      |
@@ -139,6 +139,7 @@ Each is a `data-part` attribute. Some elements have two (`data-part="composer-bu
 | `approval`                                      | A call that waits for someone to allow it                                               |
 | `live-line`, `live-mark`                        | The line that says what Pi does now, and its dot                                        |
 | `code-block`, `code-head`                       | A code block in a reply, and its bar (language, Copy)                                   |
+| `inline-code`                                   | Code in a line of words, in a reply                                                     |
 
 ### The composer
 

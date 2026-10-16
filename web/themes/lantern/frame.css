@@ -81,7 +81,7 @@
 }
 
 /* Code in Pi's words: a quiet tag on a hairline. */
-[data-part~="reply"] :not(pre) > code {
+[data-part~="reply"] [data-part~="inline-code"] {
     padding: 1px 5px;
     border: 1px solid var(--hair);
     background: var(--card);
@@ -230,7 +230,7 @@
     color: var(--text);
 }
 
-[data-part~="home-colors"] span {
+[data-part~="home-color"] {
     width: 12px;
     height: 12px;
     border-radius: var(--r-mark);
