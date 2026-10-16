@@ -2550,7 +2550,8 @@ export class PocketApp {
     async #themeDefaultStillHere(): Promise<void> {
         const before = this.config.themeDefault;
 
-        if (before === undefined) {
+        // When the owner's themes could not be read at the start, they are not gone: keep the default for the next start.
+        if (before === undefined || this.themes.failure !== undefined) {
             return;
         }
 
