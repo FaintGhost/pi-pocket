@@ -69,8 +69,7 @@ A module split into parts keeps its name for the part others import, with the re
 | `repo-watches.ts`         | Repository watches: PiP's standing orders on a GitHub repository, and the durable task that looks at it and tells PiP or a session what happened                                                                                              |
 | `github.ts`               | GitHub through `gh`: running it unattended, repository and PR names in every form, and whether `gh`'s account can push to a repository                                                                                                        |
 | `memory.ts`               | Memory: lessons Pi keeps across sessions, each for a project (a repository with its worktrees, or a folder) or everywhere; the lessons in force for a session, and people's view, writes, and approvals                                       |
-
-`folder-favorites.ts` owns each person's favorite working folders: the `FolderFavoritesDoc` in SQLite, transactional star/unstar operations, and private live updates to their devices. `http/api.ts` exposes `/api/folder-favorites`; `hello.folderFavorites` and the `folder-favorites` event feed the folder picker through `web/store.js`.
+| `folder-favorites.ts`     | Each person's favorite folders (`/api/folder-favorites`): starring and unstarring one in a transaction, and each person's list sent only to their own tabs                                                                                    |
 
 ### A conversation's folder and history
 
