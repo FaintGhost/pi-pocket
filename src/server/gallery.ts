@@ -897,21 +897,33 @@ export class Gallery {
 
         for (const file of names) {
             const installed = before.files.find((each) => each.name === file);
+            const next = files.find((each) => each.name === file)?.bytes;
+            // A file there that the version installed did not list: the owner's own, which the update replaces. It is
+            // read to diff against when it can be (a link, or a file too large, shows no diff, and still counts).
+            const unlisted =
+                installed === undefined &&
+                (await removable(this.#dropIns(), name, file)) !== undefined;
             const old =
-                installed !== undefined ||
-                (await removable(this.#dropIns(), name, file)) !== undefined
+                installed !== undefined
                     ? await readInstalled(this.#dropIns(), name, file)
-                    : undefined;
+                    : unlisted
+                      ? await readInstalled(this.#dropIns(), name, file).catch(() => undefined)
+                      : undefined;
+            // Not the owner's: an installed file under another case of its name (where the file system ignores case),
+            // or one already as the new version has it.
+            const ours =
+                old !== undefined &&
+                (before.files.some((each) => each.sha256 === sha256(old)) ||
+                    (next !== undefined && sha256(next) === sha256(old)));
 
             if (
                 installed === undefined
-                    ? old !== undefined
+                    ? unlisted && !ours
                     : old === undefined || sha256(old) !== installed.sha256
             ) {
                 edited.push(file);
             }
 
-            const next = files.find((each) => each.name === file)?.bytes;
             const change =
                 old === undefined
                     ? "added"
