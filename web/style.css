@@ -149,6 +149,14 @@
     --gap-out: 8px;
     --gap-in: 4px;
     --border: 1px;
+    /*
+     * Density, from Appearance (`data-density`): how much room the spacing takes. Padding and gaps from top to bottom
+     * scale by --space-y, and from side to side by --space-x; --leading is the conversation's line height. Rows that
+     * are tap targets keep a floor on touch screens. Font sizes, corners, and colors stay as they are.
+     */
+    --space-y: 1;
+    --space-x: 1;
+    --leading: 1.65;
 
     /* Motion: Omarchy's Hyprland curves, and its speeds in milliseconds. */
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1); /* easeOutQuint */
@@ -165,6 +173,18 @@
         Consolas, monospace;
     --sans: "Pocket Sans", "Geist", ui-sans-serif, system-ui, sans-serif;
     color-scheme: dark;
+}
+
+:root[data-density="compact"] {
+    --space-y: 0.7;
+    --space-x: 0.85;
+    --leading: 1.5;
+}
+
+:root[data-density="tight"] {
+    --space-y: 0.45;
+    --space-x: 0.7;
+    --leading: 1.4;
 }
 
 /* Light themes: quieter text and the status colors darken toward the foreground, so they stay readable on light grounds. */
@@ -850,7 +870,7 @@ kbd {
     display: flex;
     align-items: center;
     gap: 6px;
-    min-height: calc(58px + env(safe-area-inset-top));
+    min-height: calc(46px + 12px * var(--space-y) + env(safe-area-inset-top));
     padding: env(safe-area-inset-top) 0 0;
     border-bottom: 1px solid var(--hair);
     background: var(--bg);
@@ -987,7 +1007,7 @@ kbd {
     display: flex;
     flex-direction: column;
     gap: 2px;
-    padding: 4px 8px;
+    padding: calc(4px * var(--space-y)) 8px;
     margin-left: 12px;
     border-radius: var(--r-row);
     transition: background-color var(--t-hover) var(--ease-out);
@@ -1267,23 +1287,23 @@ kbd {
 .transcript {
     max-width: 720px;
     margin: 0 auto;
-    padding: 28px 28px 24px;
+    padding: calc(28px * var(--space-y)) calc(28px * var(--space-x)) calc(24px * var(--space-y));
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: calc(16px * var(--space-y));
     font-size: var(--text-size, 15px);
-    line-height: 1.65;
+    line-height: var(--leading);
     animation: rise-in 0.36s var(--ease-out);
 }
 
-/* Turns stand apart: 10px more before each message or report. */
+/* Turns stand apart: 10px more before each message or report (less at a tighter density). */
 .transcript > :is(.user-row, .report, .report-group):not(:first-child) {
-    margin-top: 10px;
+    margin-top: calc(10px * var(--space-y));
 }
 
 @media (max-width: 699px) {
     .transcript {
-        padding: 18px 16px 14px;
+        padding: calc(18px * var(--space-y)) calc(16px * var(--space-x)) calc(14px * var(--space-y));
     }
 }
 
@@ -1356,8 +1376,8 @@ kbd {
 .user-row > .prompt {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 12px 16px 14px;
+    gap: calc(4px * var(--space-y));
+    padding: calc(12px * var(--space-y)) calc(16px * var(--space-x)) calc(14px * var(--space-y));
     border: 1px solid var(--hair);
     border-radius: var(--r-window);
     background: var(--card);
@@ -1367,7 +1387,7 @@ kbd {
 
 @media (max-width: 699px) {
     .user-row > .prompt {
-        padding: 12px 14px 13px;
+        padding: calc(12px * var(--space-y)) calc(14px * var(--space-x)) calc(13px * var(--space-y));
         border-radius: 16px;
     }
 }
@@ -1465,7 +1485,7 @@ kbd {
 .reply {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: calc(10px * var(--space-y));
     min-width: 0;
     color: var(--body);
 }
@@ -1473,7 +1493,7 @@ kbd {
 .reply > .md {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: calc(12px * var(--space-y));
 }
 
 .reply > .md > *,
@@ -1482,11 +1502,11 @@ kbd {
 }
 
 .reply > .md :is(h1, h2, h3, h4) {
-    margin-top: 6px;
+    margin-top: calc(6px * var(--space-y));
 }
 
 .reply > .md li + li {
-    margin-top: 4px;
+    margin-top: calc(4px * var(--space-y));
 }
 
 .reply > .md p {
@@ -1851,7 +1871,7 @@ kbd {
 
 /* One between rows takes no room: the gap before it is taken back. */
 .entry-mark {
-    margin-top: -16px;
+    margin-top: calc(-16px * var(--space-y));
 }
 
 .activity-head {
@@ -1859,8 +1879,9 @@ kbd {
     align-items: center;
     gap: 10px;
     width: 100%;
-    min-height: 40px;
-    padding: 0 12px;
+    /* 40px, 35px, and 30px; a thumb's 34px at least on a touch screen. */
+    min-height: calc(22px + 18px * var(--space-y));
+    padding: 0 calc(12px * var(--space-x));
     text-align: left;
     font-size: 13px;
     line-height: 1.5;
@@ -1917,13 +1938,13 @@ kbd {
 /* The timeline: a line per call, each with its mark on a thin rule. */
 .timeline {
     position: relative;
-    padding: 6px 0;
+    padding: calc(6px * var(--space-y)) 0;
     animation: unroll var(--t-in) var(--ease-out);
 }
 
 /* A group that is one thought alone: its words, under the line that names it. */
 .activity-thought {
-    padding: 10px 12px 12px;
+    padding: calc(10px * var(--space-y)) calc(12px * var(--space-x)) calc(12px * var(--space-y));
     animation: unroll var(--t-in) var(--ease-out);
 }
 
@@ -2617,7 +2638,8 @@ pre.diff .del {
 /* ─── Composer ─────────────────────────────────────────────── */
 
 .composer-wrap {
-    padding: 4px 24px calc(env(safe-area-inset-bottom) + 12px);
+    padding: 4px calc(24px * var(--space-x))
+        calc(env(safe-area-inset-bottom) + 12px * var(--space-y));
     max-width: 768px;
     width: 100%;
     margin: 0 auto;
@@ -2625,7 +2647,7 @@ pre.diff .del {
 
 @media (max-width: 699px) {
     .composer-wrap {
-        padding-inline: 12px;
+        padding-inline: calc(12px * var(--space-x));
     }
 }
 
@@ -2900,7 +2922,7 @@ pre.diff .del {
     background: none;
     color: var(--text);
     resize: none;
-    padding: 14px 16px 2px;
+    padding: calc(14px * var(--space-y)) calc(16px * var(--space-x)) 2px;
     max-height: 40vh;
     font-size: 15px;
     line-height: 1.5;
@@ -2909,7 +2931,7 @@ pre.diff .del {
 /* Touch screens keep 16px, below which iOS zooms into the field. */
 @media (pointer: coarse) {
     .composer textarea {
-        padding: 13px 15px 2px;
+        padding: calc(13px * var(--space-y)) calc(15px * var(--space-x)) 2px;
         font-size: 16px;
     }
     /* The status line's own room below it is enough. */
@@ -2922,13 +2944,16 @@ pre.diff .del {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 10px 10px;
+    padding: calc(6px * var(--space-y)) calc(10px * var(--space-x)) calc(4px + 6px * var(--space-y));
 }
 
+/* On a phone its bottom keeps 5px or more at every density: the status line's guard reaches up into it for a thumb's
+ * tap. */
 @media (max-width: 699px) {
     .composer-row {
         gap: 4px;
-        padding: 6px 8px 8px;
+        padding: calc(6px * var(--space-y)) calc(8px * var(--space-x))
+            calc(3px + 5px * var(--space-y));
     }
 }
 
@@ -3285,7 +3310,7 @@ pre.diff .del {
     align-items: center;
     justify-content: center;
     gap: 4px 14px;
-    padding-top: 8px;
+    padding-top: calc(3px + 5px * var(--space-y));
     font-size: 11.5px;
     line-height: 16px;
     color: var(--muted);
@@ -4039,7 +4064,7 @@ pre.diff .del {
     align-items: center;
     gap: 6px;
     width: 100%;
-    padding: 14px 8px 6px;
+    padding: calc(4px + 10px * var(--space-y)) 8px calc(6px * var(--space-y));
     font-size: 12px;
     font-weight: 500;
     color: var(--muted);
@@ -4153,7 +4178,8 @@ pre.diff .del {
     align-items: center;
     gap: 0 11px;
     width: 100%;
-    height: 36px;
+    /* 36px, 32px, and 29px. */
+    height: calc(24px + 12px * var(--space-y));
     padding: 0 10px;
     border-radius: var(--r-row);
     text-align: left;
@@ -5423,9 +5449,9 @@ pre.diff .del {
     display: flex;
     align-items: center;
     gap: 6px;
-    min-height: 56px;
+    min-height: calc(42px + 14px * var(--space-y));
     flex: none;
-    padding: 0 10px 0 20px;
+    padding: 0 10px 0 calc(20px * var(--space-x));
     border-bottom: 1px solid var(--hair);
     position: relative;
 }
@@ -5444,7 +5470,7 @@ pre.diff .del {
 @media (max-width: 699px) {
     .sheet-head {
         padding-top: 14px;
-        min-height: 70px;
+        min-height: calc(56px + 14px * var(--space-y));
     }
     .sheet-head > .icon-button {
         width: 40px;
@@ -5499,10 +5525,10 @@ pre.diff .del {
     overflow-y: auto;
     overflow-x: hidden;
     overscroll-behavior: contain;
-    padding: 16px 20px 20px;
+    padding: calc(16px * var(--space-y)) calc(20px * var(--space-x)) calc(20px * var(--space-y));
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: calc(14px * var(--space-y));
 }
 
 .sheet-body > * {
@@ -5551,9 +5577,10 @@ pre.diff .del {
     align-items: center;
     gap: 10px;
     width: 100%;
-    min-height: 44px;
+    /* 44px, 40px, and 37px. */
+    min-height: calc(32px + 12px * var(--space-y));
     text-align: left;
-    padding: 12px 14px;
+    padding: calc(12px * var(--space-y)) calc(14px * var(--space-x));
     border-radius: var(--r-row);
     background: var(--o-bg);
     border: 0;
@@ -5594,7 +5621,7 @@ pre.diff .del {
     font-size: 12px;
     font-weight: 500;
     color: var(--faint);
-    margin: 4px 2px 6px;
+    margin: calc(4px * var(--space-y)) 2px calc(6px * var(--space-y));
 }
 
 .field {
@@ -8526,7 +8553,7 @@ textarea.notes {
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 12px 14px;
+    padding: calc(12px * var(--space-y)) calc(14px * var(--space-x));
     background: var(--o-bg);
     font-size: 14px;
 }
@@ -11857,9 +11884,9 @@ textarea.notes {
     .launcher-input input {
         font-size: 16px;
     }
-    /* Rows a thumb can take, and that answer the press. */
+    /* Rows a thumb can take, and that answer the press: 40px, 37px, and 34px. */
     .session {
-        height: 40px;
+        height: calc(30px + 10px * var(--space-y));
     }
     .session:active {
         background: var(--pressed);
@@ -11975,9 +12002,12 @@ textarea.notes {
         position: absolute;
         inset: -6px 0;
     }
-    /* A call's line, a little taller for a thumb. */
+    /* A call's line, a little taller for a thumb; a group's line keeps a thumb's height at every density. */
     .step-head {
         min-height: 36px;
+    }
+    .activity-head {
+        min-height: max(34px, calc(22px + 18px * var(--space-y)));
     }
     .browser-servers .chip,
     .dr-tools .chip {

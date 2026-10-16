@@ -1,5 +1,5 @@
 // Appearance: Omarchy palettes as CSS variables, "Follow desktop" (the Omarchy theme this machine runs), tiled windows,
-// motion, text size, and the sidebar's shape. Saved per browser. index.html applies the last look before the first
+// motion, text size, density, and the sidebar's shape. Saved per browser. index.html applies the last look before the first
 // paint from `pocket.themeCache`, so a reload never flashes another theme.
 import { THEMES } from "./themes.js";
 import { api, store } from "./store.js";
@@ -21,6 +21,8 @@ const DEFAULTS = {
     motion: "auto",
     /** The conversation's text in pixels, 13 to 17; the rest of the app keeps its own sizes. */
     text: 15,
+    /** How much room the spacing takes: "comfortable", "compact", or "tight". Font sizes stay. */
+    density: "comfortable",
     /** The sidebar on wide screens: "open", or "rail" (icons and numbered sessions only). */
     sidebar: "open",
     /** The open sidebar's width, its borders, the rail, and the list's: a 254px list. */
@@ -208,6 +210,7 @@ export function apply() {
         tiling: p.tiling ? "on" : "off",
         motion: reducedMotion() ? "reduced" : "full",
         rail: p.sidebar === "rail" ? "on" : "off",
+        density: p.density,
     };
 
     Object.assign(root.dataset, attrs);

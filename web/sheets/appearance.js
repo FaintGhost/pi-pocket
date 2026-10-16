@@ -66,6 +66,21 @@ function ThemeCard({ id, desktop = false }) {
     </button>`;
 }
 
+/** A new density, with the choice tapped kept where it was: the rows above it grow or shrink with the change. */
+function chooseDensity(density, event) {
+    const button = event.currentTarget;
+    const before = button.getBoundingClientRect().top;
+
+    setPrefs({ density });
+    requestAnimationFrame(() => {
+        const body = button.closest(".sheet-body");
+
+        if (body) {
+            body.scrollTop += button.getBoundingClientRect().top - before;
+        }
+    });
+}
+
 function SettingRow({ title, detail, children }) {
     return html`<div class="setting-row">
         <div class="setting-text">
@@ -181,6 +196,27 @@ export function AppearanceSheet() {
                         >
                             ${size}
                         </button>`,
+                    )}
+                </div>
+            <//>
+            <${SettingRow}
+                title="Density"
+                detail="Less room around messages, rows, and the message box, to fit more on a screen"
+            >
+                <div class="segmented">
+                    ${[
+                        ["comfortable", "Comfortable"],
+                        ["compact", "Compact"],
+                        ["tight", "Tight"],
+                    ].map(
+                        ([value, label]) =>
+                            html`<button
+                                class=${p.density === value ? "on" : ""}
+                                aria-pressed=${p.density === value}
+                                onClick=${(event) => chooseDensity(value, event)}
+                            >
+                                ${label}
+                            </button>`,
                     )}
                 </div>
             <//>
