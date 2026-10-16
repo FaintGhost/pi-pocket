@@ -7,10 +7,7 @@ export default () => {
     const marker = join(process.env.PI_POCKET_DIR!, "runtime-probe.json");
 
     // both runners poll this marker while the extension loads
-    writeFileSync(
-        `${marker}.tmp`,
-        JSON.stringify({ pid: process.pid, version: "v1" }),
-    );
+    writeFileSync(`${marker}.tmp`, JSON.stringify({ pid: process.pid, version: "v1" }));
     renameSync(`${marker}.tmp`, marker);
 
     return defineExtension({
