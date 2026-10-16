@@ -69,7 +69,7 @@ const FRESH_MS = 60 * 60 * 1000;
 const SIDECAR = ".gallery.json";
 const SIDECAR_FILE = /^([a-z0-9][a-z0-9_-]{1,63})\.gallery\.json$/;
 /** Files that run or that the app reads as text, which must be text the owner can read before turning them on. */
-const CODE_FILE = /\.(?:[cm]?[jt]s|json|css)$/;
+const CODE_FILE = /\.(?:[cm]?[jt]s|json|css)$/i;
 /** Characters that change the direction of text: code holding them can read as other code than what runs. */
 const BIDI = /[\u202a-\u202e\u2066-\u2069]/;
 
@@ -425,10 +425,13 @@ export class Gallery {
             }
 
             // Code the owner could not read here: the source view and an update's diff show such a file only as
-            // binary, while Node would still run it, or show it reordered.
-            const text = CODE_FILE.test(file.name) ? textOf(bytes) : "";
+            // binary, while Node would still run it, or any text reordered.
+            const text = textOf(bytes);
 
-            if (text === undefined || BIDI.test(text)) {
+            if (
+                (text === undefined && CODE_FILE.test(file.name)) ||
+                (text !== undefined && BIDI.test(text))
+            ) {
                 throw new HttpError(
                     502,
                     `${file.name} ${text === undefined ? "is not plain UTF-8 text" : "has characters that change the direction of text"}, so it could not be shown to read as it runs, and nothing was written. Tell the index's maintainers.`,
