@@ -800,6 +800,14 @@ export function readTheme(
             }
 
             queue.push(target.file);
+            // Written as its full address, as a font or an image is: the check read the address against the theme's
+            // folder, and the browser must read it the same way, not against the app's.
+            loads.get(path)!.push({
+                start: ref.start,
+                end: ref.end,
+                quoted: ref.quoted,
+                file: target.file,
+            });
         }
 
         for (const ref of found.assets) {
