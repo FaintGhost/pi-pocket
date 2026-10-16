@@ -10,7 +10,7 @@
 //   relative links (a page to its address on the site, anything else to GitHub), and draws a reference member's
 //   "Since 0.14.0 · Stable" line as two tags.
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import GithubSlugger from "github-slugger";
@@ -98,6 +98,32 @@ export function pages() {
     walk("docs");
 
     return found.sort();
+}
+
+/**
+ * Each link in docs/, and a root page that is a link. The build reads what docs/ holds and publishes it, so a link
+ * there could put a file of the machine that builds it (a runner's secrets) on the site: a pull request must not.
+ */
+export function links() {
+    const found = ROOT_PAGES.filter(
+        (file) => existsSync(join(REPO, file)) && lstatSync(join(REPO, file)).isSymbolicLink(),
+    );
+
+    const walk = (folder) => {
+        for (const entry of readdirSync(join(REPO, folder), { withFileTypes: true })) {
+            const path = `${folder}/${entry.name}`;
+
+            if (entry.isSymbolicLink()) {
+                found.push(path);
+            } else if (entry.isDirectory()) {
+                walk(path);
+            }
+        }
+    };
+
+    walk("docs");
+
+    return found;
 }
 
 /** The text of an mdast node, as a heading's anchor is made from it. */
@@ -316,6 +342,13 @@ export function repoDocsLoader() {
         name: "pi-pocket-docs",
         load: async (context) => {
             const { errors, warnings } = checkLinks();
+
+            errors.unshift(
+                ...links().map(
+                    (path) =>
+                        `${path} is a link: the docs take no links, so none can publish a file from elsewhere`,
+                ),
+            );
 
             errors.push(...checkReference(REPO), ...checkLimits(REPO));
 
