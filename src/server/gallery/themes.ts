@@ -8,8 +8,6 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
-import { pathToFileURL } from "node:url";
-import { APP_ROOT } from "../config.ts";
 import { describe, HttpError } from "../errors.ts";
 import { readTheme } from "../themes.ts";
 import { THEME_ID, THEME_LIMITS, ThemeProblem } from "../themes/format.ts";
@@ -30,18 +28,6 @@ export interface ThemeProvenance {
 /** A theme file's path in its folder: its name in the entry without the folder (`paper/theme.css` is `theme.css`). */
 export const innerPath = (entry: { name: string }, file: string) =>
     file.slice(entry.name.length + 1);
-
-/** The palettes that come with the app (`web/themes.js`): a theme from the gallery cannot take their ids. */
-let palettes: Promise<Set<string>> | undefined;
-
-export function paletteIds(): Promise<Set<string>> {
-    palettes ??= import(pathToFileURL(join(APP_ROOT, "web", "themes.js")).href).then(
-        (module: { THEMES: Record<string, unknown> }) => new Set(Object.keys(module.THEMES)),
-        () => new Set<string>(),
-    );
-
-    return palettes;
-}
 
 /** A theme's folder in `themes/`, as a folder: undefined when there is none, refused when it is a link or a file. */
 async function folderOf(dir: string, id: string): Promise<string | undefined> {

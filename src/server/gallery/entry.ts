@@ -11,11 +11,11 @@
  * sizes to `LIMITS`.
  */
 import { createHash } from "node:crypto";
-import { readdirSync } from "node:fs";
 import { BUILT_IN_COMMANDS } from "../extension-web.ts";
 import { INVISIBLE_CLASS } from "../fence.ts";
 import { BUILT_IN_MODULES, BUILT_IN_TOOLS, RESERVED_EXTENSIONS } from "../reload.ts";
 import { assetType, THEME_API, THEME_ID, THEME_LIMITS } from "../themes/format.ts";
+import { reservedThemeIds } from "../themes/reserved.ts";
 import { atLeast, POCKET_VERSION, versionParts } from "../versions.ts";
 
 // Where they always were: the index repository's checks import them from here.
@@ -574,21 +574,11 @@ export function parseEntry(value: unknown): Entry {
 }
 
 /**
- * Ids a theme in the index may not have, as Pi Pocket keeps them for itself: `desktop` (the desktop's colors), the
- * themes that come with it (`web/themes/`), and its palettes (`web/themes.js`). Read from this checkout, as the index's
- * checks import this file from one.
+ * Ids a theme in the index may not have, as Pi Pocket keeps them for itself (`reservedThemeIds`): `pocket`, `desktop`
+ * (the desktop's colors), the themes that come with it (`web/themes/`), and its palettes (`web/themes.js`). Read from
+ * this checkout, as the index's checks import this file from one.
  */
-export const RESERVED_THEMES: ReadonlySet<string> = await (async () => {
-    const web = new URL("../../../web/", import.meta.url);
-    const builtIn = readdirSync(new URL("themes/", web), { withFileTypes: true })
-        .filter((each) => each.isDirectory())
-        .map((each) => each.name);
-    const { THEMES } = (await import(new URL("themes.js", web).href)) as {
-        THEMES: Record<string, unknown>;
-    };
-
-    return new Set(["desktop", "pocket", ...builtIn, ...Object.keys(THEMES)]);
-})();
+export const RESERVED_THEMES: ReadonlySet<string> = await reservedThemeIds();
 
 /**
  * A theme's entry, checked whole: its files keep to the theme format's names and limits (`themes/format.ts`). What

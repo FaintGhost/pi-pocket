@@ -52,7 +52,6 @@ import { shareDraft, shareThemeDraft } from "./gallery/share.ts";
 import {
     changedThemeFiles,
     innerPath,
-    paletteIds,
     placeTheme,
     readThemeFile,
     recoverThemes,
@@ -1262,8 +1261,8 @@ export class Gallery {
 
         const id = entry.name;
 
+        // Ids the app keeps are refused as the index is read (`RESERVED_THEMES`).
         if (
-            (await paletteIds()).has(id) ||
             this.#app.themes.list().some((each) => each.id === id) ||
             (await exists(join(this.#themes(), id)))
         ) {
