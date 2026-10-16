@@ -19,9 +19,6 @@ import {
 } from "./entry.ts";
 import { exists, textOf, type Written } from "./files.ts";
 
-/** Past this, GitHub's page would refuse the link with the entry in it: the owner copies the entry instead. */
-const LINK_LIMIT = 6000;
-
 /** The packages a browser module can import by name: the app's import map (`web/index.html`). */
 const BROWSER_PACKAGES = new Set(["preact", "preact/hooks", "htm", "marked", "dompurify"]);
 
@@ -328,16 +325,6 @@ export async function shareDraft(options: {
     }
 
     const text = `${JSON.stringify(entry, null, 4)}\n`;
-    // GitHub's page for a new file, in the index repository's main branch, with the entry in it while that fits a link.
-    const page =
-        repoUrl === null
-            ? null
-            : `${repoUrl}/new/main/entries?filename=${encodeURIComponent(`${name}.json`)}`;
-    const filled = page === null ? null : `${page}&value=${encodeURIComponent(text)}`;
-
-    if (filled !== null && filled.length > LINK_LIMIT) {
-        notes.push("Its entry is too long for the link: copy it, and paste it on GitHub's page.");
-    }
 
     return {
         file,
@@ -349,6 +336,11 @@ export async function shareDraft(options: {
         declaresKnown: loaded,
         repoUrl,
         contributingUrl: repoUrl === null ? null : `${repoUrl}/blob/HEAD/CONTRIBUTING.md`,
-        newEntryUrl: filled !== null && filled.length > LINK_LIMIT ? page : filled,
+        // GitHub's page for a new file in the index repository's main branch: the sheet adds the entry once the owner
+        // filled in where its files are (`value`, while it fits a link).
+        newEntryPage:
+            repoUrl === null
+                ? null
+                : `${repoUrl}/new/main/entries?filename=${encodeURIComponent(`${name}.json`)}`,
     };
 }

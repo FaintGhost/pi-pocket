@@ -334,7 +334,7 @@ To publish it:
 
 1. Put its files in a public GitHub repository with the same names as in your extensions folder, at its top or in a folder of it, and commit them.
 2. In Menu → Extensions, tap **Share…** on your drop-in. It checks that the drop-in stands on its own, and drafts its entry: the description from its comment, each file's size and SHA-256, and, while it is on, what it declares. Pi Pocket makes no GitHub calls for this.
-3. Fill in what only you know: `source.repo` (`owner/name`), `source.commit` (the full id of the commit with these files), `source.path` (the folder, if not the top), `tags`, and `author.github`. **Open a pull request** opens GitHub's new-file page in the index repository with the entry filled in, as `entries/<name>.json`; the index's [CONTRIBUTING](https://github.com/TannerMidd/pi-pocket-extensions/blob/main/CONTRIBUTING.md) says the rest.
+3. Fill in what only you know: the repository (`owner/name`), the full ID of the commit with these files, the folder (if not the top), tags, and your GitHub name. **Open a pull request** opens once they would pass the index's checks: it opens GitHub's new-file page in the index repository with the entry filled in, as `entries/<name>.json`. The index's [CONTRIBUTING](https://github.com/TannerMidd/pi-pocket-extensions/blob/main/CONTRIBUTING.md) says the rest.
 4. To update it, commit the new files, and send a pull request that changes `source.commit`, `version`, and the files' hashes (**Share…** again gives them). People who have it see the update, with its diff, and choose whether to apply it.
 
 ## A built-in extension

@@ -14595,6 +14595,17 @@ textarea.notes {
     flex: 1;
 }
 
+/* Share's form: where the files are, which only their author knows. One column on a phone. */
+.gallery-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 0.75rem 0.9rem;
+}
+
+.gallery-field input[aria-invalid="true"] {
+    border-color: var(--warn);
+}
+
 .gallery-source-name {
     font-size: 13px;
     color: var(--text);
