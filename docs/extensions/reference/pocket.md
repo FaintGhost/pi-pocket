@@ -268,7 +268,7 @@ on<T = unknown>(event: string, run: (data: T) => void): () => void;
 
 Since 0.14.0 · Stable
 
-Calls `run` with the data of each `event` that the module sends with `web.send`. It returns a function: call it to stop. The app keeps no events for a page that is closed. Thus a page that opens must first get the data that is current, and then listen. [Events](../events.md) shows how.
+Calls `run` with the data of each `event` that the module sends with `web.send`. It returns a function: call it to stop. The app keeps no events for a page that is closed. Thus a page that opens must first get the data that is current, and then listen. [Events](../events.md) tells you more.
 
 ## Adding to the app
 
@@ -334,7 +334,7 @@ toolCall<A = Record<string, unknown>>(spec: ToolCallSpec<A>): { remove(): void }
 
 Since 0.14.0 · Stable
 
-Sets how the calls of one of the module's own tools show in transcripts and peek tiles. Without it, a call shows as the tool's name, with its arguments as JSON. It goes with the version that added it. See [`ToolCallSpec`](#toolcallspec). [How tool calls show](../tool-calls.md) has an example.
+Sets how the calls of one of the module's own tools show in transcripts and peek tiles. Without it, a call shows as the tool's name, with its arguments as JSON. It goes with the version that added it. See [`ToolCallSpec`](#toolcallspec). [How tool calls show](../tool-calls.md) tells you more.
 
 ## Opening and closing
 
