@@ -339,7 +339,10 @@ function follow(state) {
     const key = [
         safe ? "safe" : "",
         state.me ? "in" : "",
-        ...list.map((each) => `${each.module}@${each.url}`),
+        ...list.map(
+            (each) =>
+                `${each.module}@${each.url}@${Array.isArray(each.tools) ? each.tools.join(",") : ""}`,
+        ),
     ].join("\n");
 
     if (key === loadedKey) {
@@ -369,8 +372,13 @@ function sync(list) {
     const wanted = new Map(safe ? [] : list.map((each) => [each.module, each]));
 
     for (const record of [...modules.values()]) {
-        if (wanted.get(record.module)?.url !== record.url) {
+        const entry = wanted.get(record.module);
+
+        if (entry?.url !== record.url) {
             unload(record);
+        } else if (Array.isArray(entry.tools)) {
+            // A module reloaded on the server may install other tools, with the same browser module.
+            record.tools = entry.tools;
         }
     }
 
@@ -426,8 +434,8 @@ async function load(entry) {
         adds: Object.fromEntries(KINDS.map((kind) => [kind, new Map()])),
         // How its own tools' calls show (`pocket.toolCall`), by tool.
         calls: new Map(),
-        // Pi Pocket's own module, which may describe Pi Pocket's own tools.
-        builtIn: entry.builtIn === true,
+        // The tools its module installs, whose calls it may describe; none known from a server before that list.
+        tools: Array.isArray(entry.tools) ? entry.tools : null,
         disposers: [],
         listeners: new Set(),
         // Replaced or turned off.
@@ -819,6 +827,10 @@ function pocketFor(record) {
 
             const current = toolCallOf(record, spec);
 
+            if (current === null) {
+                return Object.freeze({ remove() {} });
+            }
+
             if (live()) {
                 record.calls.set(current.tool, current);
                 describersChanged();
@@ -950,9 +962,11 @@ function pocketFor(record) {
 
 // ─── Tool calls: how a module's own tools show ───────────────────────────────
 
-const TOOL = /^[A-Za-z0-9_-]{1,64}$/;
-
-/** A copy of what `pocket.toolCall` was given, once it holds. Pi Pocket's own tools keep their display. */
+/**
+ * A copy of what `pocket.toolCall` was given, once it holds; null from a server that does not say which tools are the
+ * module's, where calls keep the default display. A module describes only the tools its own module installs, by the
+ * very names Pi runs them by, so it never changes how another's calls show (a command shown as something else).
+ */
 function toolCallOf(record, spec) {
     if (typeof spec !== "object" || spec === null) {
         throw new Error("pocket.toolCall: give it an object");
@@ -961,15 +975,16 @@ function toolCallOf(record, spec) {
     const copy = { ...spec };
     const name = `pocket.toolCall ${String(copy.tool)}`;
 
-    if (typeof copy.tool !== "string" || !TOOL.test(copy.tool)) {
+    if (typeof copy.tool !== "string") {
         throw new Error("pocket.toolCall: give it the name of one of its tools");
     }
 
-    // A drop-in may not change how Pi Pocket's tools show (a command shown as something else). Unknown: none may.
-    const builtIn = store.state.server?.builtInTools;
+    if (record.tools === null) {
+        return null;
+    }
 
-    if (!record.builtIn && (!Array.isArray(builtIn) || builtIn.includes(copy.tool))) {
-        throw new Error(`${name}: it is one of Pi Pocket's own tools, which keep their display`);
+    if (!record.tools.includes(copy.tool)) {
+        throw new Error(`${name}: it is not one of this module's tools`);
     }
 
     if (typeof copy.label !== "function") {

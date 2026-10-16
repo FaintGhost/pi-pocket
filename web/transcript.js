@@ -302,10 +302,10 @@ function UserEntry({ entry, view, users }) {
     const via = authorId === undefined ? VIA.exec(written) : null;
     const sent = via ? written.slice(via[0].length) : written;
     const scheduled = sent.startsWith(SCHEDULED);
-    const peer = via && /^linked session (session-[a-f0-9-]{36})$/.exec(via[1]);
-    // Keep routing instructions in the model's transcript, not in the person's reading of a peer message.
+    // A linked session's message: shown by its label and its fence alone, so the words before the fence (which tell Pi
+    // how to read it) can change without changing how older messages show.
     const peerText =
-        peer && sent.startsWith(`Message from linked session ${peer[1]}.`)
+        via && /^linked session \S+$/.test(via[1])
             ? /\n<linked-session-message>\n([\s\S]*)\n<\/linked-session-message>$/.exec(sent)?.[1]
             : undefined;
     const body = peerText ?? (scheduled ? sent.slice(SCHEDULED.length) : sent);
