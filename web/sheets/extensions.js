@@ -100,7 +100,7 @@ function SafeMode() {
     }
 
     return html`<div class="setting wrap safe-mode">
-        <div class="grow small">Extensions' browser parts are off in this tab.</div>
+        <div class="grow small">Extensions' browser parts are off in this tab, and so is the theme.</div>
         <button class="button" onClick=${leaveSafeMode}>Turn them back on</button>
     </div>`;
 }

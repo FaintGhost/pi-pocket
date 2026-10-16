@@ -6,7 +6,15 @@ import { memoryAvailable, remember } from "./sheets/memory.js";
 import { togglePeeks } from "./peeks.js";
 import { askPip, openPip, pipAvailable } from "./pip.js";
 import { actions, collab, navigate, notify, openSheet, scoped, store } from "./store.js";
-import { chooseTheme, THEMES } from "./theme.js";
+import {
+    BASE_LOOK,
+    chooseLook,
+    chooseTheme,
+    folderPaletteIds,
+    lookIds,
+    paletteOf,
+    THEMES,
+} from "./theme.js";
 import { trustAvailable } from "./trust.js";
 import { copyText, formatTokens, formatWhen, modelLabel, replyText, shortPath } from "./ui.js";
 
@@ -428,35 +436,58 @@ const COMMANDS = [
     {
         name: "theme",
         args: "[name]",
-        description: "Change the theme: an Omarchy theme, or desktop to follow yours",
+        description:
+            "Change the theme or the colors: a theme, an Omarchy palette, or desktop to follow yours",
         run: setTheme,
     },
 ];
 
-/** `/theme gruvbox`, `/theme rose`, `/theme desktop`; without a name, the Appearance sheet. */
+/**
+ * `/theme meridian` (a theme folder), `/theme gruvbox`, `/theme rose`, `/theme desktop` (colors); without a name, the
+ * Appearance sheet. A theme's name wins over colors' of the same name.
+ */
 function setTheme(arg) {
     if (arg === "") {
         return openSheet({ type: "appearance" });
     }
 
     const needle = arg.toLowerCase().replace(/\s+/g, "-");
-    const ids = ["desktop", ...Object.keys(THEMES)];
-    const id =
-        ids.find((each) => each === needle) ??
-        ids.find(
-            (each) =>
-                each.startsWith(needle) ||
-                THEMES[each]?.name.toLowerCase().startsWith(arg.toLowerCase()),
+    const words = arg.toLowerCase();
+    const looks = lookIds().map((id) => ({
+        id,
+        name:
+            id === BASE_LOOK
+                ? "Pocket"
+                : (store.state.themeList?.find((each) => each.id === id)?.name ?? id),
+    }));
+    const palettes = ["desktop", ...Object.keys(THEMES), ...folderPaletteIds()].map((id) => ({
+        id,
+        name: id === "desktop" ? "desktop" : paletteOf(id).name,
+    }));
+    const find = (list) =>
+        list.find((each) => each.id === needle) ??
+        list.find(
+            (each) => each.id.startsWith(needle) || each.name.toLowerCase().startsWith(words),
         );
+    const look = find(looks);
 
-    if (!id) {
+    if (look) {
+        chooseLook(look.id);
+        notify("info", `Theme: ${look.name}.`);
+
+        return;
+    }
+
+    const palette = find(palettes);
+
+    if (!palette) {
         throw new Error(
-            `No theme called “${arg}”. Try ${Object.keys(THEMES).slice(0, 4).join(", ")}, or desktop.`,
+            `No theme or colors called “${arg}”. Try pocket, ${Object.keys(THEMES).slice(0, 3).join(", ")}, or desktop.`,
         );
     }
 
-    chooseTheme(id);
-    notify("info", `Theme: ${id === "desktop" ? "follows your desktop" : THEMES[id].name}.`);
+    chooseTheme(palette.id);
+    notify("info", `Colors: ${palette.id === "desktop" ? "follow your desktop" : palette.name}.`);
 }
 
 /** Extensions' commands this person may run (`hello` lists them). A prompt template of the same name keeps it. */

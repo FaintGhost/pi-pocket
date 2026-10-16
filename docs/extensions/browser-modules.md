@@ -129,7 +129,9 @@ Nothing outside a module can stop a loop that never yields and calls nothing of 
 - Use the app's colors, which follow the theme: `var(--text)`, `var(--muted)`, `var(--accent)`, `var(--bg)`, `var(--card)`, `var(--line)`, `var(--err)`, `var(--warn)`, and `var(--ok)`.
 - Use these classes: `button` (with `primary`), `error-box`, `muted`, `small`, `mono`, and `setting` (a row with a label and a control).
 
-Pi Pocket keeps these names. The rest of its CSS can change. To load a stylesheet of your own, put it in the module's folder, and call `pocket.style(path)`.
+Pi Pocket keeps these names. They are part of [the theme surface](reference/theme-surface.md#extensions-css-names), and a module can use its other tokens too. The rest of its CSS can change.
+
+To load a stylesheet of your own, put it in the module's folder, and call `pocket.style(path)`. The stylesheet goes in the app's own cascade layer: it wins and loses against the app's rules by specificity and order, and a theme's rules win over both. Do not add a `<link>` of your own: it would be outside the layers, and win over the app and the theme alike.
 
 ## When it fails
 

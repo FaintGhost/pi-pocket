@@ -92,25 +92,29 @@ export function Splash() {
     const canStart = canSteer() && !scoped();
     let line = 0;
 
-    return html`<div class="splash">
-        <div class="fetch">
-            <pre class="fetch-logo" aria-hidden="true">${LOGO}</pre>
+    return html`<div class="splash" data-part="home">
+        <div class="fetch" data-part="home-facts">
+            <pre class="fetch-logo" data-part="home-logo" aria-hidden="true">${LOGO}</pre>
             <div class="fetch-info">
-                <div class="fetch-title" style=${`--i:${line++}`}>
+                <div class="fetch-title" data-part="home-title" style=${`--i:${line++}`}>
                     <b>${(me?.name ?? "you").toLowerCase().replace(/\s+/g, "-")}</b>@<b>pi-pocket</b>
                 </div>
                 ${rows.map(
-                    ([key, value]) => html`<dl class="fetch-row" style=${`--i:${line++}`}>
+                    ([key, value]) => html`<dl
+                        class="fetch-row"
+                        data-part="home-fact"
+                        style=${`--i:${line++}`}
+                    >
                         <dt>${key}</dt>
                         <dd>${value}</dd>
                     </dl>`,
                 )}
-                <div class="fetch-colors" style=${`--i:${line++}`}>
+                <div class="fetch-colors" data-part="home-colors" style=${`--i:${line++}`}>
                     ${colors.map((name) => html`<span style=${`background:var(${name})`}></span>`)}
                 </div>
             </div>
         </div>
-        <div class="splash-actions">
+        <div class="splash-actions" data-part="home-actions">
             ${
                 canStart &&
                 html`<button
@@ -129,16 +133,18 @@ export function Splash() {
         </div>
         ${
             recent.length > 0 &&
-            html`<div class="splash-recent">
-                <div class="splash-heading">Jump back in</div>
+            html`<div class="splash-recent" data-part="home-recent">
+                <div class="splash-heading" data-part="home-heading">Jump back in</div>
                 ${recent.map(
-                    (
-                        session,
-                        index,
-                    ) => html`<button class="splash-row" onClick=${() => navigate(session.id)}>
-                        <span class="splash-key">${index + 1}</span>
+                    (session, index) => html`<button
+                        class="splash-row"
+                        data-part="home-recent-row"
+                        onClick=${() => navigate(session.id)}
+                    >
+                        <span class="splash-key" data-part="home-recent-key">${index + 1}</span>
                         <span
                             class=${`state-mark ${sessionMark(session).shape}`}
+                            data-part="session-mark"
                             style=${`--folder:${folderColor(session.cwd)}`}
                             aria-hidden="true"
                         ></span>

@@ -295,7 +295,7 @@ function MenuFrame({ title, children }) {
         }
     };
 
-    return html`<div class="nav-menu-host" ref=${host} onKeyDown=${onKey}>
+    return html`<div class="nav-menu-host" data-part="menu" ref=${host} onKeyDown=${onKey}>
         <${Sheet} title=${title} onClose=${closeSheet} className="nav-menu">
             ${children}
         <//>

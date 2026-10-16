@@ -104,3 +104,15 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **Each list in `declares`:** 100 names at most. An extension, tool, hook, or section name is 64 characters at most. A route's path is 200 characters at most. A command, with its scope, is 80 characters at most.
 - **`revoked`:** 50 commits at most, each with a reason of 300 characters at most.
 - **Looks for revoked versions:** two times a day, while extensions from the index are installed.
+
+## Themes
+
+[Themes](../themes.md)
+
+- **A theme's id (its folder's name):** 2 to 48 characters.
+- **`theme.json`:** 8 KB. Its `name` and `author`: 60 characters each; its `description`: 200; its `version` and `minPocket`: 32.
+- **`colors.toml` and `colors-light.toml`:** 8 KB each.
+- **All of a theme's CSS:** 256 KB together.
+- **A font or an image:** 4 MB.
+- **Everything a theme serves:** 16 MB, and 200 files.
+- **Folders:** 4 deep under the theme's own; Pi Pocket looks at 2,000 files and folders in it at most.

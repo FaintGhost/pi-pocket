@@ -26,7 +26,7 @@ export const SIDEBAR = [
             ["docs/extensions/tool-calls.md", "How tool calls show"],
             ["docs/extensions/events.md", "Events"],
             ["docs/extensions/cleanups.md", "Cleanups"],
-            // Themes (0.14.0): the theming work adds ["docs/extensions/themes.md", "Themes"] here.
+            ["docs/extensions/themes.md", "Themes"],
             ["docs/extensions/testing.md", "Testing"],
             ["docs/extensions/publishing.md", "Publishing to the gallery"],
             ["docs/extensions/built-in.md", "Making it built in"],
@@ -40,7 +40,7 @@ export const SIDEBAR = [
             ["docs/extensions/reference/web.md", "web"],
             ["docs/extensions/reference/pocket.md", "pocket"],
             ["docs/extensions/reference/command-context.md", "Command context"],
-            // Themes (0.14.0): the theming work adds ["docs/extensions/reference/theme-surface.md", "Theme surface"] here.
+            ["docs/extensions/reference/theme-surface.md", "Theme surface"],
             ["docs/extensions/reference/gallery-entry.md", "Gallery entry"],
             ["docs/extensions/reference/names.md", "Names"],
             ["docs/extensions/reference/limits.md", "Limits"],

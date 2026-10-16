@@ -27,11 +27,14 @@ import {
     store,
 } from "./store.js";
 import {
+    BASE_LOOK,
+    chooseLook,
+    folderPaletteIds,
+    lookIds,
     paletteOf,
     prefs,
     preview,
     setPrefs,
-    THEMES,
     themeIds,
     themeVars,
     varsStyle,
@@ -128,7 +131,7 @@ function actionItems() {
         },
         {
             label: "Appearance",
-            detail: "theme, tiling, motion, text size, thinking, reply speed",
+            detail: "theme, colors, tiling, motion, text size, thinking, reply speed",
             icon: "palette",
             run: () => openSheet({ type: "appearance" }),
         },
@@ -355,29 +358,54 @@ function sessionItems() {
     });
 }
 
+/** Theme folders that change the look, as launcher items: no preview (their stylesheets load when chosen). */
+function lookItems() {
+    const vars = themeVars(paletteOf());
+
+    return lookIds()
+        .map(
+            (id) =>
+                store.state.themeList?.find((each) => each.id === id && each.usable) ??
+                (id === BASE_LOOK ? { id, name: "Pocket", builtIn: true } : null),
+        )
+        .filter(Boolean)
+        .map((look) => ({
+            kind: "theme",
+            key: `look:${look.id}`,
+            label: look.name,
+            detail: look.builtIn ? "theme, built in" : "theme",
+            text: `theme ${look.name} ${look.id}`,
+            look: look.id,
+            vars,
+        }));
+}
+
 function themeItems() {
     const desktop = store.state.desktopTheme;
-    const ids = [...(desktop ? ["desktop"] : []), ...themeIds()];
+    const ids = [...(desktop ? ["desktop"] : []), ...themeIds(), ...folderPaletteIds()];
 
-    return ids.map((id) => {
-        const palette = paletteOf(id);
-        const name = id === "desktop" ? `Desktop · ${palette.name}` : THEMES[id].name;
+    return [
+        ...lookItems(),
+        ...ids.map((id) => {
+            const palette = paletteOf(id);
+            const name = id === "desktop" ? `Desktop · ${palette.name}` : palette.name;
 
-        return {
-            kind: "theme",
-            key: `theme:${id}`,
-            label: name,
-            detail:
-                id === "desktop"
-                    ? "follows your Omarchy theme"
-                    : palette.colors.mode === "light"
-                      ? "light"
-                      : "dark",
-            text: `theme ${name} ${id}`,
-            theme: id,
-            vars: themeVars(palette),
-        };
-    });
+            return {
+                kind: "theme",
+                key: `theme:${id}`,
+                label: name,
+                detail:
+                    id === "desktop"
+                        ? "follows your Omarchy theme"
+                        : palette.colors.mode === "light"
+                          ? "light"
+                          : "dark",
+                text: `theme ${name} ${id}`,
+                theme: id,
+                vars: themeVars(palette),
+            };
+        }),
+    ];
 }
 
 const GROUP_NAMES = { session: "Sessions", action: "Actions", theme: "Themes" };
@@ -650,7 +678,7 @@ export function Launcher({ leaving, returnTo }) {
             return;
         }
 
-        preview(selected?.kind === "theme" ? selected.theme : null);
+        preview(selected?.kind === "theme" && selected.theme ? selected.theme : null);
     }, [selected?.key, leaving]);
     useLayoutEffect(() => {
         if (!leaving) {
@@ -696,6 +724,12 @@ export function Launcher({ leaving, returnTo }) {
 
         if (item.kind === "theme") {
             preview(null);
+
+            if (item.look) {
+                chooseLook(item.look, event);
+
+                return;
+            }
 
             if (item.theme !== prefs().theme) {
                 setPrefs({ theme: item.theme });
@@ -762,18 +796,22 @@ export function Launcher({ leaving, returnTo }) {
 
     return html`<div
         class=${`launcher-overlay ${leaving ? "leaving" : ""}`}
+        data-part="scrim"
+        data-for="launcher"
         inert=${leaving}
         onMouseDown=${(event) => event.target === event.currentTarget && close()}
     >
         <section
             class="launcher"
+            data-part="launcher"
+            data-state=${leaving ? "closing" : undefined}
             role="dialog"
             aria-modal="true"
             aria-label="Launcher"
             onKeyDown=${onKey}
             onMouseDown=${(event) => event.target !== input.current && event.preventDefault()}
         >
-            <div class="launcher-input">
+            <div class="launcher-input" data-part="launcher-input">
                 <span class="prompt" aria-hidden="true">❯</span>
                 <input
                     ref=${input}
@@ -795,7 +833,12 @@ export function Launcher({ leaving, returnTo }) {
                     <${Icon} name="close" size=${18} />
                 </button>
             </div>
-            <div class="launcher-types" role="group" aria-label="Search type">
+            <div
+                class="launcher-types"
+                data-part="launcher-filters"
+                role="group"
+                aria-label="Search type"
+            >
                 ${[
                     ["", "All"],
                     ["@", "Sessions"],
@@ -817,7 +860,7 @@ export function Launcher({ leaving, returnTo }) {
                     role="group"
                     aria-label="Recent session options"
                 >
-                    <div class="launcher-group">
+                    <div class="launcher-group" data-part="launcher-group">
                         <span id="launcher-group-session">Recent sessions</span>
                         <span class="launcher-count">
                             ${recent.items.length} of ${recent.total}
@@ -840,7 +883,7 @@ export function Launcher({ leaving, returnTo }) {
                         <div role="group" aria-labelledby=${`launcher-group-${group.kind}`}>
                             ${
                                 !(group.kind === "session" && limitedRecent) &&
-                                html`<div class="launcher-group">
+                                html`<div class="launcher-group" data-part="launcher-group">
                                     <span id=${`launcher-group-${group.kind}`}>
                                         ${
                                             group.kind === "session" && recent
@@ -875,6 +918,7 @@ export function Launcher({ leaving, returnTo }) {
                                     key=${item.key}
                                     id=${optionId(item)}
                                     class=${`launcher-item ${on ? "on" : ""}`}
+                                    data-part="launcher-row"
                                     role="option"
                                     tabindex="-1"
                                     aria-label=${description}
@@ -949,7 +993,9 @@ export function Launcher({ leaving, returnTo }) {
                                     }
                                     ${
                                         item.kind === "theme" &&
-                                        item.theme === prefs().theme &&
+                                        (item.look
+                                            ? item.look === prefs().look
+                                            : item.theme === prefs().theme) &&
                                         html`<span class="hint">current</span>`
                                     }
                                     ${
