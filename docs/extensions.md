@@ -337,7 +337,7 @@ The new version starts before the old one's cleanups run, so that an edit that f
 
 Copy the module into a test app's data folder and turn it on, as `test/docs-examples.test.ts` does: `openApp` with a scripted model (`test/helpers.ts`), the file in `<dataDir>/extensions/`, `app.setExtensionEnabled(owner, file, true)`, then a session whose scripted model calls the tool. Nothing reaches a real provider, and nothing touches the live data.
 
-Native command examples are checked through real HTTP requests in `test/extension-command-clock.test.ts`. `test/extension-command-crash.test.ts` kills disposable child servers after an external effect, the result memo, the card, and the terminal commit. It reads SQLite before recovery and retries the original request, checking that the effect and card are not repeated. After verifying child exit and lock ownership, the test removes that child's stale PID lock so an unrelated process reusing the PID cannot block the test; task and entry data are unchanged.
+`test/extension-commands.test.ts` runs a module's commands as different people, across a restart and a reload.
 
 For a drop-in, run the test from Pi Pocket's folder with the module copied in, or check it by hand: turn it on, ask Pi to use it in a session made for the purpose, and watch Menu → Extensions and the app's notices for errors.
 
