@@ -1,0 +1,8 @@
+{
+    "themeApi": 1,
+    "name": "Pocket Meridian",
+    "description": "One line through everything: turns and tool calls on a meridian, a docked command line, inspector sheets, a drop-down launcher.",
+    "author": "Pi Pocket",
+    "version": "0.1.0",
+    "minPocket": "0.15.0"
+}

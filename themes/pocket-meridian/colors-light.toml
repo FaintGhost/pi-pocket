@@ -1,0 +1,25 @@
+# Meridian Day: the light half of Pocket Meridian's palette. Not in the planned format yet (one colors.toml per
+# folder): see FINDINGS.md, "A light and a dark palette in one theme".
+mode = "light"
+
+accent = "#0868a8"
+selection = "#cde4f4"
+muted = "#9aa2b1"
+
+background = "#f5f6f8"
+dark_background = "#eceef2"
+darker_background = "#dde1e7"
+lighter_background = "#ffffff"
+
+foreground = "#2a303c"
+dark_foreground = "#6a7282"
+light_foreground = "#1d222c"
+bright_foreground = "#0b0e14"
+
+red = "#c42841"
+yellow = "#a36b00"
+orange = "#bf5a12"
+green = "#0b7d52"
+cyan = "#087f8f"
+blue = "#2c5bd0"
+magenta = "#7b3fcb"

@@ -1,0 +1,141 @@
+/*
+ * ─── The composer: a command line docked at the pane's foot ───
+ *
+ * Not a floating card: a band across the whole pane, a rule on top, its column as wide as the conversation's. The
+ * message box is the line itself, after a ❯; with the focus, the band's top rule fills with the signal from the start.
+ */
+
+[data-part~="composer"] {
+    position: relative;
+    max-width: none;
+    margin: 0;
+    padding-block: 0 calc(env(safe-area-inset-bottom) + 6px * var(--space-y));
+    padding-inline: max(calc(16px * var(--space-x)), (100% - var(--composer-width)) / 2);
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+}
+
+[data-part~="composer"]::before {
+    content: "";
+    position: absolute;
+    inset-block-start: -1px;
+    inset-inline: 0;
+    height: 2px;
+    background: var(--signal);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform var(--t-in) var(--ease-out);
+    pointer-events: none;
+}
+
+[data-part~="composer"]:focus-within::before {
+    transform: none;
+}
+
+@media (max-width: 699px) {
+    [data-part~="composer"] {
+        padding-inline: calc(10px * var(--space-x));
+    }
+}
+
+@media (pointer: coarse) {
+    [data-part~="composer"] {
+        padding-bottom: calc(env(safe-area-inset-bottom) + 2px);
+    }
+}
+
+/* The bars and the queue above the line keep their own cards, a step in from the band's edges. */
+[data-part~="dock"]:not(:empty) {
+    padding-top: 8px;
+}
+
+[data-part~="message-box"] {
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+/* The prompt mark before the text. No part: the `textarea` inside. */
+[data-part~="message-box"]::before {
+    content: "❯" / "";
+    position: absolute;
+    inset-inline-start: 2px;
+    top: calc(13px * var(--space-y) + 1px);
+    font: 700 15px / 1.5 var(--mono);
+    color: var(--accent);
+    pointer-events: none;
+}
+
+[data-part~="message-box"] textarea {
+    padding-inline: 24px 4px;
+    font-size: 15px;
+}
+
+/* Touch screens keep 16px, below which iOS zooms into the field. A theme's rule wins over the app's touch rule too,
+ * so the theme says it again. */
+@media (pointer: coarse) {
+    [data-part~="message-box"] textarea {
+        font-size: 16px;
+    }
+}
+
+[data-part~="composer-tools"] {
+    padding-inline: 0;
+}
+
+/* The model: a cut tag, its name in mono. */
+[data-part~="model-chip"] {
+    border-radius: var(--r-control);
+    background: none;
+    box-shadow: inset 0 0 0 1px var(--line);
+    font-family: var(--mono);
+    font-size: 12px;
+}
+
+@media (hover: hover) {
+    [data-part~="model-chip"]:hover {
+        background: var(--hover);
+    }
+}
+
+/* No part: `.plan-chip`, `.attach-button`, `.composer-mic`. */
+[data-part~="composer-tools"] .plan-chip {
+    border-radius: var(--r-control);
+    font-family: var(--mono);
+    font-size: 12px;
+}
+
+[data-part~="composer-tools"] :is(.attach-button, .composer-mic, .places-button) {
+    border-radius: var(--r-control);
+}
+
+/* Steer or Queue, and Stop: cut like the rest. No part: `.mode-switch`, `.stop-button`. */
+[data-part~="composer-tools"] :is(.mode-switch, .mode-switch button, .stop-button) {
+    border-radius: var(--r-control);
+}
+
+/* Send: a cut square; ready (no part state: `.ready`), it takes the signal. */
+[data-part~="send-button"] {
+    border-radius: var(--r-control);
+}
+
+[data-part~="send-button"].ready {
+    background: var(--signal);
+    color: var(--o-bg);
+}
+
+:root[data-mode="light"] [data-part~="send-button"].ready {
+    color: #fff;
+}
+
+/* The status line: the band's last row, at its start, in mono like a terminal's mode line. */
+[data-part~="status-line"] {
+    justify-content: flex-start;
+    gap: 4px 16px;
+    padding-top: 2px;
+    padding-inline-start: 2px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
+}

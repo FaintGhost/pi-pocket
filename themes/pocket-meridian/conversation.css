@@ -1,0 +1,243 @@
+/*
+ * ─── The conversation: one line, and every turn on it ───
+ *
+ * A rule runs down the gutter at --meridian-x. Each turn has a node on it: a person's message their initials, Pi's
+ * answer π, and each tool call its own mark, so a whole turn reads as stops on one line. While Pi works, the line
+ * takes the signal.
+ */
+
+[data-part~="transcript"] {
+    position: relative;
+    max-width: calc(var(--transcript-width) + var(--meridian-gutter) + 28px);
+    padding-inline-start: var(--meridian-gutter);
+}
+
+[data-part~="transcript"]::before {
+    content: "";
+    position: absolute;
+    inset-block: 18px 0;
+    inset-inline-start: var(--meridian-x);
+    width: 1px;
+    background: var(--line-strong);
+    mask-image: linear-gradient(transparent, #000 40px, #000 calc(100% - 40px), transparent);
+    pointer-events: none;
+}
+
+/* While Pi works (the live line is there), the line runs in the signal. */
+[data-part~="transcript"]:has(> [data-part~="live-line"])::before {
+    background: var(--signal-down);
+}
+
+@media (max-width: 699px) {
+    [data-part~="transcript"] {
+        padding-inline-end: calc(14px * var(--space-x));
+    }
+}
+
+/* A node on the line: a disc in the ground's color, so the line stops at it. */
+[data-part~="prompt"] .prompt-avatar,
+[data-part~="reply"]::before {
+    position: absolute;
+    inset-inline-start: calc(var(--meridian-x) - var(--meridian-gutter) - var(--meridian-node) / 2);
+    width: var(--meridian-node);
+    height: var(--meridian-node);
+    box-shadow: 0 0 0 4px var(--bg);
+}
+
+/* ─── A person's message: not a card, a station ─── */
+
+/* Turns stand apart a little more: the line between them carries the eye. No part: `.user-row`, a turn's row. */
+[data-part~="transcript"] > .user-row:not(:first-child) {
+    margin-top: calc(18px * var(--space-y));
+}
+
+[data-part~="prompt"] {
+    position: relative;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--text);
+}
+
+@media (hover: hover) {
+    [data-part~="prompt"].tappable:hover {
+        background: none;
+    }
+    [data-part~="prompt"].tappable:hover .user-text {
+        text-decoration: underline dotted var(--line-strong);
+        text-underline-offset: 5px;
+    }
+}
+
+/* No part: `.prompt-head`, `.prompt-avatar`, `.prompt-author`, `.prompt-body`, `.user-text`; `.tappable`. */
+[data-part~="prompt"] .prompt-head {
+    font: 500 10.5px / 22px var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+[data-part~="prompt"] .prompt-avatar {
+    top: 0;
+    border-radius: var(--r-pill);
+    background:
+        linear-gradient(
+            color-mix(in srgb, var(--who) 22%, transparent),
+            color-mix(in srgb, var(--who) 22%, transparent)
+        ),
+        var(--bg);
+    font: 700 9px / 1 var(--mono);
+    letter-spacing: 0;
+}
+
+/* Yours: a solid node in the accent. */
+[data-part~="prompt"][data-from="me"] .prompt-avatar {
+    background: var(--accent);
+    color: var(--accent-ink);
+}
+
+[data-part~="prompt"] .prompt-author {
+    font-weight: 600;
+    color: var(--text);
+}
+
+[data-part~="prompt"] .prompt-body {
+    padding-left: 0;
+}
+
+[data-part~="prompt"] .user-text {
+    font-size: 1.04em;
+    font-weight: 500;
+    line-height: 1.55;
+    letter-spacing: -0.003em;
+}
+
+/* ─── Pi's answer: prose on the line, marked π ─── */
+
+[data-part~="reply"] {
+    position: relative;
+}
+
+[data-part~="reply"]::before {
+    content: "π" / "";
+    top: 0.1em;
+    display: grid;
+    place-items: center;
+    border-radius: var(--r-pill);
+    background: var(--bg);
+    color: var(--brand);
+    font: 800 15px / 1 var(--sans);
+    font-stretch: 125%;
+}
+
+[data-part~="reply"] .md :is(h1, h2, h3) {
+    font-weight: 700;
+    font-stretch: 112%;
+    letter-spacing: -0.01em;
+}
+
+[data-part~="reply"] .md :not(pre) > code {
+    border-radius: var(--r-tag);
+}
+
+[data-part~="reply-actions"] {
+    opacity: 0.85;
+}
+
+/* ─── What Pi did: its tool calls as stops on the same line ─── */
+
+/*
+ * The group opens into a timeline whose marks sit on the line. The group itself has no card: it moves out into the
+ * gutter so its marks land on the meridian (the soft tiles' timeline draws its rule 22px in, under marks 19px wide).
+ */
+[data-part~="activity"] {
+    --step-mark-x: 22.5px;
+    margin-inline-start: calc(var(--meridian-x) - var(--meridian-gutter) - var(--step-mark-x));
+    border: 0;
+    border-radius: 0;
+    overflow: visible;
+}
+
+/* No part: `.activity-head`, `.chev`, `.timeline`, `.step-head`, `.step-mark`, `.step-label`; the state `.open`. */
+[data-part~="activity"] > .activity-head {
+    min-height: calc(20px + 12px * var(--space-y));
+    padding-inline: calc(var(--step-mark-x) - 7px) 8px;
+    gap: calc(var(--meridian-gutter) - var(--meridian-x) - 7px);
+    border-radius: var(--r-row);
+    font: 500 11.5px / 1.4 var(--mono);
+    letter-spacing: 0.02em;
+}
+
+[data-part~="activity"] > .activity-head > .chev {
+    width: 14px;
+    border-radius: var(--r-pill);
+    background: var(--bg);
+    box-shadow: 0 0 0 4px var(--bg);
+}
+
+[data-part~="activity"].open > .activity-head {
+    border-bottom: 0;
+}
+
+[data-part~="activity"] .timeline {
+    padding-block: 0 calc(4px * var(--space-y));
+}
+
+[data-part~="activity"] .timeline::before {
+    display: none;
+}
+
+[data-part~="tool-call"] .step-head {
+    min-height: 30px;
+    padding-inline-start: calc(var(--step-mark-x) - 9.5px);
+    gap: calc(var(--meridian-gutter) - var(--meridian-x) - 9.5px);
+    border-radius: var(--r-row);
+}
+
+/* No part: `.step-extras`, `.step-body`. A call's input and output, in line with its words. */
+[data-part~="tool-call"] :is(.step-extras, .step-body) {
+    margin-inline-start: calc(var(--step-mark-x) + var(--meridian-gutter) - var(--meridian-x));
+}
+
+[data-part~="tool-call"] .step-mark {
+    background: linear-gradient(var(--tint), var(--tint)), var(--bg);
+    box-shadow: 0 0 0 3px var(--bg);
+}
+
+[data-part~="tool-call"] .step-label {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 12px;
+}
+
+/* ─── The live line: its dot on the meridian ─── */
+
+[data-part~="live-line"] {
+    position: relative;
+    font-family: var(--mono);
+    font-size: 12px;
+}
+
+/* No part: `.live-dot`. */
+[data-part~="live-line"] .live-dot {
+    position: absolute;
+    inset-inline-start: calc(var(--meridian-x) - var(--meridian-gutter) - 4px);
+    margin: 0;
+    border-radius: 1px;
+    background: var(--signal);
+}
+
+/* ─── Cards in the conversation ─── */
+
+[data-part~="code-block"] {
+    border-radius: var(--r-card);
+}
+
+/* No part: `.code-head`. */
+[data-part~="code-block"] .code-head {
+    font: 500 10.5px var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}

@@ -1,0 +1,176 @@
+/* ─── What opens over the app: sheets, the launcher, menus, notices ─── */
+
+:root {
+    --scrim: color-mix(in srgb, var(--o-bg-darker) 42%, transparent);
+}
+
+/* A sheet's head: its title in the wide cut, on a rule. */
+[data-part~="sheet-head"] {
+    border-bottom: 1px solid var(--line);
+}
+
+[data-part~="sheet-head"] h2 {
+    font-weight: 700;
+    font-stretch: 115%;
+    letter-spacing: -0.01em;
+}
+
+/* Phones: the sheet still comes up from the bottom, cut square, with the signal along its top edge. */
+[data-part~="sheet"] {
+    position: relative;
+    border-radius: var(--r-float) var(--r-float) 0 0;
+    background: var(--bg);
+}
+
+[data-part~="sheet"]::before {
+    content: "";
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 0;
+    height: 2px;
+    background: var(--signal);
+    z-index: 1;
+    pointer-events: none;
+}
+
+/*
+ * Wide screens: an inspector, not a popup. The sheet stands at the right edge, the whole height, beside what it is
+ * about, so the conversation stays in view under a light scrim. No part: `.overlay`, the scrim it sits in; and
+ * `.leaving`, the closing state.
+ */
+@media (min-width: 700px) {
+    .overlay:has(> [data-part~="sheet"]) {
+        align-items: stretch;
+        justify-content: flex-end;
+        padding: var(--gap-out);
+    }
+    [data-part~="sheet"] {
+        width: min(480px, 100%);
+        max-width: none;
+        max-height: none;
+        border-radius: var(--r-window);
+        box-shadow: var(--pop);
+        animation: meridian-inspector-in var(--t-in) var(--ease-out);
+    }
+    [data-part~="sheet"].wide {
+        width: min(640px, 52vw);
+        max-width: none;
+    }
+    .leaving [data-part~="sheet"] {
+        animation: meridian-inspector-out var(--t-out) linear forwards;
+    }
+}
+
+@keyframes meridian-inspector-in {
+    from {
+        opacity: 0;
+        transform: translateX(28px);
+    }
+}
+
+@keyframes meridian-inspector-out {
+    to {
+        opacity: 0;
+        transform: translateX(28px);
+    }
+}
+
+/*
+ * ─── The launcher: a drop-down console ───
+ *
+ * It drops from the top edge, as a drop-down terminal does, wide and flat, the signal along its foot. No part:
+ * `.launcher-overlay`, `.launcher-input`, `.launcher-item`, `.launcher-types`.
+ */
+.launcher-overlay {
+    padding: 0;
+}
+
+[data-part~="launcher"] {
+    position: relative;
+    width: min(860px, 100%);
+    max-height: min(76dvh, 680px);
+    padding-top: env(safe-area-inset-top);
+    border-radius: 0 0 var(--r-float) var(--r-float);
+    background: var(--panel);
+    box-shadow: var(--pop);
+    animation: meridian-drop var(--t-in) var(--ease-out);
+}
+
+[data-part~="launcher"]::after {
+    content: "";
+    position: absolute;
+    inset-block-end: 0;
+    inset-inline: 0;
+    height: 2px;
+    background: var(--signal);
+    pointer-events: none;
+}
+
+.leaving [data-part~="launcher"] {
+    animation: meridian-lift var(--t-out) linear forwards;
+}
+
+@keyframes meridian-drop {
+    from {
+        transform: translateY(-36px);
+        opacity: 0;
+    }
+}
+
+@keyframes meridian-lift {
+    to {
+        transform: translateY(-36px);
+        opacity: 0;
+    }
+}
+
+[data-part~="launcher"] .launcher-input {
+    height: 60px;
+    font-family: var(--mono);
+}
+
+[data-part~="launcher"] .launcher-input input {
+    font-family: var(--mono);
+    font-size: 16px;
+}
+
+[data-part~="launcher"] .launcher-types button {
+    border-radius: var(--r-control);
+    font-family: var(--mono);
+    font-size: 11.5px;
+}
+
+/* The selected result: a raised row with the signal on its edge, as the open session is in the list. */
+[data-part~="launcher"] .launcher-item {
+    position: relative;
+    border-radius: var(--r-row);
+}
+
+[data-part~="launcher"] .launcher-item.on::before {
+    content: "";
+    position: absolute;
+    inset-block: 7px;
+    inset-inline-start: 0;
+    width: 2px;
+    background: var(--signal-down);
+}
+
+[data-part~="launcher"] .launcher-item .glyph {
+    border-radius: var(--r-control);
+}
+
+[data-part~="launcher"] .launcher-group {
+    font: 500 10.5px / 1.4 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+/* ─── Menus and notices: cut square, a rule and one hard shadow ─── */
+
+[data-part~="menu"] {
+    border-radius: var(--r-float);
+}
+
+[data-part~="notice"] {
+    border-radius: var(--r-card);
+}

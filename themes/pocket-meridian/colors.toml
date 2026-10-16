@@ -1,0 +1,24 @@
+# Meridian Night: Pocket Meridian's own palette, in Omarchy's colors.toml format.
+mode = "dark"
+
+accent = "#3cc8ff"
+selection = "#1c2b3d"
+muted = "#4a5263"
+
+background = "#0e1117"
+dark_background = "#0a0c11"
+darker_background = "#06070a"
+lighter_background = "#171b23"
+
+foreground = "#b4bdcc"
+dark_foreground = "#5d6677"
+light_foreground = "#cbd3df"
+bright_foreground = "#eef2f7"
+
+red = "#ff6b7f"
+yellow = "#ffc65c"
+orange = "#ff9e64"
+green = "#2fe39b"
+cyan = "#5fd8e6"
+blue = "#6ea8ff"
+magenta = "#c39bff"
