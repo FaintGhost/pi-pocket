@@ -745,7 +745,7 @@ export function readTheme(
 
     const css = new Map<string, string>();
     /** Where each stylesheet loads a font or an image, to write the theme's own address in (`served` below). */
-    const loads = new Map<string, { start: number; end: number; quoted: boolean; to: string }[]>();
+    const loads = new Map<string, Load[]>();
     const assets = new Map<string, FileStat & { type: string }>();
     let cssBytes = 0;
     let assetBytes = 0;
@@ -832,7 +832,10 @@ export function readTheme(
                 start: ref.start,
                 end: ref.end,
                 quoted: ref.quoted,
-                to: `${target.file}${fragment === -1 ? "" : `#${encodeURIComponent(ref.url.slice(fragment + 1))}`}`,
+                file: target.file,
+                ...(fragment === -1
+                    ? {}
+                    : { fragment: encodeURIComponent(ref.url.slice(fragment + 1)) }),
             });
 
             if (assets.has(target.file)) {
@@ -879,25 +882,33 @@ export function readTheme(
     };
 }
 
+/** A file a stylesheet loads, where it names it, and the file of the folder it is (a `#` in its name kept apart). */
+interface Load {
+    start: number;
+    end: number;
+    quoted: boolean;
+    file: string;
+    fragment?: string;
+}
+
 /**
  * A stylesheet as it is served: each font and image it loads named by its full address, not by a path from the
  * stylesheet. A path in a variable (`--wallpaper: url("images/a.png")`) would otherwise be read where the variable is
  * used, from the app's own stylesheet, and miss.
  */
-function served(
-    text: string,
-    loads: { start: number; end: number; quoted: boolean; to: string }[],
-    id: string,
-    rev: string,
-): string {
-    let out = text;
+function served(text: string, loads: Load[], id: string, rev: string): string {
+    const parts: string[] = [];
+    let at = 0;
 
-    for (const load of [...loads].sort((a, b) => b.start - a.start)) {
-        const [file, fragment] = load.to.split("#");
-        const address = `${themeAddress(id, rev, file!)}${fragment === undefined ? "" : `#${fragment}`}`;
+    // In one pass, front to back: a slice of the whole text for each load would grow with their count times the size.
+    for (const load of [...loads].sort((a, b) => a.start - b.start)) {
+        const address = `${themeAddress(id, rev, load.file)}${load.fragment === undefined ? "" : `#${load.fragment}`}`;
 
-        out = `${out.slice(0, load.start)}${load.quoted ? `"${address}"` : `url("${address}")`}${out.slice(load.end)}`;
+        parts.push(text.slice(at, load.start), load.quoted ? `"${address}"` : `url("${address}")`);
+        at = load.end;
     }
 
-    return out;
+    parts.push(text.slice(at));
+
+    return parts.join("");
 }
