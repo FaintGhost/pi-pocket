@@ -880,8 +880,8 @@ const SCROLL_KEYS = {
 };
 
 /**
- * The keys that scroll a page scroll a sheet focused as a whole (as it is when it opens): its body scrolls, not the
- * page behind it. A sheet with nothing to Tab to but Close is read this way (Keyboard shortcuts).
+ * The keys that scroll a page scroll a sheet focused as a whole (as it is when it opens), when its body holds nothing to
+ * focus: a sheet only read, such as Keyboard shortcuts. One with controls keeps its keys (the menu's arrows).
  */
 function scrollFromKeys(event) {
     const share = SCROLL_KEYS[event.key];
@@ -889,8 +889,10 @@ function scrollFromKeys(event) {
 
     if (
         share === undefined ||
+        event.defaultPrevented ||
         event.target !== event.currentTarget ||
         !body ||
+        body.querySelector("a[href], button, input, select, textarea, [tabindex]") ||
         event.altKey ||
         event.ctrlKey ||
         event.metaKey
