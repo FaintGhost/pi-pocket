@@ -503,7 +503,9 @@ export function createApi(options: HttpOptions, auth: Auth) {
         if (first === "approvals" && second !== undefined && method === "POST") {
             const body = await readJson<{ allow?: boolean }>(request);
 
-            if (!(await app.answerApproval(second, body.allow === true, user))) {
+            // An id may hold a slash, which the path decoded into a part of its own: a codemode script's calls are
+            // named `<call>/<n>`.
+            if (!(await app.answerApproval(parts.slice(1).join("/"), body.allow === true, user))) {
                 throw new HttpError(404, "That approval is no longer pending");
             }
 
