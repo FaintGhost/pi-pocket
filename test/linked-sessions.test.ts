@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, before, test } from "node:test";
 import type { ConversationId } from "@earendil-works/pi-durable";
-import { LinkedSessionCallDoc, LinkedSessionRelayDoc, TurnsDoc } from "../src/server/docs.ts";
+import { LinkedSessionCallsDoc, LinkedSessionRelayDoc, TurnsDoc } from "../src/server/docs.ts";
 
 let app: App;
 
@@ -160,5 +160,8 @@ test("an unavailable model creates no session", async (t) => {
 
     const token = createHash("sha256").update(`${id}:${key}`).digest("hex");
 
-    assert.equal(await app.harness.snapshot(LinkedSessionCallDoc, id, token, context), undefined);
+    assert.equal(
+        (await app.harness.snapshot(LinkedSessionCallsDoc, id, context))?.items[token],
+        undefined,
+    );
 });

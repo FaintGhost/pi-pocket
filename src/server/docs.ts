@@ -81,18 +81,20 @@ export const LinkedSessionRelayDoc = defineDoc<{ sent: number }>({
     initial: () => ({ sent: 0 }),
 });
 
-/** What one call to start or message a linked session did, by its hashed key: the session, and whom Pi worked for. */
-export const LinkedSessionCallDoc = defineDocFamily<
-    { conversationId?: number; by?: string },
-    Record<string, never>
->({
-    kind: "pocket.linked-session-call",
+/**
+ * What each call to start or message a linked session did, by its key hashed with the session: the session it made or
+ * messaged, whom Pi worked for, and when. A call run again finds it, so it acts once. `linked-sessions.ts` keeps them
+ * 30 days, and the newest 1000, as `shell.ts` keeps its requests. (Not a document family: those cannot be pruned.)
+ */
+export const LinkedSessionCallsDoc = defineDoc<{
+    items: Record<string, { conversationId?: number; by?: string; at: number }>;
+}>({
+    kind: "pocket.linked-session-calls",
     version: 1,
-    family: true,
     scope: "conversation",
     history: "latest",
     fork: "initial",
-    initial: () => ({}),
+    initial: () => ({ items: {} }),
 });
 
 /**

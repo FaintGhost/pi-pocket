@@ -6,18 +6,63 @@ import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
 import type { LinkedSession, LinkedSessionsApi } from "./host.ts";
 import {
-    LinkedSessionCallDoc,
+    LinkedSessionCallsDoc,
     LinkedSessionPeersDoc,
     LinkedSessionRelayDoc,
     PlanDoc,
     SessionsDoc,
 } from "./docs.ts";
 import { HttpError } from "./errors.ts";
-import { defang } from "./fence.ts";
+import { defang, INVISIBLE_CLASS } from "./fence.ts";
 import { isThinkingLevel, levelAtMost, resolveModel, THINKING_LEVELS } from "./models.ts";
 import { requestFor } from "./requests.ts";
 
 const context = BACKGROUND_CONTEXT;
+
+/**
+ * How long a call's record is kept, and how many: a call that runs again after a restart (the server down for a while)
+ * still finds it. A call older than this is long settled.
+ */
+const KEEP_CALLS_MS = 30 * 24 * 60 * 60 * 1000;
+const KEEP_CALLS = 1000;
+/** The longest message a linked session gets, and the longest title. */
+const MAX_MESSAGE = 20_000;
+const MAX_TITLE = 120;
+const INVISIBLE = new RegExp(`[${INVISIBLE_CLASS}]`, "gu");
+
+function tooLong(message: string): void {
+    if (message.length > MAX_MESSAGE) {
+        throw new HttpError(
+            413,
+            `A message to a linked session is at most ${String(MAX_MESSAGE)} characters.`,
+        );
+    }
+}
+
+type CallRecord = { conversationId?: number; by?: string; at: number };
+
+/** The record of call `token` in `calls`, made when there is none, the oldest pruned to make room. */
+function recordOf(
+    calls: { items: Record<string, CallRecord> },
+    token: string,
+    now: number,
+): CallRecord {
+    const known = calls.items[token];
+
+    if (known !== undefined) {
+        return known;
+    }
+
+    const kept = Object.entries(calls.items)
+        .filter(([, record]) => now - record.at < KEEP_CALLS_MS)
+        .sort(([, a], [, b]) => a.at - b.at)
+        .slice(-(KEEP_CALLS - 1));
+
+    calls.items = Object.fromEntries(kept);
+    calls.items[token] = { at: now };
+
+    return calls.items[token];
+}
 
 /** The most linked sessions one session may start. Linked sessions start none, so a team is one level deep. */
 const MAX_STARTED = 10;
@@ -201,13 +246,18 @@ export class LinkedSessions implements LinkedSessionsApi {
             throw new HttpError(400, "A linked session needs a first message.");
         }
 
+        tooLong(request.message);
+
+        // One line, without invisible or direction characters, before it is stored and shown.
         const title =
             (request.title ?? request.message.split("\n")[0]!)
-                .trim()
                 .replace(/\s+/g, " ")
-                .slice(0, 120) || "Linked session";
+                .replace(INVISIBLE, "")
+                .trim()
+                .slice(0, MAX_TITLE) || "Linked session";
         const token = callKey(source, key);
-        const previous = await app.harness.snapshot(LinkedSessionCallDoc, source, token, context);
+        const previous = (await app.harness.snapshot(LinkedSessionCallsDoc, source, context))
+            ?.items[token];
         const user = this.#person(source, previous?.by);
 
         app.requireSteer(user);
@@ -299,7 +349,7 @@ export class LinkedSessions implements LinkedSessionsApi {
         const now = Date.now();
 
         return app.harness.commit(async (tx) => {
-            const receipt = await tx.doc(LinkedSessionCallDoc, source, token, {});
+            const receipt = recordOf(await tx.doc(LinkedSessionCallsDoc, source), token, now);
 
             if (receipt.conversationId !== undefined) {
                 return receipt.conversationId as unknown as ConversationId;
@@ -354,12 +404,15 @@ export class LinkedSessions implements LinkedSessionsApi {
             throw new HttpError(400, "A message cannot be empty.");
         }
 
+        tooLong(request.message);
+
         if (target === undefined || target === Number(source)) {
             throw new HttpError(404, "No linked session has that address here.");
         }
 
         const token = callKey(source, key);
-        const previous = await app.harness.snapshot(LinkedSessionCallDoc, source, token, context);
+        const previous = (await app.harness.snapshot(LinkedSessionCallsDoc, source, context))
+            ?.items[token];
         const user = this.#person(source, previous?.by);
 
         app.requireSteer(user);
@@ -376,7 +429,11 @@ export class LinkedSessions implements LinkedSessionsApi {
         await this.#deliver(source, id, user, request.message, request.steer === true, token, () =>
             // Whom it acts for is kept before it is sent: someone else writing there later changes nothing on a repeat.
             app.harness.commit(async (tx) => {
-                const record = await tx.doc(LinkedSessionCallDoc, source, token, {});
+                const record = recordOf(
+                    await tx.doc(LinkedSessionCallsDoc, source),
+                    token,
+                    app.now(),
+                );
 
                 if (record.conversationId !== undefined && record.conversationId !== target) {
                     throw new HttpError(409, "This call already refers to another linked session.");
