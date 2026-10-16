@@ -178,6 +178,21 @@ A theme is CSS. It runs no code, reads nothing, and sends nothing anywhere. It i
 - Everyone signed in can read a theme's files, as they load them. Keep nothing private in a theme folder.
 - What Pi writes in a reply never wears a part's look: replies keep no `data-` attributes.
 
+## Themes in the gallery
+
+From 0.14.0, the gallery lists themes with extensions: Menu → Extensions → **Find extensions**, then the **Themes** filter. Each theme has a **Theme** tag.
+
+- A theme's page shows its files, who made it, and where they are on GitHub. **View source** shows each file before you install it.
+- **Install** gets its files from the commit the index pins and checks each one against its SHA-256. Then Pi Pocket checks the theme as it checks every theme folder (the CSS check too), in a hidden folder. A theme that fails a check is not installed, and the gallery says why. A theme that passes goes into `themes/<id>/`.
+- Installing applies nothing. The theme shows in Appearance → Theme, and each person chooses it there.
+- **Update** shows a diff of every file before you apply it. The version you had goes to `themes/.removed/`, so your own edits are not lost.
+- **Remove** moves the folder to `themes/.removed/`, as Remove in Appearance does. Browsers that used it go back to Pocket.
+- When the index revokes the version you have, the gallery says why, and a notice tells the owner.
+
+Where a theme came from is in `.gallery.json` in its folder. It is a hidden file, so it is never served.
+
+To share one of your own themes, choose it in Appearance and tap **Share…**. Pi Pocket checks it, and drafts its entry: the files the theme loads, with their sizes and SHA-256 hashes, and its name and description from `theme.json`. Put the folder in a public GitHub repository as `<id>/` (at the top, or in a folder that you name in the entry), and open the pull request as for an extension ([extensions.md](../extensions.md#sharing-yours)). A theme's entry has `"kind": "theme"` and `themeApi`, and no `declares`.
+
 ## Themes that come with Pi Pocket
 
 Two come with it: **Pocket**, the app's own look, and **Lantern**, a calm, warm dark theme with colors of its own (`web/themes/lantern/`: `frame.css` is its frame, `direction.css` and `colors.toml` its turns and palette). Built-in themes are folders in `web/themes/<id>/`, in the same format. They cannot be edited or removed from the app: duplicate one to change it. A change to one is a change to Pi Pocket's code ([self-editing.md](../self-editing.md)).

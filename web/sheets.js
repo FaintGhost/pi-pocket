@@ -222,7 +222,11 @@ function sheetBody(sheet) {
             break;
         case "gallery-share":
             body = galleryAvailable()
-                ? html`<${GalleryShareSheet} key=${sheet.id} file=${sheet.id} />`
+                ? html`<${GalleryShareSheet}
+                      key=${sheet.id}
+                      file=${sheet.id}
+                      theme=${sheet.theme === true}
+                  />`
                 : null;
             break;
         // A sheet an extension's browser module added (`extension-ui.js`).
