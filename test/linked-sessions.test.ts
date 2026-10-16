@@ -125,8 +125,9 @@ test("a start or send is refused in plan mode, past a spend limit, or without th
     await refused(/plan mode/);
     await app.commands.setPlan(id, owner(app), false);
 
-    await recordCost(app, id, 0.02);
-    await until(() => app.spend.sessionSpent(id) === 0.02, "the spend");
+    // What the linked session spent counts against the budget of the session that started it.
+    await recordCost(app, target, 0.02);
+    await until(() => app.spend.sessionSpent(target) === 0.02, "the spend");
     await app.spend.setSessionBudget(owner(app), id, 0.01);
     await refused(/spend limit/);
     await app.spend.setSessionBudget(owner(app), id, null);
