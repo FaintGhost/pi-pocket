@@ -9,6 +9,7 @@
  * sizes to `LIMITS`.
  */
 import { createHash } from "node:crypto";
+import { BUILT_IN_COMMANDS } from "../extension-web.ts";
 import { INVISIBLE_CLASS } from "../fence.ts";
 import { BUILT_IN_MODULES, BUILT_IN_TOOLS, RESERVED_EXTENSIONS } from "../reload.ts";
 
@@ -53,6 +54,8 @@ export interface Declares {
     client: Access | null;
     /** The widest access of its routes and browser module: `owner` when it adds nothing to the app. */
     access: Access;
+    /** Its slash commands, without the slash: left out when it has none, so older Pi Pockets read the entry. */
+    commands?: string[];
 }
 
 export interface EntryFile {
@@ -128,6 +131,7 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
 const HOOK = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
 const WRAP = /^(tool|section) [A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
 const ROUTE = /^(GET|POST|PUT|PATCH|DELETE) [A-Za-z0-9._~:/-]{1,200}$/;
+const COMMAND = /^[a-z][a-z0-9_-]{0,63}$/;
 /**
  * Controls, line breaks, and characters that show as nothing or reorder text (zero-width, bidi, tags: `fence.ts`'s
  * `INVISIBLE_CLASS`, which keeps them out of memory lessons too): none of them belong in what the gallery draws.
@@ -283,17 +287,22 @@ export function atLeast(version: string, minimum: string): boolean {
 }
 
 function declares(value: unknown, where: string): Declares {
-    const shape = object(value, where, [
-        "extensions",
-        "tools",
-        "readOnlyTools",
-        "hooks",
-        "sections",
-        "wraps",
-        "routes",
-        "client",
-        "access",
-    ]);
+    const shape = object(
+        value,
+        where,
+        [
+            "extensions",
+            "tools",
+            "readOnlyTools",
+            "hooks",
+            "sections",
+            "wraps",
+            "routes",
+            "client",
+            "access",
+        ],
+        ["commands"],
+    );
     const result: Declares = {
         extensions: names(shape.extensions, `${where}.extensions`, KEY),
         tools: names(shape.tools, `${where}.tools`, TOOL),
@@ -304,7 +313,16 @@ function declares(value: unknown, where: string): Declares {
         routes: names(shape.routes, `${where}.routes`, ROUTE),
         client: shape.client === null ? null : access(shape.client, `${where}.client`),
         access: access(shape.access, `${where}.access`),
+        ...(shape.commands === undefined
+            ? {}
+            : { commands: names(shape.commands, `${where}.commands`, COMMAND) }),
     };
+
+    for (const command of result.commands ?? []) {
+        if (BUILT_IN_COMMANDS.has(command)) {
+            throw new EntryError(`${where}.commands has ${command}, a command of Pi Pocket's own`);
+        }
+    }
 
     for (const tool of result.readOnlyTools) {
         if (!result.tools.includes(tool)) {
@@ -683,5 +701,6 @@ export function claimedNames(entry: Entry): string[] {
         `module ${entry.name}`,
         ...entry.declares.extensions.map((name) => `extension ${name}`),
         ...entry.declares.tools.map((name) => `tool ${name}`),
+        ...(entry.declares.commands ?? []).map((name) => `command /${name}`),
     ];
 }

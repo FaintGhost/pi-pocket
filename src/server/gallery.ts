@@ -929,6 +929,10 @@ export class Gallery {
             ...listed("prompt sections", d.sections),
             ...listed("wraps", d.wraps),
             ...listed("routes", d.routes),
+            ...listed(
+                "slash commands",
+                (d.commands ?? []).map((command) => `/${command}`),
+            ),
             `- browser module: ${d.client === null ? "none" : `for ${d.client}`}; widest access: ${d.access}`,
             "",
             "Read every file, and report:",

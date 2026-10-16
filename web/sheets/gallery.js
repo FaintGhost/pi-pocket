@@ -65,7 +65,12 @@ const GROUPS = [
     ["sections", "Prompt sections"],
     ["wraps", "Wraps"],
     ["routes", "Routes"],
+    ["commands", "Slash commands"],
 ];
+
+/** One group of what a module declares, as names to show (a command with its slash); older entries lack some groups. */
+const declared = (declares, key) =>
+    (declares[key] ?? []).map((each) => (key === "commands" ? `/${each}` : each));
 
 const RISK =
     "A drop-in runs inside the server with your rights, in every session. Lancet Guard does not see what its code does.";
@@ -407,8 +412,8 @@ function Declares({ declares }) {
             ([key, label]) => html`<div key=${key}>
                 <dt>${label}</dt>
                 ${
-                    declares[key].length > 0
-                        ? html`<dd class="mono">${declares[key].join(", ")}</dd>`
+                    declared(declares, key).length > 0
+                        ? html`<dd class="mono">${declared(declares, key).join(", ")}</dd>`
                         : html`<dd class="muted">nothing</dd>`
                 }
             </div>`,
@@ -748,8 +753,10 @@ function declarationChanges(before, after) {
     const lines = [];
 
     for (const [key, label] of GROUPS) {
-        const added = after[key].filter((each) => !before[key].includes(each));
-        const removed = before[key].filter((each) => !after[key].includes(each));
+        const added = declared(after, key).filter((each) => !declared(before, key).includes(each));
+        const removed = declared(before, key).filter(
+            (each) => !declared(after, key).includes(each),
+        );
 
         if (added.length > 0 || removed.length > 0) {
             lines.push({ label, added, removed });

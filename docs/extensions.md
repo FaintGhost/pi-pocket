@@ -366,6 +366,7 @@ Before turning one on, read it: the gallery shows every file, and what its entry
 | `sections`                   | Its prompt sections                                                                                                                             |
 | `wraps`                      | The tools and sections it wraps: `tool bash`, `section memory`                                                                                  |
 | `routes`, `client`, `access` | Its routes (`GET status`), who loads its browser module (or `null`), and the widest access of the two (`owner` when it adds nothing to the app) |
+| `commands`                   | Its slash commands, without the slash (`clock-zone`). Left out when it has none: Pi Pocket 0.14.0 beta 6 and older do not read an entry with it |
 
 These are what Menu → Extensions shows for a module that is on, and the index's checks load the module in a test app and compare.
 
