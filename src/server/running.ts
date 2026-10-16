@@ -7,6 +7,7 @@ import { type ConversationId, LiveDoc, type TaskGraphNode } from "@earendil-work
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
 import { FollowsDoc, RepoWatchesDoc, ScheduleDoc, SubagentsDoc, WatchDoc } from "./docs.ts";
+import { COMMAND_TASK } from "./extension-commands.ts";
 import { describeMoment } from "./when.ts";
 
 const context = BACKGROUND_CONTEXT;
@@ -98,8 +99,8 @@ async function describeTask(
             };
         }
 
-        case "pocket.command": {
-            const command = await app.extensionCommands.describe(node.id);
+        case COMMAND_TASK: {
+            const command = await app.extensionCommands.named(node.id);
 
             if (command?.scope !== "conversation" && user.role !== "owner") {
                 return undefined;

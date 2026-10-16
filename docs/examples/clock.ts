@@ -63,8 +63,7 @@ function known(zone: string): boolean {
 
 export default function createClock(_host: unknown, web: ExtensionWeb) {
     // `/clock-zone` shows the session's time zone, and `/clock-zone Europe/Berlin` sets it, without asking Pi.
-    web.command({
-        name: "clock-zone",
+    web.command("clock-zone", {
         description: "Show or set this session's time zone for the clock",
         args: "[zone]",
         scope: "conversation",

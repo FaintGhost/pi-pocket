@@ -173,7 +173,7 @@ export default function createUsage(_host: unknown, web: ExtensionWeb) {
 | `api`, `module`                       | The version of this API (1); the module's name, its file's without `.ts` |
 | `route(method, path, handle, access)` | A route under `/api/x/<module>/` ([Routes](#routes))                     |
 | `client(entry, access)`               | The browser module ([The browser module](#the-browser-module))           |
-| `command({ name, … })`                | A command for the message box ([Commands](#commands))                    |
+| `command(name, { … })`                | A command for the message box ([Commands](#commands))                    |
 | `send(event, data, { to })`           | An event to the browser module ([Events](#events))                       |
 | `error(status, message)`              | An error a route throws to answer with its status and words              |
 | `onDispose(run)`                      | Run `run` when this version goes ([Cleanups](#cleanups))                 |
@@ -290,18 +290,17 @@ At most 100 events, and 1 MB of them, go out each second for a version of a modu
 
 ### Commands
 
-`web.command({ name, description, args, scope, handler })` adds `/name` to the message box's suggestions, for the people who may run it. It runs on the server and does not ask Pi. The [clock example](examples/clock.ts) has one: `/clock-zone Europe/Berlin` sets the session's time zone, and `/clock-zone` shows it.
+`web.command(name, { description, args, scope, handler })` adds `/name` to the message box's suggestions, for the people who may run it. It runs on the server and does not ask Pi. The [clock example](examples/clock.ts) has one: `/clock-zone Europe/Berlin` sets the session's time zone, and `/clock-zone` shows it.
 
 ```typescript
-web.command({
-    name: "acme-status",
+web.command("acme-status", {
     description: "Show this session's folder",
     scope: "conversation",
     handler: (_args, ctx) => ({ type: "card", output: ctx.cwd }),
 });
 ```
 
-- `name` is up to 64 lowercase letters, digits, `-`, and `_`, starting with a letter, without the `/`. Give it a prefix of your own. A name the message box has already (`/model`, `/find`, and the rest) is refused, and so is one another module's command has: the first one in keeps it. A prompt template with the same name wins in the message box.
+- `name` is up to 64 lowercase letters, digits, `-`, and `_`, starting with a letter, without the `/`, and has at least one `-`: `acme-status`, not `status`. The app's own commands are one word each, so a new one never takes your name. Give it a prefix of your own. A name the message box has already (`/model`, `/find`, and the rest) is refused, and so is one another module's command has: the first one in keeps it. A prompt template with the same name wins in the message box.
 - `description` shows in the suggestions. `args` is an optional hint in words, such as `"[zone]"`; the handler gets everything after the name as one string (up to 4000 characters) and checks it itself.
 - `handler(args, ctx)` returns what to show, or throws an `Error`, whose message the person who ran it sees. `ctx.user` is who ran it (`{ id, name, role }`), `ctx.conversationId` and `ctx.cwd` the session and its folder. Read a document with `ctx.snapshot(Doc, ctx.conversationId, ctx.context)`, and change documents with `await ctx.commit(async (tx) => …)`; keep work outside Pi Pocket out of the commit. `ctx.signal` is aborted when someone stops it.
 

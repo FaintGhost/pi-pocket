@@ -25,8 +25,8 @@ export const FROM_PI_ENTRY = "pocket.from-pi";
 
 /** What that entry holds: the Pi session's id, its title, and its file. */
 export type FromPiData = { session: string; title: string; file: string };
-/** A native extension command's read-only result, shown to people but not added to model context. */
-export const COMMAND_ENTRY = "pocket.command";
+/** The entry kind of an extension command's card: text for the people here, never in Pi's context. */
+export const COMMAND_ENTRY = "pocket.extension-command";
 
 export type CommandData = {
     command: string;

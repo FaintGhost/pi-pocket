@@ -132,20 +132,24 @@ export interface CommandContext {
     readonly signal: AbortSignal;
     readonly snapshot: DocumentReader["snapshot"];
     readonly context: Context;
-    commit(change: (tx: Tx) => void | Promise<void>): Promise<void>;
+    /** Change documents in one commit; answers what `change` returns. */
+    commit<T>(change: (tx: Tx) => T | Promise<T>): Promise<T>;
 }
 
-/** A command people run from the message box (`web.command`), without asking Pi. */
+/**
+ * A command people run from the message box (`web.command(name, command)`), without asking Pi. `scope` says who may run
+ * it: `"conversation"`, whoever may drive the session; `"global"`, the owner alone. Either way it runs in the session it
+ * was typed in, and its card goes there.
+ */
 export interface ExtensionCommand {
-    name: string;
     description: string;
     args?: string;
     scope: "conversation" | "global";
     handler(args: string, context: CommandContext): CommandResult | Promise<CommandResult>;
 }
 
-/** What browsers know about a command. The id changes with each version of its module. */
-export type CommandInfo = Omit<ExtensionCommand, "handler"> & { id: string; file: string };
+/** What browsers know about a command: no handler, and no file. The id changes with each version of its module. */
+export type CommandInfo = Omit<ExtensionCommand, "handler"> & { id: string; name: string };
 
 /** What the app gives its extensions. Extensions are reloaded on edit; the host is not. */
 export interface PocketHost {
@@ -320,7 +324,7 @@ export interface ExtensionWeb {
      * A command people run from the message box as `/name`, while the module loads. It goes with this version of the
      * module, as routes do. `scope: "conversation"` is for whoever may drive the session; `"global"` is the owner's.
      */
-    command(command: ExtensionCommand): void;
+    command(name: string, command: ExtensionCommand): void;
 }
 
 /** The shape of every module in `src/server/extensions/`: a default export building one or more extensions. */

@@ -137,7 +137,7 @@ export interface ExtensionInfo {
     }[];
     /**
      * What it adds to the app: its routes (`GET status`), who loads its browser module, when it has one, the widest
-     * access of the two, and its commands (`/name`).
+     * access of the two, and its commands (`conversation /name`, `global /name`).
      */
     web?: { routes: string[]; client?: WebAccess; access?: WebAccess; commands?: string[] };
     /** Why the module is not loaded, when it failed. */

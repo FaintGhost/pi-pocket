@@ -12,16 +12,23 @@ import {
 } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
-import { CommandRequestDoc } from "./docs.ts";
+import { CommandRequestsDoc } from "./docs.ts";
 import { COMMAND_ENTRY } from "./entry-format.ts";
 import { describe, HttpError } from "./errors.ts";
 import type { CommandResult } from "./host.ts";
 import type { RegisteredCommand } from "./extension-web.ts";
 
 const context = BACKGROUND_CONTEXT;
-const TASK = "pocket.command";
+
+/** The task of each run of an extension's command. Stored data: never rename it. */
+export const COMMAND_TASK = "pocket.extension-command";
+const TASK = COMMAND_TASK;
 const MAX_ARGS = 4000;
 
+/**
+ * What a run keeps. `commandId` (the registration a browser chose) and `selection` (the handler kept in memory for this
+ * run) are only compared, never looked up after a restart: both are new with each version and each process.
+ */
 type CommandInput = {
     commandId: string;
     selection: string;
@@ -116,12 +123,19 @@ export class ExtensionCommands {
                                             signal: runtime.signal,
                                             snapshot: runtime.snapshot.bind(runtime),
                                             context,
-                                            commit: (change) =>
-                                                runtime.commit(async (tx) => {
-                                                    await change(tx);
+                                            commit: async (change) => {
+                                                let answer: Awaited<ReturnType<typeof change>>;
+
+                                                // The callback's own answer would be a new state for the task:
+                                                // keep `change`'s apart.
+                                                await runtime.commit(async (tx) => {
+                                                    answer = await change(tx);
 
                                                     return undefined;
-                                                }, context),
+                                                }, context);
+
+                                                return answer!;
+                                            },
                                         }),
                                     ),
                                     context,
@@ -249,15 +263,11 @@ export class ExtensionCommands {
 
         try {
             const taskId = await app.harness.commit(async (tx) => {
-                const request = await tx.doc(
-                    CommandRequestDoc,
-                    id,
-                    `${user.id}:${requestId}`,
-                    null,
-                );
+                const requests = await tx.doc(CommandRequestsDoc, id, user.id, null);
+                const known = requests.items[requestId];
 
-                if (request.taskId !== undefined) {
-                    const previous = await tx.task(request.taskId);
+                if (known !== undefined) {
+                    const previous = await tx.task(known as unknown as TaskId);
                     const input = previous?.input as CommandInput | undefined;
 
                     if (
@@ -271,7 +281,7 @@ export class ExtensionCommands {
                         );
                     }
 
-                    return request.taskId as TaskId<CommandOutcome>;
+                    return known as unknown as TaskId<CommandOutcome>;
                 }
 
                 if (command === undefined || app.webs.command(commandId) !== command) {
@@ -295,7 +305,7 @@ export class ExtensionCommands {
                     { ownership: { kind: "conversation" }, background: true, conversationId: id },
                 );
 
-                request.taskId = created;
+                requests.items[requestId] = Number(created);
 
                 return created;
             }, context);
@@ -338,8 +348,8 @@ export class ExtensionCommands {
         }
     }
 
-    /** Running now uses the name and access scope, never the arguments. */
-    async describe(taskId: TaskId): Promise<Pick<RegisteredCommand, "name" | "scope"> | undefined> {
+    /** A run's command name and scope, for Running now: never its arguments. */
+    async named(taskId: TaskId): Promise<Pick<RegisteredCommand, "name" | "scope"> | undefined> {
         const task = await this.#app.harness.getTask(taskId, context);
 
         if (task?.kind !== TASK) {
