@@ -205,6 +205,18 @@ test("updates and removal never reach past an extension's own files: not through
     assert.ok(existsSync(join(outside, "util.ts")) && existsSync(join(outside, "mine.txt")));
 });
 
+test("an update's preview names a file of the owner's that the new version would replace", async () => {
+    await index(entry("owned", { "owned.ts": clock }, "9".repeat(40)));
+    await app.gallery.install("owned", await pin("owned"));
+    mkdirSync(join(dropIns, "owned"));
+    writeFileSync(join(dropIns, "owned", "settings.json"), "{}\n");
+    await index(
+        entry("owned", { "owned.ts": clock, "owned/settings.json": "[]\n" }, "a".repeat(40)),
+    );
+
+    assert.deepEqual((await app.gallery.updatePreview("owned")).edited, ["owned/settings.json"]);
+});
+
 test("an update the server stopped in the middle of goes back to the version before", async () => {
     const at = (file: string) => join(dropIns, file);
 

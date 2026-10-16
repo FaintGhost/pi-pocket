@@ -873,19 +873,24 @@ export class Gallery {
         ].sort();
         const diffs: string[] = [];
         const changes: { name: string; change: "added" | "removed" | "changed" | "same" }[] = [];
-        /** Files edited here since they were installed: the update replaces them, and the diff is against them. */
+        /**
+         * Files edited here since they were installed, and the owner's own where the new version puts one: the update
+         * replaces them, and the diff is against them.
+         */
         const edited: string[] = [];
 
         for (const file of names) {
             const installed = before.files.find((each) => each.name === file);
             const old =
-                installed === undefined
-                    ? undefined
-                    : await readInstalled(this.#dropIns(), name, file);
+                installed !== undefined ||
+                (await removable(this.#dropIns(), name, file)) !== undefined
+                    ? await readInstalled(this.#dropIns(), name, file)
+                    : undefined;
 
             if (
-                installed !== undefined &&
-                (old === undefined || sha256(old) !== installed.sha256)
+                installed === undefined
+                    ? old !== undefined
+                    : old === undefined || sha256(old) !== installed.sha256
             ) {
                 edited.push(file);
             }
