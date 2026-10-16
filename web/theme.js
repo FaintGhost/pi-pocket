@@ -187,7 +187,9 @@ export function paletteOf(id = prefs().theme) {
         if (desktop?.colors) {
             return {
                 id: "desktop",
-                name: THEMES[desktop.name]?.name ?? desktop.name,
+                name:
+                    (Object.hasOwn(THEMES, desktop.name) && THEMES[desktop.name].name) ||
+                    desktop.name,
                 colors: desktop.colors,
                 desktop: true,
             };
@@ -196,7 +198,8 @@ export function paletteOf(id = prefs().theme) {
         return { id: FALLBACK, ...THEMES[FALLBACK] };
     }
 
-    if (THEMES[id]) {
+    // Own ids only: a folder named "constructor" is no palette of the app's.
+    if (Object.hasOwn(THEMES, id)) {
         return { id, ...THEMES[id] };
     }
 
@@ -234,7 +237,7 @@ function folderColors(id) {
  * Whether the palette `id` names is known here yet: one that comes with the app, the desktop's, or any once the server
  * listed its theme folders. Until then, the palette index.html put on the page from the cache stays.
  */
-const paletteKnown = (id) => id === "desktop" || THEMES[id] !== undefined || themesListed();
+const paletteKnown = (id) => id === "desktop" || Object.hasOwn(THEMES, id) || themesListed();
 
 /** The server listed its theme folders (`hello`). */
 const themesListed = () => Array.isArray(store.state.themeList);

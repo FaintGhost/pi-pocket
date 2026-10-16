@@ -296,7 +296,7 @@ export class Themes {
             return (await desktopTheme()) !== null;
         }
 
-        if (this.#palettes[id] !== undefined) {
+        if (Object.hasOwn(this.#palettes, id)) {
             return true;
         }
 
@@ -371,7 +371,11 @@ export class Themes {
             }
         } else {
             const colors =
-                from === "desktop" ? (await desktopTheme())?.colors : this.#palettes[from]?.colors;
+                from === "desktop"
+                    ? (await desktopTheme())?.colors
+                    : Object.hasOwn(this.#palettes, from)
+                      ? this.#palettes[from]!.colors
+                      : undefined;
 
             if (colors === undefined) {
                 throw new HttpError(404, "No such colors to copy");
