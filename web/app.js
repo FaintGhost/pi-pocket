@@ -761,10 +761,10 @@ const ESCAPE_TWICE_MS = 1500;
 
 /** Esc twice stops Pi, as Esc does in other agents' terminals. Twice, since Esc also closes things and leaves fields. */
 function stopOnSecondEscape() {
-    const { view, sheet, launcher, board, page } = store.state;
+    const { view, sheet, launcher, board, page, drawer } = store.state;
 
     // Esc closes these first.
-    if (sheet || launcher || board || page || !view.live?.busy || !canSteer()) {
+    if (sheet || launcher || board || page || drawer || !view.live?.busy || !canSteer()) {
         return;
     }
 
