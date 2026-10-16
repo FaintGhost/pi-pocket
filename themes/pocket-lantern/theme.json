@@ -1,0 +1,8 @@
+{
+    "themeApi": 1,
+    "name": "Lantern",
+    "description": "Warm brown-grey with warm off-white text and a muted amber accent. Your messages marked by a quiet bar; the gentlest for night use.",
+    "author": "Pi Pocket",
+    "version": "0.1.0",
+    "minPocket": "0.14.0"
+}

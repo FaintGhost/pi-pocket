@@ -1,8 +1,0 @@
-/*
- * Prototype only. The design plans --transcript-width, --composer-width, and --focus-ring (phase 1, step 2), but the
- * app does not read them yet: this sets what they will set. Delete this file, and its @import in theme.css, once the
- * app reads them.
- */
-:focus-visible {
-    outline-color: var(--focus-ring);
-}

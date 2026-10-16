@@ -1,0 +1,23 @@
+# Lantern: warm brown-grey with warm off-white text, and a muted amber accent. Omarchy's colors.toml format.
+mode = "dark"
+
+accent = "#d0a463"
+selection = "#3a3125"
+
+background = "#211e1b"
+dark_background = "#1b1816"
+darker_background = "#171412"
+lighter_background = "#2a2622"
+
+foreground = "#ddd3c4"
+dark_foreground = "#8a8073"
+light_foreground = "#e2d9cb"
+bright_foreground = "#ebe3d6"
+
+red = "#d98a7c"
+yellow = "#d8b46a"
+orange = "#d69a6a"
+green = "#a3b58c"
+cyan = "#8fb5ad"
+blue = "#8fa8c8"
+magenta = "#c49ab5"

@@ -1,0 +1,278 @@
+/*
+ * The calm frame: quiet windows, a readable column, tool calls as one quiet line, a plain message box. Shared by the
+ * three directions; each one's tokens.css and messages.css make it its own.
+ */
+
+/* ─── Windows ─── */
+
+/* No glow: the focused window gets a stronger hairline, the others a faint one. */
+@media (min-width: 960px) {
+    :root[data-tiling="on"] :is([data-part~="pane"], [data-part~="sidebar"]) {
+        border-color: var(--hair);
+        box-shadow: none;
+    }
+    :root[data-tiling="on"]:is([data-focus="pane"], :not([data-focus])) [data-part~="pane"],
+    :root[data-tiling="on"][data-focus="sidebar"] [data-part~="sidebar"] {
+        border-color: var(--line-strong);
+    }
+}
+
+[data-part~="rail"] {
+    border-inline-end-color: var(--hair);
+}
+
+/* No part: `.rail-brand`. The π, quieter: the brand's color, a little toward the ground. */
+[data-part~="rail"] .rail-brand {
+    color: color-mix(in oklab, var(--brand) 82%, var(--o-bg));
+}
+
+/* ─── The session list ─── */
+
+/* The open session: a raised row, its title in the text color. No part: `.session`, `.session-title`. */
+[data-part~="session-row"][aria-current="page"] .session {
+    background: var(--card-2);
+}
+
+[data-part~="session-row"] .session-title {
+    color: var(--body);
+}
+
+[data-part~="session-row"][aria-current="page"] .session-title {
+    color: var(--text);
+    font-weight: 550;
+}
+
+/* ─── The top bar: title, then its folder and branch, two steps apart ─── */
+
+/* No part: `.title-main`, `.title-sub`. */
+[data-part~="topbar"] .title-main {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+[data-part~="topbar"] .title-sub {
+    color: var(--muted);
+}
+
+/* ─── The conversation: one readable column ─── */
+
+/*
+ * About 72 characters a line at any text size (--transcript-width). Turns stand apart, paragraphs a little less, lines
+ * at the app's 1.65. No part: `.user-row`, `.report`, `.report-group`, the rows that start a turn.
+ */
+[data-part~="transcript"] {
+    max-width: calc(var(--transcript-width) + 56px);
+    gap: calc(16px * var(--space-y));
+}
+
+[data-part~="transcript"] > :is(.user-row, .report, .report-group):not(:first-child) {
+    margin-top: calc(10px * var(--space-y));
+}
+
+@media (max-width: 699px) {
+    [data-part~="transcript"] {
+        max-width: none;
+    }
+}
+
+[data-part~="reply"] > .md {
+    gap: calc(14px * var(--space-y));
+}
+
+/* No part: `.md`, the reply's text. Bold and headings in the text color, a step above the body. */
+[data-part~="reply"] .md :is(h1, h2, h3, h4, strong) {
+    color: var(--text);
+}
+
+[data-part~="reply"] .md :not(pre) > code {
+    padding: 1px 5px;
+    border: 1px solid var(--hair);
+    background: var(--card);
+    font-size: 0.86em;
+}
+
+/* Reply actions: present, and quiet until you need them. */
+[data-part~="reply-actions"] {
+    color: var(--faint);
+}
+
+/* ─── What Pi did: one quiet line until opened ─── */
+
+/* Closed, a group is a line of muted text with its chevron: no card, no border. */
+[data-part~="activity"] {
+    border-color: transparent;
+    background: none;
+    transition:
+        background-color var(--t-hover) var(--ease-out),
+        border-color var(--t-hover) var(--ease-out);
+}
+
+/* No part: `.activity-head`, and the state `.open`. */
+[data-part~="activity"] > .activity-head {
+    min-height: calc(22px + 10px * var(--space-y));
+    padding-inline: 10px;
+    border-radius: var(--r-card);
+    font-size: 13px;
+    color: var(--muted);
+}
+
+/* Opened: a tonal panel with a hairline, a step below the conversation's text. */
+[data-part~="activity"].open {
+    border-color: var(--hair);
+    background: var(--card);
+}
+
+[data-part~="activity"].open > .activity-head {
+    border-bottom-color: var(--hair);
+    border-radius: var(--r-card) var(--r-card) 0 0;
+}
+
+/* No part: `.timeline`, `.step-mark`, `.step-label`, `.step-subject`. */
+[data-part~="activity"] .timeline::before {
+    background: var(--hair);
+}
+
+/* The marks sit on the panel's color (the app knocks them out of --o-bg). Success is quiet; only trouble has color. */
+[data-part~="tool-call"] .step-mark {
+    background: linear-gradient(var(--tint), var(--tint)), var(--card);
+    box-shadow: 0 0 0 3px var(--card);
+    font-weight: 500;
+}
+
+[data-part~="tool-call"] .step-mark:is(.done, .thought, .agent) {
+    --tint: var(--hover);
+    color: var(--muted);
+}
+
+[data-part~="tool-call"] .step-label {
+    font-weight: 500;
+    color: var(--body);
+}
+
+[data-part~="tool-call"] .step-subject {
+    color: var(--muted);
+}
+
+[data-part~="live-line"] {
+    color: var(--muted);
+}
+
+/* ─── Code ─── */
+
+[data-part~="code-block"] {
+    border: 1px solid var(--hair);
+    border-radius: var(--r-card);
+    background: var(--code-bg);
+}
+
+/* No part: `.code-head`. */
+[data-part~="code-block"] .code-head {
+    border-bottom-color: var(--hair);
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* ─── The composer: one plain field ─── */
+
+/* The message box as wide as the conversation's column. */
+[data-part~="composer"] {
+    max-width: calc(var(--composer-width) + 48px);
+}
+
+@media (max-width: 699px) {
+    [data-part~="composer"] {
+        max-width: none;
+    }
+}
+
+[data-part~="message-box"] {
+    border: 1px solid var(--line);
+    border-radius: var(--r-sheet);
+    background: var(--card);
+    box-shadow: none;
+}
+
+[data-part~="message-box"]:focus-within {
+    border-color: var(--line-strong);
+}
+
+[data-part~="model-chip"] {
+    background: none;
+    color: var(--muted);
+}
+
+@media (hover: hover) {
+    [data-part~="model-chip"]:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
+}
+
+/* No part: `.model-spark`. The sparkle in the chip's own color, not the accent. */
+[data-part~="model-chip"] .model-spark {
+    color: inherit;
+}
+
+/* No part: `.plan-chip`. */
+[data-part~="composer-tools"] .plan-chip {
+    border-color: var(--hair-2);
+    color: var(--muted);
+}
+
+[data-part~="status-line"] {
+    color: var(--faint);
+}
+
+/* ─── Sheets, the launcher, menus ─── */
+
+[data-part~="sheet-head"] {
+    border-bottom: 1px solid var(--hair);
+}
+
+/* No part: `.launcher-item`, its state `.on`. The selected result: a raised row. */
+[data-part~="launcher"] {
+    background: var(--panel);
+}
+
+[data-part~="launcher"] .launcher-item.on {
+    background: var(--card-2);
+}
+
+/* ─── The home screen: quiet ─── */
+
+/* No part: `.fetch-logo`, `.fetch-title`, `.fetch-colors`, `.splash-actions`, `.splash-row`, `.splash-key`. */
+[data-part~="home"] .fetch-logo {
+    font-size: 10px;
+    color: color-mix(in oklab, var(--brand) 78%, var(--o-bg));
+}
+
+[data-part~="home"] .fetch-title {
+    font-family: var(--sans);
+    font-size: 16px;
+}
+
+[data-part~="home"] .fetch-title b {
+    color: var(--text);
+}
+
+[data-part~="home"] .fetch-colors span {
+    width: 12px;
+    height: 12px;
+    border-radius: var(--r-mark);
+}
+
+[data-part~="home"] .splash-actions .button {
+    border-color: var(--line);
+    border-radius: var(--r-control);
+    background: none;
+}
+
+[data-part~="home"] .splash-actions .button.primary {
+    background: var(--accent-fill);
+}
+
+[data-part~="home"] .splash-key {
+    border-color: var(--hair-2);
+    border-radius: var(--r-tag);
+}

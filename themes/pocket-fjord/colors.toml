@@ -1,0 +1,23 @@
+# Fjord: cool blue-grey, with a soft teal accent. Omarchy's colors.toml format.
+mode = "dark"
+
+accent = "#6db5b5"
+selection = "#263a44"
+
+background = "#1d232b"
+dark_background = "#181d24"
+darker_background = "#151a20"
+lighter_background = "#262d37"
+
+foreground = "#c8d1dc"
+dark_foreground = "#76818f"
+light_foreground = "#d3dae3"
+bright_foreground = "#dfe5ec"
+
+red = "#e08585"
+yellow = "#d8b56e"
+orange = "#d99c76"
+green = "#8dc29a"
+cyan = "#6db5b5"
+blue = "#7fa7d6"
+magenta = "#b69ad6"
