@@ -1373,6 +1373,17 @@ addEventListener("keydown", (event) => {
     }
 
     const active = document.activeElement;
+
+    // Focus in a layer that comes after the dialog and is not one itself (PiP's window, or the drawer, over a covering
+    // Files tile or Browser panel) is above it: Tab moves there, as before.
+    if (
+        active !== null &&
+        !box.contains(active) &&
+        box.compareDocumentPosition(active) & Node.DOCUMENT_POSITION_FOLLOWING
+    ) {
+        return;
+    }
+
     const stops = tabStops(box);
     const toward = event.shiftKey
         ? Node.DOCUMENT_POSITION_PRECEDING
