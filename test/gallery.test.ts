@@ -239,12 +239,12 @@ test("a revoked version is flagged where it is installed, and is never installed
     await app.gallery.install("revoked", await pin("revoked"));
     await app.setExtensionEnabled(owner(app), "revoked.ts", true);
 
-    // The index revokes it, with a fix only a newer Pi Pocket can use; and, in another entry, the only version there
-    // is.
+    // The index revokes it, with a fix only a newer Pi Pocket can use, and a reason its strict reading refuses (an
+    // emoji's variation selector); and, in another entry, the only version there is.
     await index(
         entry("revoked", { "revoked.ts": clock.replace("now", "later") }, "5".repeat(40), {
             minPocket: "99.0.0",
-            revoked: [{ commit: first, reason: "It sends your config away." }],
+            revoked: [{ commit: first, reason: "\u26a0\ufe0f It sends your config away." }],
         }),
         entry("withdrawn", { "withdrawn.ts": clock }, first, {
             revoked: [{ commit: first, reason: "Withdrawn." }],
@@ -253,7 +253,7 @@ test("a revoked version is flagged where it is installed, and is never installed
 
     const [state] = (await app.gallery.installed()).items.filter((each) => each.name === "revoked");
 
-    assert.equal(state?.revoked, "It sends your config away.");
+    assert.equal(state?.revoked, "\u26a0 It sends your config away.");
     assert.equal(state?.enabled, true);
     await assert.rejects(app.gallery.install("withdrawn", await pin("withdrawn")), {
         status: 409,

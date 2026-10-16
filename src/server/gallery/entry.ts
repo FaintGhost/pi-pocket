@@ -175,6 +175,7 @@ const COMMAND = /^(conversation|global) [a-z][a-z0-9_]*-[a-z0-9_-]*$/;
  * `INVISIBLE_CLASS`, which keeps them out of memory lessons too): none of them belong in what the gallery draws.
  */
 const UNSAFE = new RegExp(`[\\p{Zl}\\p{Zp}${INVISIBLE_CLASS}]`, "u");
+const UNSAFE_ALL = new RegExp(UNSAFE.source, "gu");
 
 /**
  * Why a file name is not one an extension called `extension` may have, or undefined when it may: its module
@@ -688,6 +689,28 @@ function revocations(value: unknown): Entry["revoked"] {
 }
 
 /**
+ * An entry's revoked commits for the warning alone, read loosely: a revocation counts whatever else its entry says, so
+ * an item the strict reading refuses (a reason with an emoji's variation selector, or too long) must not drop them
+ * all. Each item with a commit counts; its reason is cleaned of what a line may not hold, and cut short.
+ */
+function revokedLoosely(value: unknown): Entry["revoked"] {
+    return (Array.isArray(value) ? value.slice(0, 200) : []).flatMap((item: unknown) => {
+        const { commit, reason } = (item ?? {}) as { commit?: unknown; reason?: unknown };
+
+        if (typeof commit !== "string" || !COMMIT.test(commit)) {
+            return [];
+        }
+
+        const said =
+            typeof reason === "string"
+                ? reason.replace(UNSAFE_ALL, " ").replace(/\s+/g, " ").trim().slice(0, 300)
+                : "";
+
+        return [{ commit, reason: said === "" ? "The index gives no reason." : said }];
+    });
+}
+
+/**
  * What the owner approves when they install or update: a digest of everything that decides what is written and what
  * it does (its repository, folder, commit, files with their hashes, and what it declares). The index could change any
  * of them and keep the commit; an install or update the owner saw goes ahead only while this is the same.
@@ -806,11 +829,7 @@ export function parseIndex(source: string, here: { api: number; version: string 
         }
 
         if (name !== undefined && !twice) {
-            try {
-                index.revoked.set(name, revocations((item as Shape).revoked));
-            } catch {
-                // Said below, when the entry is read whole.
-            }
+            index.revoked.set(name, revokedLoosely((item as Shape).revoked));
         }
 
         if (compatibility(item, here) === "newer" && !twice) {
