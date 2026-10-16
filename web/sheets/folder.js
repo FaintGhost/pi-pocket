@@ -257,17 +257,18 @@ export function CwdSheet({ mode }) {
     const mayStar = canSteer() && !scoped();
     const starred = target !== null && favorites.includes(target);
 
-    /** Star or unstar the folder Open takes. The list changes when the server says it did, on every device. */
-    const toggleFavorite = () =>
+    /** Star or unstar a folder. The list changes when the server says it did, on every device. */
+    const setFavorite = (path, on) =>
         attempt(async () => {
             setSaving(true);
 
             try {
-                await api("folder-favorites", { path: target, starred: !starred });
+                await api("folder-favorites", { path, starred: on });
             } finally {
                 setSaving(false);
             }
         });
+    const toggleFavorite = () => setFavorite(target, !starred);
 
     // Ctrl/⌘+1…9 starts a session in a favorite, while this is the New session picker on top. Caught before the
     // app's own keys; Alt+1…9 (sessions) has Alt, so it never gets here.
@@ -491,6 +492,18 @@ export function CwdSheet({ mode }) {
                 <span><span class="mono">${shortPath(missing, home)}</span> isn't there.</span>
                 <span class="fp-missing-actions">
                     <button class="button small" onClick=${() => make(missing)}>Create it</button>
+                    ${
+                        // A favorite that is gone is unstarred here: the star acts only on a folder that opens.
+                        mayStar &&
+                        favorites.includes(missing) &&
+                        html`<button
+                            class="button small"
+                            disabled=${saving}
+                            onClick=${() => setFavorite(missing, false).then(() => setMissing(null))}
+                        >
+                            Remove from favorites
+                        </button>`
+                    }
                     <button
                         class="icon-button"
                         aria-label="Never mind"
