@@ -219,7 +219,8 @@ export class LinkedSessions implements LinkedSessionsApi {
             request.model === undefined
                 ? agent.model && `${agent.model.provider}/${agent.model.modelId}`
                 : request.model.trim();
-        const wantedThinking = request.thinking ?? agent.thinkingLevel ?? "off";
+        const own = agent.thinkingLevel ?? "off";
+        const asked = request.thinking ?? own;
 
         if (!spec || spec.indexOf("/") <= 0) {
             throw new HttpError(
@@ -228,11 +229,10 @@ export class LinkedSessions implements LinkedSessionsApi {
             );
         }
 
-        if (!isThinkingLevel(wantedThinking)) {
+        if (!isThinkingLevel(asked)) {
             throw new HttpError(400, `Thinking must be one of: ${THINKING_LEVELS.join(", ")}.`);
         }
 
-        let thinking = wantedThinking;
         const model = resolveModel(app.models, spec, app.signInNeeded);
         const chosen = `${model.provider}/${model.modelId}`;
 
@@ -247,14 +247,14 @@ export class LinkedSessions implements LinkedSessionsApi {
         const selected = app.models.getModel(model.provider, model.modelId)!;
         const supported = getSupportedThinkingLevels(selected);
 
-        if (request.model !== undefined && request.thinking === undefined) {
-            thinking = levelAtMost(selected, thinking) ?? supported[0]!;
-        }
+        // Never above the source's level, as a subagent's: then the highest the model has at or below that.
+        const cap = THINKING_LEVELS.indexOf(asked) > THINKING_LEVELS.indexOf(own) ? own : asked;
+        const thinking = levelAtMost(selected, cap);
 
-        if (!supported.includes(thinking)) {
+        if (thinking === undefined) {
             throw new HttpError(
                 400,
-                `Model ${spec} does not support thinking ${thinking}. Supported levels: ${supported.join(", ")}. Do not substitute another route.`,
+                `Model ${spec} has no thinking level at or below ${cap}. Supported levels: ${supported.join(", ")}. Do not substitute another route.`,
             );
         }
 

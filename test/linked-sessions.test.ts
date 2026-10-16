@@ -23,7 +23,14 @@ import { LinkedSessionCallDoc, TurnsDoc } from "../src/server/docs.ts";
 let app: App;
 
 before(async () => {
-    app = await openApp(scriptedModel());
+    const model = scriptedModel();
+
+    // A model that thinks, so a linked session's thinking level has room to go too high.
+    Object.assign(
+        model.models.find((each) => each.id === "faux-1")!,
+        { reasoning: true },
+    );
+    app = await openApp(model);
 });
 after(async () => {
     await app?.close();
@@ -50,8 +57,15 @@ const sent = async (id: ConversationId) =>
 
 test("a repeated start or send makes one session or one message", async () => {
     const id = await source();
-    const { session: target, address } = await start(id, "start-key");
+    const { session: target, address } = await app.linkedSessions.start(
+        id,
+        { message: "a task", thinking: "high" },
+        "start-key",
+    );
     const count = app.sessions().length;
+
+    // Never thinking harder than the session that started it, which is at "off".
+    assert.equal((await app.agentState(target))?.thinkingLevel, "off");
 
     assert.equal((await start(id, "start-key")).session, target);
     assert.equal(app.sessions().length, count);
