@@ -29,7 +29,7 @@ export function setFilesOpen(open, tab) {
     } else {
         sessionStorage.removeItem(OPEN_KEY);
 
-        if (document.documentElement.dataset.focus === "files-tile") {
+        if (document.documentElement.dataset.focus === "files-panel") {
             document.documentElement.dataset.focus = "pane";
         }
     }
