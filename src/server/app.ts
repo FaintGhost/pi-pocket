@@ -706,6 +706,17 @@ export class PocketApp {
                 change.conversationId !== undefined
             ) {
                 this.spend.usageChanged(change.conversationId, change.value as UsageState | null);
+
+                // A team's top session with a limit shows the team's spend: it follows a linked session's too.
+                const root = this.rootOf(change.conversationId);
+                const top = this.spend.teamRoot(root);
+
+                if (top !== root && this.#sessions[String(top)]?.budget !== undefined) {
+                    void this.#rooms.get(top)?.then(
+                        (room) => room.schedule(),
+                        () => {},
+                    );
+                }
             }
         }
 

@@ -178,7 +178,7 @@ export class Spend {
      * The session at the top of a linked family (`linked-sessions.ts`): the one that started this one, and so on up. A
      * session no link started is its own.
      */
-    #teamRoot(root: ConversationId): ConversationId {
+    teamRoot(root: ConversationId): ConversationId {
         const seen = new Set<ConversationId>([root]);
         let at = root;
 
@@ -199,7 +199,7 @@ export class Spend {
         let spent = 0;
 
         for (const [id, cost] of this.#costs) {
-            if (this.#teamRoot(this.#app.rootOf(id)) === top) {
+            if (this.teamRoot(this.#app.rootOf(id)) === top) {
                 spent += cost;
             }
         }
@@ -212,7 +212,7 @@ export class Spend {
      * started linked sessions, theirs too, as `#reached` counts it.
      */
     budgetSpent(root: ConversationId): number {
-        return this.#teamRoot(root) === root ? this.#teamSpent(root) : this.sessionSpent(root);
+        return this.teamRoot(root) === root ? this.#teamSpent(root) : this.sessionSpent(root);
     }
 
     personSpent(userId: string): number {
@@ -233,7 +233,7 @@ export class Spend {
         }
 
         // The budget of the session that started a team covers it all: what its linked sessions spend counts too.
-        const top = this.#teamRoot(root);
+        const top = this.teamRoot(root);
         const team = app.sessionMeta(top)?.budget;
 
         if (team !== undefined && this.#teamSpent(top) >= team) {
