@@ -68,9 +68,20 @@ const GROUPS = [
     ["commands", "Slash commands"],
 ];
 
-/** One group of what a module declares, as names to show (a command with its slash); older entries lack some groups. */
+/**
+ * One group of what a module declares, as names to show: a command with its slash, and who may run it. Older entries
+ * lack some groups.
+ */
 const declared = (declares, key) =>
-    (declares[key] ?? []).map((each) => (key === "commands" ? `/${each}` : each));
+    (declares[key] ?? []).map((each) => {
+        if (key !== "commands") {
+            return each;
+        }
+
+        const [scope, name] = each.split(" ");
+
+        return `/${name} (${scope === "global" ? "owner" : "who can steer"})`;
+    });
 
 const RISK =
     "A drop-in runs inside the server with your rights, in every session. Lancet Guard does not see what its code does.";

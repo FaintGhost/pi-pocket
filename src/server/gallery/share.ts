@@ -286,7 +286,7 @@ export async function shareDraft(options: {
         // Only when it has some: an entry with the field is one only Pi Pocket 0.14.0 beta 7 and newer read.
         ...((module.web?.commands ?? []).length === 0
             ? {}
-            : { commands: module.web!.commands!.map((command) => command.replace(/^\//, "")) }),
+            : { commands: module.web!.commands!.map((command) => command.replace(" /", " ")) }),
     };
 
     if (!loaded) {

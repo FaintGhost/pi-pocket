@@ -931,7 +931,11 @@ export class Gallery {
             ...listed("routes", d.routes),
             ...listed(
                 "slash commands",
-                (d.commands ?? []).map((command) => `/${command}`),
+                (d.commands ?? []).map((command) => {
+                    const [scope, name] = command.split(" ");
+
+                    return `/${name} (${scope === "global" ? "the owner's, anywhere" : "anyone who can steer the session"})`;
+                }),
             ),
             `- browser module: ${d.client === null ? "none" : `for ${d.client}`}; widest access: ${d.access}`,
             "",
