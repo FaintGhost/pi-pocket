@@ -174,13 +174,21 @@ export function ModelPicker() {
             ? setDefault(defaultModel, each)
             : attempt(() => configure({ thinkingLevel: each }));
 
-    // Arrows and Enter move through the models from the search box or the picker itself, not from its other buttons.
+    // Arrows and Enter move through the models, and Tab switches scoped and all, from the search box or the picker
+    // itself, not from its other buttons: there Tab and Shift+Tab move the focus as anywhere else.
     const onKeyDown = (event) => {
-        if (event.isComposing) {
+        if (
+            event.isComposing ||
+            (event.target !== search.current && event.target !== box.current)
+        ) {
             return;
         }
 
-        if (event.key === "Tab" && scopedModels.length > 0) {
+        if (
+            event.key === "Tab" &&
+            scopedModels.length > 0 &&
+            !(event.shiftKey || event.altKey || event.ctrlKey || event.metaKey)
+        ) {
             event.preventDefault();
             setShowAll((all) => !all);
             setPicked(0);
@@ -189,10 +197,7 @@ export function ModelPicker() {
             return;
         }
 
-        if (
-            shown.length === 0 ||
-            (event.target !== search.current && event.target !== box.current)
-        ) {
+        if (shown.length === 0) {
             return;
         }
 
@@ -226,34 +231,43 @@ export function ModelPicker() {
             <header class="pop-menu-head">
                 <span>
                     ${forDefault ? "Default model" : "Model"}
+                    ${forDefault && html`<span class="pop-menu-head-sub">for new sessions</span>`}
                     ${
                         scopedModels.length > 0 &&
                         html`<span
-                        class="model-scope"
-                        role="group"
-                        aria-label="Model scope"
-                        title="Tab switches between scoped and all models"
-                    >
-                        [<button
-                            class=${!showAll ? "on" : ""}
-                            aria-pressed=${!showAll}
-                            title="Models from Pi’s enabledModels setting"
-                            onClick=${() => {
-                                setShowAll(false);
-                                setPicked(0);
-                            }}
-                        >scoped</button>|<button
-                            class=${showAll ? "on" : ""}
-                            aria-pressed=${showAll}
-                            title="All models with a configured sign-in"
-                            onClick=${() => {
-                                setShowAll(true);
-                                setPicked(0);
-                            }}
-                        >all</button>]
-                    </span>`
+                            class="model-scope"
+                            role="group"
+                            aria-label="Model scope"
+                            aria-keyshortcuts="Tab"
+                            title="Tab switches between scoped and all models"
+                        >
+                            <span aria-hidden="true">[</span>
+                            <button
+                                class=${!showAll ? "on" : ""}
+                                aria-pressed=${!showAll}
+                                title="Models from Pi’s enabledModels setting"
+                                onClick=${() => {
+                                    setShowAll(false);
+                                    setPicked(0);
+                                }}
+                            >
+                                scoped
+                            </button>
+                            <span aria-hidden="true">|</span>
+                            <button
+                                class=${showAll ? "on" : ""}
+                                aria-pressed=${showAll}
+                                title="All models with a configured sign-in"
+                                onClick=${() => {
+                                    setShowAll(true);
+                                    setPicked(0);
+                                }}
+                            >
+                                all
+                            </button>
+                            <span aria-hidden="true">]</span>
+                        </span>`
                     }
-                    ${forDefault && html`<span class="pop-menu-head-sub">for new sessions</span>`}
                 </span>
                 <button class="pop-menu-link" onClick=${() => openSheet({ type: "providers" })}>
                     <${Icon} name="key" size=${13} /> Providers
