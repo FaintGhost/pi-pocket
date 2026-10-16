@@ -368,10 +368,28 @@ export function Composer() {
     const [searching, setSearching] = useState(false);
     const [inlineFiles, setInlineFiles] = useState(() => localStorage.getItem(INLINE_KEY) === "1");
     const box = useRef(null);
-    // The box as it comes and goes (taking the wheel shows it, with the draft in it): fitted to its text at once.
-    const [setBox] = useState(() => (element) => {
-        box.current = element;
-        fitBox(element);
+    // The box as it comes and goes (taking the wheel shows it, with the draft in it): fitted to its text at once, and
+    // again when its width changes, which can come after the window's resize (the Peek column becoming a strip).
+    const [setBox] = useState(() => {
+        let width = -1;
+        // A new width only (fitting changes the box's height, which this hears too), fitted a frame later.
+        const observer = new ResizeObserver(([entry]) => {
+            if (entry.contentRect.width !== width) {
+                width = entry.contentRect.width;
+                requestAnimationFrame(() => fitBox(box.current));
+            }
+        });
+
+        return (element) => {
+            box.current = element;
+            fitBox(element);
+            observer.disconnect();
+            width = -1;
+
+            if (element) {
+                observer.observe(element);
+            }
+        };
     });
     // Dictation writes into the box as typing does, so the draft keeps what was heard.
     const dictation = useDictation(box, (value, at) => {

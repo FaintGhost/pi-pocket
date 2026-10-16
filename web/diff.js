@@ -1485,17 +1485,18 @@ export function DiffReview({ active = true, autoFocus = false, covering = false 
                 </span>
                 <span class="dr-viewed">${seen} of ${files.length} viewed</span>`
             }
-            <span class="grow"></span>
-            ${all.length > 0 && html`<${LayoutSwitch} />`}
-            <button
-                class="icon-button dv-tool"
-                type="button"
-                title="Look again"
-                aria-label="Refresh"
-                onClick=${refresh}
-            >
-                <${Icon} name="reload" size=${15} />
-            </button>
+            <span class="dr-actions">
+                ${all.length > 0 && html`<${LayoutSwitch} />`}
+                <button
+                    class="icon-button dv-tool"
+                    type="button"
+                    title="Look again"
+                    aria-label="Refresh"
+                    onClick=${refresh}
+                >
+                    <${Icon} name="reload" size=${15} />
+                </button>
+            </span>
         </div>
         ${
             all.length > 0 &&

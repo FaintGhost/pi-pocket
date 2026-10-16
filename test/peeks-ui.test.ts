@@ -846,6 +846,14 @@ test(
                 )) === false,
             "the column to slide away",
         );
+        // Fitted while the column still squeezed it, the empty message box fits again once the strip is in place.
+        await until(
+            async () =>
+                (await inPage<number>(
+                    `return JSON.stringify(document.querySelector(".composer textarea").offsetHeight)`,
+                )) < 60,
+            "the empty message box to fit its text again",
+        );
         const first = await sameAsScreen("the server to watch the strip's tiles", ".peek-strip");
 
         await page.evaluate(`document.querySelector(".peek-strip").scrollLeft = 1e6`);

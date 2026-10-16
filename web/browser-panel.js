@@ -799,6 +799,48 @@ export function BrowserPanel({ leaving = false }) {
         }
     };
 
+    // Fitted, the page follows the panel's size (a dragged edge, a folded sidebar, a resized window) once it settles.
+    const fitted = open && steer && preset.id === "fit";
+    const shown = useRef(state?.viewport);
+
+    shown.current = state?.viewport;
+
+    useEffect(() => {
+        const element = stageRef.current;
+
+        if (!fitted || !element) {
+            return;
+        }
+
+        let timer = 0;
+        let size = `${element.clientWidth}×${element.clientHeight}`;
+        const observer = new ResizeObserver(() => {
+            const now = `${element.clientWidth}×${element.clientHeight}`;
+
+            if (now === size) {
+                return;
+            }
+
+            size = now;
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                const viewport = fitViewport(element);
+                const { width, height } = shown.current ?? {};
+
+                if (viewport && (viewport.width !== width || viewport.height !== height)) {
+                    run("viewport", { viewport });
+                }
+            }, 300);
+        });
+
+        observer.observe(element);
+
+        return () => {
+            clearTimeout(timer);
+            observer.disconnect();
+        };
+    }, [fitted, conversationId]);
+
     const blank = open && (state.url === "" || state.url === "about:blank");
     const touch = matchMedia("(pointer: coarse)").matches;
     const why = problem ?? state?.problem;

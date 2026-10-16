@@ -1346,10 +1346,11 @@ export function ResizeHandle() {
 
         root.classList.add("resizing");
 
+        // No wider than the stylesheet lets it be: 40% of the screen.
+        const max = Math.min(LIST_MAX + rest, Math.max(SIDEBAR_WIDTH, innerWidth * 0.4));
+
         const move = (each) => {
-            width = Math.round(
-                Math.min(LIST_MAX + rest, Math.max(LIST_MIN + rest, each.clientX - left)),
-            );
+            width = Math.round(Math.min(max, Math.max(LIST_MIN + rest, each.clientX - left)));
             root.style.setProperty("--sidebar-w", `${width}px`);
         };
 

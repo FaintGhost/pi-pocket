@@ -53,6 +53,9 @@ function recentLabels(paths, home) {
     );
 }
 
+/** Marks the path's field when its start is scrolled out of sight, so it fades there. */
+const markCut = (crumbs) => crumbs.classList.toggle("cut", crumbs.scrollLeft > 0);
+
 /** A line to type a name or a path into: Enter takes it, Esc lets it go. */
 function LineInput({ value, placeholder, label, onSubmit, onCancel, class: className = "" }) {
     const [text, setText] = useState(value ?? "");
@@ -172,6 +175,7 @@ export function CwdSheet({ mode }) {
     useLayoutEffect(() => {
         if (crumbsBox.current) {
             crumbsBox.current.scrollLeft = crumbsBox.current.scrollWidth;
+            markCut(crumbsBox.current);
         }
 
         const row =
@@ -363,6 +367,7 @@ export function CwdSheet({ mode }) {
                     : html`<nav
                           class="fp-crumbs"
                           ref=${crumbsBox}
+                          onScroll=${(event) => markCut(event.currentTarget)}
                           aria-label="Folder"
                           title="Click the path's end to type one (Ctrl+L)"
                       >
@@ -452,7 +457,7 @@ export function CwdSheet({ mode }) {
                     naming &&
                     html`<${LineInput}
                         class="fp-naming"
-                        placeholder="New folder's name"
+                        placeholder="Folder name"
                         label="The new folder's name"
                         onSubmit=${(name) => make(joined(folder, name))}
                         onCancel=${() => {

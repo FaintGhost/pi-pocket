@@ -650,10 +650,11 @@ kbd {
     background: var(--bg);
 }
 
-/* The sidebar: the rail and the session list beside it, cut off rather than squeezed while it folds and unfolds. */
+/* The sidebar: the rail and the session list beside it, cut off rather than squeezed while it folds and unfolds. Wider
+ * than usual, it takes 40% of the screen at most (`sessions.js` drags to the same), so the conversation keeps room. */
 .sidebar {
     display: none;
-    width: var(--sidebar-w, 324px);
+    width: min(var(--sidebar-w, 324px), max(324px, 40vw));
     flex: none;
     flex-direction: row;
     border-right: 1px solid var(--hair);
@@ -692,12 +693,43 @@ kbd {
 }
 
 .home-list {
-    max-width: 640px;
     width: 100%;
-    margin: 0 auto;
     flex: 1;
     min-height: 0;
     display: flex;
+}
+
+/* The rail at the screen's edge, as the sidebar's is; the list beside it no wider than reads well, centered. */
+.home-list > .sessions {
+    max-width: 584px;
+    margin: 0 auto;
+}
+
+/* A short screen (a phone on its side): the rail drops its marks (Pi, and the sessions it is on) so its buttons fit,
+ * and the home list puts its search and tabs side by side, so more sessions show. */
+@media (max-height: 500px) {
+    .rail {
+        gap: 2px;
+    }
+    .rail > :is(span.rail-brand, span.rail-brand + .rail-gap, span.rail-button) {
+        display: none;
+    }
+    .home-list > .sessions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: auto auto minmax(0, 1fr);
+        column-gap: 8px;
+    }
+    .home-list > .sessions > * {
+        grid-column: 1 / -1;
+    }
+    .home-list > .sessions > .search {
+        grid-column: 1;
+    }
+    .home-list > .sessions > .session-tabs {
+        grid-column: 2;
+        margin-top: 12px;
+    }
 }
 
 .splash {
@@ -1097,7 +1129,7 @@ kbd {
     .title-sub > button.title-branch::after {
         content: "";
         position: absolute;
-        inset: -8px;
+        inset: -10px -8px -9px;
     }
 }
 
@@ -1220,6 +1252,9 @@ kbd {
     flex: 1;
     overflow-y: auto;
     overscroll-behavior: contain;
+    /* Room for the scrollbar on both sides, kept whether or not it shows: the column stays put, centered over the
+     * message box, when a session long enough to scroll opens. */
+    scrollbar-gutter: stable both-edges;
     position: relative;
 }
 
@@ -1638,6 +1673,12 @@ kbd {
     padding: 0;
     font-size: inherit;
     color: var(--body);
+}
+
+/* In the conversation, code follows Appearance's text size, as the prose does: 12.5px at the usual 15px. */
+.transcript .md code,
+.transcript .md pre {
+    font-size: calc(var(--text-size, 15px) * 5 / 6);
 }
 
 .md.streaming > :last-child:not(.md-part)::after {
@@ -3680,6 +3721,7 @@ pre.diff .del {
     display: flex;
     flex-direction: column;
     padding: calc(env(safe-area-inset-top) + 14px) 12px calc(env(safe-area-inset-bottom) + 10px);
+    container: sessions / inline-size;
 }
 
 .sessions-head {
@@ -3908,6 +3950,7 @@ pre.diff .del {
     height: 26px;
     display: grid;
     place-items: center;
+    padding: 0 6px;
     border-radius: var(--r-seg);
     font-size: 12.5px;
     color: var(--muted);
@@ -3943,6 +3986,7 @@ pre.diff .del {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
     display: flex;
     flex-direction: column;
     margin: 4px -4px 0;
@@ -5425,6 +5469,7 @@ pre.diff .del {
     min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
     padding: 16px 20px 20px;
     display: flex;
     flex-direction: column;
@@ -5789,6 +5834,20 @@ pre.diff .del {
     display: none;
 }
 
+/* A path too long for the field fades in from its start rather than being cut there (folder.js marks it cut). */
+.fp-crumbs.cut::before {
+    content: "";
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    flex: none;
+    align-self: stretch;
+    width: 28px;
+    margin: 0 -22px 0 -6px;
+    background: linear-gradient(to right, var(--card) 6px, transparent);
+    pointer-events: none;
+}
+
 .fp-crumb {
     flex: none;
     padding: 0.3rem 0.35rem;
@@ -5843,6 +5902,17 @@ pre.diff .del {
     padding: 0.35rem 0.4rem 0.35rem 0.6rem;
     border-bottom: 1px solid var(--line);
     background: var(--accent-soft);
+}
+
+/* A small phone's folder list is narrow: the name takes the whole line, OK and Cancel go under it. */
+@media (max-width: 480px) {
+    .fp-naming {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .fp-naming input {
+        flex-basis: 100%;
+    }
 }
 
 /* A typed path that is not there, with Create it. */
@@ -6074,7 +6144,7 @@ pre.diff .del {
     }
     .fp-row,
     .fp-place {
-        min-height: 2.6rem;
+        min-height: 40px;
     }
 }
 
@@ -8506,6 +8576,13 @@ textarea.notes {
     opacity: 0;
 }
 
+/* A narrow list keeps the search's words whole: its keys give way. */
+@container sessions (max-width: 200px) {
+    .search-keys {
+        display: none;
+    }
+}
+
 @media (pointer: coarse) {
     .search-keys,
     .splash-actions kbd,
@@ -9760,6 +9837,15 @@ textarea.notes {
 
 .dr-viewed {
     font-size: 12.5px;
+}
+
+/* The layout and Look again, together at the end of the row, or of the next one when there is no room. */
+.dr-actions {
+    flex: none;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .dr-tools {
@@ -11693,6 +11779,7 @@ textarea.notes {
     }
     .segmented button {
         min-height: 42px;
+        min-width: 40px;
     }
     /* iOS zooms into a text field under 16px as it takes focus. (The board's field is styled after this: hence
      * the board in its selector.) */
@@ -11801,6 +11888,16 @@ textarea.notes {
         position: absolute;
         inset: -4px -2px;
     }
+    /* The chips are shorter: their layers reach further up and down. */
+    .composer-row :is(.model-chip, .plan-chip)::before {
+        inset: -5px -2px;
+    }
+    /* Where the row has room, the icon buttons are as wide as a thumb's tap (their look is the icon alone). */
+    @container composer (min-width: 360px) {
+        .composer-row :is(.places-button, .attach-button, .composer-mic) {
+            width: 36px;
+        }
+    }
     /* Steer and Queue too, taller only: side by side, their layers must not take each other's taps. */
     .mode-switch button {
         position: relative;
@@ -11808,7 +11905,7 @@ textarea.notes {
     .mode-switch button::before {
         content: "";
         position: absolute;
-        inset: -4px 0;
+        inset: -6px 0;
     }
     /* A call's line, a little taller for a thumb. */
     .step-head {
@@ -11889,6 +11986,11 @@ textarea.notes {
     .running-head .link {
         padding-block: 11px;
         margin-block: -11px;
+    }
+    /* A task's Stop or Cancel, at the end of its row: wider too. */
+    .running-task .link.small {
+        padding-inline: 7px;
+        margin-inline: -7px;
     }
     .answer-actions > button:not(.reaction) {
         min-width: 40px;
