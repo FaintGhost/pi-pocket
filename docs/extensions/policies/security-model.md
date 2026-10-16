@@ -7,10 +7,10 @@ This page collects, for authors, what [SECURITY.md](../../../SECURITY.md) and [e
 - **The owner** runs Pi Pocket. The server runs as the owner's user on the machine.
 - **Guests** are people whom the owner invited with the role guest. A guest can steer, in every session or only in the sessions of the invite.
 - **Viewers** are people whom the owner invited with the role viewer. A viewer reads, reacts, and chats, in every session or only in the sessions of the invite. A viewer cannot make Pi do anything.
-
-Owner, guest, and viewer are three separate roles. A person has one of them.
 - **Pi** is the model. It does what people ask. It can also do what text from outside asks, if that text gets into its context (prompt injection).
 - **Other modules** run in the same server, with the same rights as yours.
+
+Owner, guest, and viewer are three separate roles. A person has one of them.
 
 Anyone who can steer a session can make Pi call every tool that is on there. That includes guests who were invited to only that session.
 
