@@ -5,7 +5,13 @@ import { AgentDoc, type ConversationId } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
 import type { LinkedSession, LinkedSessionsApi } from "./host.ts";
-import { LinkedSessionCallDoc, LinkedSessionPeersDoc, PlanDoc, SessionsDoc } from "./docs.ts";
+import {
+    LinkedSessionCallDoc,
+    LinkedSessionPeersDoc,
+    LinkedSessionRelayDoc,
+    PlanDoc,
+    SessionsDoc,
+} from "./docs.ts";
 import { HttpError } from "./errors.ts";
 import { defang } from "./fence.ts";
 import { isThinkingLevel, levelAtMost, resolveModel, THINKING_LEVELS } from "./models.ts";
@@ -15,6 +21,9 @@ const context = BACKGROUND_CONTEXT;
 
 /** The most linked sessions one session may start. Linked sessions start none, so a team is one level deep. */
 const MAX_STARTED = 10;
+/** The most messages linked sessions send each other before a person writes in one of them. */
+const MAX_RELAYED = 20;
+const RELAYED = `Linked sessions have sent ${String(MAX_RELAYED)} messages without a person; a person must continue.`;
 
 /** Stable across restarts, short enough that Commands.submit preserves the entire request key. */
 function callKey(source: ConversationId, key: string): string {
@@ -54,6 +63,30 @@ export class LinkedSessions implements LinkedSessionsApi {
         }
 
         app.spend.check(user, source);
+    }
+
+    /** The team's top session: the one that started `id`, or `id` itself. */
+    #top(id: ConversationId): ConversationId {
+        const from = this.#app.sessionMeta(id)?.linkedFrom?.id;
+
+        return from === undefined ? id : (from as unknown as ConversationId);
+    }
+
+    async #relayed(id: ConversationId): Promise<number> {
+        const top = this.#top(id);
+
+        return (await this.#app.harness.snapshot(LinkedSessionRelayDoc, top, context))?.sent ?? 0;
+    }
+
+    /** A person wrote in `id`: the sessions of its team may message each other again. */
+    async personWrote(id: ConversationId): Promise<void> {
+        if ((await this.#relayed(id)) === 0) {
+            return;
+        }
+
+        await this.#app.harness.commit(async (tx) => {
+            (await tx.doc(LinkedSessionRelayDoc, this.#top(id))).sent = 0;
+        }, context);
     }
 
     /** The source's addresses for `targets`, made for those that have none yet: in one commit, only when one is new. */
@@ -209,6 +242,12 @@ export class LinkedSessions implements LinkedSessionsApi {
         }
 
         await this.#maySend(source, user);
+
+        // Its first message would be one too many: make no session it could not send.
+        if ((await this.#relayed(source)) >= MAX_RELAYED) {
+            throw new HttpError(409, RELAYED);
+        }
+
         // Copy omitted settings once; an explicit override must never silently select another model.
         const agent = structuredClone((await app.agentState(source)) ?? {});
         const spec =
@@ -351,7 +390,7 @@ export class LinkedSessions implements LinkedSessionsApi {
 
     /**
      * Send `message` from `source` to `target` as `user`, once for `token`: a repeat finds the first. The checks run
-     * first, then `record`, then the message goes.
+     * first, then the count of messages without a person, then `record`, then the message goes.
      */
     async #deliver(
         source: ConversationId,
@@ -376,6 +415,16 @@ export class LinkedSessions implements LinkedSessionsApi {
         await this.#maySend(source, user);
         await app.requireDriver(target, user);
         app.spend.check(user, target);
+        // Counted before it goes, so a restart between the two only ever counts one too many.
+        await app.harness.commit(async (tx) => {
+            const relay = await tx.doc(LinkedSessionRelayDoc, this.#top(source));
+
+            if (relay.sent >= MAX_RELAYED) {
+                throw new HttpError(409, RELAYED);
+            }
+
+            relay.sent++;
+        }, context);
         await record?.();
         // The target's own address for the source: it learns no session id.
         const replyTo = await this.#address(target, Number(source));

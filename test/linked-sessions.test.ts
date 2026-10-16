@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, before, test } from "node:test";
 import type { ConversationId } from "@earendil-works/pi-durable";
-import { LinkedSessionCallDoc, TurnsDoc } from "../src/server/docs.ts";
+import { LinkedSessionCallDoc, LinkedSessionRelayDoc, TurnsDoc } from "../src/server/docs.ts";
 
 let app: App;
 
@@ -131,6 +131,12 @@ test("a start or send is refused in plan mode, past a spend limit, or without th
     await app.spend.setSessionBudget(owner(app), id, 0.01);
     await refused(/spend limit/);
     await app.spend.setSessionBudget(owner(app), id, null);
+
+    // Twenty messages between the team's sessions with no person writing: no more until one does.
+    await app.harness.commit(async (tx) => {
+        (await tx.doc(LinkedSessionRelayDoc, id)).sent = 20;
+    }, context);
+    await refused(/without a person/);
 
     const driver = app.config.addUser("Driver", "guest").user;
 

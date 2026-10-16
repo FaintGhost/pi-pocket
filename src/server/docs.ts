@@ -68,6 +68,19 @@ export const LinkedSessionPeersDoc = defineDoc<{ peers: Record<string, number> }
     initial: () => ({ peers: {} }),
 });
 
+/**
+ * Messages between the linked sessions of one team since a person last wrote in any of them, kept on the team's top
+ * session (`linked-sessions.ts`): past a limit, sessions stop messaging each other until a person writes.
+ */
+export const LinkedSessionRelayDoc = defineDoc<{ sent: number }>({
+    kind: "pocket.linked-session-relay",
+    version: 1,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({ sent: 0 }),
+});
+
 /** What one call to start or message a linked session did, by its hashed key: the session, and whom Pi worked for. */
 export const LinkedSessionCallDoc = defineDocFamily<
     { conversationId?: number; by?: string },
