@@ -11,6 +11,7 @@ const SHORTCUTS = [
             ["Alt 1 … Alt 9", "Jump to a session, like a workspace"],
             ["Alt ↑ or Alt ↓", "Previous or next session"],
             ["Alt N", "New session"],
+            ["Mod 1 … Mod 9", "In New session: start in a favorite folder"],
             ["Alt", "Hold to see session numbers"],
             ["Mod B", "Fold or unfold the sidebar"],
             ["Mod Click", "In the sidebar: select a session; drag to select every one you pass"],
