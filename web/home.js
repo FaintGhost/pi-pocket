@@ -1,7 +1,7 @@
 // The wide home screen, shown beside the session list when no session is open.
 
 import { folderColor } from "./avatar.js";
-import { useEffect } from "preact/hooks";
+import { useEffect, useRef } from "preact/hooks";
 import { sessionMark } from "./sessions.js";
 import { canSteer, navigate, openSheet, scoped, store, workspaceOrder } from "./store.js";
 import { lookLabel, prefs } from "./theme.js";
@@ -24,8 +24,10 @@ export function Splash() {
     const p = prefs();
     const busy = sessions.filter((session) => session.busy && !session.archived).length;
     const recent = workspaceOrder().slice(0, 5);
+    const splash = useRef(null);
 
-    // The keys beside Jump back in: a digit opens its session, as Alt and the digit does anywhere.
+    // The keys beside Jump back in: a digit opens its session, as Alt and the digit does anywhere. Only where they
+    // show: on a narrow screen the home screen is hidden, and a digit there must do nothing.
     useEffect(() => {
         const onKey = (event) => {
             const target = event.target;
@@ -39,7 +41,11 @@ export function Splash() {
                 !(index >= 0 && index < 5) ||
                 target?.closest?.("input, textarea, select, [contenteditable]") ||
                 store.state.sheet ||
-                store.state.launcher
+                store.state.launcher ||
+                !(
+                    splash.current?.checkVisibility?.() ??
+                    splash.current?.getClientRects().length > 0
+                )
             ) {
                 return;
             }
@@ -91,7 +97,7 @@ export function Splash() {
     const canStart = canSteer() && !scoped();
     let line = 0;
 
-    return html`<div class="splash" data-part="home">
+    return html`<div class="splash" data-part="home" ref=${splash}>
         <div class="fetch" data-part="home-facts">
             <pre class="fetch-logo" data-part="home-logo" aria-hidden="true">${LOGO}</pre>
             <div class="fetch-info">
