@@ -9,22 +9,22 @@ export function LinkedSessions() {
         return null;
     }
 
-    const current = sessions.find((chat) => chat.id === conversationId);
+    const current = sessions.find((session) => session.id === conversationId);
     const origin =
-        current?.linkedFrom && sessions.find((chat) => chat.id === current.linkedFrom.id);
-    const started = sessions.filter((chat) => chat.linkedFrom?.id === conversationId);
+        current?.linkedFrom && sessions.find((session) => session.id === current.linkedFrom.id);
+    const started = sessions.filter((session) => session.linkedFrom?.id === conversationId);
 
     if (!origin && !current?.linkedOrigin && !current?.linkedFrom && started.length === 0) {
         return null;
     }
 
-    const link = (chat, label) => html`<button
+    const link = (session, label) => html`<button
         class="breadcrumb"
-        key=${chat.id}
-        onClick=${() => navigate(chat.id)}
+        key=${session.id}
+        onClick=${() => navigate(session.id)}
     >
         <${Icon} name="fork" size=${14} />
-        <span>${label}: ${chat.title ?? "New session"}</span>
+        <span>${label}: ${session.title ?? "New session"}</span>
     </button>`;
 
     return html`<nav class="linked-sessions" aria-label="Linked sessions">
@@ -36,6 +36,6 @@ export function LinkedSessions() {
                 Started from another session
             </p>`
         }
-        ${started.map((chat) => link(chat, "Linked session"))}
+        ${started.map((session) => link(session, "Linked session"))}
     </nav>`;
 }
