@@ -637,15 +637,17 @@ function callStatus({ result, slot, approval, decision, streaming, canRun, busy 
 }
 
 /** A thought, on the timeline: open it to read it. */
-function ThoughtStep({ block, streaming }) {
-    const [open, setOpen] = useState(false);
+function ThoughtStep({ block, streaming, reading }) {
+    // With Show thinking on, a thought once written shows its words (the live line shows the one being written).
+    const [chosen, setChosen] = useState(null);
+    const open = chosen ?? (reading && !streaming && Boolean(block.text?.trim()));
 
     return html`<div
         class=${`step ${open ? "open" : ""}`}
         data-status=${streaming ? "running" : "done"}
     >
         <div class="step-line">
-            <button class="step-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+            <button class="step-head" aria-expanded=${open} onClick=${() => setChosen(!open)}>
                 <${StepMark} status=${streaming ? "running" : "done"} kind="thought" />
                 <span class="step-label">
                     ${streaming ? "Thinking" : block.redacted ? "Thought (redacted)" : "Thought"}
@@ -1071,7 +1073,11 @@ function ActivityGroup({
     // A thought alone is the group's own line, not a step under a line that says the same: it opens to its words,
     // which stay folded until asked for, as a thought on the timeline does.
     const lone = all.length === 1 && all[0].block.type === "thinking" ? all[0] : null;
-    const open = chosen ?? (lone ? false : live || newest);
+    // Show thinking on: thoughts show their words once written.
+    const reading = prefs().showThinking === true;
+    const open =
+        chosen ??
+        (lone ? reading && !lone.streaming && Boolean(lone.block.text?.trim()) : live || newest);
     // Calls that failed, said on the line too: folded, "edited 1" alone would read as done.
     const failed = all.filter((step) => {
         const result = step.block.type === "toolCall" ? results.get(step.block.id) : undefined;
@@ -1161,8 +1167,8 @@ function ActivityGroup({
                     // A call is named by its id, the same streamed and stored; a thought by the call before it. Not by
                     // place: earlier steps join the front when earlier messages show.
                     if (block.type === "thinking") {
-                        return html`<${Memo} key=${`t:${lastCall}:${thoughts++}`} deps=${[block, streaming]}>
-                            <${ThoughtStep} block=${block} streaming=${streaming} />
+                        return html`<${Memo} key=${`t:${lastCall}:${thoughts++}`} deps=${[block, streaming, reading]}>
+                            <${ThoughtStep} block=${block} streaming=${streaming} reading=${reading} />
                         <//>`;
                     }
 
@@ -1786,6 +1792,7 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
             busy,
             conversationId,
             after,
+            prefs().showThinking === true,
         ];
 
         // The calls before the rows shown count in the group's line: their results, for its time.
@@ -1901,15 +1908,15 @@ function canAnswer(approvals) {
     );
 }
 
-/** The sessions whose live thinking is open, in this tab: open stays open from one run to the next, and a reload. */
-const THINKING_OPEN_KEY = "pocket.thinkingOpen";
-const thinkingOpen = new Map(
+/**
+ * The sessions whose live thinking is folded, in this tab. With Show thinking on, the thought shows until folded, and a
+ * fold holds from one run to the next, and over a reload.
+ */
+const THINKING_FOLDED_KEY = "pocket.thinkingFolded";
+const thinkingFolded = new Set(
     (() => {
         try {
-            return JSON.parse(sessionStorage.getItem(THINKING_OPEN_KEY) ?? "[]").map((id) => [
-                id,
-                true,
-            ]);
+            return JSON.parse(sessionStorage.getItem(THINKING_FOLDED_KEY) ?? "[]");
         } catch {
             return [];
         }
@@ -2049,7 +2056,7 @@ function LiveLine({ live, approvals, start, entries, conversationId }) {
     }, []);
 
     const thinking = prefs().showThinking === true;
-    const open = thinking && thinkingOpen.get(conversationId) === true;
+    const open = thinking && !thinkingFolded.has(conversationId);
 
     // Only as the thought opens or closes: not on the line's every tick.
     useLayoutEffect(() => {
@@ -2064,15 +2071,17 @@ function LiveLine({ live, approvals, start, entries, conversationId }) {
 
     const fold = () => {
         was.current = line.current.getBoundingClientRect().top;
-        keep(thinkingOpen, conversationId, !open);
+
+        if (open) {
+            thinkingFolded.add(conversationId);
+        } else {
+            thinkingFolded.delete(conversationId);
+        }
 
         try {
-            sessionStorage.setItem(
-                THINKING_OPEN_KEY,
-                JSON.stringify([...thinkingOpen].filter(([, on]) => on).map(([id]) => id)),
-            );
+            sessionStorage.setItem(THINKING_FOLDED_KEY, JSON.stringify([...thinkingFolded]));
         } catch {
-            // Storage is full or off: open still holds in this page.
+            // Storage is full or off: the fold still holds in this page.
         }
 
         tick((n) => n + 1);
