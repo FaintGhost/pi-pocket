@@ -1,8 +1,0 @@
-{
-    "themeApi": 1,
-    "name": "Studio",
-    "description": "Neutral charcoal with a muted blue accent. Your messages on quiet cards, Pi's answers as plain prose in a readable column.",
-    "author": "Pi Pocket",
-    "version": "0.1.0",
-    "minPocket": "0.14.0"
-}

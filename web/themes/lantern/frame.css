@@ -1,7 +1,7 @@
 /*
  * The calm frame: the parts of the look that do not change with the direction. Quiet windows, one readable column, tool
- * calls as one quiet line, a plain message box. The direction (direction.css and colors.toml) brings the palette and
- * how the turns look.
+ * calls as one quiet line, a plain message box. The direction (direction.css and colors.toml) brings the palette, the
+ * quiet text's tones, and how the turns look.
  */
 
 /* ─── Tokens ─── */
@@ -12,10 +12,6 @@
     --code-bg: var(--o-bg-dark);
     --line-strong: color-mix(in srgb, var(--body) 21%, var(--bg));
     --scrim: color-mix(in srgb, var(--desk) 60%, transparent);
-
-    /* Quiet text that still reads: 4.5:1 or more on every surface with the theme's colors. */
-    --muted: color-mix(in oklab, var(--body) 74%, var(--bg));
-    --faint: color-mix(in oklab, var(--body) 72%, var(--bg));
 
     /* Modest, consistent corners. Pills and avatars stay round. */
     --r-mark: 3px;

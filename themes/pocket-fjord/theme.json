@@ -1,8 +1,0 @@
-{
-    "themeApi": 1,
-    "name": "Fjord",
-    "description": "Cool blue-grey with a soft teal accent. Your messages as bubbles on the right, Pi's answers as plain prose in a readable column.",
-    "author": "Pi Pocket",
-    "version": "0.1.0",
-    "minPocket": "0.14.0"
-}
