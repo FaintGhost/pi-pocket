@@ -257,7 +257,10 @@ function ColorsTools() {
 function DefaultTools() {
     const current = themeDefault();
     const p = prefs();
-    const same = current?.look === p.look && current?.colors === p.theme;
+    // What new browsers get already: the default, or with none, Pocket and the desktop's colors.
+    const same = current
+        ? current.look === p.look && current.colors === p.theme
+        : p.look === BASE_LOOK && p.theme === "desktop";
     const name = (look, colors) =>
         `${lookInfo(look)?.name ?? look} with ${colors === "desktop" ? "the desktop's colors" : paletteOf(colors).name}`;
     const set = (value) =>
