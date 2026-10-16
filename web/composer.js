@@ -1680,7 +1680,8 @@ function StatusLine() {
             </span>`);
     }
 
-    // The session's spend, its subagents' included (with a limit, its team's: what counts against it), and its limit.
+    // The session's spend, its subagents' included, and its limit; with a limit on a session that started others, the
+    // team's spend, which is what counts against it.
     const spend = view.conversation?.spend;
     const spent = spend?.spent ?? stats.cost ?? 0;
 
