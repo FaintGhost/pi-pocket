@@ -9,12 +9,46 @@ import type { Role } from "./config.ts";
 import type { Goals } from "./goals.ts";
 import type { LancetGuard } from "./lancet.ts";
 import type { Memory } from "./memory.ts";
-import type { LinkedSessions } from "./linked-sessions.ts";
 import type { Pip } from "./pip.ts";
 import type { PipCompaction } from "./pip-compact.ts";
 import type { Schedules } from "./schedules.ts";
 import type { RepoWatches } from "./repo-watches.ts";
 import type { Watches } from "./watches.ts";
+
+/** A session linked to another, as `host.linkedSessions.list` gives it to the session that asks. */
+export interface LinkedSession {
+    /** What the asking session calls it: an address of its own, never the session's id. */
+    address: string;
+    /** Only when everyone who sees the asking session sees this one too. */
+    title?: string;
+    cwd?: string;
+    busy?: boolean;
+    archived?: boolean;
+}
+
+/**
+ * Sessions that a session starts and messages (`linked-sessions.ts`). Each acts as the person Pi works for in `source`,
+ * with their checks; a call made again with the same `key` acts once, and returns what the first did.
+ */
+export interface LinkedSessionsApi {
+    /**
+     * Start a session linked to `source`, in its folder, with a copy of its agent settings but not its history, and send
+     * it `message` as its first message. `model` is `provider/modelId`; `thinking` a level no higher than the source's.
+     */
+    start(
+        source: ConversationId,
+        request: { title?: string; message: string; model?: string; thinking?: string },
+        key: string,
+    ): Promise<{ session: ConversationId; address: string }>;
+    /** Send `message` to the linked session at address `to`: a follow-up, or with `steer` at its next pause. */
+    send(
+        source: ConversationId,
+        request: { to: string; message: string; steer?: boolean },
+        key: string,
+    ): Promise<void>;
+    /** The sessions linked to `source`, at any distance, that the person Pi works for there sees. */
+    list(source: ConversationId): Promise<LinkedSession[]>;
+}
 
 export interface ApprovalRequest {
     id: string;
@@ -157,7 +191,7 @@ export interface PocketHost {
      * Sessions that a session starts and messages (`linked-sessions.ts`): each one is an ordinary session, linked to the
      * one that started it. The checks of the person Pi works for apply, and a call repeated with its key acts once.
      */
-    readonly linkedSessions: Pick<LinkedSessions, "start" | "send" | "list" | "address">;
+    readonly linkedSessions: LinkedSessionsApi;
     /** Messages to Pi for later: the schedule tool sets up Pi's own. */
     readonly schedules: Pick<Schedules, "add" | "cancel" | "list" | "task">;
     /** Sessions' goals: the goals extension runs their checks and counts them. */

@@ -41,30 +41,36 @@ async function source() {
 
 const start = (id: ConversationId, key: string = crypto.randomUUID(), model?: string) =>
     app.linkedSessions.start(id, { title: "Linked", message: "a task", model }, key);
-const send = (id: ConversationId, target: ConversationId, key: string = crypto.randomUUID()) =>
-    app.linkedSessions.send(id, Number(target), "a message", false, key);
+const send = (id: ConversationId, to: string, key: string = crypto.randomUUID()) =>
+    app.linkedSessions.send(id, { to, message: "a message" }, key);
 const sent = async (id: ConversationId) =>
-    (await modelTexts(app, id)).filter((text) => text.includes("<linked-session-message>")).length;
+    (await modelTexts(app, id)).filter(
+        (text) => text.includes("<linked-session-message>") && !text.includes("echo:"),
+    ).length;
 
 test("a repeated start or send makes one session or one message", async () => {
     const id = await source();
-    const target = await start(id, "start-key");
+    const { session: target, address } = await start(id, "start-key");
     const count = app.sessions().length;
 
-    assert.equal(await start(id, "start-key"), target);
+    assert.equal((await start(id, "start-key")).session, target);
     assert.equal(app.sessions().length, count);
-    await send(id, target, "send-key");
-    await send(id, target, "send-key");
-    await until(async () => (await sent(target)) > 0, "the message");
-    assert.equal(await sent(target), 1);
+    await send(id, address, "send-key");
+    await send(id, address, "send-key");
+    await until(async () => (await sent(target)) > 1, "the messages");
+    assert.equal(await sent(target), 2);
 });
 
 test("someone who cannot see the origin learns nothing of it and cannot reach it", async () => {
     const id = await source();
 
     await app.commands.updateSession(id, owner(app), { title: "Secret origin" });
-    const target = await start(id);
+    const { session: target } = await start(id);
     const { user } = app.config.addUser("Target only", "guest", [String(target)]);
+    // Someone who sees the linked session but not the origin: the origin's name stays out of the list Pi gets.
+    const [origin] = await app.linkedSessions.list(target);
+
+    assert.ok(origin !== undefined && origin.title === undefined && origin.cwd === undefined);
     const tab = fakeTab(undefined, user);
 
     await app.attach(tab.client);
@@ -83,19 +89,21 @@ test("someone who cannot see the origin learns nothing of it and cannot reach it
     // With Pi working for them in the linked session, its peers are out of reach.
     await app.commands.submit(target, user, { text: "hello", requestId: "guest" });
     assert.deepEqual(await app.linkedSessions.list(target), []);
-    await assert.rejects(send(target, id), /not linked/);
+    await assert.rejects(send(target, origin.address), /not linked/);
 });
 
 test("a start or send is refused in plan mode, past a spend limit, or without the turn", async () => {
     const id = await source();
-    const target = await start(id);
+    const { session: target, address } = await start(id);
     const count = app.sessions().length;
+
+    await until(async () => (await sent(target)) === 1, "the first message");
 
     const refused = async (why: RegExp) => {
         await assert.rejects(start(id), why);
-        await assert.rejects(send(id, target), why);
+        await assert.rejects(send(id, address), why);
         assert.equal(app.sessions().length, count);
-        assert.equal(await sent(target), 0);
+        assert.equal(await sent(target), 1);
     };
 
     await app.commands.setPlan(id, owner(app), true);

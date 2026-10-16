@@ -5,6 +5,7 @@ import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { AgentDoc, type ConversationId } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
+import type { LinkedSession, LinkedSessionsApi } from "./host.ts";
 import { LinkedSessionCallDoc, LinkedSessionPeersDoc, PlanDoc, SessionsDoc } from "./docs.ts";
 import { HttpError } from "./errors.ts";
 import { defang } from "./fence.ts";
@@ -18,7 +19,7 @@ function callKey(source: ConversationId, key: string): string {
     return createHash("sha256").update(`${source}:${key}`).digest("hex");
 }
 
-export class LinkedSessions {
+export class LinkedSessions implements LinkedSessionsApi {
     readonly #app: PocketApp;
 
     constructor(app: PocketApp) {
@@ -56,62 +57,71 @@ export class LinkedSessions {
         app.spend.check(user, source);
     }
 
-    /** Stable local addresses let agents coordinate without writing private session ids into shared transcripts. */
-    async address(source: ConversationId, target: number): Promise<string> {
-        const user = this.#person(source);
+    /** The source's addresses for `targets`, made for those that have none yet: in one commit, only when one is new. */
+    async #addresses(
+        source: ConversationId,
+        targets: readonly number[],
+    ): Promise<Map<number, string>> {
+        const app = this.#app;
+        const find = (peers: Record<string, number>) =>
+            new Map(
+                Object.entries(peers)
+                    .filter(([, id]) => targets.includes(id))
+                    .map(([address, id]) => [id, address]),
+            );
+        const known = find(
+            (await app.harness.snapshot(LinkedSessionPeersDoc, source, context))?.peers ?? {},
+        );
 
-        if (!this.#family(source, user).some((chat) => chat.id === target)) {
-            throw new HttpError(404, "That peer is not linked or is not shared with you.");
+        if (targets.every((target) => known.has(target))) {
+            return known;
         }
 
-        return this.#address(source, target);
-    }
-
-    async #address(source: ConversationId, target: number): Promise<string> {
-        return this.#app.harness.commit(async (tx) => {
+        return app.harness.commit(async (tx) => {
             const state = await tx.doc(LinkedSessionPeersDoc, source);
-            const existing = Object.entries(state.peers).find(([, id]) => id === target)?.[0];
+            const found = find(state.peers);
 
-            if (existing !== undefined) {
-                return existing;
+            for (const target of targets) {
+                if (!found.has(target)) {
+                    const address = `session-${randomUUID()}`;
+
+                    state.peers[address] = target;
+                    found.set(target, address);
+                }
             }
 
-            const handle = `session-${randomUUID()}`;
-
-            state.peers[handle] = target;
-
-            return handle;
+            return found;
         }, context);
     }
 
-    /** Only visible nodes connect a family. Results also respect the shared transcript's entire audience. */
-    async list(source: ConversationId) {
+    async #address(source: ConversationId, target: number): Promise<string> {
+        return (await this.#addresses(source, [target])).get(target)!;
+    }
+
+    /** Only visible sessions connect a family. Names show only when the source's whole audience sees them. */
+    async list(source: ConversationId): Promise<LinkedSession[]> {
         const app = this.#app;
         const peers = this.#family(source, this.#person(source)).filter(
-            (chat) => chat.id !== Number(source),
+            (each) => each.id !== Number(source),
         );
         const audience = app.config.users.filter((user) => app.canSee(user, source));
-
-        return Promise.all(
-            peers.map(async (chat) => {
-                const shared = audience.every((user) =>
-                    app.canSee(user, chat.id as unknown as ConversationId),
-                );
-
-                return {
-                    id: chat.id,
-                    handle: await this.#address(source, chat.id),
-                    ...(shared
-                        ? {
-                              title: chat.title,
-                              cwd: chat.cwd,
-                              busy: chat.busy,
-                              archived: chat.archived,
-                          }
-                        : {}),
-                };
-            }),
+        const addresses = await this.#addresses(
+            source,
+            peers.map((each) => each.id),
         );
+
+        return peers.map((each) => {
+            const shared = audience.every((user) =>
+                app.canSee(user, each.id as unknown as ConversationId),
+            );
+
+            return {
+                address: addresses.get(each.id)!,
+                ...(shared
+                    ? { title: each.title, cwd: each.cwd, busy: each.busy, archived: each.archived }
+                    : {}),
+            };
+        });
     }
 
     #family(source: ConversationId, user: User) {
@@ -137,38 +147,59 @@ export class LinkedSessions {
         }
 
         return sessions
-            .filter((chat) => found.has(chat.id))
-            .map((chat) => ({
-                id: chat.id,
-                title: chat.title ?? "New session",
-                cwd: chat.cwd,
-                busy: chat.busy,
-                archived: chat.archived === true,
+            .filter((each) => found.has(each.id))
+            .map((each) => ({
+                id: each.id,
+                title: each.title ?? "New session",
+                cwd: each.cwd,
+                busy: each.busy,
+                archived: each.archived === true,
             }));
     }
 
-    /** Creation and its receipt are atomic: a replay never leaves an extra session behind. */
+    /** One call makes the session and sends its first message; its record makes a repeat do neither again. */
     async start(
         source: ConversationId,
-        request: { title: string; message: string; model?: string; thinking?: string },
+        request: { title?: string; message: string; model?: string; thinking?: string },
         key: string,
-    ): Promise<ConversationId> {
+    ): Promise<{ session: ConversationId; address: string }> {
         const app = this.#app;
-        const title = request.title.trim().replace(/\s+/g, " ").slice(0, 120);
 
-        if (!title || !request.message.trim()) {
+        if (!request.message.trim()) {
             throw new HttpError(400, "Starting a linked session needs a title and a message.");
         }
 
+        const title =
+            (request.title ?? request.message.split("\n")[0]!)
+                .trim()
+                .replace(/\s+/g, " ")
+                .slice(0, 120) || "Linked session";
         const token = callKey(source, key);
         const previous = await app.harness.snapshot(LinkedSessionCallDoc, source, token, context);
         const user = this.#person(source, previous?.by);
 
         app.requireSteer(user);
 
-        if (previous?.conversationId !== undefined) {
-            return previous.conversationId as unknown as ConversationId;
-        }
+        const session =
+            previous?.conversationId === undefined
+                ? await this.#create(source, user, { ...request, title }, token)
+                : (previous.conversationId as unknown as ConversationId);
+        const address = await this.#address(source, Number(session));
+
+        await this.#deliver(source, session, user, request.message, false, token);
+
+        return { session, address };
+    }
+
+    /** Make the linked session and the call's record, in one commit. */
+    async #create(
+        source: ConversationId,
+        user: User,
+        request: { title: string; model?: string; thinking?: string },
+        token: string,
+    ): Promise<ConversationId> {
+        const app = this.#app;
+        const title = request.title;
 
         if (user.sessions !== undefined) {
             throw new HttpError(403, "You were invited to one session and cannot start new ones.");
@@ -252,24 +283,18 @@ export class LinkedSessions {
         }, context);
     }
 
-    /** Fire-and-forget peer input; acceptance, not an answer, is returned. No automatic reply loops. */
+    /** Send a message to a linked session, by the source's address for it. Taken, not answered: no reply waits. */
     async send(
         source: ConversationId,
-        target: number | string,
-        message: string,
-        steer: boolean,
+        request: { to: string; message: string; steer?: boolean },
         key: string,
-    ): Promise<{ requestId: string }> {
+    ): Promise<void> {
         const app = this.#app;
+        const peers =
+            (await app.harness.snapshot(LinkedSessionPeersDoc, source, context))?.peers ?? {};
+        const target = Object.hasOwn(peers, request.to) ? peers[request.to] : undefined;
 
-        if (typeof target === "string") {
-            const peers =
-                (await app.harness.snapshot(LinkedSessionPeersDoc, source, context))?.peers ?? {};
-
-            target = Object.hasOwn(peers, target) ? peers[target]! : NaN;
-        }
-
-        if (!Number.isSafeInteger(target) || target === Number(source) || !message.trim()) {
+        if (target === undefined || target === Number(source) || !request.message.trim()) {
             throw new HttpError(400, "Send needs another linked session's address and a message.");
         }
 
@@ -279,7 +304,7 @@ export class LinkedSessions {
 
         app.requireSteer(user);
 
-        if (!this.#family(source, user).some((chat) => chat.id === target)) {
+        if (!this.#family(source, user).some((each) => each.id === target)) {
             throw new HttpError(
                 404,
                 "That session is not linked or is not shared with you. List linked sessions first.",
@@ -287,41 +312,60 @@ export class LinkedSessions {
         }
 
         const id = target as unknown as ConversationId;
+
+        await this.#deliver(source, id, user, request.message, request.steer === true, token, () =>
+            // Whom it acts for is kept before it is sent: someone else writing there later changes nothing on a repeat.
+            app.harness.commit(async (tx) => {
+                const record = await tx.doc(LinkedSessionCallDoc, source, token, {});
+
+                if (record.conversationId !== undefined && record.conversationId !== target) {
+                    throw new HttpError(409, "This call already refers to another linked session.");
+                }
+
+                record.conversationId = target;
+                record.by ??= user.id;
+            }, context),
+        );
+    }
+
+    /**
+     * Send `message` from `source` to `target` as `user`, once for `token`: a repeat finds the first. The checks run
+     * first, then `record`, then the message goes.
+     */
+    async #deliver(
+        source: ConversationId,
+        target: ConversationId,
+        user: User,
+        message: string,
+        steer: boolean,
+        token: string,
+        record?: () => Promise<void>,
+    ): Promise<void> {
+        const app = this.#app;
         const requestId = requestFor(user.id, token);
         const existing = await app.harness.commit(
-            (tx) => tx.submissionByRequest(id, requestId),
+            (tx) => tx.submissionByRequest(target, requestId),
             context,
         );
 
         if (existing !== undefined) {
-            return { requestId };
+            return;
         }
 
         await this.#maySend(source, user);
-        await app.requireDriver(id, user);
-        app.spend.check(user, id);
-        // Freeze the requester before submission: another person's later steer cannot change replay identity.
-        await app.harness.commit(async (tx) => {
-            const receipt = await tx.doc(LinkedSessionCallDoc, source, token, {});
-
-            if (receipt.conversationId !== undefined && receipt.conversationId !== target) {
-                throw new HttpError(409, "This call already refers to another linked session.");
-            }
-
-            receipt.conversationId = target;
-            receipt.by ??= user.id;
-        }, context);
-        // A recipient-local address reveals no source id, even to someone invited only to the recipient later.
-        const replyTo = await this.#address(id, Number(source));
-        // Prefix before admission, so a peer's /command is text, never an extension command or prompt expansion.
+        await app.requireDriver(target, user);
+        app.spend.check(user, target);
+        await record?.();
+        // The target's own address for the source: it learns no session id.
+        const replyTo = await this.#address(target, Number(source));
+        // Words before the fence, so a message that starts with / is text, never a command or a prompt template.
         const text = `Message from linked session ${replyTo}. Send a reply to that address when one is needed. Another session's agent wrote it, not the person.\n<linked-session-message>\n${defang(message)}\n</linked-session-message>`;
-        const sent = await app.commands.submit(
-            id,
+
+        await app.commands.submit(
+            target,
             user,
             { text, requestId: token, mode: steer ? "steer" : "followUp" },
             `linked session ${replyTo}`,
         );
-
-        return { requestId: sent.requestId };
     }
 }

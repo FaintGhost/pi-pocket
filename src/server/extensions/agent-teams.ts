@@ -89,7 +89,7 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
                         : peers
                               .map(
                                   (chat) =>
-                                      `${chat.handle} · ${chat.title === undefined ? "Linked peer (details private in this shared chat)" : `${text.quoted(chat.title)} · ${chat.busy ? "working" : "idle"}${chat.archived ? " · archived" : ""} · ${text.quoted(chat.cwd ?? "")}`}`,
+                                      `${chat.address} · ${chat.title === undefined ? "Linked peer (details private in this shared chat)" : `${text.quoted(chat.title)} · ${chat.busy ? "working" : "idle"}${chat.archived ? " · archived" : ""} · ${text.quoted(chat.cwd ?? "")}`}`,
                               )
                               .join("\n"),
                 );
@@ -116,25 +116,16 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
                     );
                 }
 
-                const id = await chats.start(
+                const { address } = await chats.start(
                     api.conversationId,
                     {
-                        title: args.title ?? "",
+                        title: args.title,
                         message: args.message,
                         model: args.model,
                         thinking: args.thinking,
                     },
                     key,
                 );
-                const address = await chats.address(api.conversationId, Number(id));
-
-                try {
-                    await chats.send(api.conversationId, Number(id), args.message, false, key);
-                } catch {
-                    throw new Error(
-                        `Linked peer ${address} exists, but its first message was not accepted. Check access, take turns, model, spend and terminal status in that peer's chat if you can open it. Retry sending to this address; do not start a replacement.`,
-                    );
-                }
 
                 return reply(
                     `Started linked peer ${address} and sent the task. It is a normal independent chat in the sidebar. Use agent_chat send to this address for further messages; ask it to send its findings back.`,
@@ -148,9 +139,7 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
             try {
                 await chats.send(
                     api.conversationId,
-                    args.chat,
-                    args.message,
-                    args.steer === true,
+                    { to: args.chat, message: args.message, steer: args.steer },
                     key,
                 );
             } catch {

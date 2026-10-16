@@ -55,7 +55,10 @@ export const FolderFavoritesDoc = defineDoc<{ users: Record<string, string[]> }>
     initial: () => ({ users: {} }),
 });
 
-/** The addresses this session knows its linked sessions by, so no session id goes into its transcript. A fork makes its own. */
+/**
+ * The addresses this session knows its linked sessions by, so no session id goes into its transcript. A fork starts with
+ * none, so it leaves the team: the addresses in the history it inherited do not resolve there.
+ */
 export const LinkedSessionPeersDoc = defineDoc<{ peers: Record<string, number> }>({
     kind: "pocket.linked-session-peers",
     version: 1,
