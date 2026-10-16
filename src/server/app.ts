@@ -85,6 +85,7 @@ import { PIP_COMPACT_CHOICES, PipCompaction } from "./pip-compact.ts";
 import { RepoWatches } from "./repo-watches.ts";
 import { snippet } from "./projection.ts";
 import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./prompts.ts";
+import { Themes } from "./themes.ts";
 import { measureModelStreams } from "./timing.ts";
 import { Providers } from "./providers.ts";
 import { PushStore } from "./push.ts";
@@ -291,6 +292,8 @@ export class PocketApp {
     readonly folderFavorites = new FolderFavorites(this);
     /** Other people's drop-ins, from a reviewed index: found, installed off, read, updated, removed (`gallery.ts`). */
     readonly gallery = new Gallery(this);
+    /** Theme folders: the app's look and layout, built in and the owner's (`themes.ts`). */
+    readonly themes: Themes;
     /** Each conversation's browser page, which Pi and the people in the conversation share. */
     readonly browsers: Browsers;
     /** What extension modules add to the app: their routes, browser modules, and events (`extension-web.ts`). */
@@ -376,6 +379,20 @@ export class PocketApp {
                         this.#log(`browser page not saved: ${describe(error)}`),
                     );
             },
+        });
+        this.themes = new Themes({
+            builtIn: join(APP_ROOT, "web", "themes"),
+            dataDir: options.dataDir,
+            notify: (message) => this.ownerNotice("warning", message),
+            // Everyone's tabs: a theme anyone may have chosen changed, or one came or went.
+            changed: () => {
+                const list = this.themes.list();
+
+                for (const client of this.#clients) {
+                    client.send("themes", list);
+                }
+            },
+            log: (line) => this.#log(line),
         });
         this.webs = new ExtensionWebs({
             changed: (access) => this.#websChanged(access),
@@ -535,6 +552,7 @@ export class PocketApp {
             // What a module's load says can name the server's folders, or quote a provider: the owner's to read.
             { webs: this.webs, notify: (level, message) => this.ownerNotice(level, message) },
         );
+        await this.themes.load();
         // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one.
         await this.gallery.recover().catch((error: unknown) => {
             this.#log(`The extension gallery could not check its updates: ${describe(error)}`);
@@ -1716,6 +1734,8 @@ export class PocketApp {
             },
             // Read after the guard's wait, so a connecting device does not replace a live update with an older list.
             folderFavorites: await this.folderFavorites.list(user),
+            // Every theme folder, for Appearance and for the look this tab uses (`theme.js`).
+            themes: this.themes.list(),
         };
     }
 
@@ -2691,6 +2711,7 @@ export class PocketApp {
         this.#closing ??= (async () => {
             clearTimeout(this.#sessionsTimer);
             this.alerts.close();
+            this.themes.close();
             this.spend.close();
             this.#unsubscribeCommits?.();
             this.#unsubscribeApprovals?.();

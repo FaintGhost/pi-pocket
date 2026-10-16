@@ -12,6 +12,10 @@ import { createHash } from "node:crypto";
 import { BUILT_IN_COMMANDS } from "../extension-web.ts";
 import { INVISIBLE_CLASS } from "../fence.ts";
 import { BUILT_IN_MODULES, BUILT_IN_TOOLS, RESERVED_EXTENSIONS } from "../reload.ts";
+import { atLeast, POCKET_VERSION, versionParts } from "../versions.ts";
+
+// Where they always were: the index repository's checks import them from here.
+export { atLeast, versionParts };
 
 /** The index format this Pi Pocket reads. */
 export const INDEX_FORMAT = 1;
@@ -128,7 +132,6 @@ const NOT_PORTABLE =
     /^(con|prn|aux|nul|com[0-9\u00b9\u00b2\u00b3]|lpt[0-9\u00b9\u00b2\u00b3])(\..*)?$|\.$/i;
 const TAG = /^[a-z0-9][a-z0-9-]{0,23}$/;
 const VERSION = /^[0-9A-Za-z][0-9A-Za-z.+-]{0,31}$/;
-const POCKET_VERSION = /^(\d{1,4})\.(\d{1,4})\.(\d{1,4})$/;
 const TOOL = /^[A-Za-z0-9_-]{1,64}$/;
 const KEY = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
 const HOOK = /^[A-Za-z][A-Za-z0-9]{0,63}$/;
@@ -263,31 +266,6 @@ function access(value: unknown, where: string): Access {
     }
 
     return value as Access;
-}
-
-/** The parts of a Pi Pocket version, `0.14.0`, or undefined. Pre-releases count as their release (`0.14.0-beta.3`). */
-export function versionParts(version: string): [number, number, number] | undefined {
-    const match = POCKET_VERSION.exec(version.replace(/[-+].*$/, ""));
-
-    return match === null ? undefined : [Number(match[1]), Number(match[2]), Number(match[3])];
-}
-
-/** Whether Pi Pocket `version` is `minimum` or newer. */
-export function atLeast(version: string, minimum: string): boolean {
-    const have = versionParts(version);
-    const need = versionParts(minimum);
-
-    if (have === undefined || need === undefined) {
-        return false;
-    }
-
-    for (let at = 0; at < 3; at++) {
-        if (have[at] !== need[at]) {
-            return have[at]! > need[at]!;
-        }
-    }
-
-    return true;
 }
 
 function declares(value: unknown, where: string): Declares {
