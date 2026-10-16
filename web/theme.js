@@ -320,6 +320,20 @@ export function chooseLook(id, event) {
     }, at);
 }
 
+/**
+ * The look in use, in words: the theme's name, and the colors' when they are not the theme's own ("Lantern", "Pocket ·
+ * Gruvbox"). For the menu's Appearance row and the home screen.
+ */
+export function lookLabel() {
+    const look = lookOf();
+    const palette = paletteOf();
+    const colors = palette.desktop ? `${palette.name} (desktop)` : palette.name;
+
+    return look && prefs().theme.split("@")[0] === look.id
+        ? look.name
+        : `${look?.name ?? "Pocket"} · ${colors}`;
+}
+
 /** Theme folders that change the look, in the order the server lists them: the app's own first. */
 export function lookIds() {
     return [

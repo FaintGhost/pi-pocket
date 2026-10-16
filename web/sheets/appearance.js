@@ -271,8 +271,11 @@ function DefaultTools() {
     const same = current
         ? current.look === p.look && current.colors === p.theme
         : p.look === BASE_LOOK && p.theme === "desktop";
+    // A theme with its own colors is named once: "My Lantern", not "My Lantern with My Lantern".
     const name = (look, colors) =>
-        `${lookInfo(look)?.name ?? look} with ${colors === "desktop" ? "the desktop's colors" : paletteOf(colors).name}`;
+        colors.split("@")[0] === look
+            ? (lookInfo(look)?.name ?? look)
+            : `${lookInfo(look)?.name ?? look} with ${colors === "desktop" ? "the desktop's colors" : paletteOf(colors).name}`;
     const set = (value) =>
         attempt(async () => {
             await api("themes/default", { default: value }, { method: "PUT" });

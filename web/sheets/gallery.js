@@ -1197,9 +1197,13 @@ export function GalleryShareSheet({ file, theme = false }) {
     });
 
     useRoute(`${theme ? "share-theme" : "share"}/${encodeURIComponent(file)}`, setData, setProblem);
+    // A theme by its name, as Appearance shows it; a drop-in by its file.
+    const shareName = theme
+        ? (store.state.themeList?.find((each) => each.id === file)?.name ?? file)
+        : file;
 
     if (!data) {
-        return html`<${Sheet} title=${`Share ${file}`} onClose=${closeSheet} wide=${true} className="gallery">
+        return html`<${Sheet} title=${`Share ${shareName}`} onClose=${closeSheet} wide=${true} className="gallery">
             ${problem ? html`<div class="error-box small">${problem}</div>` : html`<${Loader} label="Checking it" />`}
         <//>`;
     }
@@ -1241,7 +1245,7 @@ export function GalleryShareSheet({ file, theme = false }) {
     const filled = data.newEntryPage && `${data.newEntryPage}&value=${encodeURIComponent(text)}`;
     const link = filled && filled.length <= LINK_LIMIT ? filled : data.newEntryPage;
 
-    return html`<${Sheet} title=${`Share ${file}`} onClose=${closeSheet} wide=${true} className="gallery">
+    return html`<${Sheet} title=${`Share ${shareName}`} onClose=${closeSheet} wide=${true} className="gallery">
         <p class="muted small">
             To share it, add its entry to the gallery's index with a pull request. Pi Pocket makes no GitHub calls: you put its files on GitHub and open the pull request yourself.
         </p>
@@ -1301,7 +1305,7 @@ export function GalleryShareSheet({ file, theme = false }) {
                     id="share-path"
                     label="Folder (optional)"
                     hint="Only when the files are not at the top of the repository."
-                    placeholder="extension"
+                    placeholder=${theme ? "theme" : "extension"}
                     value=${form.path}
                     onInput=${set("path")}
                     problem=${wrong.path}
@@ -1309,8 +1313,8 @@ export function GalleryShareSheet({ file, theme = false }) {
                 <${Field}
                     id="share-tags"
                     label="Tags"
-                    hint="A few words people search for, such as usage, time."
-                    placeholder="usage, limits"
+                    hint=${`A few words people search for, such as ${theme ? "dark, calm" : "usage, time"}.`}
+                    placeholder=${theme ? "dark, minimal" : "usage, limits"}
                     value=${form.tags}
                     onInput=${set("tags")}
                     problem=${wrong.tags}

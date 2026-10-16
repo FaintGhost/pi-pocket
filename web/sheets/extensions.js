@@ -279,7 +279,7 @@ export function ExtensionsSheet() {
                     galleryAvailable() &&
                     html`<button class="list-item" onClick=${() => openSheet({ type: "gallery" })}>
                         <span><${Icon} name="search" size=${16} /> Find extensions</span>
-                        <span class="muted small">drop-ins other people wrote</span>
+                        <span class="muted small">extensions and themes other people made</span>
                     </button>`
                 }
                 <a class="list-item" href=${GUIDE} target="_blank" rel="noopener noreferrer">
