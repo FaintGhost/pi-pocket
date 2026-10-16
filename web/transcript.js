@@ -4,7 +4,7 @@ import { Component } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { initials, personColor } from "./avatar.js";
 import { browserAvailable, setBrowserOpen } from "./browser.js";
-import { describeCall } from "./calls.js";
+import { describeCall, describersRevision } from "./calls.js";
 import { DiffBlock } from "./diff.js";
 import { LinkedSessions } from "./linked-sessions.js";
 import { fromServer } from "./seen.js";
@@ -477,8 +477,16 @@ function stepWords(call) {
             };
         case "watch_pr":
             return { label: "watch PR", subject: [args.action, args.pr].filter(Boolean).join(" ") };
-        default:
-            return { label: call.name, subject: describeCall(call).subject };
+
+        default: {
+            const described = describeCall(call);
+
+            // An extension's own words for its tool, or the tool's name.
+            return {
+                label: described.own ? described.label : call.name,
+                subject: described.subject,
+            };
+        }
     }
 }
 
@@ -1672,6 +1680,8 @@ function callDeps(block, results, slots, approvals) {
         results.get(block.id),
         slot === undefined ? "" : JSON.stringify(slot),
         decision === undefined ? "" : JSON.stringify(decision),
+        // How extensions describe their tools' calls (`pocket.toolCall`).
+        describersRevision(),
     ];
 
     if (slot?.taskId !== undefined) {

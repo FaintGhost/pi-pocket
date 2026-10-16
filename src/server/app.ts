@@ -87,7 +87,13 @@ import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./p
 import { measureModelStreams } from "./timing.ts";
 import { Providers } from "./providers.ts";
 import { PushStore } from "./push.ts";
-import { type ExtensionInfo, ExtensionLoader, prepareDropInFolder } from "./reload.ts";
+import {
+    BUILT_IN_MODULES,
+    BUILT_IN_TOOLS,
+    type ExtensionInfo,
+    ExtensionLoader,
+    prepareDropInFolder,
+} from "./reload.ts";
 import { ResendTask } from "./resend.ts";
 import { type Client, reportingOf, Room, ROOM_DOCS, subagentView } from "./room.ts";
 import { Schedules } from "./schedules.ts";
@@ -1663,8 +1669,14 @@ export class PocketApp {
                 home: homedir(),
                 defaultCwd: this.defaultCwd,
                 extensions: this.loader.extensionNames(),
-                // The browser modules this person's tabs load (`extension-ui.js`).
-                ui: this.webs.clients(user),
+                // The browser modules this person's tabs load (`extension-ui.js`), Pi Pocket's own marked.
+                ui: this.webs
+                    .clients(user)
+                    .map((each) =>
+                        BUILT_IN_MODULES.has(each.module) ? { ...each, builtIn: true } : each,
+                    ),
+                // Tools whose calls only Pi Pocket's own browser modules may describe (`pocket.toolCall`).
+                builtInTools: [...BUILT_IN_TOOLS],
                 // Tells the web app this server has people chat and typing indicators.
                 chat: true,
                 // Manual refresh reloads shared model configuration and catalogs; only the owner may start it.
