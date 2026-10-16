@@ -158,18 +158,15 @@ export async function modelTexts(app: App, id: ConversationId): Promise<string[]
     return view.messages.map((message) => JSON.stringify(message.content));
 }
 
-/**
- * A browser tab as the app sees it, recording every event it is sent. Attach it with `app.attach(tab.client)`. Its code
- * is the current one (`protocol` 2), or with `older`, code from before, which names no protocol.
- */
-export function fakeTab(id: ConversationId | undefined, user: User, older = false) {
+/** A browser tab as the app sees it, recording every event it is sent. Attach it with `app.attach(tab.client)`. */
+export function fakeTab(id: ConversationId | undefined, user: User) {
     const events: { event: string; data: Record<string, unknown> }[] = [];
     const client: Client = {
         id: `tab-${crypto.randomUUID()}`,
         connection: `connection-${crypto.randomUUID()}`,
         user,
         conversationId: id,
-        ...(older ? {} : { protocol: 2 }),
+        protocol: 2,
         sentEntries: new Set<number>(),
         orderKey: "",
         send: (event: string, data: unknown) =>

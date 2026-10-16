@@ -41,7 +41,6 @@ stdenv.mkDerivation {
       ../web
       ../test
       ../docs
-      ../site/icon.svg
       ../package.json
       ../package-lock.json
       ../tsconfig.json

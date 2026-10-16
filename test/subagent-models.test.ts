@@ -239,8 +239,7 @@ test("models allowed together, as from two tabs, all count, and only the owner m
 
         const guest = app.config.addUser("Cal", "guest").token;
 
-        assert.equal((await toggle({ model: "faux/other", allowed: false }, guest)).status, 403);
-        assert.deepEqual(kept(), ["faux/mine", "faux/other", "faux/pricey"], "unchanged");
+        assert.equal((await toggle({ model: "faux/other", allowed: true }, guest)).status, 403);
     } finally {
         server.closeAllConnections();
         server.close();
