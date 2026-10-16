@@ -29,8 +29,9 @@ const BROWSER_PACKAGES = new Set(["preact", "preact/hooks", "htm", "marked", "do
 
 /**
  * What a file imports when it runs: `import … from`, `export … from`, `import "…"`, `import("…")`, and `require("…")`,
- * but not `import type`, which is erased; each with whether only `require` names it (CommonJS finds a file without its
- * ending). Read from the text, so it can only be a first check: the index loads the module.
+ * but not `import type`, which is erased; each with whether only `require` names it (CommonJS finds a .js or .json file
+ * without its ending, and a folder's index). Read from the text, so it can only be a first check: the index loads the
+ * module.
  */
 function specifiers(source: string): Map<string, boolean> {
     // Comments first, so a `from "…"` in one is not read as an import.
@@ -83,10 +84,10 @@ export function importProblems(
         for (const [spec, required] of specifiers(file.text)) {
             if (spec.startsWith("./") || spec.startsWith("../")) {
                 const target = posix.normalize(posix.join(posix.dirname(file.name), spec));
-                // What `require` would find too: the name with an ending, or a folder's index.
+                // What `require` would find too, as Node looks: the name with .js or .json, or a folder's index.
                 const found = required
-                    ? ["", ".js", ".cjs", ".json", "/index.js", "/index.json"].some((end) =>
-                          names.has(`${target}${end}`),
+                    ? ["", ".js", ".json", "/index.js", "/index.json"].some((end) =>
+                          names.has(`${target.replace(/\/$/, "")}${end}`),
                       )
                     : names.has(target);
 

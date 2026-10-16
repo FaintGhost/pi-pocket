@@ -932,7 +932,7 @@ export class Gallery {
             }
 
             // What is there now, to diff against when it can be read: a file too large, or a link the update removes,
-            // shows as changed, without its lines.
+            // shows without its lines.
             const old = there
                 ? await readInstalled(this.#dropIns(), name, file).catch(() => undefined)
                 : undefined;
