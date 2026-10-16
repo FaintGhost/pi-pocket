@@ -33,6 +33,11 @@ const DEFAULTS = {
     text: 15,
     /** How much room the spacing takes: "comfortable", "compact", or "tight". Font sizes stay. */
     density: "comfortable",
+    /**
+     * How wide the conversation and the message box are on a wide screen: "comfortable" (the theme's width, which grows
+     * with the pane), "wide" (most of the pane), or "full" (all of it).
+     */
+    width: "comfortable",
     /** The sidebar on wide screens: "open", or "rail" (icons and numbered sessions only). */
     sidebar: "open",
     /** The open sidebar's width, its borders, the rail, and the list's: a 254px list. */
@@ -93,6 +98,19 @@ function savedPrefs() {
 
     return next;
 }
+
+/**
+ * Appearance's Width, past Comfortable: the column's width and the message box's, set inline so they win over a theme's.
+ * Each grows with the pane (a percentage of it) and has a floor of today's column, so phones and narrow windows stay as
+ * they are.
+ */
+const WIDTHS = {
+    wide: {
+        "--transcript-width": "clamp(720px, 92%, 1600px)",
+        "--composer-width": "calc(clamp(720px, 92%, 1600px) + 48px)",
+    },
+    full: { "--transcript-width": "100%", "--composer-width": "100%" },
+};
 
 /** The open sidebar's width as it shows: the rail and its borders, and a list 204–464px wide. */
 const sidebarWidth = (p) => `${Math.min(524, Math.max(264, p.sidebarWidth))}px`;
@@ -459,14 +477,22 @@ export function apply() {
         p.theme === "desktop" && p.wallpaper && p.tiling && desktop?.wallpaper
             ? `url("/api/theme/wallpaper?v=${encodeURIComponent(desktop.stamp)}")`
             : null;
+    // Width other than Comfortable is the person's choice, inline over the theme's; Comfortable leaves it to the theme.
+    const width = WIDTHS[p.width];
     const inline = {
         "--text-size": `${p.text}px`,
         "--sidebar-w": sidebarWidth(p),
         ...(wallpaper === null ? {} : { "--wallpaper": wallpaper }),
+        ...(width ?? {}),
     };
 
     if (wallpaper === null) {
         root.style.removeProperty("--wallpaper");
+    }
+
+    if (!width) {
+        root.style.removeProperty("--transcript-width");
+        root.style.removeProperty("--composer-width");
     }
 
     for (const [name, value] of Object.entries(inline)) {
@@ -481,6 +507,7 @@ export function apply() {
         motion: reducedMotion() ? "reduced" : "full",
         rail: p.sidebar === "rail" ? "on" : "off",
         density: p.density,
+        width: WIDTHS[p.width] ? p.width : "comfortable",
     };
 
     Object.assign(root.dataset, attrs);

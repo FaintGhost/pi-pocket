@@ -37,9 +37,10 @@
     --pop: 0 0 0 1px var(--line), 0 16px 40px -20px var(--sh);
 
     /* One column for the conversation and the message box: about 72 characters a line at the conversation's own text
-     * size, with their padding. */
-    --transcript-width: calc(36 * var(--text-size, 15px) + 56px);
-    --composer-width: calc(36 * var(--text-size, 15px) + 48px);
+     * size, with their padding, and wider on a wide screen (64% of the pane, at most 1080px), a little narrower than
+     * Pocket's. Appearance's Width (Wide, Full) sets these inline, and so wins. */
+    --transcript-width: clamp(calc(36 * var(--text-size, 15px) + 56px), 64%, 1080px);
+    --composer-width: calc(var(--transcript-width) - 8px);
 }
 
 /* The π, quieter: the brand's color, a little toward the ground. */

@@ -155,8 +155,8 @@
     --gap-in: 4px;
     --border: 1px;
     /* The conversation's column, and the message box under it, at their widest; room before the conversation's turns. */
-    --transcript-width: 720px;
-    --composer-width: 768px;
+    --transcript-width: clamp(720px, 72%, 1200px);
+    --composer-width: calc(var(--transcript-width) + 48px);
     --transcript-gutter: 0px;
     /* The timeline in an activity group: where its rule and the centers of its marks are, the marks' size, and the gap
      * from a mark to its words (and to what a step shows under them). */
@@ -1620,6 +1620,33 @@ kbd {
 .md strong {
     color: var(--text);
     font-weight: 600;
+}
+
+/*
+ * A reply's code blocks and tables may run wider than its words, up to the pane's room (--pane-room, which
+ * transcript.js measures) less the column's padding. A code block as wide as its longest line, at least the column's
+ * width, centered on the column; a table as wide as its cells, from the column's start toward the pane's edge. On a
+ * phone, and in a pane no wider than the column, the room is the column, so nothing changes.
+ */
+.transcript {
+    --wide-room: max(
+        100%,
+        calc(var(--pane-room, 100%) - 56px * var(--space-x) - var(--transcript-gutter))
+    );
+}
+
+[data-part~="reply"] :is(.md, .md-part) > .code {
+    position: relative;
+    left: 50%;
+    width: max-content;
+    min-width: 100%;
+    max-width: var(--wide-room);
+    translate: -50%;
+}
+
+[data-part~="reply"] :is(.md, .md-part) > table:not(.dv-table) {
+    width: max-content;
+    max-width: calc(100% + (var(--wide-room) - 100%) / 2);
 }
 
 /* A reply's own tables, in a card; a diff it shows draws its table itself. */

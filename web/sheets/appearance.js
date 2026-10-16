@@ -444,6 +444,27 @@ export function AppearanceSheet() {
                 </div>
             <//>
             <${SettingRow}
+                title="Width"
+                detail="Wide screens: how much of the window the conversation and the message box take. Comfortable grows with the window"
+            >
+                <div class="segmented">
+                    ${[
+                        ["comfortable", "Comfortable"],
+                        ["wide", "Wide"],
+                        ["full", "Full"],
+                    ].map(
+                        ([value, label]) =>
+                            html`<button
+                                class=${(p.width ?? "comfortable") === value ? "on" : ""}
+                                aria-pressed=${(p.width ?? "comfortable") === value}
+                                onClick=${() => setPrefs({ width: value })}
+                            >
+                                ${label}
+                            </button>`,
+                    )}
+                </div>
+            <//>
+            <${SettingRow}
                 title="Density"
                 detail="Less room around messages, rows, and the message box, to fit more on a screen"
             >
