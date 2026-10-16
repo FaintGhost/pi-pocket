@@ -17,6 +17,7 @@ import {
     openSync,
     readdirSync,
     readFileSync,
+    realpathSync,
     renameSync,
     writeFileSync,
 } from "node:fs";
@@ -123,8 +124,8 @@ export interface ThemesOptions {
 
 export class Themes {
     readonly builtInDir: string;
-    /** The owner's themes. */
-    readonly dir: string;
+    /** The owner's themes: a real path once `load` made it, as reading a file checks the path it opened. */
+    dir: string;
     readonly #options: ThemesOptions & { version: string };
     /** The last good version of each theme, by id. */
     readonly #good = new Map<string, Version>();
@@ -167,6 +168,9 @@ export class Themes {
 
         try {
             mkdirSync(this.dir, { recursive: true });
+            // A data folder reached through a link (or named relatively) would make every file read differ from the
+            // path `/proc` gives for it, and no theme of the owner's would load.
+            this.dir = realpathSync(this.dir);
         } catch (error) {
             this.#options.log(`No themes folder at ${this.dir}: ${describe(error)}`);
         }

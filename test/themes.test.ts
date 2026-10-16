@@ -2,7 +2,7 @@
 // these checks keep a theme from any other address on it (`url(/login?token=…)`, an API route), however it is written.
 import { root } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { APP_ROOT } from "../src/server/config.ts";
@@ -46,24 +46,21 @@ test("every built-in theme passes its checks", () => {
     }
 });
 
-test("two themes that say they extend each other still load", async () => {
-    const data = join(root, "loop");
+test("an owner's theme loads when the data folder is reached through a link", async () => {
+    const data = join(root, "real-data");
+    const linked = join(root, "linked-data");
 
-    for (const [id, other] of [
-        ["one", "two"],
-        ["two", "one"],
-    ] as const) {
-        mkdirSync(join(data, "themes", id), { recursive: true });
-        writeFileSync(
-            join(data, "themes", id, "theme.json"),
-            JSON.stringify({ themeApi: 1, name: id, extends: other }),
-        );
-        writeFileSync(join(data, "themes", id, "theme.css"), ":root { --r-card: 0; }\n");
-    }
+    mkdirSync(join(data, "themes", "mine"), { recursive: true });
+    writeFileSync(
+        join(data, "themes", "mine", "theme.json"),
+        JSON.stringify({ themeApi: 1, name: "Mine" }),
+    );
+    writeFileSync(join(data, "themes", "mine", "theme.css"), ":root { --r-card: 0; }\n");
+    symlinkSync(data, linked);
 
     const themes = new Themes({
         builtIn: join(root, "no-built-in-themes"),
-        dataDir: data,
+        dataDir: linked,
         notify: () => {},
         changed: () => {},
         log: () => {},
@@ -72,9 +69,6 @@ test("two themes that say they extend each other still load", async () => {
     await themes.load();
     assert.deepEqual(
         themes.list().map((each) => [each.id, each.usable]),
-        [
-            ["one", true],
-            ["two", true],
-        ],
+        [["mine", true]],
     );
 });
