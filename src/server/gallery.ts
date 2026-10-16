@@ -899,20 +899,23 @@ export class Gallery {
         for (const file of names) {
             const installed = before.files.find((each) => each.name === file);
             const next = files.find((each) => each.name === file)?.bytes;
-            // A file there that the version installed did not list: the owner's own, which the update replaces. It is
-            // read to diff against when it can be (a file too large shows no diff, and still counts); a link there, or
-            // anything that is no file, refuses the preview, as it would refuse the update.
+
+            // Where the update writes a file, the check it makes there: a link, or anything that is no folder on the
+            // way or no file at the place, refuses the preview as it would refuse the update.
+            if (next !== undefined) {
+                await plain(this.#dropIns(), name, file);
+            }
+
+            // A file there that the version installed did not list: the owner's own, which the update replaces.
             const unlisted =
                 installed === undefined &&
                 (await removable(this.#dropIns(), name, file)) !== undefined;
+            // What is there now, to diff against when it can be read: a file too large, or a link the update removes,
+            // shows no diff.
             const old =
-                installed !== undefined
-                    ? await readInstalled(this.#dropIns(), name, file)
-                    : unlisted
-                      ? await plain(this.#dropIns(), name, file).then(() =>
-                            readInstalled(this.#dropIns(), name, file).catch(() => undefined),
-                        )
-                      : undefined;
+                installed !== undefined || unlisted
+                    ? await readInstalled(this.#dropIns(), name, file).catch(() => undefined)
+                    : undefined;
             // Not the owner's: an installed file under another case of its name (where the file system ignores case),
             // or one already as the new version has it.
             const ours =
@@ -929,10 +932,10 @@ export class Gallery {
             }
 
             const change =
-                old === undefined
-                    ? "added"
-                    : next === undefined
-                      ? "removed"
+                next === undefined
+                    ? "removed"
+                    : old === undefined
+                      ? "added"
                       : sha256(old) === sha256(next)
                         ? "same"
                         : "changed";
