@@ -16,8 +16,8 @@ In `src/server/reload.ts`:
 
 1. Give the module its place in `ORDER`, and its title in `TITLES`.
 2. If it must start off, add it to `OFF_BY_DEFAULT`.
-3. Add the names of its tools to `BUILT_IN_TOOLS`, so that no drop-in takes them. `test/dropins.test.ts` fails until you do.
+3. Add the names of its tools to `BUILT_IN_TOOLS`, so that no drop-in takes them. No test checks this list: keep it in step by hand.
 
 Name the extension `pocket-…`.
 
-`reload.ts` is not an extension, so these changes take effect at the next restart. `test/app.test.ts` checks the order.
+`reload.ts` is not an extension, so these changes take effect at the next restart.

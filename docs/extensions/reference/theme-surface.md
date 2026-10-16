@@ -236,7 +236,7 @@ What is inside a part (its children without a part of their own) may use its pse
 
 ## Layers
 
-`@layer pocket, palette, theme;`: the app's CSS and extensions' stylesheets, then the colors, then the theme. Later layers win over earlier ones, whatever the selectors' specificity, and in every condition: a theme's rule for a property replaces the app's on phones, on touch screens, and on hover too. `!important` reverses that: the app's `!important` rules win over a theme's. There are three: reduced motion, `--ligatures` (so each `font` shorthand cannot reset it), and fields' 16px on touch screens (so iOS does not zoom into them). Inline values win over all of them: the text size and the widths people drag, unless a theme marks a size `!important`, which a theme must not do.
+`@layer pocket, palette, theme;`: the app's CSS and extensions' stylesheets, then the colors, then the theme. Later layers win over earlier ones, whatever the selectors' specificity, and in every condition: a theme's rule for a property replaces the app's on phones, on touch screens, and on hover too. `!important` reverses that: the app's `!important` rules win over a theme's. The ones a theme is likely to meet: reduced motion, `--ligatures` (so each `font` shorthand cannot reset it), and fields' 16px on touch screens (so iOS does not zoom into them); a few more keep app states whole (the resize cursor while a width is dragged, a page leaving on back, the browser's forward button on a phone). Inline values win over all of them: the text size and the widths people drag, unless a theme marks a size `!important`, which a theme must not do.
 
 ## Changes
 

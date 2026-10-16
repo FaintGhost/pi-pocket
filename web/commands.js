@@ -443,7 +443,7 @@ const COMMANDS = [
 ];
 
 /**
- * `/theme meridian` (a theme folder), `/theme gruvbox`, `/theme rose`, `/theme desktop` (colors); without a name, the
+ * `/theme lantern` (a theme folder), `/theme gruvbox`, `/theme rose`, `/theme desktop` (colors); without a name, the
  * Appearance sheet. A theme's name wins over colors' of the same name.
  */
 function setTheme(arg) {
