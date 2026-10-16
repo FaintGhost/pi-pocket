@@ -1,8 +1,6 @@
 # The security model for extension authors
 
-> **Draft for the owner's review.** Items marked **OWNER DECISION** are proposals. They are not rules yet.
-
-This page collects, for authors, what [SECURITY.md](../../SECURITY.md) and [extensions.md](../extensions.md) say about extensions. It adds rules for authors. Each section names its sources. When this page and a source do not agree, the source is correct. Tell us in an issue.
+This page collects, for authors, what [SECURITY.md](../../../SECURITY.md) and [extensions.md](../../extensions.md) say about extensions. It adds rules for authors. Each section names its sources. When this page and a source do not agree, the source is correct. Tell us in an issue.
 
 ## Who is who
 
@@ -157,10 +155,8 @@ Rules:
 
 ## Report a problem
 
-- **A problem in Pi Pocket:** read [SECURITY.md](../../SECURITY.md). Report it in private. Do not open a public issue.
-- **A problem in a gallery extension:** see [gallery-review.md](gallery-review.md#revoke-withdraw-and-remove).
-
-> **OWNER DECISION D11:** Where people report a security problem in a gallery extension. **Proposed:** turn on private vulnerability reporting in [TannerMidd/pi-pocket-extensions](https://github.com/TannerMidd/pi-pocket-extensions), and tell people to report there, and to its author. Until then, the Pi Pocket repository's private report is the place.
+- **A problem in Pi Pocket:** read [SECURITY.md](../../../SECURITY.md). Report it in private. Do not open a public issue.
+- **A problem in a gallery extension:** report it in private in the index, [TannerMidd/pi-pocket-extensions](https://github.com/TannerMidd/pi-pocket-extensions): **Security → Report a vulnerability**. Tell its author too. Do not open a public issue. The maintainers then act as [gallery-review.md](gallery-review.md#revoke-withdraw-and-remove) says.
 
 ## Before you share a module
 

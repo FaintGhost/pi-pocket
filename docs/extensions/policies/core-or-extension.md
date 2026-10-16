@@ -1,8 +1,6 @@
 # Core or extension
 
-> **Draft for the owner's review.** Items marked **OWNER DECISION** are proposals. They are not rules yet.
-
-This page tells where a change goes: into Pi Pocket's core, or into an extension. Read it before you write code, and before you open a pull request. [extensions.md](../extensions.md) tells how to write an extension.
+This page tells where a change goes: into Pi Pocket's core, or into an extension. Read it before you write code, and before you open a pull request. [extensions.md](../../extensions.md) tells how to write an extension.
 
 ## Terms
 
@@ -49,10 +47,8 @@ Ask these questions in this order. The first "yes" gives the answer.
   _Reason:_ people can share it with no change to Pi Pocket.
 - **C13. Make a built-in extension only when Pi Pocket must ship it.** It is part of the default experience, or it is the interface to a part of core (as the gallery is).\
   _Reason:_ the maintainers keep each built-in extension for all people.
-- **C14. A new built-in extension uses only `host` and `web` at run time.** Type imports from core are permitted. Agent Teams obeys this rule.\
+- **C14. A new built-in extension uses only `host` and `web` at run time.** Type imports from core are permitted. Agent Teams obeys this rule. The built-in extensions from before 0.14 do not have to change.\
   _Reason:_ the module then shows that the public API is sufficient, and it can move to the gallery later.
-
-> **OWNER DECISION D1:** Is C14 a rule? **Proposed:** yes, for new built-in extensions. The built-in extensions from before 0.14 do not have to change.
 
 ## Examples from Pi Pocket
 
@@ -65,7 +61,7 @@ Ask these questions in this order. The first "yes" gives the answer.
 ### Commands
 
 - **Core: `web.command`** (pull request #36). Core decides who may run a command. It makes a durable task for each run, so a retry runs the handler once. It shows the run in **Menu → Running now**, and stops it there. It keeps limits, and it writes cards that Pi does not read.
-- **Extension: each command.** For example, `/clock-zone` in [examples/clock.ts](../examples/clock.ts).
+- **Extension: each command.** For example, `/clock-zone` in [examples/clock.ts](../../examples/clock.ts).
 - **Why:** the mechanism decides permissions and stored data (C1, C2). Each command is a workflow (C6).
 
 ### The gallery
@@ -116,10 +112,8 @@ A maintainer answers with one of these:
 
 ### Rules for extension points
 
-- **C15. Each new extension point has a user when it ships:** a built-in extension, a gallery extension, or a tested example in [docs/examples/](../examples/).\
+- **C15. Each new extension point has a user when it ships:** a built-in extension, a gallery extension, or a tested example in [docs/examples/](../../examples/). `host.linkedSessions` and `pocket.toolCall` shipped with Agent Teams, and `web.command` with the clock example.\
   _Reason:_ an interface with no user is a guess, and a wrong guess becomes a public API that Pi Pocket must keep.
-
-> **OWNER DECISION D2:** Is C15 a rule? **Proposed:** yes. `host.linkedSessions` (Agent Teams), `web.command` (the clock example), and `pocket.toolCall` (Agent Teams) all shipped with a user.
 
 ## Pull requests
 

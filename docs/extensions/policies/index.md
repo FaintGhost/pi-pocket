@@ -1,7 +1,5 @@
 # Policies for extension authors and contributors
 
-> **Draft for the owner's review.** Items marked **OWNER DECISION** are proposals. They are not rules yet.
-
 The guides tell how to do a thing. These policies tell what is permitted, and what Pi Pocket promises. They are for people who write extensions, share them in the gallery, review them, or change Pi Pocket itself.
 
 ## How to read them
@@ -9,7 +7,7 @@ The guides tell how to do a thing. These policies tell what is permitted, and wh
 - **Must** and **do not** are rules. **Should** is a strong recommendation. **Can** and **may** give a choice.
 - Each rule has an ID: C for [core or extension](core-or-extension.md), A for [the API](api-stability.md), S for [security](security-model.md), and G for [the gallery](gallery-review.md). Use the ID in issues and reviews, for example "G14".
 - Each rule has a reason. When a case is not in the rules, use the reasons to decide.
-- These pages collect rules from [extensions.md](../extensions.md), [SECURITY.md](../../SECURITY.md), and the gallery's index, and add their own. When they do not agree, tell us in an issue. Until it is fixed, obey the stricter text.
+- These pages collect rules from [extensions.md](../../extensions.md), [SECURITY.md](../../../SECURITY.md), and the gallery's index, and add their own. When they do not agree, tell us in an issue. Until it is fixed, obey the stricter text.
 
 ## The policies
 

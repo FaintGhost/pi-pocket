@@ -4,7 +4,7 @@ An extension gives Pi something new: a **tool** it can call, a **section** of it
 
 Extensions are Pi Durable's. Its README covers the parts in depth: `node_modules/@earendil-works/pi-durable/README.md` in Pi Pocket's folder (Extensions, Tools, System Prompt, Hooks, Your Own State). This page is what Pi Pocket adds, and how to write one that holds up.
 
-The rules are in [the policies](policies/index.md): what goes in core and what in an extension, which interfaces are public and how they change, the security model, and the gallery's review.
+The rules are in [the policies](extensions/policies/index.md): what goes in core and what in an extension, which interfaces are public and how they change, the security model, and the gallery's review.
 
 ## Drop-in or built-in
 
@@ -131,7 +131,7 @@ What the default export receives first. Extensions reach the app only through it
 | `onLimitsChanged(listener)`      | Call `listener` when the owner changes a spend limit; returns how to stop                                                                                                                |
 | `approvals`, `guard`             | Calls waiting for a person to allow them; Lancet Guard                                                                                                                                   |
 | `schedules`, `goals`, `browsers` | Scheduled messages, Done when, and the built-in browser, as their extensions use them                                                                                                    |
-| `linkedSessions`                 | Sessions that a session starts and messages, as Agent Teams does: `start`, `send`, `list` ([below](#starting-and-messaging-sessions))                                                    |
+| `linkedSessions`                 | **Experimental.** Sessions that a session starts and messages, as Agent Teams does: `start`, `send`, `list` ([below](#starting-and-messaging-sessions))                                  |
 | `memory`                         | Lessons Pi keeps across sessions: their projects, the ones in force, saving and changing them                                                                                            |
 | `watches`                        | Sessions' PR watches: starting, stopping, and reading one, and the task that looks                                                                                                       |
 | `repoWatches`                    | Repository watches' task, which the triggers extension installs                                                                                                                          |
@@ -144,6 +144,8 @@ Modules reload into the running server, but the server's own part (the host amon
 To type it, import the type by the absolute path of `src/server/host.ts`: `import type { PocketHost } from "/path/to/pi-pocket/src/server/host.ts";`. A type import is gone when the module runs, so the path only matters to the type checker.
 
 ## Starting and messaging sessions
+
+**Experimental** in 0.14: it can change in a minor release ([api-stability.md](extensions/policies/api-stability.md#experimental)).
 
 `host.linkedSessions` lets a tool start a session from the one it runs in, and send messages between such sessions, as Agent Teams (`extensions/agent-teams.ts`) does. Its shapes are `LinkedSessionsApi` and `LinkedSession` in `host.ts`. A linked session is an ordinary session: it shows in the list under the one that started it. It works in the source's folder, with no worktree of its own, and starts with a copy of the source's agent settings but not its history, plan mode, or budget: the source's budget covers it (below). The link (`linkedFrom` in its session entry) gives no access and owns nothing.
 
@@ -167,6 +169,7 @@ Pass a `key` that stays the same when the call runs again, `${api.taskId}:${api.
 - **Nothing twice.** A restart can run a hook or a safe tool again. Anything that must happen once (a message sent, money spent, a file appended to) goes behind `api.memo` or a key that makes a repeat find the first.
 - **No surprise state.** Keep state in Pi Durable documents or memos, not in variables: a reload starts the module over, and a restart starts the process over.
 - **Your documents are stored data.** Name a document kind after your module (`x.<module>.<name>`, as `x.word-count.totals`), so no other module's ever meets it, and your tasks' names and entries' kinds too. Once anyone has run it, never rename a kind or a name, or change what its fields mean: add new ones beside them.
+- **Your browser data is named too.** A browser module that keeps data in `localStorage` or `sessionStorage` uses keys that start with `x.<module>.` (`x.word-count.open`). Pi Pocket's own keys start with `pocket.`, and it never uses `x.` keys.
 - **Do not block.** Tools run in the server process: use async file and process calls, never `execSync` or a busy loop. A slow tool holds up only its call; a blocked event loop holds up everyone.
 - **Do not get around a block.** A guard or a person said no for a reason.
 - **Secrets stay out.** Text in a section, a tool's description, or a result goes to the model provider.
@@ -358,6 +361,8 @@ The new version starts before the old one's cleanups run, so that an edit that f
 ### Versions
 
 `web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet. `web.command` is newer than the rest of `web`: a module that should also load on Pi Pocket before 0.14.0 checks `typeof web.command === "function"` first.
+
+A member that is going is marked **Deprecated** on this page, with what to use instead and when it goes. A module that uses one shows a warning on its row in Menu → Extensions, for the owner: its server part's uses, and its browser module's uses in that tab. [api-stability.md](extensions/policies/api-stability.md) has the rules: what is public, what is a breaking change, and how long a deprecated member stays. Nothing is deprecated now.
 
 ## Testing
 

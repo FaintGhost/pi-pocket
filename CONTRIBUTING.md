@@ -4,9 +4,9 @@ Thank you for your help. This page tells how to send a change.
 
 ## Before you start
 
-- Read the [policies](docs/policies/index.md). They tell what belongs in core and what belongs in an extension, which interfaces are public, and how they change.
+- Read the [policies](docs/extensions/policies/index.md). They tell what belongs in core and what belongs in an extension, which interfaces are public, and how they change.
 - For a large change, open an issue first. Tell what you want to change, and why.
-- If an extension cannot do what you need, ask for an extension point ([how](docs/policies/core-or-extension.md#ask-for-a-new-extension-point)).
+- If an extension cannot do what you need, ask for an extension point ([how](docs/extensions/policies/core-or-extension.md#ask-for-a-new-extension-point)).
 - To report a security problem, do not open an issue. Read [SECURITY.md](SECURITY.md).
 
 ## Make the change
