@@ -41,9 +41,10 @@ export function defaultLabel(chosen, models) {
 
 /**
  * The model picker: a menu that opens up from the message box's model chip, with the current model first and checked,
- * and how hard Pi thinks below, then what new sessions start with. Arrows and Enter pick; a search box shows when there
- * are many models, or when `/model son` opened it already searching. Opened for the default (`forDefault`, from the
- * menu), it picks the model and thinking level new sessions start with instead, and stays open for both.
+ * and how hard Pi thinks below, then, for the owner, Make default. Arrows and Enter pick, and Tab switches between the
+ * scoped models (Pi's `enabledModels`) and all of them; a search box shows when there are many models, or when
+ * `/model son` opened it already searching. Opened for the default (`forDefault`, from the menu), it picks the model
+ * and thinking level new sessions start with instead, and stays open for both.
  */
 export function ModelPicker() {
     const { models, server, me } = store.state;
@@ -362,23 +363,24 @@ export function ModelPicker() {
                                     </span>`
                           }
                       </div>`
-                      : html`<div class="pop-menu-foot pop-menu-default">
-                          ${
-                              owner &&
-                              models.some((model) => isCurrent(model)) &&
-                              (sessionIsDefault
-                                  ? html`<span class="pop-menu-default-mark">
-                                        <${Icon} name="check" size=${13} /> Default
-                                    </span>`
-                                  : html`<button
-                                        class="pop-menu-link"
-                                        title="New sessions start with this model and thinking level"
-                                        onClick=${() => setDefault(agent.model, agent.thinkingLevel ?? "off")}
-                                    >
-                                        Make default
-                                    </button>`)
-                          }
-                      </div>`
+                      : // Only the owner makes a default: no one else gets an empty footer.
+                        owner &&
+                        models.some((model) => isCurrent(model)) &&
+                        html`<div class="pop-menu-foot pop-menu-default">
+                            ${
+                                sessionIsDefault
+                                    ? html`<span class="pop-menu-default-mark">
+                                          <${Icon} name="check" size=${13} /> Default
+                                      </span>`
+                                    : html`<button
+                                          class="pop-menu-link"
+                                          title="New sessions start with this model and thinking level"
+                                          onClick=${() => setDefault(agent.model, agent.thinkingLevel ?? "off")}
+                                      >
+                                          Make default
+                                      </button>`
+                            }
+                        </div>`
             }
         </section>
     </div>`;
