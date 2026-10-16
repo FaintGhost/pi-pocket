@@ -105,8 +105,8 @@ function piEditPath(cwd: string, path: string, canonicalize: boolean): string {
 }
 
 /**
- * The files Pi wrote or edited, by absolute path, with the newest of its replies that did: its own calls, and the
- * ones its codemode scripts made, which their results list.
+ * The files Pi wrote or edited, by absolute path, with the newest of its replies that did: its own calls that did not
+ * fail, and the ones its codemode scripts made, which their results list.
  */
 function piEdits(
     entries: readonly ClientEntry[],
@@ -116,6 +116,12 @@ function piEdits(
     const edits = new Map<string, number>();
     /** The reply that made each tool call, by call id. */
     const callers = new Map<string, number>();
+    /** Calls whose results are errors: an edit that could not find its text changed nothing. */
+    const failed = new Set(
+        entries.flatMap((entry) =>
+            entry.kind === "toolResult" && entry.isError ? [entry.callId] : [],
+        ),
+    );
 
     for (const entry of entries) {
         if (entry.kind === "assistant") {
@@ -127,7 +133,12 @@ function piEdits(
                 callers.set(block.id, entry.id);
                 const path = block.args.path;
 
-                if (EDITORS.has(block.name) && typeof path === "string" && path !== "") {
+                if (
+                    EDITORS.has(block.name) &&
+                    !failed.has(block.id) &&
+                    typeof path === "string" &&
+                    path !== ""
+                ) {
                     edits.set(piEditPath(cwd, path, canonicalize), entry.id);
                 }
             }
