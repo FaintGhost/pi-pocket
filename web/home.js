@@ -110,7 +110,10 @@ export function Splash() {
                     </dl>`,
                 )}
                 <div class="fetch-colors" data-part="home-colors" style=${`--i:${line++}`}>
-                    ${colors.map((name) => html`<span style=${`background:var(${name})`}></span>`)}
+                    ${colors.map(
+                        (name) =>
+                            html`<span data-part="home-color" style=${`background:var(${name})`}></span>`,
+                    )}
                 </div>
             </div>
         </div>

@@ -6,9 +6,10 @@ import { extname } from "node:path";
 import { INVISIBLE_CLASS } from "../fence.ts";
 import { parseColors } from "../omarchy.ts";
 import { atLeast } from "../versions.ts";
+import { THEME_API } from "../../../web/theme-surface.js";
 
-/** The version of the theme surface (tokens, parts, states) this Pi Pocket offers: `web/theme-surface.js`. */
-export const THEME_API = 1;
+/** The version of the theme surface (tokens, parts, states) this Pi Pocket offers, from `web/theme-surface.js`. */
+export { THEME_API };
 
 /** A theme's id: its folder's name. */
 export const THEME_ID = /^[a-z0-9][a-z0-9-]{1,47}$/;
@@ -28,8 +29,6 @@ export const THEME_LIMITS = {
     depth: 4,
     /** Entries looked at in its folder, at most: past this, it is too big to read. */
     walk: 2000,
-    /** How many themes deep `extends` goes. */
-    extendsDepth: 3,
 } as const;
 
 /** The fonts and images a theme may load, by their ending. */
@@ -57,7 +56,6 @@ export interface Manifest {
     author?: string;
     version?: string;
     minPocket?: string;
-    extends?: string;
 }
 
 const UNSAFE = new RegExp(`[\\p{Zl}\\p{Zp}${INVISIBLE_CLASS}]`, "u");
@@ -123,14 +121,6 @@ export function parseManifest(text: string, pocketVersion: string): Manifest {
 
     if (manifest.minPocket !== undefined && !atLeast(pocketVersion, manifest.minPocket)) {
         throw new ThemeProblem(`it needs Pi Pocket ${manifest.minPocket} or newer`);
-    }
-
-    if (fields.extends !== undefined) {
-        if (typeof fields.extends !== "string" || !THEME_ID.test(fields.extends)) {
-            throw new ThemeProblem("theme.json's extends is not a theme's id");
-        }
-
-        manifest.extends = fields.extends;
     }
 
     return manifest;

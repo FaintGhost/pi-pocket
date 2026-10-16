@@ -28,6 +28,8 @@ import { opened } from "./http/extension-routes.ts";
 import { desktopTheme } from "./omarchy.ts";
 import { watchTree } from "./reload.ts";
 import { cssReferences, themeFile } from "./themes/css.ts";
+import { reservedThemeIds } from "./themes/reserved.ts";
+import { pocketVersion } from "./versions.ts";
 import {
     assetType,
     colorsToml,
@@ -53,7 +55,7 @@ export interface ThemeInfo {
     version?: string;
     /** In `web/themes/`, with the app: it cannot be changed or removed here. */
     builtIn: boolean;
-    /** The stylesheets to load, in order (a theme it extends first); none for the base theme and for colors alone. */
+    /** The stylesheets to load; none for the base theme and for colors alone. */
     css: string[];
     /** Its palette, by `colors.toml`'s keys, when it has one. */
     colors?: Record<string, string>;
@@ -63,7 +65,6 @@ export interface ThemeInfo {
     fonts: string[];
     /** Changes when any of its files do. */
     rev?: string;
-    extends?: string;
     /** Why it is not as its files are: it keeps its last good version, or, with none, it is not offered. */
     problem?: string;
     /** Whether it can be chosen: it has a good version. */
@@ -92,21 +93,6 @@ interface Version {
     /** Its fonts and images, by their path in the folder. */
     assets: Map<string, FileStat & { type: string }>;
     rev: string;
-}
-
-/** Pi Pocket's version, from its package. */
-function pocketVersion(): string {
-    try {
-        return (
-            (
-                JSON.parse(readFileSync(join(APP_ROOT, "package.json"), "utf8")) as {
-                    version?: string;
-                }
-            ).version ?? "0.0.0"
-        );
-    } catch {
-        return "0.0.0";
-    }
 }
 
 /** A theme's file's address: its path in the folder, each part escaped, under the theme's id and version. */
@@ -148,6 +134,9 @@ export class Themes {
     #found: Listed[] = [];
     /** The palettes that come with the app (`web/themes.js`), by id: their ids are taken. */
     #palettes: Record<string, { name: string; colors: Record<string, string> }> = {};
+    /** The ids the app keeps (`reservedThemeIds`): no folder of the owner's may take one. */
+    #reserved = new Set<string>(["pocket", "desktop"]);
+    #failure: string | undefined;
     /** Folders not read for their names, with why: told once. */
     #misnamed = new Map<string, string>();
     #stops: (() => void)[] = [];
@@ -174,13 +163,35 @@ export class Themes {
             this.#options.log(`The app's palettes could not be read: ${describe(error)}`);
         }
 
+        this.#reserved = await reservedThemeIds();
+
         try {
             mkdirSync(this.dir, { recursive: true });
         } catch (error) {
             this.#options.log(`No themes folder at ${this.dir}: ${describe(error)}`);
         }
 
-        this.#scan(false);
+        // A theme folder must never keep the server from starting: past a failure, the built-in themes alone.
+        try {
+            this.#scan(false);
+        } catch (error) {
+            this.#failure = `The owner's themes could not be read, so only the built-in ones are offered until the server restarts: ${describe(error)}`;
+            this.#options.log(this.#failure);
+            this.#good.clear();
+            this.#problems.clear();
+            this.#found = [];
+
+            try {
+                this.#scan(false, false);
+            } catch (again) {
+                this.#options.log(`The built-in themes could not be read: ${describe(again)}`);
+            }
+        }
+    }
+
+    /** Why the owner's themes were not read at the start, if they were not: the owner is told when they connect. */
+    get failure(): string | undefined {
+        return this.#failure;
     }
 
     /** Read the themes again shortly after their files change. */
@@ -211,11 +222,19 @@ export class Themes {
 
     /** Read every theme again, and tell the tabs and the owner what changed. */
     rescan(): void {
-        this.#scan(true);
+        // From a timer: what it throws would end the process.
+        try {
+            this.#scan(true);
+        } catch (error) {
+            const message = `Themes could not be read again; the ones in use stay as they were: ${describe(error)}`;
+
+            this.#options.log(message);
+            this.#options.notify(message);
+        }
     }
 
     /** Every theme, as the web app lists it: built-in ones first, then the owner's by name. */
-    list(): ThemeInfo[] {
+    list(owner = true): ThemeInfo[] {
         return this.#found.map(({ id, builtIn, name }) => {
             const good = this.#good.get(id);
             const problem = this.#problems.get(id);
@@ -235,8 +254,8 @@ export class Themes {
                 ...(good?.colorsLight === undefined ? {} : { colorsLight: good.colorsLight }),
                 fonts: good === undefined || id === BASE_THEME ? [] : this.#fonts(good),
                 ...(good === undefined ? {} : { rev: good.rev }),
-                ...(manifest?.extends === undefined ? {} : { extends: manifest.extends }),
-                ...(problem === undefined ? {} : { problem }),
+                // What is wrong can name the server's folders: the owner's to read, as extensions' load errors are.
+                ...(problem === undefined || !owner ? {} : { problem }),
                 usable: good !== undefined,
             };
         });
@@ -262,6 +281,29 @@ export class Themes {
         const file = css === undefined ? good.assets.get(key) : { css };
 
         return file === undefined ? undefined : { file, current: rev === good.rev };
+    }
+
+    /**
+     * Whether colors are here to use: the desktop's (on a machine with Omarchy), a palette that comes with the app, or a
+     * theme folder's that can be used (`<id>`, or a half of a pair: `<id>@dark`, `<id>@light`).
+     */
+    async hasColors(id: string): Promise<boolean> {
+        if (id === "desktop") {
+            return (await desktopTheme()) !== null;
+        }
+
+        if (this.#palettes[id] !== undefined) {
+            return true;
+        }
+
+        const [base, half] = id.split("@");
+        const good = base === undefined ? undefined : this.#good.get(base);
+
+        return half === "light"
+            ? good?.colorsLight !== undefined
+            : half === "dark"
+              ? good?.colorsLight !== undefined && good.colors !== undefined
+              : good?.colors !== undefined;
     }
 
     /** Whether a theme is the owner's, and so may be changed or removed here. */
@@ -396,7 +438,7 @@ export class Themes {
 
     /** Whether an id is a theme's, a built-in palette's, or a word the app keeps. */
     #taken(id: string): boolean {
-        if (id === "desktop" || id === BASE_THEME || this.#palettes[id] !== undefined) {
+        if (this.#reserved.has(id)) {
             return true;
         }
 
@@ -413,35 +455,27 @@ export class Themes {
         }
     }
 
-    /** The fonts a theme's stylesheets load, the ones of the themes it extends too. */
+    /** The fonts a theme's stylesheets load. */
     #fonts(version: Version): string[] {
-        const own = [...version.assets]
+        return [...version.assets]
             .filter(([, asset]) => asset.type === "font/woff2")
             .map(([path]) => themeAddress(version.id, version.rev, path));
-        const base = version.manifest?.extends;
-        const parent = base === undefined || base === BASE_THEME ? undefined : this.#good.get(base);
-
-        return parent === undefined ? own : [...this.#fonts(parent), ...own];
     }
 
-    /** The stylesheets of a theme, the ones of the themes it extends first. */
+    /** The stylesheet of a theme: its `theme.css`, which imports the rest; none for colors alone. */
     #chain(version: Version): string[] {
-        const own = version.css.has("theme.css")
+        return version.css.has("theme.css")
             ? [`/themes/${version.id}/${version.rev}/theme.css`]
             : [];
-        const base = version.manifest?.extends;
-        const parent = base === undefined || base === BASE_THEME ? undefined : this.#good.get(base);
-
-        return parent === undefined ? own : [...this.#chain(parent), ...own];
     }
 
     /** Read every theme folder; with `tell`, tell the owner about new problems and the tabs about a changed list. */
-    #scan(tell: boolean): void {
+    #scan(tell: boolean, theirs = true): void {
         const found: { id: string; builtIn: boolean; dir: string }[] = [];
 
         for (const [root, builtIn] of [
             [this.builtInDir, true],
-            [this.dir, false],
+            ...(theirs ? [[this.dir, false] as const] : []),
         ] as const) {
             let entries: Dirent[];
 
@@ -472,10 +506,7 @@ export class Themes {
                 continue;
             }
 
-            if (
-                seen.has(id) ||
-                (!builtIn && (this.#palettes[id] !== undefined || id === "desktop"))
-            ) {
+            if (seen.has(id) || (!builtIn && this.#reserved.has(id))) {
                 misnamed.set(
                     dir,
                     "its folder has the name of a theme or colors that come with Pi Pocket",
@@ -706,10 +737,6 @@ export function readTheme(
 
     if (entry !== undefined && manifest === undefined) {
         throw new ThemeProblem("it has a theme.css but no theme.json");
-    }
-
-    if (manifest?.extends === id) {
-        throw new ThemeProblem("it extends itself");
     }
 
     const css = new Map<string, string>();

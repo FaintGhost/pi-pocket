@@ -354,7 +354,7 @@ export function createApi(options: HttpOptions, auth: Auth) {
         // Theme folders (`themes.ts`): everyone signed in lists them, as everyone chooses one for their own browsers;
         // only the owner adds, edits, and removes them.
         if (first === "themes" && second === undefined && method === "GET") {
-            return json(response, 200, { themes: app.themes.list() });
+            return json(response, 200, { themes: app.themes.list(user.role === "owner") });
         }
 
         if (first === "themes" && second === "default" && method === "PUT") {

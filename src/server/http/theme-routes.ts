@@ -37,11 +37,24 @@ export function themeFile(
     const served = id === undefined ? undefined : app.themes.file(id, rev, path);
 
     if (served === undefined) {
+        // A theme a browser kept, that is not here now (removed, or broken since a restart): its stylesheet is empty, so
+        // the page loads the app's own look with no error in its console.
+        if (path.at(-1)?.toLowerCase().endsWith(".css")) {
+            send(response, 200, "", "text/css; charset=utf-8", {
+                "cache-control": "private, no-cache",
+                "x-content-type-options": "nosniff",
+            });
+
+            return;
+        }
+
         throw new HttpError(404, "Not found");
     }
 
     const found = served.file;
     const headers = {
+        // Only as the type it says: a stylesheet or a font is never read as anything else.
+        "x-content-type-options": "nosniff",
         // The version in the address is the files' hash: under the current one, nothing else will ever be served, so the
         // browser keeps it. An older address serves what is there now, and asks each time.
         "cache-control": served.current

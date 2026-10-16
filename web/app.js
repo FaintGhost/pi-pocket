@@ -523,9 +523,10 @@ function focusWindow(event) {
         return;
     }
 
+    // By the window's part name, as themes know it: `sidebar`, `peeks`, `people-panel`, `browser-panel`, `files-panel`.
     const name =
-        ["sidebar", "browser", "files-tile", "people", "peeks"].find((each) =>
-            win.classList.contains(each),
+        ["sidebar", "peeks", "people-panel", "browser-panel", "files-panel"].find((each) =>
+            win.matches(`[data-part~="${each}"]`),
         ) ?? "pane";
 
     if (document.documentElement.dataset.focus !== name) {

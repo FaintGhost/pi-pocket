@@ -367,6 +367,10 @@ const IMAGE_FUNCTIONS = new Set([
     "cross-fade",
     "-webkit-cross-fade",
 ]);
+/** Functions whose strings are files to load, at any depth. */
+const loads = (fn: string) => fn === "url" || fn === "src" || IMAGE_FUNCTIONS.has(fn);
+/** Functions that put in a value from elsewhere (a variable, an attribute, the browser). */
+const SUBSTITUTE = new Set(["var", "attr", "env"]);
 /** Old ways for CSS to run code (Firefox's XBL, Internet Explorer's behaviors and expressions): never in a theme. */
 const CODE = new Set(["-moz-binding", "behavior"]);
 
@@ -415,13 +419,13 @@ export function cssReferences(source: string): CssReferences {
                 break;
 
             case "string": {
-                const inner = open.at(-1)?.toLowerCase();
+                const inner = open.at(-1);
 
+                // A string anywhere in a function that loads is a load (`image-set(fn("x") 1x)` too), except a type's
+                // or a format's, which names a kind of file.
                 if (
                     (importing !== undefined && open.length === 0) ||
-                    inner === "url" ||
-                    inner === "src" ||
-                    (inner !== undefined && IMAGE_FUNCTIONS.has(inner))
+                    (inner !== "type" && inner !== "format" && open.some(loads))
                 ) {
                     take(token);
                 }
@@ -434,6 +438,14 @@ export function cssReferences(source: string): CssReferences {
 
                 if (fn === "expression") {
                     found.problems.push({ line: token.line, message: "expression() runs code" });
+                }
+
+                // An address made where the CSS is used, not written: it could name any address here.
+                if (SUBSTITUTE.has(fn) && open.some(loads)) {
+                    found.problems.push({
+                        line: token.line,
+                        message: `${fn}() inside a function that loads a file: name the file itself`,
+                    });
                 }
 
                 open.push(fn);
@@ -461,6 +473,14 @@ export function cssReferences(source: string): CssReferences {
 
                 break;
             case "ident":
+                // `attr(data-x url)`, `attr(data-x type(<url>))`: an address from the page.
+                if (token.value.toLowerCase() === "url" && open.includes("attr")) {
+                    found.problems.push({
+                        line: token.line,
+                        message: "attr() as an address: name the file itself",
+                    });
+                }
+
                 if (CODE.has(token.value.toLowerCase())) {
                     found.problems.push({ line: token.line, message: `${token.value} runs code` });
                 }

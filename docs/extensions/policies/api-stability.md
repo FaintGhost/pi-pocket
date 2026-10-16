@@ -238,6 +238,11 @@ These can change in any release: the words of errors and notices, timing that th
   _Reason:_ authors then know when to look, and one number shows the break.
 - The release notes list it under "Removed", with what to use instead.
 
+### Theme parts
+
+- **A20. When what a theme part names leaves the app, the part goes with it, in the same release, with a release note.** A theme's rules for it then match nothing, and the rest of the theme works as before. A part whose region stays but changes its name keeps the old name as an alias, by A17 and A18.\
+  _Reason:_ the app cannot keep a screen for the sake of a selector; a rename costs nothing to keep.
+
 ## Release notes: "For extension authors"
 
 - **A19. The notes of each release have a section "For extension authors".** The 0.14 betas already have it. It uses these headings, in this order, with one line and a link for each item:

@@ -1174,7 +1174,7 @@ export function closePeople() {
     sessionStorage.removeItem(PEOPLE_KEY);
 
     // Its active border goes to the conversation, not nowhere.
-    if (document.documentElement.dataset.focus === "people") {
+    if (document.documentElement.dataset.focus === "people-panel") {
         document.documentElement.dataset.focus = "pane";
     }
 

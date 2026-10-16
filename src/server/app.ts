@@ -86,6 +86,7 @@ import { RepoWatches } from "./repo-watches.ts";
 import { snippet } from "./projection.ts";
 import { loadPromptTemplates, type PromptTemplate, type SkillCommand } from "./prompts.ts";
 import { Themes } from "./themes.ts";
+import { THEME_ID } from "./themes/format.ts";
 import { measureModelStreams } from "./timing.ts";
 import { Providers } from "./providers.ts";
 import { PushStore } from "./push.ts";
@@ -386,10 +387,13 @@ export class PocketApp {
             notify: (message) => this.ownerNotice("warning", message),
             // Everyone's tabs: a theme anyone may have chosen changed, or one came or went.
             changed: () => {
-                const list = this.themes.list();
+                const lists = { owner: this.themes.list(true), others: this.themes.list(false) };
 
                 for (const client of this.#clients) {
-                    client.send("themes", list);
+                    client.send(
+                        "themes",
+                        client.user.role === "owner" ? lists.owner : lists.others,
+                    );
                 }
             },
             log: (line) => this.#log(line),
@@ -558,7 +562,9 @@ export class PocketApp {
             // What a module's load says can name the server's folders, or quote a provider: the owner's to read.
             { webs: this.webs, notify: (level, message) => this.ownerNotice(level, message) },
         );
-        await this.themes.load();
+        await this.themes.load().catch((error: unknown) => {
+            this.#log(`Themes could not be read: ${describe(error)}`);
+        });
         // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one.
         await this.gallery.recover().catch((error: unknown) => {
             this.#log(`The extension gallery could not check its updates: ${describe(error)}`);
@@ -1025,6 +1031,10 @@ export class PocketApp {
         client.send("hello", this.#helloFor(client, hello));
         client.send("sessions", this.sessions(client.user));
         this.#sendPip(client);
+
+        if (client.user.role === "owner" && this.themes.failure !== undefined) {
+            client.send("notice", { level: "warning", message: this.themes.failure });
+        }
 
         if (arriving) {
             this.#peopleChanged(client.user.id);
@@ -1743,7 +1753,7 @@ export class PocketApp {
             // Read after the guard's wait, so a connecting device does not replace a live update with an older list.
             folderFavorites: await this.folderFavorites.list(user),
             // Every theme folder, for Appearance and for the look this tab uses (`theme.js`).
-            themes: this.themes.list(),
+            themes: this.themes.list(user.role === "owner"),
         };
     }
 
@@ -2505,8 +2515,8 @@ export class PocketApp {
             if (
                 typeof look !== "string" ||
                 typeof colors !== "string" ||
-                !/^[a-z0-9][a-z0-9-]{1,47}$/.test(look) ||
-                !/^[a-z0-9][a-z0-9-]{1,47}(@(dark|light))?$/.test(colors)
+                !THEME_ID.test(look) ||
+                !THEME_ID.test(colors.replace(/@(dark|light)$/, ""))
             ) {
                 throw new HttpError(
                     400,
@@ -2516,6 +2526,11 @@ export class PocketApp {
 
             if (!this.themes.list().some((each) => each.id === look && each.usable)) {
                 throw new HttpError(404, "No such theme");
+            }
+
+            // Colors that are not here (the desktop's, on a machine without Omarchy) would leave new browsers on none.
+            if (!(await this.themes.hasColors(colors))) {
+                throw new HttpError(404, "No such colors here");
             }
 
             this.config.themeDefault = { look, colors };

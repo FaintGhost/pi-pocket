@@ -17,7 +17,8 @@
         <link rel="preload" href="/style.css" as="style" />
         <!--
             The cascade layers, in the order they win: the app's own CSS and extensions' (pocket), the colors chosen in
-            Appearance (palette), then the theme (theme.js). Sizes people choose stay inline and win over all three.
+            Appearance (palette), then the theme (theme.js). Sizes people choose stay inline and win over all three, unless a
+            theme marks a size !important, which themes must not do.
         -->
         <style>
             @layer pocket, palette, theme;
@@ -52,12 +53,12 @@
                             : sessionStorage.getItem("pocket.noext") === "1";
                         if (!safe) {
                             sheets = (look.css || []).filter(function (url) {
-                                return /^\/themes\/[a-z0-9-]+\/[A-Za-z0-9_-]+\/theme\.css$/.test(
+                                return /^\/themes\/[a-z0-9][a-z0-9-]{1,47}\/[A-Za-z0-9_-]{12}\/theme\.css$/.test(
                                     url,
                                 );
                             });
                             var own = (look.fonts || []).filter(function (url) {
-                                return /^\/themes\/[a-z0-9-]+\/[A-Za-z0-9_-]+\/[A-Za-z0-9%._~\/-]+\.woff2$/.test(
+                                return /^\/themes\/[a-z0-9][a-z0-9-]{1,47}\/[A-Za-z0-9_-]{12}\/([A-Za-z0-9_-][A-Za-z0-9._-]*\/)*[A-Za-z0-9_-][A-Za-z0-9._-]*\.woff2$/.test(
                                     url,
                                 );
                             });

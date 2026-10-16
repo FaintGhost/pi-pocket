@@ -113,7 +113,7 @@ Each is a `data-part` attribute. Some elements have two (`data-part="composer-bu
 | `session-mark`                                                      | A session's square, in its folder's color, in the shape of its state (the home screen's too)                                                                                                   |
 | `session-branches`                                                  | The lines to a session that another one started                                                                                                                                                |
 | `home`                                                              | The home screen on wide screens                                                                                                                                                                |
-| `home-facts`, `home-logo`, `home-title`, `home-fact`, `home-colors` | Its summary: the block, the logo, the first line, each fact, and the palette's colors                                                                                                          |
+| `home-facts`, `home-logo`, `home-title`, `home-fact`, `home-colors` | Its summary: the block, the logo, the first line, each fact, the palette's colors (each a `home-color`)                                                                                        |
 | `home-actions`                                                      | Its buttons                                                                                                                                                                                    |
 | `home-recent`, `home-heading`, `home-recent-row`, `home-recent-key` | Jump back in: the list, its heading, each session, and the number that opens it                                                                                                                |
 | `home-list`                                                         | The session list as a phone's home screen                                                                                                                                                      |
@@ -139,6 +139,7 @@ Each is a `data-part` attribute. Some elements have two (`data-part="composer-bu
 | `approval`                                      | A call that waits for someone to allow it                                               |
 | `live-line`, `live-mark`                        | The line that says what Pi does now, and its dot                                        |
 | `code-block`, `code-head`                       | A code block in a reply, and its bar (language, Copy)                                   |
+| `inline-code`                                   | Code in a line of words, in a reply                                                     |
 
 ### The composer
 
@@ -204,16 +205,16 @@ Each is a `data-part` attribute. Some elements have two (`data-part="composer-bu
 
 On `<html>`:
 
-| Attribute      | Values                                                                                                                                                                                                                                                    |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data-mode`    | `dark` or `light`: the colors' mode                                                                                                                                                                                                                       |
-| `data-theme`   | The theme in use: `pocket`, or a theme folder's id                                                                                                                                                                                                        |
-| `data-colors`  | The colors in use: `desktop`, a palette's id, or a folder's (`id`, `id@dark`, `id@light`)                                                                                                                                                                 |
-| `data-tiling`  | `on` or `off`: tiled windows on wide screens                                                                                                                                                                                                              |
-| `data-rail`    | `on` when the sidebar is folded to the rail                                                                                                                                                                                                               |
-| `data-density` | `comfortable`, `compact`, or `tight`                                                                                                                                                                                                                      |
-| `data-motion`  | `full` or `reduced`                                                                                                                                                                                                                                       |
-| `data-focus`   | The window in focus: `pane` (the conversation's, at first), `sidebar`, `peeks`, `people`, `browser`, or `files-tile`. The app draws the focus only on wide screens with tiling on: `:root[data-tiling="on"][data-focus="sidebar"] [data-part~="sidebar"]` |
+| Attribute      | Values                                                                                                                                                                                                                                                                                         |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data-mode`    | `dark` or `light`: the colors' mode                                                                                                                                                                                                                                                            |
+| `data-theme`   | The theme in use: `pocket`, or a theme folder's id                                                                                                                                                                                                                                             |
+| `data-colors`  | The colors in use: `desktop`, a palette's id, or a folder's (`id`, `id@dark`, `id@light`)                                                                                                                                                                                                      |
+| `data-tiling`  | `on` or `off`: tiled windows on wide screens                                                                                                                                                                                                                                                   |
+| `data-rail`    | `on` when the sidebar is folded to the rail                                                                                                                                                                                                                                                    |
+| `data-density` | `comfortable`, `compact`, or `tight`                                                                                                                                                                                                                                                           |
+| `data-motion`  | `full` or `reduced`                                                                                                                                                                                                                                                                            |
+| `data-focus`   | The window in focus: `pane` (the conversation's, at first), `sidebar`, `peeks`, `people-panel`, `browser-panel`, or `files-panel`: the window's part name. The app draws the focus only on wide screens with tiling on: `:root[data-tiling="on"][data-focus="sidebar"] [data-part~="sidebar"]` |
 
 Widths: below 700 px is the phone layout (sheets from the bottom, one screen at a time); the sidebar shows from 960 px; from 1100 px the Files tile and the Browser panel sit beside the conversation.
 
@@ -233,7 +234,7 @@ What is inside a part (its children without a part of their own) may use its pse
 
 ## Layers
 
-`@layer pocket, palette, theme;`: the app's CSS and extensions' stylesheets, then the colors, then the theme. Later layers win over earlier ones, whatever the selectors' specificity, and in every condition: a theme's rule for a property replaces the app's on phones, on touch screens, and on hover too. `!important` reverses that: the app's `!important` rules win over a theme's. There are three: reduced motion, `--ligatures` (so each `font` shorthand cannot reset it), and fields' 16px on touch screens (so iOS does not zoom into them). Inline values win over all of them: the text size and the widths people drag.
+`@layer pocket, palette, theme;`: the app's CSS and extensions' stylesheets, then the colors, then the theme. Later layers win over earlier ones, whatever the selectors' specificity, and in every condition: a theme's rule for a property replaces the app's on phones, on touch screens, and on hover too. `!important` reverses that: the app's `!important` rules win over a theme's. There are three: reduced motion, `--ligatures` (so each `font` shorthand cannot reset it), and fields' 16px on touch screens (so iOS does not zoom into them). Inline values win over all of them: the text size and the widths people drag, unless a theme marks a size `!important`, which a theme must not do.
 
 ## Changes
 
@@ -242,3 +243,4 @@ These names change by the deprecation rules of [the API policy](../policies/api-
 - **Additions** (a new token, part, state, or value) come in any minor release, with no change to `themeApi`. A theme that needs one sets `minPocket` to the release that added it.
 - **A rename or a removal** first keeps the old name as an alias: `--old: var(--new)` in the app's CSS, or both names in `data-part` (`data-part="new old"`). The alias stays for at least one minor release and at least 90 days, from the first stable release that deprecates it, whichever is later. This page and the release notes mark it deprecated, with its replacement and its earliest removal.
 - **The removal** comes only in a minor release after that time, and raises `themeApi` by one. The release notes list it under "Removed", with what to use instead.
+- **A part whose region leaves the app** goes with it, in the same release, with a release note ([A20](../policies/api-stability.md#theme-parts)): a theme's rules for it match nothing, and the rest of the theme works as before.

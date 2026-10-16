@@ -824,12 +824,12 @@ kbd {
         animation-delay: 60ms;
     }
     :root[data-tiling="on"][data-focus="sidebar"] .sidebar,
-    :root[data-tiling="on"][data-focus="browser"] .browser,
-    :root[data-tiling="on"][data-focus="files-tile"] .files-tile,
-    :root[data-tiling="on"][data-focus="people"] .people,
-    :root[data-tiling="on"]:not([data-focus="sidebar"]):not([data-focus="browser"]):not(
-            [data-focus="files-tile"]
-        ):not([data-focus="people"]):not([data-focus="peeks"])
+    :root[data-tiling="on"][data-focus="browser-panel"] .browser,
+    :root[data-tiling="on"][data-focus="files-panel"] .files-tile,
+    :root[data-tiling="on"][data-focus="people-panel"] .people,
+    :root[data-tiling="on"]:not([data-focus="sidebar"]):not([data-focus="browser-panel"]):not(
+            [data-focus="files-panel"]
+        ):not([data-focus="people-panel"]):not([data-focus="peeks"])
         .pane {
         border-color: var(--window-border-active);
         box-shadow: var(--window-ring);

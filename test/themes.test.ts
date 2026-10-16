@@ -6,7 +6,7 @@ import { mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { APP_ROOT } from "../src/server/config.ts";
-import { readTheme } from "../src/server/themes.ts";
+import { readTheme, Themes } from "../src/server/themes.ts";
 import { ThemeProblem } from "../src/server/themes/format.ts";
 
 test("a theme's CSS may load only files in its own folder", () => {
@@ -29,6 +29,10 @@ test("a theme's CSS may load only files in its own folder", () => {
         "a { background: url(/login?token=a); }",
         "a { background: \\75 rl(../../a.png); }",
         'a { background: image-set("/api/me" 1x); }',
+        'a { background: image-set(var(--n, "/login?token=a") 1x); }',
+        ':root { --x: "/login?token=a"; } a { background: image-set(var(--x) 1x); }',
+        "a { background: attr(data-x url); }",
+        "@font-face { font-family: x; src: src(var(--f)); }",
     ]) {
         assert.throws(css(rule), ThemeProblem, rule);
     }
@@ -40,4 +44,37 @@ test("every built-in theme passes its checks", () => {
     for (const id of readdirSync(builtIn)) {
         assert.doesNotThrow(() => readTheme(join(builtIn, id), id, true, "0.14.0"), id);
     }
+});
+
+test("two themes that say they extend each other still load", async () => {
+    const data = join(root, "loop");
+
+    for (const [id, other] of [
+        ["one", "two"],
+        ["two", "one"],
+    ] as const) {
+        mkdirSync(join(data, "themes", id), { recursive: true });
+        writeFileSync(
+            join(data, "themes", id, "theme.json"),
+            JSON.stringify({ themeApi: 1, name: id, extends: other }),
+        );
+        writeFileSync(join(data, "themes", id, "theme.css"), ":root { --r-card: 0; }\n");
+    }
+
+    const themes = new Themes({
+        builtIn: join(root, "no-built-in-themes"),
+        dataDir: data,
+        notify: () => {},
+        changed: () => {},
+        log: () => {},
+    });
+
+    await themes.load();
+    assert.deepEqual(
+        themes.list().map((each) => [each.id, each.usable]),
+        [
+            ["one", true],
+            ["two", true],
+        ],
+    );
 });
