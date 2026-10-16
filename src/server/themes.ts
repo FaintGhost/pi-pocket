@@ -214,7 +214,7 @@ export class Themes {
     }
 
     /** Every theme, as the web app lists it: built-in ones first, then the owner's by name. */
-    list(): ThemeInfo[] {
+    list(owner = true): ThemeInfo[] {
         return this.#found.map(({ id, builtIn, name }) => {
             const good = this.#good.get(id);
             const problem = this.#problems.get(id);
@@ -234,7 +234,8 @@ export class Themes {
                 ...(good?.colorsLight === undefined ? {} : { colorsLight: good.colorsLight }),
                 fonts: good === undefined || id === BASE_THEME ? [] : this.#fonts(good),
                 ...(good === undefined ? {} : { rev: good.rev }),
-                ...(problem === undefined ? {} : { problem }),
+                // What is wrong can name the server's folders: the owner's to read, as extensions' load errors are.
+                ...(problem === undefined || !owner ? {} : { problem }),
                 usable: good !== undefined,
             };
         });

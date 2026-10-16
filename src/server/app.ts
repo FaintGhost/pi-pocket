@@ -386,10 +386,13 @@ export class PocketApp {
             notify: (message) => this.ownerNotice("warning", message),
             // Everyone's tabs: a theme anyone may have chosen changed, or one came or went.
             changed: () => {
-                const list = this.themes.list();
+                const lists = { owner: this.themes.list(true), others: this.themes.list(false) };
 
                 for (const client of this.#clients) {
-                    client.send("themes", list);
+                    client.send(
+                        "themes",
+                        client.user.role === "owner" ? lists.owner : lists.others,
+                    );
                 }
             },
             log: (line) => this.#log(line),
@@ -1743,7 +1746,7 @@ export class PocketApp {
             // Read after the guard's wait, so a connecting device does not replace a live update with an older list.
             folderFavorites: await this.folderFavorites.list(user),
             // Every theme folder, for Appearance and for the look this tab uses (`theme.js`).
-            themes: this.themes.list(),
+            themes: this.themes.list(user.role === "owner"),
         };
     }
 
