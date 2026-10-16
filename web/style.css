@@ -9923,6 +9923,12 @@ textarea.notes {
     color: inherit;
 }
 
+/* A comment's words that changed: the comment's faint color is too weak on the change's highlight. */
+.dv-code .hl-com mark,
+.dv-code mark .hl-com {
+    color: var(--muted);
+}
+
 /* The side of a split row with no line: hatched, as an absence rather than an empty line. */
 .dv-code.none,
 .dv-n.none {
