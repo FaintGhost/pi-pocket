@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
 import { satteri } from "@astrojs/markdown-satteri";
-import { idOf, pages, REPO, repoMarkdown, STRICT, VERSION } from "./src/repo-docs.mjs";
-import { PENDING, SIDEBAR } from "./src/sidebar.mjs";
+import { idOf, isPending, pages, REPO, repoMarkdown, VERSION } from "./src/repo-docs.mjs";
+import { SIDEBAR } from "./src/sidebar.mjs";
 
 const listed = new Set(SIDEBAR.flatMap((group) => group.items.map(([path]) => path)));
 const problems = [];
@@ -17,10 +17,7 @@ for (const path of pages()) {
 }
 
 for (const path of listed) {
-    const there = existsSync(join(REPO, path));
-    const pending = !STRICT && PENDING.some((prefix) => path === prefix || path.startsWith(prefix));
-
-    if (!there && !pending) {
+    if (!existsSync(join(REPO, path)) && !isPending(path)) {
         problems.push(`${path} is in the sidebar, but not in the repository`);
     }
 }

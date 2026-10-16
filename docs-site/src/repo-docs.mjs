@@ -4,7 +4,7 @@
 //
 // - `repoDocsLoader` is Astro's glob loader on the repository root. A page's title is its `# H1`, its description
 //   its first paragraph. Each build also checks every relative link and anchor of every page (`checkLinks`), and
-//   fails with the whole list.
+//   that the reference says what types/pocket.d.ts says (`checkReference`), and fails with the whole list.
 // - `repoMarkdown` is a Sätteri mdast plugin for the pages: it drops the H1 (Starlight draws the title), rewrites
 //   relative links (a page to its address on the site, anything else to GitHub), and draws a reference member's
 //   "Since 0.14.0 · Stable" line as two tags.
@@ -15,7 +15,8 @@ import { fileURLToPath } from "node:url";
 import GithubSlugger from "github-slugger";
 import { glob } from "astro/loaders";
 import { markdownToMdast } from "satteri";
-import { MOVED, PENDING } from "./sidebar.mjs";
+import { checkReference } from "./reference-check.mjs";
+import { LATER, MOVED, PENDING } from "./sidebar.mjs";
 
 export const REPO = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 export const GITHUB = "https://github.com/TannerMidd/pi-pocket";
@@ -72,8 +73,10 @@ export function idOf(repoPath) {
 
 export const urlOf = (repoPath) => `${BASE}/${idOf(repoPath)}/`;
 
-const isPending = (repoPath) =>
-    !STRICT && PENDING.some((prefix) => repoPath === prefix || repoPath.startsWith(prefix));
+/** Whether a page may be missing: one that another branch adds (until strict mode), or one of a coming release. */
+export const isPending = (repoPath) =>
+    LATER.includes(repoPath) ||
+    (!STRICT && PENDING.some((prefix) => repoPath === prefix || repoPath.startsWith(prefix)));
 
 /** Every page there is, as repository paths. */
 export function pages() {
@@ -312,6 +315,8 @@ export function repoDocsLoader() {
         name: "pi-pocket-docs",
         load: async (context) => {
             const { errors, warnings } = checkLinks();
+
+            errors.push(...checkReference(REPO));
 
             for (const warning of warnings) {
                 context.logger.warn(warning);
