@@ -6,7 +6,7 @@ import { api, attempt, closeSheet, openSheet, store } from "../store.js";
 import { html, Icon, Loader, Sheet, shortPath, Switch } from "../ui.js";
 import { galleryApi, galleryAvailable } from "./gallery.js";
 
-/** The guide for people who write extensions: its first page, on the docs site. */
+/** The guide for people who write extensions: its first page, on the docs site, which describes the latest release. */
 const GUIDE = "https://tannermidd.github.io/pi-pocket/docs/extensions/first-extension/";
 
 /** What Lancet Guard does here, given the module's switch and Pi's own setting. */
@@ -272,19 +272,22 @@ export function ExtensionsSheet() {
             Extensions give Pi its tools and checks in Pi Pocket, and can add pages and buttons to the app. A change applies to every session right away and stays after restarts.${owner ? "" : " Only the owner can change them."}
         </p>
         <${SafeMode} />
-        <div class="sheet-list">
-            ${
-                galleryAvailable() &&
-                html`<button class="list-item" onClick=${() => openSheet({ type: "gallery" })}>
-                    <span><${Icon} name="search" size=${16} /> Find extensions</span>
-                    <span class="muted small">drop-ins other people wrote</span>
-                </button>`
-            }
-            <a class="list-item" href=${GUIDE} target="_blank" rel="noopener">
-                <span><${Icon} name="external" size=${16} /> How to write one</span>
-                <span class="muted small">the guide, on the web</span>
-            </a>
-        </div>
+        ${
+            owner &&
+            html`<div class="sheet-list">
+                ${
+                    galleryAvailable() &&
+                    html`<button class="list-item" onClick=${() => openSheet({ type: "gallery" })}>
+                        <span><${Icon} name="search" size=${16} /> Find extensions</span>
+                        <span class="muted small">drop-ins other people wrote</span>
+                    </button>`
+                }
+                <a class="list-item" href=${GUIDE} target="_blank" rel="noopener noreferrer">
+                    <span><${Icon} name="external" size=${16} /> How to write one</span>
+                    <span class="muted small">the guide (latest release)</span>
+                </a>
+            </div>`
+        }
         ${problem && html`<div class="error-box">${problem}</div>`}
         ${!data && !problem && html`<${Loader} label="Loading extensions" />`}
         ${
