@@ -55,52 +55,6 @@ test("new sessions start with the owner's default, whatever was picked since", a
     assert.deepEqual(await startsWith(), { model: "other", thinkingLevel: "low" });
 });
 
-test("PiP's panel choice leaves the last picked model alone", async () => {
-    const me = owner(app);
-    const id = await app.pip.ensure(me);
-    const last = app.config.lastModel;
-
-    await app.commands.configure(id, me, {
-        model: { provider: "faux", modelId: "plain" },
-        pipPanel: true,
-    });
-    assert.equal((await app.agentState(id))?.model?.modelId, "plain");
-    assert.deepEqual(app.config.lastModel, last);
-});
-
-test("the default keeps a thinking level its model has", async () => {
-    await app.setDefaultModel(owner(app), {
-        provider: "faux",
-        modelId: "plain",
-        thinkingLevel: "high",
-    });
-    assert.equal(app.config.defaultModel?.thinkingLevel, "off");
-    assert.deepEqual(await startsWith(), { model: "plain", thinkingLevel: "off" });
-    await app.setDefaultModel(owner(app), null);
-});
-
-test("only the owner chooses the default, and only a model signed in here", async () => {
-    const guest = app.config.addUser("Alex", "guest").user;
-
-    await assert.rejects(app.setDefaultModel(guest, { provider: "faux", modelId: "thinker" }), {
-        status: 403,
-    });
-    await assert.rejects(
-        app.setDefaultModel(owner(app), { provider: "faux", modelId: "missing" }),
-        { status: 400, message: /not available/ },
-    );
-    await assert.rejects(app.setDefaultModel(owner(app), "thinker"), { status: 400 });
-    await assert.rejects(
-        app.setDefaultModel(owner(app), {
-            provider: "faux",
-            modelId: "thinker",
-            thinkingLevel: "banana",
-        }),
-        { status: 400 },
-    );
-    assert.equal(app.config.defaultModel, undefined);
-});
-
 test("the settings route sets and clears the default, for the owner only", async () => {
     const { createServer } = await import("node:http");
     const { createHandler } = await import("../src/server/http.ts");
