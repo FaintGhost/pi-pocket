@@ -2176,14 +2176,28 @@ export function Transcript() {
             return;
         }
 
+        const grew = rows.length > counted.current;
+        const newest = rows.at(-1);
+
+        // A message of your own just sent: the reader goes down to it, from wherever they had scrolled to.
+        if (
+            grew &&
+            counted.current > 0 &&
+            newest?.kind === "user" &&
+            view.authors?.[newest.id] === store.state.me?.id &&
+            !stick.current
+        ) {
+            stick.current = true;
+            keep.current = null;
+            setShowJump(false);
+        }
+
         if (keep.current !== null) {
             element.scrollTop = element.scrollHeight - keep.current;
             keep.current = null;
         } else if (stick.current) {
             element.scrollTop = element.scrollHeight;
         }
-
-        const grew = rows.length > counted.current;
 
         counted.current = rows.length;
 

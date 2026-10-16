@@ -10,10 +10,19 @@ const largest = (rows) => rows.reduce((max, row) => Math.max(max, row.spent), 1)
 function SpendLimit({ budget, editable, save }) {
     const [draft, setDraft] = useState(null);
     const field = useRef(null);
+    const change = useRef(null);
+    const edited = useRef(false);
     const editing = draft !== null;
 
+    // Into the field as it opens; back to Change as it closes, so the keyboard keeps its place.
     useEffect(() => {
-        field.current?.focus();
+        if (editing) {
+            field.current?.focus();
+        } else if (edited.current) {
+            change.current?.focus();
+        }
+
+        edited.current = editing;
     }, [editing]);
 
     if (draft === null) {
@@ -24,6 +33,7 @@ function SpendLimit({ budget, editable, save }) {
             editable
                 ? html`<button
                     class="link small spend-change"
+                    ref=${change}
                     onClick=${() => setDraft(budget === undefined ? "" : String(budget))}
                 >
                     Change

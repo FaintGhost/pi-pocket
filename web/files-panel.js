@@ -594,6 +594,7 @@ function FilesTab({ changes, covering }) {
                 ? html`<div
                       class=${`ft-view ${selected ? "" : "leaving"}`}
                       inert=${!selected}
+                      tabindex="-1"
                       onKeyDown=${(event) => {
                           // Esc goes back to the tree, as back does, where the file covers it.
                           if (covered && event.key === "Escape" && !event.defaultPrevented) {

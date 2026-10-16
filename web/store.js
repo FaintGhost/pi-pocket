@@ -238,18 +238,19 @@ export const canSteer = () => store.state.me?.role !== "viewer";
 /** People invited to one session cannot start sessions or invite others. */
 export const scoped = () => Array.isArray(store.state.me?.sessions);
 
-/** The notices that announce chat messages: reading the chat takes them down. */
-const chatNotices = new Set();
+/** The notices that announce chat messages, here or a mention elsewhere, by id: their session's. Reading its chat takes them down. */
+const chatNotices = new Map();
 
 /** Everything in the chat counts as read: called while the chat is open. */
 export function markChatRead() {
     const { chat, chatRead, conversationId } = store.state;
 
-    for (const id of chatNotices) {
-        dismiss(id);
+    for (const [id, conversation] of chatNotices) {
+        if (conversation === conversationId) {
+            dismiss(id);
+            chatNotices.delete(id);
+        }
     }
-
-    chatNotices.clear();
 
     const last = chat.at(-1)?.at ?? 0;
 
@@ -290,7 +291,8 @@ function applyChat(data) {
     }
 
     const open = () => openSheet({ type: "chat" });
-    const announce = (message) => chatNotices.add(notify("info", message, open));
+    const announce = (message) =>
+        chatNotices.set(notify("info", message, open), store.state.conversationId);
 
     if (fresh.length > 1) {
         return announce(`${fresh.length} new chat messages`);
@@ -414,6 +416,7 @@ export function holdNotice(id, held) {
 export function dismiss(id) {
     clearTimeout(countdowns.get(id)?.timer);
     countdowns.delete(id);
+    chatNotices.delete(id);
     store.set((state) => ({ notices: state.notices.filter((notice) => notice.id !== id) }));
 }
 
@@ -573,8 +576,8 @@ const handlers = {
         }
     },
     // A notice may link to a conversation, such as a mention elsewhere: tapping it goes there.
-    notice: (data) =>
-        notify(
+    notice: (data) => {
+        const id = notify(
             data.level,
             data.message,
             data.link
@@ -583,7 +586,13 @@ const handlers = {
                           sheet: data.link.sheet ? { type: data.link.sheet } : null,
                       })
                 : undefined,
-        ),
+        );
+
+        // A mention's: reading that chat takes it down.
+        if (data.link?.sheet === "chat") {
+            chatNotices.set(id, data.link.conversationId);
+        }
+    },
     auth: (data) => handleAuth(data),
     closing: () => store.set({ connection: "closed" }),
     reload: () => {

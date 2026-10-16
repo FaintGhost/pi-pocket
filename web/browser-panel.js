@@ -985,7 +985,7 @@ export function BrowserPanel({ leaving = false }) {
             <button
                 class="icon-button"
                 aria-label=${`Size: ${preset.id === "fit" ? `${state?.viewport?.width ?? ""}×${state?.viewport?.height ?? ""}` : preset.label}. Switch to ${nextPreset.label}`}
-                title=${`${preset.id === "fit" ? `${state?.viewport?.width}×${state?.viewport?.height}` : preset.label} · tap for ${nextPreset.label}`}
+                title=${`${preset.id === "fit" ? `${state?.viewport?.width}×${state?.viewport?.height}` : preset.label} · next: ${nextPreset.label}`}
                 disabled=${!steer || !open}
                 onClick=${resize}
             >

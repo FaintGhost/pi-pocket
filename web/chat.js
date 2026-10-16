@@ -309,6 +309,18 @@ function ChatTab({ highlight, focus }) {
 
     useEffect(() => markChatRead(), [newest]);
     useEffect(() => chatLogShown(), []);
+    // Whether the log follows its newest message, and where it last put itself: a scroll to anywhere else is the reader's.
+    const follow = useRef({ on: !highlight, at: -1 });
+
+    const stick = () => {
+        const element = log.current;
+
+        if (element && follow.current.on) {
+            element.scrollTop = element.scrollHeight;
+            follow.current.at = element.scrollTop;
+        }
+    };
+
     useLayoutEffect(() => {
         const element = log.current;
 
@@ -319,12 +331,15 @@ function ChatTab({ highlight, focus }) {
         const target = highlight && element.querySelector(`[data-chat="${CSS.escape(highlight)}"]`);
 
         if (target) {
+            follow.current.on = false;
             target.scrollIntoView({ block: "center" });
         } else {
-            element.scrollTop = element.scrollHeight;
+            follow.current.on = true;
+            stick();
         }
     }, [newest]);
-    // At the bottom, it stays there while the log's height settles: the panel opening, the box under it growing.
+    // Following, it stays at the bottom while things settle: the panel opening, a pin showing above it, the box under it
+    // growing, a message taking its room.
     useEffect(() => {
         const element = log.current;
 
@@ -332,24 +347,37 @@ function ChatTab({ highlight, focus }) {
             return undefined;
         }
 
-        let atBottom = !highlight;
-
         const onScroll = () => {
-            atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 24;
+            // Its own scroll, or the browser holding it at the end as the log grew: still following.
+            if (Math.abs(element.scrollTop - follow.current.at) <= 1) {
+                return;
+            }
+
+            follow.current.on =
+                element.scrollHeight - element.scrollTop - element.clientHeight < 24;
         };
 
-        const observer = new ResizeObserver(() => {
-            if (atBottom) {
-                element.scrollTop = element.scrollHeight;
+        const sizes = new ResizeObserver(stick);
+
+        const watch = () => {
+            for (const child of element.children) {
+                sizes.observe(child);
             }
-        });
+
+            stick();
+        };
+
+        const children = new MutationObserver(watch);
 
         element.addEventListener("scroll", onScroll, { passive: true });
-        observer.observe(element);
+        sizes.observe(element);
+        children.observe(element, { childList: true });
+        watch();
 
         return () => {
             element.removeEventListener("scroll", onScroll);
-            observer.disconnect();
+            sizes.disconnect();
+            children.disconnect();
         };
     }, []);
     useEffect(() => {

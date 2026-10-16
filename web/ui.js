@@ -868,6 +868,40 @@ const ICONS = {
     wheel: "M12 3a9 9 0 1 0 0 18 9 9 0 1 0 0-18zM12 10a2 2 0 1 0 0 4 2 2 0 1 0 0-4zM3.3 11.2l6.7.6M20.7 11.2l-6.7.6M12 14v6.9",
 };
 
+/** How far each key scrolls a sheet's body, by its height. */
+const SCROLL_KEYS = {
+    ArrowDown: 0.1,
+    ArrowUp: -0.1,
+    PageDown: 0.9,
+    PageUp: -0.9,
+    " ": 0.9,
+    End: 1e6,
+    Home: -1e6,
+};
+
+/**
+ * The keys that scroll a page scroll a sheet focused as a whole (as it is when it opens): its body scrolls, not the
+ * page behind it. A sheet with nothing to Tab to but Close is read this way (Keyboard shortcuts).
+ */
+function scrollFromKeys(event) {
+    const share = SCROLL_KEYS[event.key];
+    const body = event.currentTarget.querySelector(":scope > .sheet-body");
+
+    if (
+        share === undefined ||
+        event.target !== event.currentTarget ||
+        !body ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+    ) {
+        return;
+    }
+
+    event.preventDefault();
+    body.scrollTop += (event.shiftKey && event.key === " " ? -1 : 1) * share * body.clientHeight;
+}
+
 /** An icon's SVG path, for marks drawn outside Preact (gestures.js); "" for a name that is not one of the icons. */
 export const iconPath = (name) =>
     typeof name === "string" && Object.hasOwn(ICONS, name) ? ICONS[name] : "";
@@ -1205,6 +1239,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
             aria-modal="true"
             aria-label=${title}
             tabindex="-1"
+            onKeyDown=${scrollFromKeys}
         >
             <header class="sheet-head">
                 <div class="grip" aria-hidden="true"></div>

@@ -321,7 +321,7 @@ function sheetBody(sheet) {
                 title="Your name"
                 label="Shown on your messages to others"
                 initial=${me?.name ?? ""}
-                footer=${html`<button class="button ghost wide sheet-footer" onClick=${signOut}>
+                footer=${html`<button class="button ghost wide sheet-footer signout" onClick=${signOut}>
                     <${Icon} name="logout" size=${16} /> Sign out
                 </button>`}
                 submit=${async (value) => {

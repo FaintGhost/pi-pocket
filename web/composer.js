@@ -1373,7 +1373,6 @@ export function Composer() {
                             </div>`
                         }
                         <${MicButton} dictation=${dictation} class="composer-mic" />
-                        ${busy && html`<${StopButton} />`}
                         <button
                             class=${`send-button ${canSend ? "ready" : ""}`}
                             aria-label="Send"
@@ -1387,6 +1386,7 @@ export function Composer() {
                                     : html`<${Icon} name="send" size=${16} stroke=${2.4} />`
                             }
                         </button>
+                        ${busy && html`<${StopButton} />`}
                     </div>
                 </div>`
         }

@@ -706,7 +706,7 @@ kbd {
 }
 
 /* A short screen (a phone on its side): the rail drops its marks (Pi, and the sessions it is on) so its buttons fit,
- * and the home list puts its search and tabs side by side, so more sessions show. */
+ * and the home list puts its search and tabs side by side, so more sessions show (where they fit). */
 @media (max-height: 500px) {
     .rail {
         gap: 2px;
@@ -714,6 +714,10 @@ kbd {
     .rail > :is(span.rail-brand, span.rail-brand + .rail-gap, span.rail-button) {
         display: none;
     }
+}
+
+/* Side by side only where both fit: a short window that is also narrow keeps them stacked. */
+@media (max-height: 500px) and (min-width: 600px) {
     .home-list > .sessions {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -947,9 +951,9 @@ kbd {
         color: var(--text);
     }
     /* Out past the chevron's tip, so it covers neither the arrow nor the title. */
-    .topbar-back .badge {
-        top: -3px;
-        right: -6px;
+    .topbar > .topbar-back .badge {
+        top: -2px;
+        right: 0;
     }
 }
 
@@ -2694,6 +2698,8 @@ pre.diff .del {
 
 /* A message waiting for Pi: Steer or Queue, what it says, and a way to take it back. */
 .queued {
+    /* Its own height in a queue that scrolls: shrunk, the dock would measure it smaller and let it grow again. */
+    flex: none;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -2724,13 +2730,23 @@ pre.diff .del {
     text-overflow: ellipsis;
 }
 
-/* Tapped: the whole message, wrapped, scrolling past a few lines. */
+/* Tapped: the whole message, wrapped (the queue scrolls past a few lines), with who sent it and its × at its top. */
 .queued-text.open {
     padding: 8px 0;
-    max-height: 30vh;
-    overflow-y: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+.queued:has(> .queued-text.open) {
+    align-items: flex-start;
+}
+
+.queued:has(> .queued-text.open) > .queued-mode {
+    padding-top: 8px;
+}
+
+.queued:has(> .queued-text.open) > .queued-remove {
+    margin-top: 4px;
 }
 
 .queued .queued-remove {
@@ -5719,6 +5735,12 @@ pre.diff .del {
 .button.sheet-footer {
     min-height: 40px;
     border-radius: 11px;
+}
+
+/* Away from Save, in the color of what cannot be undone here. */
+.button.sheet-footer.signout {
+    margin-top: 14px;
+    color: var(--err);
 }
 
 .button.small {
@@ -11561,8 +11583,8 @@ textarea.notes {
     .mode-switch button {
         padding-inline: 8px;
     }
-    /* While Pi works the row is full: the mic stays where it was and Stop takes Send's place while there is nothing to
-       send; once there is, Send comes back and the mic gives way (staying while it listens, to stop it). */
+    /* While Pi works the row is full, and Stop holds the end of it: Send shows once there is something to send, in the
+       mic's place (the mic stays while it listens, to stop it). */
     .composer.busy:not(.filled):has(.composer-mic) .send-button,
     .composer.busy.filled .composer-mic:not(.listening) {
         display: none;

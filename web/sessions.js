@@ -99,13 +99,17 @@ export async function setArchived(ids, archived, { undo = true } = {}) {
             ? `“${title.length > 48 ? `${title.slice(0, 47)}…` : title}”`
             : `${done.length} sessions`;
 
-    notify("info", `${archived ? "Archived" : "Unarchived"} ${what}. Tap to undo.`, async () => {
-        await setArchived(done, !archived, { undo: false });
+    notify(
+        "info",
+        `${archived ? "Archived" : "Unarchived"} ${what}. ${matchMedia("(pointer: coarse)").matches ? "Tap" : "Click"} to undo.`,
+        async () => {
+            await setArchived(done, !archived, { undo: false });
 
-        if (left && store.state.conversationId === null) {
-            navigate(open);
-        }
-    });
+            if (left && store.state.conversationId === null) {
+                navigate(open);
+            }
+        },
+    );
 }
 
 /**
@@ -308,12 +312,21 @@ function SessionRow({
     // The Folders tab names the folder above the row already: its model comes first.
     const tip = [title, ...(folders ? where.reverse() : where)].join(" · ");
     // A search can match the folder or model instead of the title: the row shows which.
-    const hit =
+    let hit =
         needle && !title.toLowerCase().includes(needle)
             ? [path, session.cwd, session.model].find((text) =>
                   text?.toLowerCase().includes(needle),
               )
             : undefined;
+
+    // A path from the folder that matched: its start is the same in every row, and would push the match out of sight.
+    if (hit && hit !== session.model) {
+        const parts = hit.split("/");
+        const at = parts.findLastIndex((part) => part.toLowerCase().includes(needle));
+
+        hit = at > 0 ? `…/${parts.slice(at).join("/")}` : hit;
+    }
+
     const counts = session.subagents ?? {};
     const live = (counts.working ?? 0) + (counts.waiting ?? 0);
     const failed = failing(counts);
