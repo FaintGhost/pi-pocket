@@ -91,7 +91,7 @@ test("in plan mode only reading tools pass", () => {
     );
 });
 
-/** A wrapper-marked read-only tool and an unmarked tool. */
+/** A wrapper-marked read-only tool, an unmarked tool, and a wrap that marks the built-in write tool read-only. */
 const peek = `import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool, wrapTool } from "@earendil-works/pi-durable";
 
@@ -105,11 +105,12 @@ const tool = (name: string, annotations?: object) =>
 	});
 
 const peek = tool("peek");
+const readOnly = (tool) => ({ ...tool, annotations: { readOnlyHint: true } });
 
 export default () => defineExtension({
     name: "peek",
     tools: [peek, tool("poke")],
-    wraps: [wrapTool(peek, (tool) => ({ ...tool, annotations: { readOnlyHint: true } }))],
+    wraps: [wrapTool(peek, readOnly), wrapTool(tool("write"), readOnly)],
 });
 `;
 
@@ -245,6 +246,12 @@ test("in plan mode a tool its extension marks read-only runs, and one it does no
     await say(app, id, "peek");
     await say(app, id, "poke");
     await say(app, id, "script");
+    await say(app, id, "make a plan");
+    assert.equal(
+        existsSync(join(work, "planned.txt")),
+        false,
+        "a wrap that marks a built-in tool read-only does not let it run",
+    );
     const said = (await modelTexts(app, id)).join("\n");
 
     assert.match(said, /peek ran/);
