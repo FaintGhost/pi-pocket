@@ -568,10 +568,6 @@ export function GalleryEntrySheet({ name }) {
     }
 
     const title = installed?.title ?? entry.title;
-    const version = installed?.version ?? entry.version;
-    const repo = installed?.repo ?? entry.source.repo;
-    const commit = installed?.commit ?? entry.source.commit;
-    const sourceUrl = installed?.sourceUrl ?? entry.sourceUrl;
     const declares = installed?.declares ?? entry.declares;
     // The index's files are these when it offers the version here, or nothing is installed.
     const files =
@@ -632,49 +628,11 @@ export function GalleryEntrySheet({ name }) {
                 ${entry.tags.map((tag) => html`<span class="gallery-tag-text" key=${tag}>#${tag}</span>`)}
             </div>`
         }
-        <dl class="pi-facts">
-            ${
-                entry &&
-                html`<div>
-                    <dt>Author</dt>
-                    <dd>
-                        ${entry.author.name}
-                        ${
-                            entry.author.github &&
-                            html` · <${Out} href=${`https://github.com/${entry.author.github}`}>@${entry.author.github}<//>`
-                        }
-                    </dd>
-                </div>`
-            }
-            <div>
-                <dt>Version</dt>
-                <dd>
-                    ${version}${installed?.update ? html`<span class="warn"> · ${installed.update.version} available</span>` : ""}
-                </dd>
-            </div>
-            <div>
-                <dt>Source</dt>
-                <dd class="mono">
-                    <${Out} href=${sourceUrl}>${repo} @ ${short(commit)}<//>
-                </dd>
-            </div>
-            ${
-                entry &&
-                html`<div>
-                    <dt>Needs</dt>
-                    <dd>Pi Pocket ${entry.minPocket} or newer · extension API ${entry.pocketApi}</dd>
-                </div>`
-            }
-            ${
-                installed &&
-                html`<div>
-                    <dt>Installed</dt>
-                    <dd>
-                        ${timeAgo(installed.installedAt)}${installed.unlisted ? ` · ${installed.unlisted}` : ""}
-                    </dd>
-                </div>`
-            }
-        </dl>
+        <${EntryFacts}
+            entry=${entry}
+            installed=${installed}
+            needs=${entry && `Pi Pocket ${entry.minPocket} or newer · extension API ${entry.pocketApi}`}
+        />
         ${
             installed?.changed.length > 0 &&
             html`<div class="gallery-warn small">
