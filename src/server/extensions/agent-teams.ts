@@ -99,9 +99,14 @@ export default function createAgentTeams(host: PocketHost, web?: ExtensionWeb) {
                         key,
                     ));
                 } catch (error) {
-                    // Core says what went wrong; what Pi should do about it is this tool's to say.
+                    // Core says what went wrong; what Pi should do about it is this tool's to say. A first message too
+                    // long started nothing: Pi can send a shorter one.
+                    const why = error instanceof Error ? error.message : String(error);
+
                     throw new Error(
-                        `${error instanceof Error ? error.message : String(error)} Do not look for a way around it: stop and tell the person.`,
+                        (error as { status?: unknown } | null)?.status === 413
+                            ? `${why} Send a shorter one.`
+                            : `${why} Do not look for a way around it: stop and tell the person.`,
                     );
                 }
 
