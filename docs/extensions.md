@@ -101,6 +101,7 @@ These examples work. `npm test` runs them (`test/docs-examples.test.ts`):
 - **Nothing two times.** A restart can run a hook or a safe tool again. Some work must occur one time only: a message that you send, money that you spend, a line that you add to a file. Put it behind `api.memo`, or behind a key that lets a second run find the first.
 - **No hidden state.** Keep state in Pi Durable documents or memos, not in variables. A reload starts the module again, and a restart starts the process again.
 - **Your documents are stored data.** Name a document kind after your module (`x.<module>.<name>`, for example `x.word-count.totals`), so that no other module uses the same kind. Name your tasks and your entries' kinds the same way. After anyone has run the module, never rename a kind or a name, and never change what its fields mean. Add new ones beside them.
+- **Name your browser data too.** A browser module that keeps data in `localStorage` or `sessionStorage` uses keys that start with `x.<module>.`, for example `x.word-count.open`. Pi Pocket's own keys start with `pocket.`, and it never uses `x.` keys.
 - **Do not block.** Tools run in the server process. Use async file and process calls, never `execSync` or a busy loop. A slow tool delays only its call; a blocked event loop delays everyone.
 - **Do not get around a block.** A guard or a person said no for a reason.
 - **Keep secrets out.** The text of a section, a tool's description, and a result go to the model provider.

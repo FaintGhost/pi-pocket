@@ -2,6 +2,8 @@
 
 A tool can start a session from the session that it runs in, and send messages between such sessions. Agent Teams does this ([agent-teams.ts](../../src/server/extensions/agent-teams.ts)). Use `host.linkedSessions`. Its members are in [the host reference](reference/host.md).
 
+**Experimental** in 0.14: it can change in a minor release ([API stability](policies/api-stability.md#experimental)).
+
 ## What a linked session is
 
 A linked session is an ordinary session. The session list shows it under the session that started it (the source).

@@ -41,6 +41,10 @@ Do slow work after the module loads, not while it loads.
 - Other people see only that the module failed. The error can name the server's folders, or quote a model provider.
 - When an edit does not load, the previous version continues to run, with its routes and browser module.
 
+## Deprecated members
+
+A member of the API that will go is marked **Deprecated** in the reference, with what to use instead, and when it goes. When a module uses one, its row in Menu → Extensions shows a warning to the owner: for the server part's uses, and for the browser module's uses in that tab. [API stability](policies/api-stability.md) gives the rules: what is public, what is a breaking change, and how long a deprecated member stays.
+
 ## Restarts
 
 A restart installs again each module that is on. Work that the module's tasks did not finish continues when the module is installed.
