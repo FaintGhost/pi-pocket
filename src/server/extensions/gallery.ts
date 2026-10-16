@@ -5,8 +5,14 @@
  */
 import { defineExtension } from "@earendil-works/pi-durable";
 import { HttpError } from "../errors.ts";
-import { NAME } from "../gallery/entry.ts";
 import type { ExtensionWeb, PocketHost, WebHandler, WebRequest } from "../host.ts";
+
+/**
+ * An extension's name in the index, as a route's `:name` (`NAME` in `gallery/entry.ts`). Kept here rather than imported:
+ * this module also loads into a running server from before the gallery, until its restart, whose `reload.ts` lacks what
+ * `entry.ts` imports.
+ */
+const NAME = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 
 /** A drop-in's module file, as a route's `:file`. */
 const FILE = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,99}\.ts$/;
