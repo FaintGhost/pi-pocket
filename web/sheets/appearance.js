@@ -26,6 +26,7 @@ import {
     varsStyle,
 } from "../theme.js";
 import { html, Icon, Sheet, Switch } from "../ui.js";
+import { galleryAvailable } from "./gallery.js";
 
 // Key hints are for people with a keyboard: a touch screen has none.
 const touch = matchMedia("(pointer: coarse)").matches;
@@ -215,6 +216,15 @@ function LookTools() {
                 ? html`<button class="button" onClick=${() => attempt(() => editWithPi(id))}>
                         <${Icon} name="sparkle" size=${14} /> Edit with Pi
                     </button>
+                    ${
+                        galleryAvailable() &&
+                        html`<button
+                            class="button"
+                            onClick=${() => openSheet({ type: "gallery-share", id, theme: true })}
+                        >
+                            Share…
+                        </button>`
+                    }
                     <button class="button ghost" onClick=${remove}>Remove</button>`
                 : html`<span class="muted small">Duplicate it to make a theme of your own.</span>`
         }
