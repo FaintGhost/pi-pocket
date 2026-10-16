@@ -14,7 +14,7 @@ import {
     until,
 } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
@@ -101,6 +101,12 @@ test("drop-ins are off until the owner turns them on, and cannot replace a built
     assert.equal(seen.dropIns, undefined);
     assert.equal(seen.modules.find((each) => each.file === "shout.ts")?.path, undefined);
     assert.equal((await app.extensions(owner(app))).dropIns, dropIns);
+    // Pi Pocket's types beside the drop-ins: a link to them, never a module.
+    assert.equal(
+        realpathSync(join(dropIns, "_pocket.d.ts")),
+        realpathSync(new URL("../types/pocket.d.ts", import.meta.url)),
+    );
+    assert.deepEqual(module("_pocket.d.ts"), []);
 });
 
 test("a drop-in that is on gives Pi its tools and hooks, reloads when edited, and goes away when deleted", async () => {
