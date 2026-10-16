@@ -20,6 +20,7 @@ So a change to an extension module and to other server code goes live in two par
 - **`web/*.js`:** run `node --check web/<file>.js` at once, before anything else. If the app went blank, this tells why. Check the change in a browser (below). There are tests for a few of the web app's risks (`test/*-ui.test.ts`), not for most of it.
 - **An extension module:** watch for the reload notice, or its error, in the app.
 - **Other server code:** run `npm run check`.
+- **A page in `docs/`:** a new page needs a row in `docs-site/src/sidebar.mjs`, or the docs build fails. To check the links, anchors, and the reference, run `cd docs-site && npm ci && npm run check` (the site's own packages, never at the root). The root `npm run check` also checks that the reference and `types/pocket.d.ts` agree.
 
 Then, before you say that the change is done:
 
