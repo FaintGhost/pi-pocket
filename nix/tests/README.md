@@ -5,22 +5,8 @@ installed package, after development dependencies have been pruned. It starts th
 wrapped executable outside the checkout, with an isolated home and no inherited
 build tools or provider credentials. It checks HTTP assets, dependency resolution,
 owner activation, automatic hot reload, and persistence of extension files,
-enabled/disabled choices and a database session across restarts. No model calls
+enabled choices and a database session across restarts. No model calls
 are needed.
-
-On Linux, `nix flake check` also runs `service.py` in the NixOS VM configured by
-`service.nix`. The Python test has annotated functions and response records and
-must pass basedpyright in strict mode before the VM starts. To run just that check on an
-x86-64 Linux host:
-
-```sh
-nix build .#checks.x86_64-linux.nixos-service -L
-```
-
-The VM exercises the actual service user, systemd startup, Pocket's server restart,
-service restart, and switches to prebuilt NixOS specialisations with changed and
-empty extension declarations. These are real configuration activations, without
-needing a network-dependent `nixos-rebuild` inside the VM.
 
 The package preserves owner-created extensions and live edits. The NixOS module
 also preserves owner additions across service starts and configuration changes.

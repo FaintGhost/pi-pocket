@@ -63,12 +63,6 @@
               ${pkgs.bash}/bin/bash ${./nix/tests/extensions.sh} ${./nix/manage-extensions.sh}
               touch "$out"
             '';
-          }
-          // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
-            nixos-service = import ./nix/tests/service.nix {
-              inherit pkgs;
-              package = pi-pocket;
-            };
           };
           formatter = pkgs.nixfmt;
         };

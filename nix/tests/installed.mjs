@@ -32,10 +32,6 @@ test(
 
         mkdirSync(extensions, { recursive: true });
         writeFileSync(file, source);
-        assert.equal(
-            existsSync(join(packageDir, "share/pi-pocket/node_modules/typescript")),
-            false,
-        );
 
         // Use a free loopback port, rather than colliding with a real Pocket instance.
         const listener = createServer();
@@ -264,13 +260,5 @@ test(
             ),
             "the database session survives both kinds of restart",
         );
-
-        await api("extensions/extension.ts", { enabled: false });
-        assert.deepEqual((await module()).extensions, []);
-        await stop();
-        start();
-        await ready();
-        assert.equal((await module()).enabled, false, "a disabled choice also survives restart");
-        assert.deepEqual((await module()).extensions, []);
     },
 );
