@@ -16,6 +16,7 @@ import {
     api,
     attempt,
     canSteer,
+    canToggleTurns,
     closeSheet,
     collab,
     navigate,
@@ -349,14 +350,8 @@ export function MenuSheet({ places = true }) {
     const steer = canSteer();
     const session = conversation?.kind === "session";
     const turns = view.turns;
-    // While take turns is on, settings belong to the driver. Turning it off also works for the owner, or when the
-    // driver has left: the same rules the server applies.
+    // While take turns is on, settings belong to the driver.
     const driving = !turns?.on || turns.driver === me?.id;
-    const canStopTurns =
-        driving ||
-        me?.role === "owner" ||
-        !turns.driver ||
-        !store.state.presence.some((person) => person.id === turns.driver);
     const instructions = view.agent?.instructions;
     const memory = useMemory();
 
@@ -366,8 +361,7 @@ export function MenuSheet({ places = true }) {
             ${
                 conversation &&
                 collab() &&
-                steer &&
-                (!turns?.on || canStopTurns) &&
+                canToggleTurns() &&
                 item(
                     turns?.on ? "Turn off take turns" : "Take turns",
                     () =>

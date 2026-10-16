@@ -8,6 +8,7 @@ import {
     actions,
     attempt,
     canSteer,
+    canToggleTurns,
     chatLogShown,
     closePeople,
     closeSheet,
@@ -689,13 +690,7 @@ function PeopleRoster() {
     const { presence, users, me, view } = store.state;
     const turns = view.turns;
     const driver = users.find((person) => person.id === turns?.driver)?.name ?? "No one";
-    const canToggle =
-        canSteer() &&
-        (!turns?.on ||
-            turns.driver === me?.id ||
-            me?.role === "owner" ||
-            !turns.driver ||
-            !presence.some((person) => person.id === turns.driver));
+    const canToggle = canToggleTurns();
 
     return html`<div class="people-roster">
         ${presence.map((person) => {

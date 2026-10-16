@@ -242,6 +242,25 @@ export function workspaceOrder(state = store.state) {
 export const collab = () => (store.state.server?.collab ?? 0) >= 2;
 /** Viewers read and chat; they never steer Pi. */
 export const canSteer = () => store.state.me?.role !== "viewer";
+
+/**
+ * Whether this person may turn take turns on or off here, as the server decides: anyone who steers while it is off; the
+ * driver, the owner, or anyone when nobody drives or the driver has left, while it is on.
+ */
+export function canToggleTurns() {
+    const { me, presence, view } = store.state;
+    const turns = view.turns;
+
+    return (
+        canSteer() &&
+        (!turns?.on ||
+            turns.driver === me?.id ||
+            me?.role === "owner" ||
+            !turns.driver ||
+            !presence.some((person) => person.id === turns.driver))
+    );
+}
+
 /** People invited to one session cannot start sessions or invite others. */
 export const scoped = () => Array.isArray(store.state.me?.sessions);
 
