@@ -489,10 +489,10 @@ export function GalleryEntrySheet({ name }) {
         entry && (!installed || entry.source.commit === installed.commit) ? entry.files : null;
     const offeredRevoked = !installed && entry ? revocation(entry, entry.source.commit) : undefined;
 
+    // Bound to the manifest the owner saw (`pin`): when the index changed since, the server refuses with 409, and the
+    // entry is read again (run's reload) for the owner to look at once more.
     const install = () =>
-        run(() =>
-            galleryApi(`install/${encodeURIComponent(name)}`, { commit: entry.source.commit }),
-        );
+        run(() => galleryApi(`install/${encodeURIComponent(name)}`, { pin: entry.pin }));
     const toggle = (enabled) => run(() => setEnabled(installed, title, enabled));
 
     const uninstall = () => {
@@ -749,10 +749,17 @@ export function GalleryUpdateSheet({ name }) {
     const [busy, setBusy] = useState(false);
     const going = useRef(false);
 
-    useEffect(() => {
-        galleryApi(`update/${encodeURIComponent(name)}`).then(setData, (error) =>
-            setProblem(error.message),
+    const preview = () =>
+        galleryApi(`update/${encodeURIComponent(name)}`).then(
+            (result) => {
+                setData(result);
+                setProblem(null);
+            },
+            (error) => setProblem(error.message),
         );
+
+    useEffect(() => {
+        preview();
     }, [name]);
 
     const apply = () => {
@@ -772,9 +779,22 @@ export function GalleryUpdateSheet({ name }) {
         going.current = true;
         setBusy(true);
         attempt(async () => {
-            const result = await galleryApi(`update/${encodeURIComponent(name)}`, {
-                commit: data.to.commit,
-            });
+            let result;
+
+            try {
+                // Bound to the manifest shown here (`pin`).
+                result = await galleryApi(`update/${encodeURIComponent(name)}`, {
+                    pin: data.to.pin,
+                });
+            } catch (error) {
+                // The index changed since this preview: show the update it offers now instead.
+                if (error.status === 409) {
+                    setData(null);
+                    await preview();
+                }
+
+                throw error;
+            }
 
             if (result.restart) {
                 notify(
