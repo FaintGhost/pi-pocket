@@ -561,7 +561,9 @@ export class PocketApp {
             // What a module's load says can name the server's folders, or quote a provider: the owner's to read.
             { webs: this.webs, notify: (level, message) => this.ownerNotice(level, message) },
         );
-        await this.themes.load();
+        await this.themes.load().catch((error: unknown) => {
+            this.#log(`Themes could not be read: ${describe(error)}`);
+        });
         // A gallery update the server stopped in the middle of goes back first, so no extension loads half of one.
         await this.gallery.recover().catch((error: unknown) => {
             this.#log(`The extension gallery could not check its updates: ${describe(error)}`);
@@ -1028,6 +1030,10 @@ export class PocketApp {
         client.send("hello", this.#helloFor(client, hello));
         client.send("sessions", this.sessions(client.user));
         this.#sendPip(client);
+
+        if (client.user.role === "owner" && this.themes.failure !== undefined) {
+            client.send("notice", { level: "warning", message: this.themes.failure });
+        }
 
         if (arriving) {
             this.#peopleChanged(client.user.id);

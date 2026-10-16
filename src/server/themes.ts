@@ -147,6 +147,7 @@ export class Themes {
     #found: Listed[] = [];
     /** The palettes that come with the app (`web/themes.js`), by id: their ids are taken. */
     #palettes: Record<string, { name: string; colors: Record<string, string> }> = {};
+    #failure: string | undefined;
     /** Folders not read for their names, with why: told once. */
     #misnamed = new Map<string, string>();
     #stops: (() => void)[] = [];
@@ -179,7 +180,27 @@ export class Themes {
             this.#options.log(`No themes folder at ${this.dir}: ${describe(error)}`);
         }
 
-        this.#scan(false);
+        // A theme folder must never keep the server from starting: past a failure, the built-in themes alone.
+        try {
+            this.#scan(false);
+        } catch (error) {
+            this.#failure = `The owner's themes could not be read, so only the built-in ones are offered until the server restarts: ${describe(error)}`;
+            this.#options.log(this.#failure);
+            this.#good.clear();
+            this.#problems.clear();
+            this.#found = [];
+
+            try {
+                this.#scan(false, false);
+            } catch (again) {
+                this.#options.log(`The built-in themes could not be read: ${describe(again)}`);
+            }
+        }
+    }
+
+    /** Why the owner's themes were not read at the start, if they were not: the owner is told when they connect. */
+    get failure(): string | undefined {
+        return this.#failure;
     }
 
     /** Read the themes again shortly after their files change. */
@@ -210,7 +231,15 @@ export class Themes {
 
     /** Read every theme again, and tell the tabs and the owner what changed. */
     rescan(): void {
-        this.#scan(true);
+        // From a timer: what it throws would end the process.
+        try {
+            this.#scan(true);
+        } catch (error) {
+            const message = `Themes could not be read again; the ones in use stay as they were: ${describe(error)}`;
+
+            this.#options.log(message);
+            this.#options.notify(message);
+        }
     }
 
     /** Every theme, as the web app lists it: built-in ones first, then the owner's by name. */
@@ -427,12 +456,12 @@ export class Themes {
     }
 
     /** Read every theme folder; with `tell`, tell the owner about new problems and the tabs about a changed list. */
-    #scan(tell: boolean): void {
+    #scan(tell: boolean, theirs = true): void {
         const found: { id: string; builtIn: boolean; dir: string }[] = [];
 
         for (const [root, builtIn] of [
             [this.builtInDir, true],
-            [this.dir, false],
+            ...(theirs ? [[this.dir, false] as const] : []),
         ] as const) {
             let entries: Dirent[];
 
