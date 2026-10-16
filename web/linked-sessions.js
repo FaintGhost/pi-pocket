@@ -1,9 +1,16 @@
 // Links between linked sessions, above the transcript. Only the server's list for this person may name one.
+import { useState } from "preact/hooks";
 import { navigate, store } from "./store.js";
 import { html, Icon } from "./ui.js";
 
+/** Links shown before the rest fold into "+N more": a coordinator's transcript stays near the top on a phone. */
+const SHOWN = 3;
+
 export function LinkedSessions() {
     const { conversationId, sessions, sessionsLoaded } = store.state;
+    // Unfolded for one session: another one opens folded.
+    const [openFor, setOpenFor] = useState(null);
+    const open = openFor === conversationId;
 
     if (!sessionsLoaded) {
         return null;
@@ -26,6 +33,7 @@ export function LinkedSessions() {
         <${Icon} name="fork" size=${14} />
         <span>${label}: ${session.title ?? "New session"}</span>
     </button>`;
+    const shown = open || started.length <= SHOWN ? started : started.slice(0, SHOWN);
 
     return html`<nav class="linked-sessions" aria-label="Linked sessions">
         ${
@@ -36,6 +44,12 @@ export function LinkedSessions() {
                 Started from another session
             </p>`
         }
-        ${started.map((session) => link(session, "Linked session"))}
+        ${shown.map((session) => link(session, "Linked session"))}
+        ${
+            shown.length < started.length &&
+            html`<button class="breadcrumb" onClick=${() => setOpenFor(conversationId)}>
+                +${started.length - shown.length} more
+            </button>`
+        }
     </nav>`;
 }
