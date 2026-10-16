@@ -35,9 +35,12 @@ const Runs = defineDoc({
 });
 const count = (ctx) => ctx.commit(async (tx) => { (await tx.doc(Runs, ctx.conversationId)).count++; });
 export default (_host, web) => {
-    web.command({
-        name: "count", description: "Count", scope: "conversation",
+    web.command("count-here", {
+        description: "Count", scope: "conversation",
         handler: async (args, ctx) => {
+            if (args === "throw") {
+                throw new Error("a secret path");
+            }
             await count(ctx);
             if (args === "hold") {
                 await new Promise((resolve) => ctx.signal.addEventListener("abort", resolve));
@@ -47,8 +50,8 @@ export default (_host, web) => {
                 : { type: "toast", level: "info", message: "Counted." };
         },
     });
-    web.command({
-        name: "count-all", description: "Count for the owner", scope: "global",
+    web.command("count-all", {
+        description: "Count for the owner", scope: "global",
         handler: async (_args, ctx) => {
             await count(ctx);
             return { type: "toast", level: "info", message: "Counted." };
@@ -82,7 +85,7 @@ const request = (name: string, args = "") => ({
 
 test("a retried request runs its handler once, and a restart does not run it again", async () => {
     const id = await newSession(app);
-    const once = request("count");
+    const once = request("count-here");
     const [first, second] = await Promise.all([
         app.extensionCommands.run(id, owner(app), once),
         app.extensionCommands.run(id, owner(app), once),
@@ -92,7 +95,7 @@ test("a retried request runs its handler once, and a restart does not run it aga
     assert.equal(await runs(id), 1);
 
     // A handler that changed something, cut off by a restart, comes back interrupted and is not run again.
-    const held = request("count", "hold");
+    const held = request("count-here", "hold");
 
     void app.extensionCommands.run(id, owner(app), held).catch(() => {});
     await until(async () => (await runs(id)) === 2, "the held command");
@@ -110,14 +113,32 @@ test("a viewer runs no command, and a global command is the owner's alone", asyn
     const viewer = app.config.addUser("Viewer", "viewer").user;
     const guest = app.config.addUser("Guest", "guest").user;
 
-    await assert.rejects(app.extensionCommands.run(id, viewer, request("count")), {
+    await assert.rejects(app.extensionCommands.run(id, viewer, request("count-here")), {
         status: 403,
     });
     await assert.rejects(app.extensionCommands.run(id, guest, request("count-all")), {
         status: 403,
     });
+    // While people take turns, a guest who does not drive runs no conversation command.
+    await app.collab.turns(id, owner(app), { action: "on" });
+    await assert.rejects(app.extensionCommands.run(id, guest, request("count-here")), {
+        status: 409,
+    });
+    await app.collab.turns(id, owner(app), { action: "off" });
     assert.equal(await runs(id), 0);
-    assert.equal((await app.extensionCommands.run(id, guest, request("count"))).status, "done");
+    // A handler's own error words are the owner's to read, not the guest's.
+    assert.equal(
+        (
+            (await app.extensionCommands.run(id, guest, request("count-here", "throw"))) as {
+                message?: string;
+            }
+        ).message,
+        "The command failed.",
+    );
+    assert.equal(
+        (await app.extensionCommands.run(id, guest, request("count-here"))).status,
+        "done",
+    );
     assert.equal(await runs(id), 1);
 });
 
@@ -127,31 +148,31 @@ test("a card shows in the transcript, never in Pi's context, and does not change
 
     await say(app, id, "Hello");
     assert.equal(
-        (await app.extensionCommands.run(id, guest, request("count", "card"))).type,
+        (await app.extensionCommands.run(id, guest, request("count-here", "card"))).type,
         "card",
     );
 
     const entries = (await (await app.conversation(id)).context(context)).entries;
 
-    assert.ok(entries.some((entry) => entry.kind === "pocket.command"));
+    assert.ok(entries.some((entry) => entry.kind === "pocket.extension-command"));
     assert.equal(app.attribution.requesterOf(id), owner(app).id);
     await say(app, id, "Again");
     assert.ok(!(await modelTexts(app, id)).some((text) => text.includes("CARD_SENTINEL")));
 });
 
 test("a failed reload keeps the commands, and turning the module off takes them away", async () => {
-    const before = commandId("count");
+    const before = commandId("count-here");
 
     // A version that registers, then fails: what it registered never counts.
     writeFileSync(
         join(app.dataDir, "extensions", FILE),
         `export default (_host, web) => {
-            web.command({ name: "count", description: "Count", scope: "global", handler() {} });
+            web.command("count-here", { description: "Count", scope: "global", handler() {} });
             throw new Error("broken");
         };`,
     );
     await assert.rejects(app.loader.reload(FILE));
-    assert.equal(commandId("count"), before);
+    assert.equal(commandId("count-here"), before);
 
     writeFileSync(join(app.dataDir, "extensions", FILE), MODULE);
     await app.setExtensionEnabled(owner(app), FILE, false);
@@ -160,7 +181,7 @@ test("a failed reload keeps the commands, and turning the module off takes them 
     const id = await newSession(app);
 
     await assert.rejects(
-        app.extensionCommands.run(id, owner(app), { ...request("count"), commandId: before }),
+        app.extensionCommands.run(id, owner(app), { ...request("count-here"), commandId: before }),
         { status: 404 },
     );
 });

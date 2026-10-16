@@ -451,15 +451,18 @@ export const BrowserDoc = defineDoc<{
     initial: () => ({}),
 });
 
-/** A native command request and its task are stored together. Retries remain deduplicated across restarts. */
-export const CommandRequestDoc = defineDocFamily<{ taskId?: TaskId }, null>({
-    kind: "pocket.command-request",
+/**
+ * The extensions' commands one person ran here, keyed by the person's id: each request id with its task, oldest first.
+ * A request sent again, also after a restart, finds its task. A fork starts without them.
+ */
+export const CommandRequestsDoc = defineDocFamily<{ items: Record<string, number> }, null>({
+    kind: "pocket.extension-command-request",
     version: 1,
     family: true,
     scope: "conversation",
     history: "latest",
     fork: "initial",
-    initial: () => ({}),
+    initial: () => ({ items: {} }),
 });
 
 /**

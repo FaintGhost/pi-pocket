@@ -1495,87 +1495,24 @@ const SHELL_ENDS = {
 /** How many of a command's last lines show before "Show all". */
 const SHELL_LINES = 12;
 
-/** A native extension result: read-only text for the people here, not a model message. */
-function CommandEntry({ entry }) {
-    const [open, setOpen] = useState(false);
-    const [full, setFull] = useState(null);
-    const output = full ?? entry.output;
-    const lines = output.split("\n");
-    const long = lines.length > SHELL_LINES;
-
-    return html`<div class="shell-row command-row" id=${`entry-${entry.id}`}>
-        <div class=${`shell-card command-card ${open ? "open" : ""}`}>
-            <div class="shell-head">
-                <span class="mono shell-command">/${entry.command}</span>
-                <span class="muted small">${entry.name} · not shown to Pi</span>
-            </div>
-            <pre class="output">${long && !open ? `${lines.slice(0, SHELL_LINES).join("\n")}\n…` : output}</pre>
-            ${
-                long &&
-                html`<button class="link small" onClick=${() => setOpen(!open)}>
-                    ${open ? "Show less" : `Show all ${lines.length} lines`}
-                </button>`
-            }
-            ${
-                entry.truncated &&
-                full === null &&
-                html`<button
-                    class="link small"
-                    onClick=${() =>
-                        attempt(async () => {
-                            setFull((await actions.fullEntry(entry.id)).output);
-                            setOpen(true);
-                        })}
-                >
-                    Load everything
-                </button>`
-            }
-            <button
-                class="link small"
-                onClick=${() =>
-                    attempt(async () => {
-                        const text =
-                            full ??
-                            (entry.truncated
-                                ? (await actions.fullEntry(entry.id)).output
-                                : entry.output);
-
-                        setFull(text);
-                        await copyText(text);
-                        notify("info", "Copied the command output.");
-                    })}
-            >
-                Copy output
-            </button>
-        </div>
-    </div>`;
-}
-
-/** A command someone ran with `!` (or `!!`, which Pi does not see): what it printed, and how it ended. */
-function ShellEntry({ entry }) {
+/**
+ * What a command printed, as a card: a `!` command's, or an extension command's card. A long output shows its last lines
+ * until opened, and one the server cut short loads in full on a tap.
+ */
+function OutputCard({ entry, command, meta, failed = false, longCommand = false, copy = false }) {
     const [open, setOpen] = useState(false);
     const [full, setFull] = useState(null);
     const output = (full ?? entry.output).replace(/\s+$/, "");
     const lines = output.split("\n");
     const long = lines.length > SHELL_LINES;
-    // A long command (a paste in it, say) shows its first lines until opened.
-    const longCommand = entry.command.split("\n").length > 3 || entry.command.length > 240;
-    const end =
-        entry.status === "done"
-            ? entry.code === 0
-                ? ""
-                : `exit ${entry.code}`
-            : SHELL_ENDS[entry.status];
+    const whole = async () =>
+        full ?? (entry.truncated ? (await actions.fullEntry(entry.id)).output : entry.output);
 
     return html`<div class="shell-row" id=${`entry-${entry.id}`}>
-        <div class=${`shell-card ${end ? "failed" : ""} ${open ? "open" : ""}`}>
+        <div class=${`shell-card ${failed ? "failed" : ""} ${open ? "open" : ""}`}>
             <div class="shell-head">
-                <span class="mono shell-command">$ ${entry.command}</span>
-                <span class="muted small">
-                    ${entry.name}
-                    ${end ? ` · ${end}` : ""}
-                    ${entry.context ? "" : " · not shown to Pi"}
-                </span>
+                <span class="mono shell-command">${command}</span>
+                <span class="muted small">${meta}</span>
             </div>
             ${
                 output !== "" &&
@@ -1596,15 +1533,61 @@ function ShellEntry({ entry }) {
                     class="link small"
                     onClick=${() =>
                         attempt(async () => {
-                            setFull((await actions.fullEntry(entry.id)).output);
+                            setFull(await whole());
                             setOpen(true);
                         })}
                 >
                     Load everything
                 </button>`
             }
+            ${
+                copy &&
+                html`<button
+                    class="link small"
+                    onClick=${() =>
+                        attempt(async () => {
+                            const text = await whole();
+
+                            setFull(text);
+                            await copyText(text);
+                            notify("info", "Copied the output.");
+                        })}
+                >
+                    Copy output
+                </button>`
+            }
         </div>
     </div>`;
+}
+
+/** An extension command's card: text for the people here, never in Pi's context. */
+function CommandEntry({ entry }) {
+    return html`<${OutputCard}
+        entry=${entry}
+        command=${`/${entry.command}`}
+        meta=${`${entry.name} · not shown to Pi${entry.clipped ? " · only the end is kept" : ""}`}
+        copy=${true}
+    />`;
+}
+
+/** A command someone ran with `!` (or `!!`, which Pi does not see): what it printed, and how it ended. */
+function ShellEntry({ entry }) {
+    // A long command (a paste in it, say) shows its first lines until opened.
+    const longCommand = entry.command.split("\n").length > 3 || entry.command.length > 240;
+    const end =
+        entry.status === "done"
+            ? entry.code === 0
+                ? ""
+                : `exit ${entry.code}`
+            : SHELL_ENDS[entry.status];
+
+    return html`<${OutputCard}
+        entry=${entry}
+        command=${`$ ${entry.command}`}
+        meta=${`${entry.name}${end ? ` · ${end}` : ""}${entry.context ? "" : " · not shown to Pi"}`}
+        failed=${Boolean(end)}
+        longCommand=${longCommand}
+    />`;
 }
 
 /** Something a person did that Pi was told about, such as undoing a file. */

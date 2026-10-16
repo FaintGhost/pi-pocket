@@ -106,7 +106,7 @@ export function RunningSheet() {
                         }
                         ${
                             steer &&
-                            ["pocket.shell", "pocket.command"].includes(task.kind) &&
+                            ["pocket.shell", "pocket.extension-command"].includes(task.kind) &&
                             html`<button
                                 class="link small"
                                 onClick=${() => stopCommand(task)}

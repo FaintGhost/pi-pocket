@@ -56,7 +56,11 @@ const MAX_FOLDERS = 500;
 /** How many of a browser module's folders are watched for edits; deeper or more are seen at the module's next load. */
 const MAX_WATCHED = 64;
 
-/** The message box's own commands: a module's command may not take their names, whether they show now or not. */
+/**
+ * The message box's own commands: a module's command may not take their names, whether they show now or not. Keep it
+ * the same as `COMMANDS` in `web/commands.js`. They are one word each, and a module's command names have a `-`, so a new
+ * built-in never takes a module's name.
+ */
 export const BUILT_IN_COMMANDS: ReadonlySet<string> = new Set([
     "compact",
     "reset",
@@ -90,10 +94,15 @@ export const BUILT_IN_COMMANDS: ReadonlySet<string> = new Set([
     "trust",
     "theme",
 ]);
-const COMMAND_NAME = /^[a-z][a-z0-9_-]{0,63}$/;
+/** A module's command name: lowercase, starting with a letter, with at least one `-` (`clock-zone`). */
+const COMMAND_NAME = /^(?=[^-]*-)[a-z][a-z0-9_-]{0,63}$/;
 
-/** A command with its handler, which stays on the server. */
-export type RegisteredCommand = CommandInfo & Pick<ExtensionCommand, "handler">;
+/** The most commands a module may register, and the longest description or `args` hint each may have. */
+const MAX_COMMANDS = 50;
+const MAX_COMMAND_TEXT = 200;
+
+/** A command with its handler and its module's file, which stay on the server. */
+export type RegisteredCommand = CommandInfo & Pick<ExtensionCommand, "handler"> & { file: string };
 
 /** Marks the errors a module made with `web.error`: only their status and words reach the browser as they are. */
 const EXPOSED = Symbol("pocket.webError");
@@ -296,9 +305,9 @@ export class ExtensionWebs {
 
                 return Object.assign(new Error(words), { status, [EXPOSED]: true });
             },
-            command: (command) => {
+            command: (name, command) => {
                 sealed("command");
-                part.commands.push(this.#checkCommand(part, command));
+                part.commands.push(this.#checkCommand(part, name, command));
             },
             onDispose: (dispose) => {
                 if (typeof dispose !== "function") {
@@ -389,18 +398,18 @@ export class ExtensionWebs {
     }
 
     /** A command as registered, checked: its name must not take a built-in command's, or another module's. */
-    #checkCommand(part: WebPart, command: unknown): RegisteredCommand {
-        if (typeof command !== "object" || command === null) {
-            throw new Error("web.command: give it { name, description, scope, handler }");
-        }
-
-        const { name, description, args, scope, handler } = command as Partial<ExtensionCommand>;
-
+    #checkCommand(part: WebPart, name: unknown, command: unknown): RegisteredCommand {
         if (typeof name !== "string" || !COMMAND_NAME.test(name)) {
             throw new Error(
-                "web.command: a name is up to 64 lowercase letters, digits, - and _, starting with a letter, without the /",
+                `web.command: ${String(name).slice(0, 64)}: a name is up to 64 lowercase letters, digits, - and _, starting with a letter, with at least one - (clock-zone), without the /`,
             );
         }
+
+        if (typeof command !== "object" || command === null) {
+            throw new Error(`web.command: /${name}: give it { description, scope, handler }`);
+        }
+
+        const { description, args, scope, handler } = command as Partial<ExtensionCommand>;
 
         if (typeof description !== "string" || description.trim() === "") {
             throw new Error(`web.command: /${name} needs a description`);
@@ -408,6 +417,16 @@ export class ExtensionWebs {
 
         if (args !== undefined && typeof args !== "string") {
             throw new Error(`web.command: /${name}: args is a hint in words, such as "[zone]"`);
+        }
+
+        if (description.length > MAX_COMMAND_TEXT || (args?.length ?? 0) > MAX_COMMAND_TEXT) {
+            throw new Error(
+                `web.command: /${name}: its description and args are ${MAX_COMMAND_TEXT} characters at most`,
+            );
+        }
+
+        if (part.commands.length >= MAX_COMMANDS) {
+            throw new Error(`web.command: a module has ${MAX_COMMANDS} commands at most`);
         }
 
         if (scope !== "conversation" && scope !== "global") {
@@ -461,7 +480,7 @@ export class ExtensionWebs {
     /** Every installed module's commands, without their handlers. */
     commands(): CommandInfo[] {
         return [...this.#parts.values()].flatMap((part) =>
-            part.commands.map(({ handler: _handler, ...info }) => info),
+            part.commands.map(({ handler: _handler, file: _file, ...info }) => info),
         );
     }
 
@@ -679,7 +698,7 @@ export class ExtensionWebs {
             routes: part.routes.map((route) => `${route.method} ${route.path}`),
             ...(part.client === undefined ? {} : { client: part.client.access }),
             access,
-            commands: part.commands.map((command) => `/${command.name}`),
+            commands: part.commands.map((command) => `${command.scope} /${command.name}`),
         };
     }
 

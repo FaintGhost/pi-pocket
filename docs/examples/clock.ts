@@ -63,8 +63,7 @@ function known(zone: string): boolean {
 
 export default function createClock(_host: unknown, web: ExtensionWeb) {
     // `/clock-zone` shows the session's time zone, and `/clock-zone Europe/Berlin` sets it, without asking Pi.
-    web.command({
-        name: "clock-zone",
+    web.command("clock-zone", {
         description: "Show or set this session's time zone for the clock",
         args: "[zone]",
         scope: "conversation",
@@ -80,8 +79,9 @@ export default function createClock(_host: unknown, web: ExtensionWeb) {
                 };
             }
 
+            // An error made with web.error reaches the person who ran the command; others say only that it failed.
             if (!known(zone)) {
-                throw new Error(`There is no time zone ${zone}.`);
+                throw web.error(400, `There is no time zone ${zone}.`);
             }
 
             await ctx.commit(async (tx) => {

@@ -61,8 +61,12 @@ export async function conversationRoutes(
 
     if (third === "extension-commands" && fourth === undefined && method === "POST") {
         const body = await readJson<CommandRequest>(request);
+        const gone = new AbortController();
 
-        return json(response, 200, await app.extensionCommands.run(id, user, body));
+        // The browser stopped waiting: so does this request. The run goes on, and a retry finds it.
+        response.on("close", () => gone.abort());
+
+        return json(response, 200, await app.extensionCommands.run(id, user, body, gone.signal));
     }
 
     if (third === "extension-commands" && parts[4] === "stop" && method === "POST") {

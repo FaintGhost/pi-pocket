@@ -156,7 +156,7 @@ Both `start` and `send` act as the person Pi works for in the source: they need 
 
 - **Nothing twice.** A restart can run a hook or a safe tool again. Anything that must happen once (a message sent, money spent, a file appended to) goes behind `api.memo` or a key that makes a repeat find the first.
 - **No surprise state.** Keep state in Pi Durable documents or memos, not in variables: a reload starts the module over, and a restart starts the process over.
-- **Your documents are stored data.** Name a document kind after your module (`x.<module>.<name>`, as `x.word-count.totals`), so no other module's ever meets it. Once anyone has run it, never rename a kind or change what its fields mean: add new ones beside them.
+- **Your documents are stored data.** Name a document kind after your module (`x.<module>.<name>`, as `x.word-count.totals`), so no other module's ever meets it, and your tasks' names and entries' kinds too. Once anyone has run it, never rename a kind or a name, or change what its fields mean: add new ones beside them.
 - **Do not block.** Tools run in the server process: use async file and process calls, never `execSync` or a busy loop. A slow tool holds up only its call; a blocked event loop holds up everyone.
 - **Do not get around a block.** A guard or a person said no for a reason.
 - **Secrets stay out.** Text in a section, a tool's description, or a result goes to the model provider.
@@ -185,7 +185,7 @@ export default function createUsage(_host: unknown, web: ExtensionWeb) {
 | `api`, `module`                       | The version of this API (1); the module's name, its file's without `.ts` |
 | `route(method, path, handle, access)` | A route under `/api/x/<module>/` ([Routes](#routes))                     |
 | `client(entry, access)`               | The browser module ([The browser module](#the-browser-module))           |
-| `command({ name, … })`                | A command for the message box ([Commands](#commands))                    |
+| `command(name, { … })`                | A command for the message box ([Commands](#commands))                    |
 | `send(event, data, { to })`           | An event to the browser module ([Events](#events))                       |
 | `error(status, message)`              | An error a route throws to answer with its status and words              |
 | `onDispose(run)`                      | Run `run` when this version goes ([Cleanups](#cleanups))                 |
@@ -304,35 +304,40 @@ At most 100 events, and 1 MB of them, go out each second for a version of a modu
 
 ### Commands
 
-`web.command({ name, description, args, scope, handler })` adds `/name` to the message box's suggestions, for the people who may run it. It runs on the server and does not ask Pi. The [clock example](examples/clock.ts) has one: `/clock-zone Europe/Berlin` sets the session's time zone, and `/clock-zone` shows it.
+`web.command(name, { description, args, scope, handler })` adds `/name` to the message box's suggestions, for the people who may run it. It runs on the server and does not ask Pi. The [clock example](examples/clock.ts) has one: `/clock-zone Europe/Berlin` sets the session's time zone, and `/clock-zone` shows it.
 
 ```typescript
-web.command({
-    name: "acme-status",
+web.command("acme-status", {
     description: "Show this session's folder",
     scope: "conversation",
     handler: (_args, ctx) => ({ type: "card", output: ctx.cwd }),
 });
 ```
 
-- `name` is up to 64 lowercase letters, digits, `-`, and `_`, starting with a letter, without the `/`. Give it a prefix of your own. A name the message box has already (`/model`, `/find`, and the rest) is refused, and so is one another module's command has: the first one in keeps it. A prompt template with the same name wins in the message box.
-- `description` shows in the suggestions. `args` is an optional hint in words, such as `"[zone]"`; the handler gets everything after the name as one string (up to 4000 characters) and checks it itself.
-- `handler(args, ctx)` returns what to show, or throws an `Error`, whose message the person who ran it sees. `ctx.user` is who ran it (`{ id, name, role }`), `ctx.conversationId` and `ctx.cwd` the session and its folder. Read a document with `ctx.snapshot(Doc, ctx.conversationId, ctx.context)`, and change documents with `await ctx.commit(async (tx) => …)`; keep work outside Pi Pocket out of the commit. `ctx.signal` is aborted when someone stops it.
+- `name` is up to 64 lowercase letters, digits, `-`, and `_`, starting with a letter, without the `/`, and has at least one `-`: `acme-status`, not `status`. The app's own commands are one word each, so a new one never takes your name. Give it a prefix of your own. A name another module's command has is refused: the first one in keeps it. A prompt template with the same name wins in the message box.
+- `description` shows in the suggestions. `args` is an optional hint in words, such as `"[zone]"`. Each is 200 characters at most, and a module has 50 commands at most.
+- `handler(args, ctx)` gets everything after the name as one string (up to 4000 characters). `ctx.user` is who ran it (`{ id, name, role }`), `ctx.conversationId` and `ctx.cwd` the session and its folder. Read a document with `ctx.snapshot(Doc, ctx.conversationId, ctx.context)`, and change documents with `await ctx.commit(async (tx) => …)`, which answers what its function returns; keep work outside Pi Pocket out of the commit.
 
 What it returns:
 
-- `{ type: "toast", level, message }`: a notice (`"info"`, `"warning"`, or `"error"`) for the person who ran it, in that tab alone.
-- `{ type: "card", output }`: plain text in the conversation, for everyone who sees it. Pi never gets it, and it does not change whom Pi works for. Find in session and export include it. Put no secrets in it.
+- `{ type: "toast", level, message }`: a notice (`"info"`, `"warning"`, or `"error"`) for the person who ran it, in that tab alone. A message is cut to 500 characters.
+- `{ type: "card", output }`: plain text in the session the command was typed in, for everyone who sees it. Pi never gets it, and it does not change whom Pi works for. Find in session and export include it. Only its last 30,000 characters are kept, as for a `!` command. Put no secrets in it.
 
-Who may run it:
+To refuse, throw `web.error(status, message)` (or let the app's own errors through): the person who ran it reads `message`. Any other throw tells them only "The command failed.", and the owner gets its words in a notice, as they can name the server's folders or quote a secret.
 
-- `scope: "conversation"`: anyone who may steer the session, and only whoever drives while people take turns. Guests invited to one session may run it there.
-- `scope: "global"`: the owner alone, in any session they see, also while someone else drives. Use it for settings of the whole app. Its card still shows to everyone in the session.
+A conversation command is offered to everyone who can steer that session, people invited to only that session included, and its handler runs with the owner's rights, as all of the module does. Its `args` are untrusted text: check them, and check `ctx.user.role` and `ctx.conversationId` before you change anything beyond that session.
+
+Who may run it (`scope`):
+
+- `"conversation"`: anyone who may steer the session, and only whoever drives while people take turns. Guests invited to one session may run it there.
+- `"global"`: the owner alone, in any session they see, also while someone else drives. Use it for settings of the whole app. Its card still goes to the session it was typed in, for everyone there.
 - Viewers run none, and see none in the suggestions.
 
-Each run is a durable task, kept by who ran it, the session, and the request's id. When a reply gets lost, sending the same text again from the same tab finds the first run and gets its result: the handler runs once. A server restart never runs a handler again: the person hears that it was cut off, as it may have done part of its work. Menu → **Running now** shows a command while it runs, and stops it: steerers stop conversation commands, the owner global ones. Stopping aborts `ctx.signal` and does not undo what the handler did. The arguments and the result are stored with the task, so a command is no place to type a password.
+Each run is a durable task, kept by who ran it, the session, and the request's id. When a reply gets lost, sending the same text again from the same tab finds the first run and gets its result: the handler runs once. A server restart never runs a handler again: the person hears that it was cut off, as it may have done part of its work. Menu → **Running now** shows a command while it runs, and stops it: steerers stop conversation commands, the owner global ones. Stopping aborts `ctx.signal` and does not undo what the handler did; a stop that comes just after the card was written leaves the card, and the run says it was stopped.
 
-Commands install and go with the module's version, as routes do: an edit swaps them in one step, a version that fails keeps the ones before, and turning the module off removes them. A run that started keeps the handler it started with. Menu → **Extensions** lists a module's commands.
+There is no time limit: a handler must watch `ctx.signal` and end when it aborts. One person may have 4 runs going at once, over every session; a fifth is refused until one ends, so a handler that never ends holds one of them until the server restarts. The arguments and the result are stored with the task, so a command is no place to type a password.
+
+Commands install and go with the module's version, as routes do: an edit swaps them in one step, a version that fails keeps the ones before, and turning the module off removes them. A run that started keeps the handler it started with. Menu → **Extensions** lists a module's commands, each with its scope.
 
 ### Cleanups
 
@@ -342,7 +347,7 @@ The new version starts before the old one's cleanups run, so that an edit that f
 
 ### Versions
 
-`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet. `web.command` is newer than the rest of `web`: a module that should also load on a Pi Pocket without it checks `typeof web.command === "function"` first.
+`web.api` and `pocket.version` are the version of this API, 1 now. It goes up only when something a module uses changes in a way that breaks it; additions keep it. A module that exports `pocketApi` (the server module, the browser module, or both) is not set up by a Pi Pocket with an older version of this API, which says so instead. The browser checks it after importing the module, so keep a browser module's top level to declarations, and do its work in the default export. A Pi Pocket from before this API knows neither `pocketApi` nor `web`: a module that adds to the app fails there at its first `web.route` or `web.client`, with the error in the Extensions sheet. `web.command` is newer than the rest of `web`: a module that should also load on Pi Pocket before 0.14.0 checks `typeof web.command === "function"` first.
 
 ## Testing
 
