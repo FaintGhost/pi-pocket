@@ -84,11 +84,13 @@ export function importProblems(
         for (const [spec, required] of specifiers(file.text)) {
             if (spec.startsWith("./") || spec.startsWith("../")) {
                 const target = posix.normalize(posix.join(posix.dirname(file.name), spec));
-                // What `require` would find too, as Node looks: the name with .js or .json, or a folder's index.
+                // What `require` would find too, as Node looks: the name with .js, .json, or .node, or a folder's index
+                // (only that, for a path that ends in a slash).
+                const ends = spec.endsWith("/")
+                    ? ["/index.js", "/index.json", "/index.node"]
+                    : ["", ".js", ".json", ".node", "/index.js", "/index.json", "/index.node"];
                 const found = required
-                    ? ["", ".js", ".json", "/index.js", "/index.json"].some((end) =>
-                          names.has(`${target.replace(/\/$/, "")}${end}`),
-                      )
+                    ? ends.some((end) => names.has(`${target.replace(/\/$/, "")}${end}`))
                     : names.has(target);
 
                 if (!found) {
