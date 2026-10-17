@@ -1403,8 +1403,8 @@ export function RailNav({ foldable = false, folded = false }) {
 const LIST_MIN = 204;
 const LIST_MAX = 464;
 
-/** The sidebar's usual width: its border, the rail, a 264px list, and its other border. */
-export const SIDEBAR_WIDTH = 324;
+/** The sidebar's usual width, the rail and its list together: the one a new browser starts with (theme.js). */
+export const SIDEBAR_WIDTH = 312;
 
 /** Drag the sidebar's right edge to resize its list; a double click puts it back to its usual width. */
 export function ResizeHandle() {

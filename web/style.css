@@ -693,7 +693,7 @@ kbd {
  * than usual, it takes 40% of the screen at most (`sessions.js` drags to the same), so the conversation keeps room. */
 .sidebar {
     display: none;
-    width: min(var(--sidebar-w, 324px), max(324px, 40vw));
+    width: min(var(--sidebar-w, 312px), max(312px, 40vw));
     flex: none;
     flex-direction: row;
     border-right: 1px solid var(--hair);
