@@ -915,7 +915,10 @@ function ToolStep({
 
         // The harness's own errors come wrapped in its tags, after the output if any: what it says is inside them.
         const output = (resultText ?? slot?.output)
-            ?.replace(/(^|\n)<harness>\s*([\s\S]*?)\s*<\/harness>\s*$/, "$1$2")
+            ?.replace(
+                /(^|\n)<harness>([\s\S]*?)<\/harness>\s*$/,
+                (_, before, note) => before + note.trim(),
+            )
             .replace(/^<harness>\s*/, "");
 
         if (output && !(call.name === "edit" && details?.diff && !result?.isError)) {
