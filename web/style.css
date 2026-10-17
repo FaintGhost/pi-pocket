@@ -1641,14 +1641,16 @@ kbd {
 }
 
 /* Words in a code block (a draft to copy, say) wrap in the column, as a reply's words do: a paragraph on one line would
- * otherwise run the pane's width and still scroll sideways. */
-.code
+ * otherwise run the pane's width and still scroll sideways. A block with no language is text too, as its label says,
+ * unless the app draws it (a page or a picture: `data-kind`). */
+.code:not([data-kind])
     > pre:is(
-        [data-lang="text"],
-        [data-lang="txt"],
-        [data-lang="plaintext"],
-        [data-lang="markdown"],
-        [data-lang="md"]
+        :not([data-lang]),
+        [data-lang="text" i],
+        [data-lang="txt" i],
+        [data-lang="plaintext" i],
+        [data-lang="markdown" i],
+        [data-lang="md" i]
     ) {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1656,13 +1658,14 @@ kbd {
 
 [data-part~="reply"]
     :is(.md, .md-part)
-    > .code:has(
+    > .code:not([data-kind]):has(
         > pre:is(
-                [data-lang="text"],
-                [data-lang="txt"],
-                [data-lang="plaintext"],
-                [data-lang="markdown"],
-                [data-lang="md"]
+                :not([data-lang]),
+                [data-lang="text" i],
+                [data-lang="txt" i],
+                [data-lang="plaintext" i],
+                [data-lang="markdown" i],
+                [data-lang="md" i]
             )
     ) {
     left: 0;
