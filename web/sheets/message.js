@@ -149,6 +149,8 @@ export function MessageSheet({ entryId }) {
     // A message to Pi (from anyone), or one of its replies.
     const toPi = entry.kind === "user";
     const text = toPi ? writtenText(entry) : replyText(entry);
+    // A message of files alone has no words: its preview says so, and there is nothing to copy or remember.
+    const filesAlone = toPi && text.trim() === "";
     const prompt = toPi ? entry : promptBefore(entryId);
 
     const copy = () => {
@@ -183,7 +185,7 @@ export function MessageSheet({ entryId }) {
     }
 
     return html`<${Sheet} title=${toPi ? "Message" : "Reply"} onClose=${closeSheet}>
-        <div class="message-preview">${text}</div>
+        <div class="message-preview">${filesAlone ? "(attachments)" : text}</div>
         ${
             canBranch &&
             view.conversation.inRepository &&
@@ -205,13 +207,14 @@ export function MessageSheet({ entryId }) {
             ${
                 memoryAvailable() &&
                 canSteer() &&
+                !filesAlone &&
                 item(
                     "Remember…",
                     () => openSheet({ type: "memory", draft: lessonFrom(text) }),
                     "keep it as a lesson for Pi",
                 )
             }
-            ${item("Copy text", copy)}
+            ${!filesAlone && item("Copy text", copy)}
         </div>
     <//>`;
 }
