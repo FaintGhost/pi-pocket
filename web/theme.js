@@ -378,7 +378,8 @@ export function lookIds() {
 }
 
 /** A theme folder with colors and no CSS: it shows under Colors only. */
-const colorsOnly = (each) => each.css.length === 0 && each.colors !== undefined && each.usable;
+export const colorsOnly = (each) =>
+    each.css.length === 0 && each.colors !== undefined && each.usable;
 
 /** Theme folders' palettes, after the app's own: their ids. */
 export function folderPaletteIds() {

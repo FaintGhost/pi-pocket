@@ -15,6 +15,7 @@ import {
     BASE_LOOK,
     chooseLook,
     chooseTheme,
+    colorsOnly,
     folderPaletteIds,
     lookIds,
     paletteOf,
@@ -239,11 +240,20 @@ function LookTools() {
     </div>`;
 }
 
-/** The owner's tool for the colors in use: a copy of them as a theme folder of colors, to change. */
+/**
+ * The owner's tools for the colors in use: a copy of them as a theme folder of colors, and for colors of their own, Edit
+ * with Pi and Remove.
+ */
 function ColorsTools() {
     const [naming, setNaming] = useState(false);
     const id = prefs().theme;
     const palette = paletteOf(id);
+    // The owner's own folder of colors alone (a theme with colors of its own has these in the Theme row).
+    const own = palette.folder
+        ? store.state.themeList?.find(
+              (each) => each.id === palette.id.split("@")[0] && colorsOnly(each) && !each.builtIn,
+          )
+        : undefined;
 
     if (naming) {
         return html`<${Duplicate}
@@ -260,10 +270,26 @@ function ColorsTools() {
         />`;
     }
 
+    const remove = () =>
+        confirm(
+            `Remove the colors “${own.name}”?\n\nTheir folder moves to themes/.removed/ in the data folder, so you can get them back from there.`,
+        ) &&
+        attempt(async () => {
+            await api(`themes/${encodeURIComponent(own.id)}`, undefined, { method: "DELETE" });
+            setPrefs({ theme: "desktop" });
+        });
+
     return html`<div class="look-tools">
         <button class="button" onClick=${() => setNaming(true)}>
             <${Icon} name="copy" size=${14} /> Duplicate colors
         </button>
+        ${
+            own &&
+            html`<button class="button" onClick=${() => attempt(() => editWithPi(own.id))}>
+                    <${Icon} name="sparkle" size=${14} /> Edit with Pi
+                </button>
+                <button class="button ghost" onClick=${remove}>Remove</button>`
+        }
     </div>`;
 }
 
