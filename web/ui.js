@@ -795,9 +795,19 @@ export function plainText(markdown) {
 /** What separates a message to Pi from the list of files attached to it, which the server adds. */
 export const ATTACHMENTS_HEADING = "\n\nAttached files (saved on the server):\n";
 
+/**
+ * A message to Pi in two: what the person wrote, and the list of attached files if any. One with files alone, sent
+ * before 0.14.0, has the heading without the blank line before it.
+ */
+export function splitAttachments(text) {
+    return (text.startsWith(ATTACHMENTS_HEADING.trimStart()) ? `\n\n${text}` : text).split(
+        ATTACHMENTS_HEADING,
+    );
+}
+
 /** What a person wrote in a message to Pi, without the list of attached files. */
 export function writtenText(entry) {
-    return entry.text.split(ATTACHMENTS_HEADING)[0];
+    return splitAttachments(entry.text)[0];
 }
 
 /** What Pi wrote in a reply: its text blocks, without thinking or tool calls. */

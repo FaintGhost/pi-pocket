@@ -40,7 +40,6 @@ import {
     withoutNotes,
 } from "./turns.js";
 import {
-    ATTACHMENTS_HEADING,
     Boot,
     copyText,
     entryImageUrl,
@@ -53,6 +52,7 @@ import {
     readable,
     replyText,
     Spinner,
+    splitAttachments,
     Thumb,
 } from "./ui.js";
 import { LessonCall, memoryAvailable } from "./sheets/memory.js";
@@ -296,7 +296,7 @@ function UserEntry({ entry, view, users }) {
         authorName(entry.id, view, users) ??
         entry.from ??
         (view.conversation?.kind === "subagent" ? "Main agent" : undefined);
-    const [written, attachments] = entry.text.split(ATTACHMENTS_HEADING);
+    const [written, attachments] = splitAttachments(entry.text);
     // Set up earlier to go out now: by a person (who shows as its author) or by Pi.
     // Only a message nobody typed: someone writing "[via …]" themselves gets no label.
     const via = authorId === undefined ? VIA.exec(written) : null;

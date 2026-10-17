@@ -727,8 +727,9 @@ export class Commands {
             (file) =>
                 `- ${file.path} (${file.name}, ${file.mime || "unknown type"}, ${file.size} bytes)`,
         );
+        // The heading whole, with files alone too: what reads the message splits it there.
         const written =
-            lines.length === 0 ? text : `${text}${ATTACHMENTS_HEADING}${lines.join("\n")}`.trim();
+            lines.length === 0 ? text : `${text}${ATTACHMENTS_HEADING}${lines.join("\n")}`;
         const body = this.messageText(
             user,
             via === undefined ? written : `[via ${via}] ${written}`,
