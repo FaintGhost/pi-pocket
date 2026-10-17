@@ -27,6 +27,7 @@ import {
     themeVars,
     varsStyle,
 } from "../theme.js";
+import { currentLang, LANGS, setLang } from "../i18n.js";
 import { html, Icon, Sheet, Switch } from "../ui.js";
 import { galleryAvailable } from "./gallery.js";
 
@@ -396,6 +397,25 @@ export function AppearanceSheet() {
                 Running Pi Pocket on an Omarchy desktop adds “Desktop”: the app follows the theme the desktop uses.
             </p>`
         }
+        <div class="label">Language</div>
+        <div class="sheet-list">
+            <${SettingRow}
+                title="Language"
+                detail="Interface language. The translation covers the app's own text; messages and file contents are untouched."
+            >
+                <div class="segmented">
+                    ${LANGS.map(
+                        (each) => html`<button
+                            class=${currentLang() === each.id ? "on" : ""}
+                            aria-pressed=${currentLang() === each.id}
+                            onClick=${() => setLang(each.id)}
+                        >
+                            ${each.label}
+                        </button>`,
+                    )}
+                </div>
+            <//>
+        </div>
         <div class="label">Layout and motion</div>
         <div class="sheet-list">
             <${SettingRow}
