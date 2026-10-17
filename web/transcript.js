@@ -658,6 +658,27 @@ const CALL_STATES = {
 };
 
 /**
+ * Who allowed or denied a call. A script's own calls are asked about one by one (`<call>/<n>`): for the script, the one
+ * denied when it failed, or else the last one allowed.
+ */
+function decisionOf(decisions, call, result) {
+    const own = decisions?.[call.id];
+
+    if (own !== undefined || call.name !== "codemode") {
+        return own;
+    }
+
+    const inner = Object.entries(decisions ?? {}).flatMap(([id, each]) =>
+        id.startsWith(`${call.id}/`) ? [each] : [],
+    );
+
+    return (
+        (result?.isError ? inner.find((each) => each.allow === false) : undefined) ??
+        inner.findLast((each) => each.allow !== false)
+    );
+}
+
+/**
  * Where a call is: waiting for approval, denied, running, done, failed, or stopped before it finished. A call with
  * nothing to say for it yet runs while it is being written, or while Pi works on the answer that asked for it
  * (`canRun`); any other never will.
@@ -737,7 +758,7 @@ function ToolStep({
     const [open, setOpen] = useState(false);
     const [full, setFull] = useState(null);
     const view = store.state.view;
-    const decision = view.decisions?.[call.id];
+    const decision = decisionOf(view.decisions, call, result);
     const status = callStatus({ result, slot, approval, decision, streaming, canRun, busy });
     // A call that finishes while on screen flashes once.
     const [settled, setSettled] = useState(false);
@@ -1143,14 +1164,14 @@ function ActivityGroup({
         chosen ??
         (lone ? reading && !lone.streaming && Boolean(lone.block.text?.trim()) : live || newest);
     // Calls that failed, said on the line too: folded, "edited 1" alone would read as done. A call someone denied did
-    // not fail: its line says who denied it.
+    // not fail, nor a script stopped by a denial: its line says who denied it.
     const failed = all.filter((step) => {
         const result = step.block.type === "toolCall" ? results.get(step.block.id) : undefined;
 
         return (
             result?.isError === true &&
             !STOPPED.test(result.text ?? "") &&
-            store.state.view.decisions?.[step.block.id]?.allow !== false
+            decisionOf(store.state.view.decisions, step.block, result)?.allow !== false
         );
     }).length;
     const first = all[0];
@@ -1778,7 +1799,7 @@ function rowDeps(entry) {
 function callDeps(block, results, slots, approvals) {
     const { view } = store.state;
     const slot = slots.get(block.id);
-    const decision = view.decisions?.[block.id];
+    const decision = decisionOf(view.decisions, block, results.get(block.id));
     const deps = [
         results.get(block.id),
         slot === undefined ? "" : JSON.stringify(slot),
