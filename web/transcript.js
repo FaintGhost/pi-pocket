@@ -913,10 +913,10 @@ function ToolStep({
             parts.push(html`<pre class="output">${JSON.stringify(args, null, 2)}</pre>`);
         }
 
-        // The harness's own errors come wrapped in its tags: what it says is inside them.
+        // The harness's own errors come wrapped in its tags, after the output if any: what it says is inside them.
         const output = (resultText ?? slot?.output)
-            ?.replace(/^<harness>\s*/, "")
-            .replace(/\s*<\/harness>\s*$/, "");
+            ?.replace(/(^|\n)<harness>\s*([\s\S]*?)\s*<\/harness>\s*$/, "$1$2")
+            .replace(/^<harness>\s*/, "");
 
         if (output && !(call.name === "edit" && details?.diff && !result?.isError)) {
             parts.push(
