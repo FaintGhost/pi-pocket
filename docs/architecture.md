@@ -217,7 +217,7 @@ What a browser shows is its person's choice of theme (`look`) and colors (`theme
 - Event names and shapes (`hello`, `view`, `chat`, `peek`, `subagents`, `ext`, …) and the sheet types the server names (`sheet: "chat"`).
 - The `pocket.*` keys in local and session storage.
 - Extensions' API: `web` on the server and `pocket` in the browser, at `POCKET_API`. Modules outside this repository depend on them: add to them freely, and change what they do only with a new version.
-- `ATTACHMENTS_HEADING`, which `ui.js` repeats from `entry-format.ts`.
+- `ATTACHMENTS_HEADING` and `splitAttachments` (which also reads the form sent before 0.14.0), which `ui.js` repeats from `entry-format.ts`.
 
 ## Checking a change
 
