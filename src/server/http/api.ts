@@ -659,6 +659,49 @@ export function createApi(options: HttpOptions, auth: Auth) {
             return json(response, 200, await app.extensions(user));
         }
 
+        // Magpie: the gateway's catalog, what its own sign-ins have left, and what it has sent lately. Reading is
+        // anyone's; asking the gateway to read a plan again is the owner's, as a sign-in is.
+        if (first === "magpie" && second === undefined && method === "GET") {
+            const magpie = app.magpie;
+
+            if (magpie === undefined) {
+                return json(response, 200, {
+                    reachable: false,
+                    models: [],
+                    groups: [],
+                    quotas: [],
+                });
+            }
+
+            const [quotas, usage] = await Promise.all([magpie.quotas(), magpie.usage()]);
+
+            return json(response, 200, { ...magpie.state(), quotas, usage });
+        }
+
+        if (
+            first === "magpie" &&
+            second === "refresh" &&
+            third === undefined &&
+            method === "POST"
+        ) {
+            requireOwner(user);
+            const magpie = app.magpie;
+
+            if (magpie === undefined) {
+                return json(response, 200, {
+                    reachable: false,
+                    models: [],
+                    groups: [],
+                    quotas: [],
+                });
+            }
+
+            const state = await magpie.refresh(app.models);
+            const quotas = await magpie.refreshQuotas();
+
+            return json(response, 200, { ...state, quotas, usage: await magpie.usage(true) });
+        }
+
         if (
             first === "models" &&
             second === "refresh" &&
@@ -666,6 +709,9 @@ export function createApi(options: HttpOptions, auth: Auth) {
             method === "POST"
         ) {
             requireOwner(user);
+
+            // The gateway's own catalog is fetched too: its models and routing groups change as it does.
+            void app.magpie?.refresh(app.models).catch(() => undefined);
 
             return json(response, 200, await app.providers.modelRefresh.refresh());
         }
