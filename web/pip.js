@@ -11,7 +11,6 @@ import { api, attempt, isRow, navigate, notify, openSheet, store, uid } from "./
 import { memoryAvailable, useMemory } from "./sheets/memory.js";
 import { itemsOf, says, summarize } from "./turns.js";
 import {
-    ATTACHMENTS_HEADING,
     contextLevel,
     entryImageUrl,
     fileUrl,
@@ -24,9 +23,9 @@ import {
     railState,
     readable,
     Spinner,
+    splitAttachments,
     Thumb,
     usePresence,
-    writtenText,
 } from "./ui.js";
 import { MicButton, useDictation } from "./voice.js";
 
@@ -385,11 +384,12 @@ function Report({ text, label = "Report", data = null, conversationId }) {
     </div>`;
 }
 
-/** Uploaded names can contain commas or parentheses: find the name repeated at the end of its saved path. */
-function attachedFiles(text) {
-    const block = text.split(ATTACHMENTS_HEADING).at(-1);
-
-    if (!text.includes(ATTACHMENTS_HEADING)) {
+/**
+ * A message's list of attached files (`splitAttachments`). Uploaded names can contain commas or parentheses: find the
+ * name repeated at the end of its saved path.
+ */
+function attachedFiles(block) {
+    if (block === undefined) {
         return [];
     }
 
@@ -450,12 +450,9 @@ function Item({ item, last, busy, conversationId }) {
                 </div>`;
             }
 
-            // The server trims image/file-only messages, including the attachment heading's leading newlines.
-            const stored = body.startsWith(ATTACHMENTS_HEADING.trimStart()) ? `\n\n${body}` : body;
-            const text = writtenText({ text: stored });
-
+            const [text, block] = splitAttachments(body);
             // Uploaded pictures also remain readable when the chosen model cannot take inline images.
-            const files = attachedFiles(stored);
+            const files = attachedFiles(block);
             const pictures = files.filter((file) => file.mime.startsWith("image/"));
             const others = files.filter((file) => !pictures.includes(file));
 
