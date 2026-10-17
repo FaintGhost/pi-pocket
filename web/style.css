@@ -1640,6 +1640,37 @@ kbd {
     translate: -50%;
 }
 
+/* Words in a code block (a draft to copy, say) wrap in the column, as a reply's words do: a paragraph on one line would
+ * otherwise run the pane's width and still scroll sideways. */
+.code
+    > pre:is(
+        [data-lang="text"],
+        [data-lang="txt"],
+        [data-lang="plaintext"],
+        [data-lang="markdown"],
+        [data-lang="md"]
+    ) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+[data-part~="reply"]
+    :is(.md, .md-part)
+    > .code:has(
+        > pre:is(
+                [data-lang="text"],
+                [data-lang="txt"],
+                [data-lang="plaintext"],
+                [data-lang="markdown"],
+                [data-lang="md"]
+            )
+    ) {
+    left: 0;
+    width: auto;
+    max-width: 100%;
+    translate: none;
+}
+
 [data-part~="reply"] :is(.md, .md-part) > table:not(.dv-table) {
     width: max-content;
     max-width: calc(100% + (var(--wide-room) - 100%) / 2);
