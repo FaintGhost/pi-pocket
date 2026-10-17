@@ -1,4 +1,5 @@
 // Pi Pocket web app. No build step: edit a file under web/ and every open browser reloads.
+import "./i18n.js";
 import { render } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { folderColor } from "./avatar.js";
