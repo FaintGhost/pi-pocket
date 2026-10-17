@@ -151,7 +151,10 @@ export function jumpToEntry(entryId) {
             ? (found.closest(".activity")?.querySelector(".activity-head") ?? found)
             : found;
 
-        element.scrollIntoView({ block: "center", behavior: "smooth" });
+        // A long one from its top, where it starts: centered, its middle would show, and what was found may be above.
+        const tall = element.getBoundingClientRect().height > innerHeight / 2;
+
+        element.scrollIntoView({ block: tall ? "start" : "center", behavior: "smooth" });
         element.classList.remove("flash");
         void element.offsetWidth;
         element.classList.add("flash");
