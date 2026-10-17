@@ -1723,7 +1723,7 @@ export class Commands {
         const body = edit ?? written.replace(FROM_PREFIX, "").trim();
         const text = this.messageText(
             user,
-            files === undefined ? body : `${body}${ATTACHMENTS_HEADING}${files}`.trim(),
+            files === undefined ? body : `${body}${ATTACHMENTS_HEADING}${files}`,
         );
         const author =
             (await app.harness.snapshot(AuthorsDoc, id, context))?.entries[String(entryId)] ??
