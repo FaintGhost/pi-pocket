@@ -140,10 +140,13 @@ function Duplicate({ from, label, colors = false, onDone }) {
     const [busy, setBusy] = useState(false);
     const field = useRef(null);
 
-    // Ready to type a name, each time: `autofocus` works once a page load.
+    // Ready to type a name each time (`autofocus` works once a page load), where a keyboard is at hand: on a touch
+    // screen, one would pop up over the sheet.
     useEffect(() => {
-        field.current?.focus();
-        field.current?.select();
+        if (!matchMedia("(pointer: coarse)").matches) {
+            field.current?.focus();
+            field.current?.select();
+        }
     }, []);
 
     const make = async (event) => {
