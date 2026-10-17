@@ -461,7 +461,13 @@ function setTheme(arg) {
             ? [{ id, name: id === BASE_LOOK ? "Pocket" : (listed?.name ?? id) }]
             : [];
     });
-    const palettes = ["desktop", ...Object.keys(THEMES), ...folderPaletteIds()].map((id) => ({
+    // The desktop's colors only where the server has a desktop: elsewhere "desktop" would show Tokyo Night.
+    const desktop = paletteOf("desktop").desktop === true;
+    const palettes = [
+        ...(desktop ? ["desktop"] : []),
+        ...Object.keys(THEMES),
+        ...folderPaletteIds(),
+    ].map((id) => ({
         id,
         name: id === "desktop" ? "desktop" : paletteOf(id).name,
     }));
@@ -482,8 +488,14 @@ function setTheme(arg) {
     const palette = find(palettes);
 
     if (!palette) {
+        const some = [
+            "pocket",
+            ...Object.keys(THEMES).slice(0, 3),
+            ...(desktop ? ["desktop"] : []),
+        ];
+
         throw new Error(
-            `No theme or colors called “${arg}”. Try pocket, ${Object.keys(THEMES).slice(0, 3).join(", ")}, or desktop.`,
+            `No theme or colors called “${arg}”. Try ${some.slice(0, -1).join(", ")}, or ${some.at(-1)}.`,
         );
     }
 

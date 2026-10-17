@@ -310,11 +310,12 @@ function DefaultTools() {
     const same = current
         ? current.look === look && current.colors === colors
         : look === BASE_LOOK && p.theme === "desktop";
-    // A theme with its own colors is named once: "My Lantern", not "My Lantern with My Lantern".
+    // A theme with its own colors is named once: "My Lantern", not "My Lantern with My Lantern". The desktop's colors
+    // are Tokyo Night where the server has no desktop.
     const name = (look, colors) =>
         colors.split("@")[0] === look
             ? (lookInfo(look)?.name ?? look)
-            : `${lookInfo(look)?.name ?? look} with ${colors === "desktop" ? "the desktop's colors" : paletteOf(colors).name}`;
+            : `${lookInfo(look)?.name ?? look} with ${paletteOf(colors).desktop ? "the desktop's colors" : paletteOf(colors).name}`;
     const set = (value) =>
         attempt(async () => {
             await api("themes/default", { default: value }, { method: "PUT" });
@@ -328,7 +329,7 @@ function DefaultTools() {
 
     return html`<div class="look-tools">
         <span class="muted small grow">
-            ${current ? `For new browsers: ${name(current.look, current.colors)}.` : "New browsers start with Pocket and the desktop's colors."}
+            ${current ? `For new browsers: ${name(current.look, current.colors)}.` : `New browsers start with ${name(BASE_LOOK, "desktop")}.`}
         </span>
         ${
             !same &&
