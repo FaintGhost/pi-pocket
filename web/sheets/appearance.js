@@ -1,5 +1,5 @@
 // Appearance: the theme and the colors, and how the app looks and moves.
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
     actions,
     api,
@@ -137,6 +137,13 @@ function listed(id) {
 function Duplicate({ from, label, colors = false, onDone }) {
     const [name, setName] = useState(`My ${label}`);
     const [busy, setBusy] = useState(false);
+    const field = useRef(null);
+
+    // Ready to type a name, each time: `autofocus` works once a page load.
+    useEffect(() => {
+        field.current?.focus();
+        field.current?.select();
+    }, []);
 
     const make = async (event) => {
         event.preventDefault();
@@ -158,11 +165,11 @@ function Duplicate({ from, label, colors = false, onDone }) {
 
     return html`<form class="look-duplicate" onSubmit=${make}>
         <input
+            ref=${field}
             value=${name}
             aria-label="The new theme's name"
             maxlength="60"
             onInput=${(event) => setName(event.currentTarget.value)}
-            autofocus
         />
         <button class="button primary" disabled=${busy || name.trim() === ""}>Make</button>
         <button class="button ghost" type="button" onClick=${() => onDone(null)}>Cancel</button>
