@@ -6715,6 +6715,11 @@ pre.diff .del {
     background: var(--card);
 }
 
+/* A viewer has nothing to do with a message of files alone: no empty box. */
+.message-actions:empty {
+    display: none;
+}
+
 .message-model-search {
     padding: 8px 14px;
 }
