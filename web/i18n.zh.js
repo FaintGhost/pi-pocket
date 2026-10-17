@@ -1186,6 +1186,24 @@ export const text = {
         "查主题。箭头移到配色上会预览，Enter 确定。",
     "Calm and dark for long reading: warm brown-grey, warm off-white text, and a muted amber accent. One readable column and quiet tool calls.":
         "适合长时间阅读的沉稳深色：暖棕灰底、暖白文字、柔和的琥珀色强调。单栏易读，工具调用也安静。",
+    "routing group": "路由分组",
+    "Routing groups": "路由分组",
+    Quotas: "配额",
+    "Sent lately": "最近用量",
+    "Not reachable from here": "从这台机器连不上",
+    "Refresh catalog and quotas": "刷新目录与配额",
+    "Reading…": "正在读取…",
+    renews: "重置",
+    read: "读取",
+    out: "输出",
+    reasoning: "推理",
+    images: "图片",
+    calls: "次调用",
+    errors: "次错误",
+    retried: "次重试",
+    in: "输入",
+    cached: "缓存",
+    "the model gateway is not reachable": "连不上模型网关",
 };
 
 /** Patterns for text with a number or a name in it. `$1` is the first capture group. */
@@ -1214,4 +1232,5 @@ export const patterns = [
     [/^signed in · (.+)$/, "已登录 · $1"],
     [/^not signed in$/, "未登录"],
     [/^Pi Pocket (\d+\.\d+) or newer · (.+)$/, "Pi Pocket $1 或更新版本 · $2"],
+    [/^(\d+) models · (\d+) routing groups$/, "$1 个模型 · $2 个路由分组"],
 ];
