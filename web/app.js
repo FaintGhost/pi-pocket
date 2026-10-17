@@ -778,7 +778,10 @@ function stopOnSecondEscape() {
     }
 
     escapedAt = Date.now();
-    escapeNotice = notify("info", "Press Esc again to stop Pi.");
+    const notice = (escapeNotice = notify("info", "Press Esc again to stop Pi."));
+
+    // Up only while a second press stops Pi.
+    setTimeout(() => dismiss(notice), ESCAPE_TWICE_MS);
 }
 
 const altUp = () => delete document.documentElement.dataset.alt;
