@@ -274,7 +274,12 @@ export function CwdSheet({ mode }) {
                 setSaving(false);
             }
         });
-    const toggleFavorite = () => setFavorite(target, !starred);
+
+    const toggleFavorite = () => {
+        setFavorite(target, !starred);
+        // The list keeps the keys: the star, off while it saves, would drop the focus to the page.
+        list.current?.focus({ preventScroll: true });
+    };
 
     // Ctrl/⌘+1…9 starts a session in a favorite, while this is the New session picker on top. Caught before the
     // app's own keys; Alt+1…9 (sessions) has Alt, so it never gets here.
