@@ -64,6 +64,7 @@ const faux = fauxProvider({
         { id: "faux-2" },
         { id: "faux-z8" },
         { id: "faux-vision", input: ["text", "image"] },
+        { id: "o3" },
     ],
 });
 
@@ -272,6 +273,19 @@ test("PiP starts a session on a model only when its person named it, in their ow
         app.pip.start(id, { model: "faux/nothing" }),
         /not a model signed in here/,
     );
+});
+
+test("a two-character model id needs a qualifier, but PiP cannot pass it on unasked", async () => {
+    const id = await pip();
+
+    await say(app, id, "修复O3优化导致的错误");
+    await assert.rejects(app.pip.start(id, { model: "faux/o3" }), /did not name/);
+    await assert.rejects(app.pip.start(id, { message: "Use o3 to review it." }), /names faux\/o3/);
+
+    await say(app, id, "用o3 on faux吧");
+    const made = await app.pip.start(id, { model: "faux/o3" });
+
+    assert.equal((await app.agentState(made))?.model?.modelId, "o3");
 });
 
 test("PiP takes its person's bare answer to which provider pays, right after it asked, and nothing else", async () => {
