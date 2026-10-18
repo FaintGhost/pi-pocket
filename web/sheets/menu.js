@@ -43,8 +43,8 @@ function extensionsHint() {
     const { guard } = store.state;
 
     return [
-        safeMode() && "browser parts off here",
-        guard?.enabled ? "Lancet Guard on" : guard?.available ? "Lancet Guard off" : "",
+        safeMode() && t("browser parts off here"),
+        guard?.enabled ? t("Lancet Guard on") : guard?.available ? t("Lancet Guard off") : "",
     ]
         .filter(Boolean)
         .join(" · ");

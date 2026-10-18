@@ -1,4 +1,5 @@
 // Links between linked sessions, above the transcript. Only the server's list for this person may name one.
+import { t } from "./i18n.js";
 import { useState } from "preact/hooks";
 import { navigate, store } from "./store.js";
 import { html, Icon } from "./ui.js";
@@ -31,20 +32,20 @@ export function LinkedSessions() {
         onClick=${() => navigate(session.id)}
     >
         <${Icon} name="fork" size=${14} />
-        <span>${label}: ${session.title ?? "New session"}</span>
+        <span>${t(label)}: ${session.title ?? t("New session")}</span>
     </button>`;
     const shown = open || started.length <= SHOWN ? started : started.slice(0, SHOWN);
 
-    return html`<nav class="linked-sessions" aria-label="Linked sessions">
+    return html`<nav class="linked-sessions" aria-label=${t("Linked sessions")}>
         ${
             origin
-                ? link(origin, "Started from")
+                ? link(origin, t("Started from"))
                 : (current?.linkedOrigin || current?.linkedFrom) &&
                   html`<p class="muted small">
-                Started from another session
+                ${t("Started from another session")}
             </p>`
         }
-        ${shown.map((session) => link(session, "Linked session"))}
+        ${shown.map((session) => link(session, t("Linked session")))}
         ${
             shown.length < started.length &&
             html`<button class="breadcrumb" onClick=${() => setOpenFor(conversationId)}>

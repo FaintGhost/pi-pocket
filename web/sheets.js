@@ -364,7 +364,7 @@ function sheetBody(sheet) {
                 label=${t("Shown on your messages to others")}
                 initial=${me?.name ?? ""}
                 footer=${html`<button class="button ghost wide sheet-footer signout" onClick=${signOut}>
-                    <${Icon} name="logout" size=${16} /> Sign out
+                    <${Icon} name="logout" size=${16} /> ${t("Sign out")}
                 </button>`}
                 submit=${async (value) => {
                     await api("me", { name: value });

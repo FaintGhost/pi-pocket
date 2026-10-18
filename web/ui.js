@@ -235,7 +235,7 @@ function codeBlock(pre, fold) {
         more.className = "code-more";
         more.type = "button";
         more.dataset.more = "";
-        more.textContent = `Show all ${lines} lines`;
+        more.textContent = t("Show all {{count}} lines", { count: lines });
         wrap.append(more);
     }
 }
@@ -303,7 +303,7 @@ function sanitize(html, fold) {
 
         link.href = src;
         link.textContent = label;
-        link.title = `Image from ${host}`;
+        link.title = t("Image from {{host}}", { host });
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         image.replaceWith(link);
@@ -677,8 +677,10 @@ document.addEventListener("click", (event) => {
     const open = block.classList.toggle("open");
 
     button.textContent = open
-        ? "Fold"
-        : `Show all ${block.querySelector("pre")?.textContent.split("\n").length ?? ""} lines`;
+        ? t("Fold")
+        : t("Show all {{count}} lines", {
+              count: block.querySelector("pre")?.textContent.split("\n").length ?? "",
+          });
 });
 
 /** Copy text, with a fallback for plain-http addresses, where the clipboard API does not exist. */
@@ -698,7 +700,7 @@ export async function copyText(text) {
     area.remove();
 
     if (!ok) {
-        throw new Error("Could not copy.");
+        throw new Error(t("Could not copy."));
     }
 }
 

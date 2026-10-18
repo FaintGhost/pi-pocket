@@ -1067,7 +1067,7 @@ export function BrowserPanel({ leaving = false }) {
             !steer &&
             open &&
             html`<div class="browser-foot muted small">
-                ${canSteer() ? "Take turns is on: the driver uses the page." : "You can watch; people who can steer use the page."}
+                ${t(canSteer() ? "Take turns is on: the driver uses the page." : "You can watch; people who can steer use the page.")}
             </div>`
         }
     </section>`;

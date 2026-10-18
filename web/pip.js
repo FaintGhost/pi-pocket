@@ -223,7 +223,7 @@ export const togglePip = () => (store.state.pipOpen ? closePip() : openPip());
 /** Send PiP a message from anywhere (`/pip …`), and open the panel to show what it says. */
 export async function askPip(text) {
     if (!pipAvailable()) {
-        notify("error", "PiP is not on here.");
+        notify("error", t("PiP is not on here."));
 
         return;
     }
@@ -498,9 +498,9 @@ function Item({ item, last, busy, conversationId }) {
 
         const line =
             entry.kind === "reset"
-                ? "Fresh start"
+                ? t("Fresh start")
                 : entry.kind === "compaction"
-                  ? "Earlier messages summarized"
+                  ? t("Earlier messages summarized")
                   : entry.kind === "note"
                     ? `${entry.name} ${entry.text}`
                     : null;
@@ -574,7 +574,7 @@ function Welcome({ id, name, hasModel }) {
                             ? openPip(suggestion.slice(0, -1))
                             : send(id, suggestion, false)}
                 >
-                    ${suggestion}
+                    ${t(suggestion)}
                 </button>`,
             )}
         </div>
@@ -717,7 +717,7 @@ function Composer({ id, busy }) {
     >
         ${
             files.length > 0 &&
-            html`<div class="pip-attachments" aria-label="Files attached to PiP">
+            html`<div class="pip-attachments" aria-label=${t("Files attached to PiP")}>
                 ${files.map(
                     (file) => html`<div class="pip-attachment" key=${file.key}>
                         ${file.preview && html`<${Thumb} src=${file.preview} alt=${file.name} />`}
@@ -755,8 +755,8 @@ function Composer({ id, busy }) {
             <button
                 type="button"
                 class="icon-button pip-attach"
-                aria-label="Attach files to PiP"
-                title="Attach files. Images need an image-capable model to be read inline."
+                aria-label=${t("Attach files to PiP")}
+                title=${t("Attach files. Images need an image-capable model to be read inline.")}
                 disabled=${id === undefined}
                 onClick=${() => picker.current?.click()}
             >
@@ -766,8 +766,10 @@ function Composer({ id, busy }) {
                 ref=${ref}
                 rows="1"
                 value=${text}
-                placeholder=${dictation.listening ? "Listening…" : busy ? "Tell PiP more…" : "Ask PiP…"}
-                aria-label="Message to PiP"
+                placeholder=${t(
+                    dictation.listening ? "Listening…" : busy ? "Tell PiP more…" : "Ask PiP…",
+                )}
+                aria-label=${t("Message to PiP")}
                 enterkeyhint="send"
                 onInput=${(event) => change(event.currentTarget.value)}
                 onPaste=${onPaste}
@@ -788,8 +790,8 @@ function Composer({ id, busy }) {
                     ? html`<button
                           type="button"
                           class="icon-button pip-send"
-                          aria-label="Stop PiP"
-                          title="Stop"
+                          aria-label=${t("Stop PiP")}
+                          title=${t("Stop")}
                           onClick=${() => attempt(() => api(`c/${id}/abort`, {}))}
                       >
                           <${Icon} name="stop" size=${18} />
@@ -797,7 +799,7 @@ function Composer({ id, busy }) {
                     : html`<button
                           type="submit"
                           class="icon-button pip-send"
-                          aria-label="Send to PiP"
+                          aria-label=${t("Send to PiP")}
                           disabled=${sendDisabled}
                       >
                           <${Icon} name="send" size=${18} />
@@ -812,23 +814,23 @@ function PendingMemories({ id }) {
     const data = useMemory(id, true);
     const count = data?.pendingAll === true ? data.lessons.length : null;
     const hint = data?.restartRequired
-        ? "Restart required"
+        ? t("Restart required")
         : count === null
-          ? "Loading…"
-          : `${count} pending`;
+          ? t("Loading…")
+          : t("{{count}} pending", { count });
 
     return html`<div class="pip-memory">
         <button
             type="button"
             class="button small ghost"
-            aria-label="Pending memories"
+            aria-label=${t("Pending memories")}
             aria-describedby="pip-memory-count"
             onClick=${() => {
                 closePip();
                 openSheet({ type: "memory", conversationId: id, pendingOnly: true });
             }}
         >
-            <span>Pending memories</span>
+            <span>${t("Pending memories")}</span>
             <span
                 id="pip-memory-count"
                 class=${`pip-memory-count ${count > 0 ? "waiting" : ""}`}
@@ -946,8 +948,11 @@ function PipPanel({ leaving, scrim }) {
                 <button
                     class="model-chip pip-model"
                     disabled=${!ready || busy || compacting}
-                    aria-label=${`PiP model: ${model}${thinking ? ` · ${thinking}` : ""}`}
-                    title="Change PiP's model and thinking level"
+                    aria-label=${t("PiP model: {{model}}{{thinking}}", {
+                        model,
+                        thinking: thinking ? ` · ${thinking}` : "",
+                    })}
+                    title=${t("Change PiP's model and thinking level")}
                     onClick=${() => openSheet({ type: "model", pipId: id })}
                 >
                     <span class="model-name">
@@ -971,7 +976,7 @@ function PipPanel({ leaving, scrim }) {
             </button>
             <button
                 class="icon-button"
-                aria-label="Start fresh"
+                aria-label=${t("Start fresh")}
                 title=${t("Start fresh: PiP forgets this conversation")}
                 disabled=${!ready || busy || rows.length === 0}
                 onClick=${() =>
@@ -1009,7 +1014,7 @@ function PipPanel({ leaving, scrim }) {
         >
             ${
                 !ready
-                    ? html`<div class="pip-loading"><${Spinner} label="Waking PiP" /></div>`
+                    ? html`<div class="pip-loading"><${Spinner} label=${t("Waking PiP")} /></div>`
                     : rows.length === 0 && !busy
                       ? html`<${Welcome}
                             id=${id}
@@ -1051,7 +1056,7 @@ function PipPanel({ leaving, scrim }) {
                         navigate(id);
                     }}
                 >
-                    Review
+                    ${t("Review")}
                 </button>
             </div>`
         }

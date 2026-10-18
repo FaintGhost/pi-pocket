@@ -43,10 +43,12 @@ export function defaultLabel(chosen, models) {
     // Not signed in any more, or gone from its provider: new sessions start with it anyway, and say so, rather than
     // with a model nobody chose for them.
     if (!model) {
-        return `${chosen.modelId} (not signed in)`;
+        return t("{{model}} (not signed in)", { model: chosen.modelId });
     }
 
-    return `${model.name}${model.reasoning ? ` · ${chosen.thinkingLevel ?? "off"}` : ""}${model.signIn ? " (needs sign-in)" : ""}`;
+    return `${model.name}${model.reasoning ? ` · ${chosen.thinkingLevel ?? "off"}` : ""}${
+        model.signIn ? ` ${t("(needs sign-in)")}` : ""
+    }`;
 }
 
 /** Whether a model is one the picker's search finds: each word in its id or name, as `/model` finds them. */
@@ -336,7 +338,7 @@ export function ModelPicker() {
                         <span class="pop-menu-row-text">
                             <span class="pop-menu-row-name">${model.name}</span>
                             <span class="pop-menu-row-sub">
-                                ${model.provider}${!forDefault && isDefault(model) ? " · default" : ""}${model.signIn ? " · needs sign-in" : ""}
+                                ${model.provider}${!forDefault && isDefault(model) ? ` · ${t("default")}` : ""}${model.signIn ? ` · ${t("needs sign-in")}` : ""}
                             </span>
                         </span>
                         ${isCurrent(model) && html`<${Icon} name="check" size=${14} />`}
@@ -391,14 +393,14 @@ export function ModelPicker() {
                             ${
                                 sessionIsDefault
                                     ? html`<span class="pop-menu-default-mark">
-                                          <${Icon} name="check" size=${13} /> Default
+                                          <${Icon} name="check" size=${13} /> ${t("Default")}
                                       </span>`
                                     : html`<button
                                           class="pop-menu-link"
-                                          title="New sessions start with this model and thinking level"
+                                          title=${t("New sessions start with this model and thinking level")}
                                           onClick=${() => setDefault(agent.model, agent.thinkingLevel ?? "off")}
                                       >
-                                          Make default
+                                          ${t("Make default")}
                                       </button>`
                             }
                         </div>`

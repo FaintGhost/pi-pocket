@@ -120,7 +120,7 @@ function actionItems() {
         },
         canStart &&
             here !== null && {
-                label: "New session here",
+                label: t("New session here"),
                 detail: shortPath(here, server?.home),
                 keywords: "in this folder",
                 icon: "plus",
@@ -275,8 +275,8 @@ function actionItems() {
                 run: () => setArchived([conversation.id], !conversation.archived),
             },
         pipAvailable() && {
-            label: "Ask PiP",
-            detail: "your assistant, over any screen",
+            label: t("Ask PiP"),
+            detail: t("your assistant, over any screen"),
             icon: "pip",
             keys: "Alt A",
             run: () => openPip(),
@@ -345,14 +345,14 @@ function actionItems() {
             icon: "users",
             run: () => openSheet({ type: "name" }),
         },
-        { label: "Sign out", detail: "this browser", icon: "logout", run: signOut },
+        { label: t("Sign out"), detail: t("this browser"), icon: "logout", run: signOut },
         // What extensions' browser modules added (`extension-ui.js`).
         ...extensionLauncherItems(),
         // Last: a list that is cut keeps the actions above, however many favorites there are (up to 100).
         ...(canStart
             ? folderFavorites.map((path, index) => ({
                   key: `action:new-favorite:${path}`,
-                  label: `New session in ${favoriteNames[index]}`,
+                  label: t("New session in {{name}}", { name: favoriteNames[index] }),
                   detail: shortPath(path, server?.home),
                   icon: "star",
                   run: () =>
@@ -395,7 +395,7 @@ function sessionItems() {
                 ]
                     .filter(Boolean)
                     .join(" · ") || timeAgo(session.updatedAt),
-            text: `${session.title ?? "New session"} ${shortPath(session.cwd, server?.home)}`,
+            text: `${session.title ?? t("New session")} ${shortPath(session.cwd, server?.home)}`,
             keys: number >= 0 && number < 9 ? `Alt ${number + 1}` : undefined,
             rank: session.archived ? -20 : -number * 0.01,
             run: () => navigate(session.id),
@@ -526,8 +526,8 @@ export function Launcher({ leaving, returnTo }) {
             const matchNote =
                 match.hits.length > 0 && hits.length === 0 && detailHits.length === 0
                     ? item.kind === "theme"
-                        ? "Theme name or ID match"
-                        : "Keyword match"
+                        ? t("Theme name or ID match")
+                        : t("Keyword match")
                     : null;
 
             scored.push({

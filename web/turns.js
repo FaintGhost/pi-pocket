@@ -1,6 +1,7 @@
 // How the transcript reads a conversation, without drawing it: Pi's answers split into runs of words and groups of
 // thinking and tool calls (`itemsOf`), what a group did in a line (`summarize`), and what a call came to, read from what
-// its tool printed. Pure functions with no imports, so `test/turns.test.ts` runs them in Node; transcript.js draws them.
+// its tool printed. The app's own words go through `t()`, which is plain data in Node; transcript.js draws them.
+import { t } from "./i18n.js";
 
 export const short = (text, max = 160) => {
     const flat = String(text ?? "")
@@ -91,8 +92,8 @@ export function testOutcome(text, command = "") {
             : Number(/\b(?:in|Duration|Time:)\s+([\d.]+)\s?s\b/.exec(text)?.[1] ?? NaN);
 
     return [
-        `${passed} passed`,
-        failed !== undefined && Number(failed) > 0 && `${failed} failed`,
+        t("{{count}} passed", { count: passed }),
+        failed !== undefined && Number(failed) > 0 && t("{{count}} failed", { count: failed }),
         Number.isFinite(seconds) && `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`,
     ]
         .filter(Boolean)
@@ -104,15 +105,15 @@ export function shortError(text) {
     const exit = /(?:exited with code|exit code:?) (\d+)/i.exec(text);
 
     if (exit) {
-        return `exit ${exit[1]}`;
+        return t("exit {{code}}", { code: exit[1] });
     }
 
     if (/timed out/i.test(text)) {
-        return "timed out";
+        return t("timed out");
     }
 
     if (/\b(?:Command|Operation|was) aborted\b/.test(text)) {
-        return "stopped";
+        return t("stopped");
     }
 
     // The first line that says something: not a tag around the harness's own errors ("<harness>"), nor its "[error]".
@@ -120,7 +121,7 @@ export function shortError(text) {
         text
             .split("\n")
             .map((each) => each.trim().replace(/^\[[\w -]+\]\s*/, ""))
-            .find((each) => each !== "" && !/^<\/?[\w-]+>$/.test(each)) ?? "failed";
+            .find((each) => each !== "" && !/^<\/?[\w-]+>$/.test(each)) ?? t("failed");
 
     return short(line.replace(/^error:\s*/i, ""), 48);
 }
@@ -225,7 +226,12 @@ function byAction(name, args) {
 
 /** Several things in a sentence: "a, b and c". */
 const sentence = (parts) =>
-    parts.length < 2 ? (parts[0] ?? "") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
+    parts.length < 2
+        ? (parts[0] ?? "")
+        : t("{{list}} and {{last}}", {
+              list: parts.slice(0, -1).join(t(", ")),
+              last: parts.at(-1),
+          });
 
 /**
  * A group's calls in a line, in the order Pi first did each kind: "Thought, searched, read 2 files, ran 1 command", or
@@ -279,10 +285,10 @@ export function summarize(steps, thinking) {
             const bare = index === 0 && noun === before && !ONE[noun];
 
             return count === 1 && ONE[noun]
-                ? ONE[noun]
+                ? t(ONE[noun])
                 : bare
                   ? String(count)
-                  : plural(count, noun);
+                  : t("{{count}} {{noun}}", { count, noun: t(count === 1 ? noun : `${noun}s`) });
         });
 
         before = [...nouns.keys()].at(-1) ?? null;
@@ -290,9 +296,11 @@ export function summarize(steps, thinking) {
         // A thought still being written, with nothing else done yet.
         const said = verb === "thought" && thinking && did.size === 1 ? "thinking" : verb;
 
-        return counted.length === 0 ? said : `${said} ${sentence(counted)}`;
+        return counted.length === 0
+            ? t(said)
+            : t("{{verb}} {{what}}", { verb: t(said), what: sentence(counted) });
     });
-    const line = parts.join(", ");
+    const line = parts.join(t(", "));
 
     return line.charAt(0).toUpperCase() + line.slice(1);
 }

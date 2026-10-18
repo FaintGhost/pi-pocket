@@ -3,6 +3,7 @@
 // rail buttons, menu rows, launcher actions, pages in the conversation's place, sheets, and how its own tools' calls
 // show, calls its own routes, and hears its module's events. What it added goes when it reloads or is turned off; one that fails says why, and the app
 // goes on without it. A tab opened with `?noext=1` loads none of them (safe mode), for as long as the tab stays open.
+import { t } from "./i18n.js";
 import { Component, Fragment, h, options } from "preact";
 import {
     useCallback,
@@ -369,7 +370,9 @@ function sync(list) {
         safeTold = true;
         notify(
             "warning",
-            "Extensions' browser parts are off in this tab, and so is the theme. Menu → Extensions turns them back on.",
+            t(
+                "Extensions' browser parts are off in this tab, and so is the theme. Menu → Extensions turns them back on.",
+            ),
             () => openSheet({ type: "extensions" }),
         );
     }
@@ -460,7 +463,7 @@ function fail(record, error, how) {
     record.error = reason(error);
     record.how = how;
     console.error(`${record.title}'s browser module ${how}`, error);
-    notify("error", `${record.title} ${how} in this browser: ${record.error}`);
+    notify("error", `${record.title} ${how} ${t("in this browser:")} ${record.error}`);
     redraw();
 }
 
@@ -1574,19 +1577,19 @@ function componentId(component) {
 /** What a page or sheet shows: its component once its module is ready, else why not. */
 function Body({ record, spec, title, props, close }) {
     if (record === undefined) {
-        return html`<p class="muted">This extension is off.</p>`;
+        return html`<p class="muted">${t("This extension is off.")}</p>`;
     }
 
     if (record.status === "failed") {
         return html`<div class="error-box">
-            ${record.title} ${record.how ?? "failed to load"} in this browser: ${record.error}
+            ${record.title} ${record.how ?? t("failed to load")} ${t("in this browser:")} ${record.error}
         </div>`;
     }
 
     if (spec === undefined) {
         return record.status === "ready"
-            ? html`<p class="muted">${record.title} no longer has this.</p>`
-            : html`<${Loader} label=${`Loading ${title}`} />`;
+            ? html`<p class="muted">${t("{{title}} no longer has this.", { title: record.title })}</p>`
+            : html`<${Loader} label=${t("Loading {{title}}", { title })} />`;
     }
 
     // A Guard that caught a failure stays with it until its component changes (the page added again, or updated).
@@ -1603,7 +1606,7 @@ export function ExtensionPage() {
     const target = store.state.page;
     const record = modules.get(target?.module);
     const spec = record?.adds.page.get(target?.id);
-    const title = spec?.title ?? record?.title ?? "Extension";
+    const title = spec?.title ?? record?.title ?? t("Extension");
     // A page that keeps Esc for itself (`escape: false`): read as the key comes, as it may change.
     const keepsEscape = useRef(false);
     const close = useMemo(() => pageCloser(record, target?.id), [record, target?.id]);
@@ -1657,8 +1660,8 @@ export function ExtensionPage() {
             </div>
             <button
                 class="icon-button"
-                title="Back to the conversation (Esc)"
-                aria-label="Close"
+                title=${t("Back to the conversation (Esc)")}
+                aria-label=${t("Close")}
                 onClick=${closePage}
             >
                 <${Icon} name="close" />
@@ -1674,7 +1677,7 @@ export function ExtensionPage() {
 export function ExtensionSheet({ sheet }) {
     const record = modules.get(sheet.module);
     const spec = record?.adds.sheet.get(sheet.sheetId);
-    const title = spec?.title ?? record?.title ?? "Extension";
+    const title = spec?.title ?? record?.title ?? t("Extension");
     const close = useMemo(() => sheetCloser(record, sheet.sheetId), [record, sheet.sheetId]);
 
     return html`<${Sheet} title=${title} onClose=${closeSheet} wide=${spec?.wide === true}>

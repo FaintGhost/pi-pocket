@@ -597,7 +597,7 @@ export function CwdSheet({ mode }) {
                         role="option"
                         aria-selected=${dir.path === selected ? "true" : "false"}
                         data-path=${dir.path}
-                        title=${touch ? undefined : "Double-click to open"}
+                        title=${touch ? undefined : t("Double-click to open")}
                         onClick=${() => {
                             if (touch) {
                                 load(dir.path);

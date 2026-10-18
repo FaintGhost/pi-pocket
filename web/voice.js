@@ -342,9 +342,9 @@ export function MicButton({ dictation, class: className = "", size = 17, part })
         type="button"
         class=${`icon-button mic-button ${listening ? "listening" : ""} ${className}`}
         data-part=${part}
-        aria-label="Dictate"
+        aria-label=${t("Dictate")}
         aria-pressed=${listening ? "true" : "false"}
-        title=${listening ? "Listening: tap to stop (Alt+V)" : "Dictate (Alt+V)"}
+        title=${t(listening ? "Listening: tap to stop (Alt+V)" : "Dictate (Alt+V)")}
         onMouseDown=${(event) => event.preventDefault()}
         onClick=${toggle}
     >

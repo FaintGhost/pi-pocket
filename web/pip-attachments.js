@@ -1,4 +1,6 @@
 // PiP's browser-only draft, kept across panel mounts. No main-composer state or conversation lookup.
+import { t } from "./i18n.js";
+
 /** A scoped draft. Async work holds its original scope and item/token identity, never a newer draft. */
 export function createPipDraft({ loadText, saveText, upload, onError }) {
     const listeners = new Set();
@@ -92,7 +94,7 @@ export function createPipDraft({ loadText, saveText, upload, onError }) {
         removeFile,
         addFiles(files) {
             if (id === undefined || account == null) {
-                onError("PiP is not ready yet. Try again in a moment.");
+                onError(t("PiP is not ready yet. Try again in a moment."));
 
                 return;
             }
@@ -131,7 +133,11 @@ export function createPipDraft({ loadText, saveText, upload, onError }) {
                         }
 
                         removeFile(item.key);
-                        onError(`Upload failed: ${error.message ?? String(error)}`);
+                        onError(
+                            t("Upload failed: {{error}}", {
+                                error: error.message ?? String(error),
+                            }),
+                        );
                     },
                 );
             }

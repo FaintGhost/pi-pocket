@@ -276,20 +276,20 @@ function stateMark(session, working, marked) {
     const fresh = marked || finishedUnseen(session);
 
     if (session.waiting) {
-        return { shape: "waiting", label: "Waiting for approval" };
+        return { shape: "waiting", label: t("Waiting for approval") };
     }
 
     if (session.busy || working) {
-        return { shape: "working", label: "Working" };
+        return { shape: "working", label: t("Working") };
     }
 
     if (session.failed) {
         return fresh
-            ? { shape: "failed", label: "Failed, not read" }
-            : { shape: "failed seen", label: "Failed" };
+            ? { shape: "failed", label: t("Failed, not read") }
+            : { shape: "failed seen", label: t("Failed") };
     }
 
-    return fresh ? { shape: "fresh", label: "Not read" } : { shape: "seen", label: "" };
+    return fresh ? { shape: "fresh", label: t("Not read") } : { shape: "seen", label: "" };
 }
 
 /** A row's state for themes (`data-state`), by its square's shape: a documented name that stays when the squares change. */
@@ -1407,8 +1407,8 @@ export function RailNav({ foldable = false, folded = false }) {
             html`<button
                 class="rail-button"
                 data-part="rail-button"
-                title="Model providers"
-                aria-label="Providers"
+                title=${t("Model providers")}
+                aria-label=${t("Providers")}
                 onClick=${() => openSheet({ type: "providers" })}
             >
                 <${Icon} name="key" size=${19} />

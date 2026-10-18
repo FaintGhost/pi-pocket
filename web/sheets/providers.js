@@ -42,8 +42,11 @@ function SubagentModels({ names }) {
     const chosen = rows.filter((row) => isOn(row.spec)).map((row) => row.model?.name ?? row.spec);
     const summary =
         chosen.length === 0
-            ? "None allowed: Pi never picks a model."
-            : `${chosen.length} allowed: ${chosen.join(", ")}`;
+            ? t("None allowed: Pi never picks a model.")
+            : t("{{count}} allowed: {{models}}", {
+                  count: chosen.length,
+                  models: chosen.join(", "),
+              });
     const needle = query.trim().toLowerCase();
     const groups = new Map();
 
@@ -85,9 +88,9 @@ function SubagentModels({ names }) {
     };
 
     return html`<div class="subagent-models">
-        <div class="label">Models for subagents</div>
+        <div class="label">${t("Models for subagents")}</div>
         <p class="muted small">
-            Subagents and linked sessions run on their session's model, the one people picked. Pi cannot choose another model unless you allow it here.
+            ${t("Subagents and linked sessions run on their session's model, the one people picked. Pi cannot choose another model unless you allow it here.")}
         </p>
         <p class="small subagent-models-chosen" title=${summary}>${summary}</p>
         ${
@@ -95,18 +98,22 @@ function SubagentModels({ names }) {
             html`<label class="search">
                 <${Icon} name="search" size=${16} />
                 <input
-                    placeholder="Find a model"
-                    aria-label="Find a model for subagents"
+                    placeholder=${t("Find a model")}
+                    aria-label=${t("Find a model for subagents")}
                     value=${query}
                     onInput=${(event) => setQuery(event.currentTarget.value)}
                 />
             </label>`
         }
-        <div class="subagent-models-list" role="group" aria-label="Models for subagents">
+        <div class="subagent-models-list" role="group" aria-label=${t("Models for subagents")}>
             ${
                 groups.size === 0 &&
                 html`<p class="muted small">
-                    ${rows.length === 0 ? "No models: sign in to a provider below." : "No model matches."}
+                    ${t(
+                        rows.length === 0
+                            ? "No models: sign in to a provider below."
+                            : "No model matches.",
+                    )}
                 </p>`
             }
             ${[...groups].map(

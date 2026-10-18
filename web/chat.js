@@ -108,10 +108,12 @@ function typingText(people, where, me) {
         names.length === 1
             ? names[0]
             : names.length === 2
-              ? `${names[0]} and ${names[1]}`
-              : `${names.length} people`;
+              ? t("{{a}} and {{b}}", { a: names[0], b: names[1] })
+              : t("{{count}} people", { count: names.length });
 
-    return `${who} ${names.length === 1 ? "is" : "are"} ${where === "pi" ? "writing to Pi" : "typing"}…`;
+    return names.length === 1
+        ? t(where === "pi" ? "{{who}} is writing to Pi…" : "{{who}} is typing…", { who })
+        : t(where === "pi" ? "{{who}} are writing to Pi…" : "{{who}} are typing…", { who });
 }
 
 /** "Alex is writing to Pi…" above the message box, or "Alex is typing…" in the chat. */
@@ -718,7 +720,7 @@ function NotesTab() {
 function PeopleRoster() {
     const { presence, users, me, view } = store.state;
     const turns = view.turns;
-    const driver = users.find((person) => person.id === turns?.driver)?.name ?? "No one";
+    const driver = users.find((person) => person.id === turns?.driver)?.name ?? t("No one");
     const canToggle = canToggleTurns();
 
     return html`<div class="people-roster">
@@ -727,15 +729,15 @@ function PeopleRoster() {
             const writing = person.typing && person.id !== me?.id;
             const state = writing
                 ? person.typing === "pi"
-                    ? "writing to Pi…"
-                    : "typing…"
+                    ? t("writing to Pi…")
+                    : t("typing…")
                 : person.away
-                  ? "away"
+                  ? t("away")
                   : person.id === me?.id
-                    ? "here · you"
-                    : "here";
+                    ? t("here · you")
+                    : t("here");
             const roleLabel =
-                role === "owner" ? "owner" : role === "viewer" ? "view only" : "can steer";
+                role === "owner" ? t("owner") : role === "viewer" ? t("view only") : t("can steer");
 
             return html`<div class="people-person" key=${person.id}>
                 <span class="people-here">
@@ -760,10 +762,10 @@ function PeopleRoster() {
         html`<div class="people-turns">
             <span class="grow">
                 <span class="people-turns-title">
-                    ${turns?.on ? `${driver} is driving` : "Take turns"}
+                    ${turns?.on ? t("{{driver}} is driving", { driver }) : t("Take turns")}
                 </span>
                 <span class="people-turns-hint">
-                    ${turns?.on ? "Only the driver can send to Pi" : "One person drives Pi at a time"}
+                    ${t(turns?.on ? "Only the driver can send to Pi" : "One person drives Pi at a time")}
                 </span>
             </span>
             ${
@@ -772,7 +774,7 @@ function PeopleRoster() {
                     class=${`button small ${turns?.on ? "" : "primary"}`}
                     onClick=${() => attempt(() => actions.turns(turns?.on ? "off" : "on"))}
                 >
-                    ${turns?.on ? "Turn off" : "Start"}
+                    ${t(turns?.on ? "Turn off" : "Start")}
                 </button>`
             }
         </div>`

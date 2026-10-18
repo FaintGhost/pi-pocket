@@ -273,7 +273,7 @@ function Dismiss({ agent }) {
         }
 
         if (answer?.newer === true) {
-            notify("info", `Not dismissed: ${agent.name} failed again since.`);
+            notify("info", t("Not dismissed: {{name}} failed again since.", { name: agent.name }));
         }
     };
 

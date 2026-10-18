@@ -50,7 +50,7 @@ function SpendLimit({ budget, editable, save }) {
         });
 
     return html`<span class="limit-edit">
-        $<input type="number" inputmode="decimal" min="0.01" step="0.01" aria-label="Limit in dollars" ref=${field} value=${draft} onInput=${(event) => setDraft(event.currentTarget.value)} onKeyDown=${(
+        $<input type="number" inputmode="decimal" min="0.01" step="0.01" aria-label=${t("Limit in dollars")} ref=${field} value=${draft} onInput=${(event) => setDraft(event.currentTarget.value)} onKeyDown=${(
             event,
         ) => {
             // Esc lets go of the limit, not the whole sheet.

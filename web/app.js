@@ -656,7 +656,12 @@ addEventListener("keydown", (event) => {
         if (event.code === "KeyT") {
             event.preventDefault();
             setPrefs({ showThinking: !prefs().showThinking });
-            notify("info", `Show thinking: ${prefs().showThinking ? "on" : "off"}.`);
+            notify(
+                "info",
+                t("Show thinking: {{state}}.", {
+                    state: prefs().showThinking ? t("on") : t("off"),
+                }),
+            );
 
             return;
         }

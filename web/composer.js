@@ -54,12 +54,12 @@ function ParentSessionButton() {
 
     return html`<button
         class="parent-session"
-        aria-label=${`Back to main session: ${parent.title}`}
-        title=${`Return to ${parent.title}`}
+        aria-label=${t("Back to main session: {{title}}", { title: parent.title })}
+        title=${t("Return to {{title}}", { title: parent.title })}
         onClick=${() => navigate(parent.id)}
     >
         <${Icon} name="back" size=${16} />
-        <span>Back to main session</span>
+        <span>${t("Back to main session")}</span>
         <span class="parent-session-title">${parent.title}</span>
     </button>`;
 }
@@ -139,7 +139,12 @@ function queuedText(item) {
         return (item.text ?? "").replace(FROM, "");
     }
 
-    return `from ${names.join(", ")}, on ${names.length === 1 ? "its" : "their"} way to Pi`;
+    return t(
+        names.length === 1
+            ? "from {{names}}, on its way to Pi"
+            : "from {{names}}, on their way to Pi",
+        { names: names.join(", ") },
+    );
 }
 
 /** Take turns: who drives, who asked, and the buttons to hand over, ask, or take the wheel. */
@@ -254,7 +259,7 @@ function PlanBar({ blocked }) {
             <button
                 class="button small primary"
                 disabled=${view.live.busy || !proposed}
-                title=${proposed ? undefined : "Pi has not proposed a plan yet."}
+                title=${proposed ? undefined : t("Pi has not proposed a plan yet.")}
                 onClick=${() => attempt(actions.approvePlan)}
             >
                 ${t("Approve plan")}
@@ -1161,7 +1166,7 @@ export function Composer() {
                     !searching &&
                     html`<div class="command-hint wraps">
                         <span class="muted">
-                            ${inlineFiles ? "Mentioned files go with the message." : "Pi reads the files you mention."}
+                            ${t(inlineFiles ? "Mentioned files go with the message." : "Pi reads the files you mention.")}
                         </span>
                         ${" "}
                         <button
@@ -1172,7 +1177,7 @@ export function Composer() {
                                 setInlineFiles(!inlineFiles);
                             }}
                         >
-                            ${inlineFiles ? "Let Pi read them" : "Send them along"}
+                            ${t(inlineFiles ? "Let Pi read them" : "Send them along")}
                         </button>
                     </div>`
                 }
@@ -1257,7 +1262,7 @@ export function Composer() {
                         ${
                             template.args &&
                             html` <span class="command-args">${template.args}</span>`
-                        } <span class="muted">· ${template.skill ? "skill · Pi gets its instructions with your request" : "prompt template · Pi gets it filled in"}</span>
+                        } <span class="muted">· ${t(template.skill ? "skill · Pi gets its instructions with your request" : "prompt template · Pi gets it filled in")}</span>
                     </div>`
                 }
                 <div
@@ -1395,8 +1400,8 @@ export function Composer() {
                                 }}
                             >
                                 ${[
-                                    [true, "Steer", "Pi reads it now, between steps"],
-                                    [false, "Queue", "Pi reads it when this run ends"],
+                                    [true, "Steer", t("Pi reads it now, between steps")],
+                                    [false, "Queue", t("Pi reads it when this run ends")],
                                 ].map(
                                     ([value, label, tip]) => html`<button
                                         role="radio"
@@ -1726,7 +1731,7 @@ function StatusLine() {
                 class=${`guard ${guard.enabled && !failed ? "" : "off"}`}
                 aria-label=${
                     failed
-                        ? `Lancet Guard ${t("failed")}`
+                        ? t("Lancet Guard {{state}}", { state: t("failed") })
                         : t(guard?.enabled ? "Lancet Guard on" : "Lancet Guard off")
                 }
                 title=${guard.detail}

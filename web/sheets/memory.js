@@ -274,7 +274,7 @@ function Lesson({ lesson, data, conversationId, pendingOnly = false }) {
                             onClick=${() => (forgetting ? act("/remove") : setForgetting(true))}
                             onBlur=${() => setForgetting(false)}
                         >
-                            ${forgetting ? "Forget it" : "Forget"}
+                            ${t(forgetting ? "Forget it" : "Forget")}
                         </button>`
                     }
                 </div>`

@@ -158,8 +158,8 @@ export function PeeksRailButton() {
         class=${`rail-button rail-peeks ${on ? "open" : ""}`}
         data-part="rail-button"
         data-state=${railState(on)}
-        title=${on ? "Hide peek tiles (Alt+P)" : "Peek at other sessions (Alt+P)"}
-        aria-label="Peek tiles"
+        title=${t(on ? "Hide peek tiles (Alt+P)" : "Peek at other sessions (Alt+P)")}
+        aria-label=${t("Peek tiles")}
         aria-pressed=${on}
         onClick=${togglePeeks}
     >

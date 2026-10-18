@@ -75,6 +75,9 @@ const FENCED =
     /<(ci-log|webhook-payload|github-event)((?: [a-z]+="[^"\n]*")*)>\n([\s\S]*?)\n<\/\1>/g;
 const FENCE_LABELS = { "webhook-payload": "What was posted", "github-event": "On GitHub" };
 
+/** A count with its noun: "1 line", "{{count}} lines". */
+const counting = (count, one, many) => (count === 1 ? t(one) : t(many, { count }));
+
 /** A message from the app with what it fenced for Pi shown as blocks of its own, named after what each is. */
 function FencedText({ text }) {
     const parts = [];
@@ -84,10 +87,12 @@ function FencedText({ text }) {
         const name = /"([^"]*)"/.exec(match[2])?.[1];
         const label =
             match[1] === "ci-log"
-                ? `Log of ${name ?? "a check"}`
+                ? t("Log of {{name}}", { name: name ?? t("a check") })
                 : match[1] === "github-event"
-                  ? `On GitHub${name ? `: ${name}` : ""}`
-                  : (name ?? FENCE_LABELS[match[1]]);
+                  ? name
+                      ? t("On GitHub: {{name}}", { name })
+                      : t("On GitHub")
+                  : (name ?? t(FENCE_LABELS[match[1]]));
 
         parts.push(
             html`<${MentionedText} text=${text.slice(last, match.index).replace(/\n$/, "")} />`,
@@ -526,12 +531,14 @@ function stepWords(call) {
  */
 function outcome({ call, result, details, status }) {
     if (status === "approval") {
-        return { text: "needs approval", tone: "warn" };
+        return { text: t("needs approval"), tone: "warn" };
     }
 
     if (status === "denied" || status === "stopped") {
         return {
-            text: /was interrupted/.test(result?.text ?? "") ? "cut off by a restart" : status,
+            text: /was interrupted/.test(result?.text ?? "")
+                ? t("cut off by a restart")
+                : t(status),
             tone: "",
         };
     }
@@ -568,34 +575,41 @@ function outcome({ call, result, details, status }) {
             );
 
             return result.images > 0
-                ? { text: "image", tone: "" }
-                : !result.clipped && { text: plural(lineCount(read), "line"), tone: "" };
+                ? { text: t("image"), tone: "" }
+                : !result.clipped && {
+                      text: counting(lineCount(read), "1 line", "{{count}} lines"),
+                      tone: "",
+                  };
         }
 
         // A long result reaches the browser cut short (its start and end): its lines cannot be counted.
         case "grep":
             return /^No matches/.test(text)
-                ? { text: "no matches", tone: "" }
+                ? { text: t("no matches"), tone: "" }
                 : {
                       text: result.clipped
-                          ? "many matches"
-                          : plural(matchCount(withoutNotes(text)), "match").replace(
-                                "matchs",
-                                "matches",
+                          ? t("many matches")
+                          : counting(
+                                matchCount(withoutNotes(text)),
+                                "1 match",
+                                "{{count}} matches",
                             ),
                       tone: "",
                   };
         case "find":
         case "ls":
             return /^(?:No files|\(empty directory\))/.test(text)
-                ? { text: "none", tone: "" }
+                ? { text: t("none"), tone: "" }
                 : {
                       text: result.clipped
-                          ? "many"
-                          : plural(
-                                lineCount(withoutNotes(text)),
-                                call.name === "ls" ? "entry" : "file",
-                            ).replace("entrys", "entries"),
+                          ? t("many")
+                          : call.name === "ls"
+                            ? counting(
+                                  lineCount(withoutNotes(text)),
+                                  "1 entry",
+                                  "{{count}} entries",
+                              )
+                            : counting(lineCount(withoutNotes(text)), "1 file", "{{count}} files"),
                       tone: "",
                   };
 
@@ -610,10 +624,10 @@ function outcome({ call, result, details, status }) {
 
             return {
                 text: result.clipped
-                    ? "long output"
+                    ? t("long output")
                     : lines === 0
-                      ? "no output"
-                      : plural(lines, "line"),
+                      ? t("no output")
+                      : counting(lines, "1 line", "{{count}} lines"),
                 tone: "",
             };
         }
@@ -624,7 +638,7 @@ function outcome({ call, result, details, status }) {
                 : null;
         case "codemode":
             return Array.isArray(details?.calls)
-                ? { text: plural(details.calls.length, "call"), tone: "" }
+                ? { text: counting(details.calls.length, "1 call", "{{count}} calls"), tone: "" }
                 : null;
 
         case "subagent": {
@@ -986,7 +1000,7 @@ function ToolStep({
                 onClick=${() => setOpen(!open)}
             >
                 <${StepMark} status=${status} kind=${call.name === "subagent" ? "agent" : ""} />
-                <span class="step-label" data-part="step-label">${label}</span>
+                <span class="step-label" data-part="step-label">${t(label)}</span>
                 <span class="step-subject">${subject}</span>
                 ${
                     said &&
@@ -1255,7 +1269,10 @@ function ActivityGroup({
         >
             <${Icon} name="chevron" size=${14} class="chev" part="activity-chevron" />
             <span class="activity-summary">${summarize(all, thinking)}</span>
-            ${failed > 0 && html`<span class="activity-failed">${failed} failed</span>`}
+            ${
+                failed > 0 &&
+                html`<span class="activity-failed">${t("{{count}} failed", { count: failed })}</span>`
+            }
             <${GroupTime} id=${id} start=${start} end=${end} live=${live} />
         </button>
         ${
@@ -1657,10 +1674,10 @@ function OutputCard({ entry, command, meta, failed = false, longCommand = false,
 
                             setFull(text);
                             await copyText(text);
-                            notify("info", "Copied the output.");
+                            notify("info", t("Copied the output."));
                         })}
                 >
-                    Copy output
+                    ${t("Copy output")}
                 </button>`
             }
         </div>
@@ -1672,7 +1689,7 @@ function CommandEntry({ entry }) {
     return html`<${OutputCard}
         entry=${entry}
         command=${`/${entry.command}`}
-        meta=${`${entry.name} · not shown to Pi${entry.clipped ? " · only the end is kept" : ""}`}
+        meta=${`${entry.name} · ${t("not shown to Pi")}${entry.clipped ? ` · ${t("only the end is kept")}` : ""}`}
         copy=${true}
     />`;
 }
@@ -1685,13 +1702,13 @@ function ShellEntry({ entry }) {
         entry.status === "done"
             ? entry.code === 0
                 ? ""
-                : `exit ${entry.code}`
+                : t("exit {{code}}", { code: entry.code })
             : SHELL_ENDS[entry.status];
 
     return html`<${OutputCard}
         entry=${entry}
         command=${`$ ${entry.command}`}
-        meta=${`${entry.name}${end ? ` · ${end}` : ""}${entry.context ? "" : " · not shown to Pi"}`}
+        meta=${`${entry.name}${end ? ` · ${end}` : ""}${entry.context ? "" : ` · ${t("not shown to Pi")}`}`}
         failed=${Boolean(end)}
         longCommand=${longCommand}
     />`;
@@ -2013,7 +2030,7 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
         return [
             group,
             html`<div key=${`${item.key}:stopped`} class="reply" data-part="reply">
-                <div class="muted small">Stopped.</div>
+                <div class="muted small">${t("Stopped.")}</div>
             </div>`,
         ];
     });
@@ -2190,16 +2207,20 @@ function LiveThought({ generation, entries, id }) {
 
     const empty = text === "";
     const streaming = thought?.streaming && !empty;
-    const label = empty ? "Thinking" : thought.writing ? "Current thought" : "Latest thought";
+    const label = empty
+        ? t("Thinking")
+        : thought.writing
+          ? t("Current thought")
+          : t("Latest thought");
     const shown = !empty
         ? text
         : thought?.block.redacted
-          ? "The model has hidden its thinking."
+          ? t("The model has hidden its thinking.")
           : generation !== undefined && generation.message === undefined
-            ? "Waiting for thinking text…"
-            : "No thinking text shared for this response.";
+            ? t("Waiting for thinking text…")
+            : t("No thinking text shared for this response.");
 
-    return html`<section class="live-thought" id=${id} aria-label="Pi's thinking">
+    return html`<section class="live-thought" id=${id} aria-label=${t("Pi's thinking")}>
         <div class="live-thought-label">${label}</div>
         <div
             class=${`live-thought-text ${empty ? "is-empty" : ""} ${streaming ? "streaming" : ""}`}
@@ -2296,8 +2317,8 @@ function LiveLine({ live, approvals, start, entries, conversationId }) {
                 class=${`live-fold ${open ? "open" : ""}`}
                 aria-expanded=${open}
                 aria-controls=${thoughtId}
-                aria-label=${open ? "Hide Pi's thinking" : "Show Pi's thinking"}
-                title=${open ? "Hide Pi's thinking" : "Show Pi's thinking"}
+                aria-label=${t(open ? "Hide Pi's thinking" : "Show Pi's thinking")}
+                title=${t(open ? "Hide Pi's thinking" : "Show Pi's thinking")}
                 onClick=${fold}
             ><${Icon} name="chevron" size=${14} class="chev" /></button>`
         }

@@ -146,10 +146,10 @@ export function TrustBar() {
         </span>
         <span class="trust-actions">
             <button class="link small" onClick=${() => attempt(() => decide("distrust"))}>
-                Don't trust
+                ${t("Don't trust")}
             </button>
             <button class="button small primary" onClick=${() => openSheet({ type: "trust" })}>
-                Review
+                ${t("Review")}
             </button>
             <button
                 class="icon-button"
@@ -268,7 +268,7 @@ export function TrustSheet() {
     const info = currentTrust();
 
     if (!info) {
-        return html`<${Sheet} title="Project trust" onClose=${closeSheet}>
+        return html`<${Sheet} title=${t("Project trust")} onClose=${closeSheet}>
             <${Loader} label=${t("Loading")} />
         <//>`;
     }
@@ -280,14 +280,14 @@ export function TrustSheet() {
         });
     const saved = (path, trusted) => info.saved?.path === path && info.saved.trusted === trusted;
 
-    return html`<${Sheet} title="Project trust" onClose=${closeSheet}>
+    return html`<${Sheet} title=${t("Project trust")} onClose=${closeSheet}>
         <p class="mono small">${short(info.folder)}</p>
         <p>${status(info, short)}</p>
         ${ownSkillsText(info).map((text) => html`<p>${text}</p>`)}
         ${
             info.settings &&
             html`<p>
-                In .pi/settings.json: model and thinking defaults apply only to later new sessions, after trust. This session will not change. The owner's Default model still wins; clear it in Menu → Default model to use project defaults. No project setting can grant trust to itself. Extra skill and prompt paths and per-project run policy are not supported yet.
+                ${t("In .pi/settings.json: model and thinking defaults apply only to later new sessions, after trust. This session will not change. The owner's Default model still wins; clear it in Menu → Default model to use project defaults. No project setting can grant trust to itself. Extra skill and prompt paths and per-project run policy are not supported yet.")}
             </p>`
         }
         <p class="muted small">
@@ -299,21 +299,21 @@ export function TrustSheet() {
                 : !info.unreadable &&
                   html`<div class="group">
                       <${Choice}
-                          label="Trust this folder"
+                          label=${t("Trust this folder")}
                           current=${saved(info.folder, true)}
                           onClick=${() => choose("trust")}
                       />
                       ${
                           info.parent &&
                           html`<${Choice}
-                              label="Trust the folder above it"
+                              label=${t("Trust the folder above it")}
                               detail=${short(info.parent)}
                               current=${saved(info.parent, true)}
                               onClick=${() => choose("trust-parent")}
                           />`
                       }
                       <${Choice}
-                          label="Don't trust"
+                          label=${t("Don't trust")}
                           current=${saved(info.folder, false)}
                           onClick=${() => choose("distrust")}
                       />

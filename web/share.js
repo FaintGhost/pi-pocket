@@ -118,7 +118,7 @@ export function ShareSheet({ share }) {
                 ${recent.map(
                     (session) =>
                         html`<button class="list-item" onClick=${() => deliver(session.id)}>
-                            <span>${session.title ?? "New session"}</span>
+                            <span>${session.title ?? t("New session")}</span>
                             <span class="muted small">${timeAgo(session.updatedAt)}</span>
                         </button>`,
                 )}`
