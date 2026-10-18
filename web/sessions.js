@@ -535,6 +535,13 @@ function groupsOf(shown, { tab, needle, home, pinned }) {
     return [...groups, ...byKey.values()];
 }
 
+/** The three lists a person can be looking at, in the order they sit in the bar. */
+const TABS = [
+    ["recent", "Recent"],
+    ["folders", "Folders"],
+    ["archived", "Archived"],
+];
+
 /**
  * What the full list searched for and how far it was scrolled, kept while the tab lives: on a phone the list goes when a
  * session opens, and back from the session shows it again as it was.
@@ -1089,7 +1096,7 @@ export function SessionList({ compact = false }) {
                     class=${tab === key ? "on" : ""}
                     onClick=${() => setTab(key)}
                 >
-                    ${label}
+                    ${t(label)}
                 </button>`,
             )}
             <${Slide} box=${tabBar} axis="x" />

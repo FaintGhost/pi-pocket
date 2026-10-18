@@ -1175,6 +1175,16 @@ const strings: Record<string, string> = {
         " 项目模型默认值仅适用于之后新建的会话；本会话不会改变。",
     "Its .pi/settings.json can set the model and thinking level of later new sessions. This session will not change.":
         "其 .pi/settings.json 可设置之后新建会话的模型和思考级别。本会话不会改变。",
+    "Not reachable from here": "从这台机器连不上",
+    "Routing groups": "路由分组",
+    Quotas: "配额",
+    "Sent lately": "最近用量",
+    "routing group": "路由分组",
+    reasoning: "推理",
+    "Refresh catalog and quotas": "刷新目录与配额",
+    "Reading…": "正在读取…",
+    "the model gateway is not reachable": "连不上模型网关",
+    Magpie: "Magpie",
 };
 
 const templates: Record<string, string> = {
@@ -1420,6 +1430,16 @@ const templates: Record<string, string> = {
         "其 .agents/skills 中的技能（{{skills}}）也需要信任。",
     "PiP's idle compaction limit is {{tokens}} tokens.":
         "PiP 的空闲压缩阈值为 {{tokens}} 个 token。",
+    "{{models}} models · {{groups}} routing groups": "{{models}} 个模型 · {{groups}} 个路由分组",
+    "renews {{when}}": "重置 {{when}}",
+    "read {{when}}": "读取 {{when}}",
+    "{{tokens}} context · {{out}} out": "上下文 {{tokens}} · 输出 {{out}}",
+    "{{count}} calls": "{{count}} 次调用",
+    "{{count}} errors": "{{count}} 次错误",
+    "{{count}} retried": "{{count}} 次重试",
+    "{{count}} out": "输出 {{count}}",
+    "{{count}} cached": "缓存 {{count}}",
+    "{{count}} in": "输入 {{count}}",
 };
 
 export default function zhCnUi() {

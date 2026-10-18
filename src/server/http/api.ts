@@ -667,7 +667,62 @@ export function createApi(options: HttpOptions, auth: Auth) {
         ) {
             requireOwner(user);
 
-            return json(response, 200, await app.providers.modelRefresh.refresh());
+            // A gateway that answers for many vendors has a catalog of its own, so refreshing models means refreshing
+            // it too; one that is not there leaves the answer as it is.
+            const refreshed = await app.providers.modelRefresh.refresh();
+
+            if (app.magpie !== undefined && app.models !== undefined) {
+                await app.magpie.refresh(app.models).catch(() => undefined);
+            }
+
+            return json(response, 200, refreshed);
+        }
+
+        // The model gateway on this machine: what it serves, what its own sign-ins have left, and what it sent lately.
+        // Absent gateway is an empty answer rather than an error, so the browser can just not show the way in.
+        if (first === "magpie" && second === undefined && method === "GET") {
+            const magpie = app.magpie;
+
+            return json(
+                response,
+                200,
+                magpie === undefined
+                    ? { reachable: false, models: [], groups: [], quotas: [], usage: undefined }
+                    : {
+                          ...magpie.state(),
+                          quotas: await magpie.quotas(),
+                          usage: await magpie.usage(),
+                      },
+            );
+        }
+
+        if (
+            first === "magpie" &&
+            second === "refresh" &&
+            third === undefined &&
+            method === "POST"
+        ) {
+            requireOwner(user);
+
+            const magpie = app.magpie;
+
+            if (magpie === undefined) {
+                return json(response, 200, {
+                    reachable: false,
+                    models: [],
+                    groups: [],
+                    quotas: [],
+                });
+            }
+
+            await magpie.refresh(app.models);
+            await magpie.refreshQuotas();
+
+            return json(response, 200, {
+                ...magpie.state(),
+                quotas: await magpie.quotas(),
+                usage: await magpie.usage(),
+            });
         }
 
         // For the owner, each subscription's sign-in is asked afresh first (three seconds at most; a mark found later

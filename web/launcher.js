@@ -293,6 +293,18 @@ function actionItems() {
             icon: "key",
             run: () => openSheet({ type: "providers" }),
         },
+        store.state.server?.magpie && {
+            label: t("Magpie"),
+            detail: store.state.server.magpie.reachable
+                ? t("{{models}} models · {{groups}} routing groups", {
+                      models: store.state.server.magpie.models,
+                      groups: store.state.server.magpie.groups,
+                  })
+                : t("the model gateway is not reachable"),
+            keywords: "gateway models quotas routing",
+            icon: "key",
+            run: () => openSheet({ type: "magpie" }),
+        },
         modelRefreshAvailable() && {
             label: t("Refresh models"),
             detail: store.state.modelRefresh.loading

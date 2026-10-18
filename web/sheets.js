@@ -8,6 +8,7 @@ import { ShareSheet } from "./share.js";
 import { AppearanceSheet } from "./sheets/appearance.js";
 import { BranchPicker } from "./sheets/branch.js";
 import { ExtensionsSheet } from "./sheets/extensions.js";
+import { MagpieSheet } from "./sheets/magpie.js";
 import { FileSheet } from "./sheets/file.js";
 import { FindSheet } from "./sheets/find.js";
 import {
@@ -199,6 +200,9 @@ function sheetBody(sheet) {
             break;
         case "providers":
             body = html`<${ProvidersSheet} />`;
+            break;
+        case "magpie":
+            body = html`<${MagpieSheet} />`;
             break;
         case "extensions":
             body = html`<${ExtensionsSheet} />`;

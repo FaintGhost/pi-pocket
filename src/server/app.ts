@@ -76,6 +76,7 @@ import { type ApprovalRequest, Approvals, type PocketHost, type WebAccess } from
 import { type GuardStatus, LancetGuard } from "./lancet.ts";
 import { takeLock } from "./lock.ts";
 import { Memory } from "./memory.ts";
+import { Magpie } from "./magpie.ts";
 import { isThinkingLevel, modelList, resolveModel, THINKING_LEVELS } from "./models.ts";
 import { configureHttp } from "./net.ts";
 import { PiSessions } from "./pi-sessions.ts";
@@ -255,6 +256,8 @@ export class PocketApp {
     access: AccessInfo | undefined;
     harness!: Harness;
     models!: ModelRuntime;
+    /** The model gateway on this machine, when there is one; its models are a provider of their own. */
+    magpie: Magpie | undefined;
     settings!: SettingsManager;
     loader!: ExtensionLoader;
     readonly commands = new Commands(this);
@@ -486,6 +489,18 @@ export class PocketApp {
         this.models = await ModelRuntime.create();
         this.providers.modelRefresh.watch(this.models);
         this.#configureModels?.(this.models);
+        // Magpie, when this machine has one: its catalog becomes a provider, and a gateway that is not there (or is
+        // slow) only means Pi's own providers are the ones on offer.
+        const magpie = Magpie.fromEnvironment();
+
+        this.magpie = magpie;
+
+        if (magpie !== undefined) {
+            void magpie.attach(this.models).catch((error: unknown) => {
+                this.#log(`Magpie is not available: ${describe(error)}`);
+            });
+        }
+
         measureModelStreams(this.models);
         await this.models.getAvailable().catch(() => []);
 
@@ -1774,6 +1789,16 @@ export class PocketApp {
                 pip: this.pip.available(user),
                 // Tokens of context above which PiP compacts itself once idle; 0: only as sessions do.
                 pipCompactAt: this.pipCompaction.compactAt,
+                // The model gateway this machine has, for the launcher: what it serves, or that it is not there.
+                ...(this.magpie === undefined
+                    ? {}
+                    : {
+                          magpie: {
+                              reachable: this.magpie.state().reachable,
+                              models: this.magpie.state().models.length,
+                              groups: this.magpie.state().groups.length,
+                          },
+                      }),
             },
             // Read after the guard's wait, so a connecting device does not replace a live update with an older list.
             folderFavorites: await this.folderFavorites.list(user),
