@@ -235,6 +235,57 @@ test(
     },
 );
 
+/**
+ * A finger held on a row, and what the page there lets be selected meanwhile: the actions sheet rises under the
+ * finger, and its own text is what Android's long press would otherwise take. Back is the sheet text's `user-select`
+ * and whether its `selectstart` is stopped, while the finger is held and again after the lift.
+ */
+const heldSelection = (id: ConversationId) =>
+    inPage<{ held: string; stopped: boolean; after: string; free: boolean }>(`
+        const button = document.querySelector(${JSON.stringify(`${row(id)} > .session`)});
+        const box = button.getBoundingClientRect();
+        const at = {
+            pointerId: 7,
+            pointerType: "touch",
+            isPrimary: true,
+            button: 0,
+            clientX: box.x + box.width / 2,
+            clientY: box.y + box.height / 2,
+        };
+        const fire = (type) =>
+            button.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, ...at }));
+        const wait = (time) => new Promise((resolve) => setTimeout(resolve, time));
+        // A selection starting on the sheet's own text, the way Android's long press makes one: true when stopped.
+        const start = (word) => {
+            const each = new Event("selectstart", { bubbles: true, cancelable: true });
+            word.dispatchEvent(each);
+            return each.defaultPrevented;
+        };
+
+        fire("pointerdown");
+        await wait(600);
+        const word = document.querySelector(".sheet-host:not(.leaving) .sheet-head h2");
+        const held = { held: getComputedStyle(word).userSelect, stopped: start(word) };
+        fire("pointerup");
+        await wait(600);
+        return JSON.stringify({ ...held, after: getComputedStyle(word).userSelect, free: !start(word) });
+    `);
+
+test(
+    "a finger held on a row selects nothing, and the lift gives selection back",
+    real,
+    async () => {
+        await fresh(true);
+
+        const { held, stopped, after, free } = await heldSelection(active);
+
+        assert.equal(held, "none", "the held finger leaves the page nothing to select");
+        assert.equal(stopped, true, "and stops a selection the sheet's own text would start");
+        assert.notEqual(after, "none", "the lift does not leave the page unselectable");
+        assert.equal(free, true, "the sheet's text is selectable again");
+    },
+);
+
 /** What this browser marked unread, and which rows show it. */
 const marks = () =>
     inPage<{ stored: number[]; dots: number[] }>(`
