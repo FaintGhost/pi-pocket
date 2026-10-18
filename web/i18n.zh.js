@@ -1285,6 +1285,60 @@ export const text = {
     "That message is in earlier history: use “Show earlier messages” at the top.":
         "那条消息在更早的历史里：用顶部的「显示更早的消息」。",
     "A few words people search for, such as .": "别人会搜的几个词，例如",
+    "Publish a viewable artifact (self-contained HTML page, Markdown document, or SVG image) that the user opens in the app's artifact viewer.":
+        "发布一个可查看的产物（自包含的 HTML 页面、Markdown 文档或 SVG 图片），用户在应用的产物查看器里打开。",
+    "Use a real web browser (Chromium on this machine) that the people in this conversation watch live. Open pages (local dev servers, files, sites), read them as a person would, and take screenshots.":
+        "操控这台机器上真实的浏览器（Chromium），这个会话里的人可以实时看到。打开页面（本地开发服务器、文件、网站），像人一样阅读，并截图。",
+    "Watch one of your person's GitHub repositories (gh must be able to push to it) and get a message, with the instructions you give, when something happens there: an issue, a pull request, a comment, a failed check, a release.":
+        "监看你这个人的某个 GitHub 仓库（gh 要能往它推送），一旦那边有动静——issue、pull request、评论、失败的检查、发布——就带着你给的指令收到一条消息。",
+    "See a pull request through from a session: Pi there gets a message when its checks fail (with their logs), it has conflicts, or reviewers comment, and fixes them until it is merged.":
+        "从会话里把某个 pull request 盯到合并：检查失败（带日志）、有冲突或有评审意见时，那边的 Pi 会收到消息并修好，直到它被合并。",
+    "Lessons you keep across sessions, for this project or everywhere. Actions: add (text, scope), update (id, text), remove (id), list.":
+        "跨会话保留的经验，按项目或全局。动作：add（文本、范围）、update（id、文本）、remove（id）、list。",
+    "List sessions, newest first: id, title, state (working, needs approval, idle), folder, model, last activity. Also lists the folders in use.":
+        "列出会话，最新的在前：id、标题、状态（工作中、待批准、空闲）、目录、模型、最后活动。也列出正在使用的目录。",
+    "Send a message to Pi in a session. By default it waits until the current work is done; steer joins the running work now.":
+        "给某个会话里的 Pi 发消息。默认等到当前工作结束；steer 则立刻介入正在跑的这一轮。",
+    "Send yourself a message in this conversation later, or on repeat: to check back on something slow, or for a regular job.":
+        "稍后或按重复在这个会话里给自己发一条消息：用来回头查看慢任务，或做定期任务。",
+    "Scheduled messages to Pi in another session: add (session, when, message), list (session), cancel (session, id).":
+        "往别的会话里给 Pi 发定时消息：add（会话、时间、消息）、list（会话）、cancel（会话、id）。",
+    "Archive a session (it leaves the list but keeps everything), or bring one back.":
+        "归档一个会话（从列表移走但内容全保留），或把它取回来。",
+    "Manage persistent background subagents. Actions: spawn (name, message; optional model), list, send, wait, stop.":
+        "管理长期在后台跑的子代理。动作：spawn（名字、消息；可选模型）、list、send、wait、stop。",
+    "Calls waiting for a person to allow or deny them, in every session: list them, or deny one by id. You cannot allow calls.":
+        "每个会话里等待人放行或拒绝的调用：列出来，或按 id 拒绝一个。你不能放行调用。",
+    "Get a report back when Pi answers (default true). Leave it on unless the person said they do not need to hear back.":
+        "Pi 回答后回一份汇报（默认开启）。除非这个人说不需要回音，否则保持开着。",
+    "Get a report when a session's current run ends, with Pi's last answer. If it is idle now, you get its last answer at once instead.":
+        "某个会话当前这轮结束时收到汇报，带 Pi 的最后回答。如果它现在空闲，则立刻把最后的回答给你。",
+    "Linked sessions: ordinary sessions this one starts and messages, not subagents.":
+        "关联会话：由这个会话启动并给它发消息的普通会话，不是子代理。",
+    "Start a new session, optionally with a first message for Pi there. The folder defaults to the server's default folder; pick one from the folders the sessions tool lists.":
+        "新开一个会话，可以带一条给那边 Pi 的初始消息。目录默认用服务器的默认目录；也可以从会话工具列出的目录里选一个。",
+    "Read the newest part of a session: its state, calls waiting for approval, scheduled messages, and its last messages, with Pi's last answer in full.":
+        "读某个会话最新的一段：状态、等待批准的调用、定时消息，以及最近的消息（Pi 的最后回答完整给出）。",
+    "Stop the run in a session, and withdraw what waits in its queue.":
+        "停掉某个会话正在跑的这一轮，并撤回它队列里等待的内容。",
+    "Agent Teams needs a server restart before it can be used.":
+        "Agent Teams 需要重启服务器之后才能用。",
+    "Work in a git worktree of its own, on a new branch, apart from the folder":
+        "在它自己的 git worktree 里、新分支上工作，与目录本身分开",
+    "Join the running work now instead of waiting": "立刻加入正在跑的工作，而不是等待",
+    "Instead of ref: the element's visible text or label, such as a button's text.":
+        "不用 ref，改用元素可见的文字或标签，比如按钮上的字。",
+    "Instead of ref: a CSS selector. wait: wait until it is visible.":
+        "不用 ref，改用 CSS 选择器。wait：等到它可见。",
+    "How many of the newest entries to read (default 40)": "读多少条最新的记录（默认 40）",
+    "List archived sessions instead": "改为列出已归档的会话",
+    "Short human-readable title.": "简短、人能读懂的标题。",
+    "Words to find in titles, folders, or branches": "在标题、目录或分支里查找的词",
+    "Absolute or ~/ path of the folder to work in": "要工作的目录的绝对路径或 ~/ 路径",
+    "Default html, or the type of the existing artifact.": "默认 html，或现有产物的类型。",
+    "The complete content of the new version.": "新版本的完整内容。",
+    "The task for Pi in the new session, self-contained": "新会话里给 Pi 的任务，自成一体",
+    "What Pi there should do or know, self-contained": "那边 Pi 该做什么或该知道什么，自成一体",
 };
 
 /** Patterns for text with a number or a name in it. `$1` is the first capture group. */
@@ -1354,4 +1408,6 @@ export const patterns = [
         "$1 已在 $2 检出：git 只会在那里切到它。",
     ],
     [/^It now comes from another repository: (.+)$/, "它现在来自另一个仓库：$1"],
+    [/^· tools: (.+)$/, "· 工具：$1"],
+    [/^retry$/, "重试"],
 ];
