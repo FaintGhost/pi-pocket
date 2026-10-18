@@ -1339,6 +1339,32 @@ export const text = {
     "The complete content of the new version.": "新版本的完整内容。",
     "The task for Pi in the new session, self-contained": "新会话里给 Pi 的任务，自成一体",
     "What Pi there should do or know, self-contained": "那边 Pi 该做什么或该知道什么，自成一体",
+    "Artifacts: HTML pages, Markdown documents, and SVG images the agent publishes for the user to open in the app.":
+        "产物：agent 发布、供用户在应用里打开的 HTML 页面、Markdown 文档和 SVG 图片。",
+    "Browser: Pi opens, reads, clicks through, and screenshots web pages in a real Chromium on this machine, the same page the people in the conversation watch and use in the Browser panel.":
+        "浏览器：Pi 在这台机器上真实的 Chromium 里打开、阅读、点击网页并截图，和会话里的人在浏览器面板里看到、用的是同一个页面。",
+    "Persistent background subagents, after Pi Durable's example 23.":
+        "长期在后台运行的子代理，参照 Pi Durable 的示例 23。",
+    "Agent Teams lets Pi start linked sessions, each an ordinary session of its own, and send them tasks, questions, and findings.":
+        "Agent Teams 让 Pi 启动关联会话——每个都是独立的普通会话——并给它们发任务、问题和发现。",
+    "Scheduled messages go to Pi later, or on repeat: people set them up with /schedule, and Pi with its schedule tool, to check back on something slow or for a regular job.":
+        "定时消息会在稍后或按重复发给 Pi：人用 /schedule 设置，Pi 用它的 schedule 工具设置，用来回头查看慢任务或做定期任务。",
+    "Done when: Pi keeps working until a session's check command passes, such as npm test, up to five checks.":
+        "完成条件：Pi 会一直跑到某个会话的检查命令通过，比如 npm test，最多检查五次。",
+    "Plan mode lets Pi read and explore but change nothing, so it proposes a plan for people to approve first.":
+        "计划模式让 Pi 可以读取和探索，但什么都不能改，所以它会先给出计划让人批准。",
+    "Lancet Guard for Pi Pocket's tools.": "Pi Pocket 工具用的 Lancet Guard。",
+    "Lancet Guard is not installed in Pi; tools run unguarded.":
+        "Lancet Guard 没有装进 Pi；工具会不受检查地运行。",
+    "Codemode lets the agent write JavaScript that calls its other tools, to batch independent calls, chain them, or filter large output before it reaches the model.":
+        "代码模式让 agent 写 JavaScript 调用它的其它工具，用来批量执行互不依赖的调用、把它们串起来，或在大量输出到达模型之前先过滤。",
+    "Once PiP is idle above this, older messages become a short summary.":
+        "PiP 空闲时超过这个值，较早的消息就会被压成一段摘要。",
+    "Done when": "完成条件",
+    "Agent Teams": "Agent Teams",
+    "Plan mode": "计划模式",
+    "Lancet Guard": "Lancet Guard",
+    Triggers: "触发器",
 };
 
 /** Patterns for text with a number or a name in it. `$1` is the first capture group. */
