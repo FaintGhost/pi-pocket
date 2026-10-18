@@ -1,5 +1,6 @@
 // The keyboard shortcuts, as a list. The keys themselves are handled in app.js.
 import { closeSheet } from "../store.js";
+import { t } from "../i18n.js";
 import { html, Keys, Sheet } from "../ui.js";
 
 // Each row: its keys, and what they do. An "or" between keys means either one, and a "…" a run from one to the other.
@@ -72,20 +73,20 @@ function Chords({ keys }) {
 }
 
 export function ShortcutsSheet() {
-    return html`<${Sheet} title="Keyboard shortcuts" onClose=${closeSheet}>
+    return html`<${Sheet} title=${t("Keyboard shortcuts")} onClose=${closeSheet}>
         ${SHORTCUTS.map(
             ([title, rows]) => html`<div class="group" key=${title}>
-                <div class="group-title">${title}</div>
+                <div class="group-title">${t(title)}</div>
                 <dl class="shortcuts">
                     ${rows.map(
                         ([keys, text]) => html`<dt><${Chords} keys=${keys} /></dt>
-                        <dd>${text}</dd>`,
+                        <dd>${t(text)}</dd>`,
                     )}
                 </dl>
             </div>`,
         )}
         <p class="muted small">
-            In the launcher, start with <kbd>></kbd> for actions, <kbd>@</kbd> for sessions, or <kbd>#</kbd> for themes. Arrowing onto colors shows them; Enter keeps them.
+            ${t("In the launcher, start with")} <kbd>></kbd> ${t("for actions")}, <kbd>@</kbd> ${t("for sessions")}, or <kbd>#</kbd> ${t("for themes")}. ${t("Arrowing onto colors shows them; Enter keeps them.")}
         </p>
     <//>`;
 }

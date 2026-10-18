@@ -3,6 +3,7 @@
 // click goes into it; on a touch screen, a tap goes into it. Open takes the selected folder, or the one you are in.
 // It opens in the folder of the session you are in, so New session here is a tap away without walking the tree;
 // favorites, each person's own and on all their devices, sit first among the places; Ctrl/⌘+1…9 starts in one.
+import { t } from "../i18n.js";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import {
     actions,
@@ -109,9 +110,9 @@ function LineInput({ value, placeholder, label, onSubmit, onCancel, class: class
             }}
         />
         <button class="button small primary" type="submit" disabled=${text.trim() === ""}>
-            OK
+            ${t("OK")}
         </button>
-        <button class="icon-button" type="button" aria-label="Cancel" onClick=${onCancel}>
+        <button class="icon-button" type="button" aria-label=${t("Cancel")} onClick=${onCancel}>
             <${Icon} name="close" size=${16} />
         </button>
     </form>`;
@@ -421,7 +422,7 @@ export function CwdSheet({ mode }) {
     </button>`;
 
     return html`<${Sheet}
-        title=${changing ? "Move this session: pick a folder" : "New session: pick a folder"}
+        title=${t(changing ? "Move this session: pick a folder" : "New session: pick a folder")}
         onClose=${closeSheet}
         wide=${true}
         className="folder-sheet"
@@ -430,8 +431,8 @@ export function CwdSheet({ mode }) {
             <button
                 type="button"
                 class="icon-button"
-                aria-label="Up one folder"
-                title="Up one folder (Backspace)"
+                aria-label=${t("Up one folder")}
+                title=${t("Up one folder (Backspace)")}
                 disabled=${!listing?.parent}
                 onClick=${up}
             >
@@ -442,8 +443,8 @@ export function CwdSheet({ mode }) {
                     ? html`<${LineInput}
                           class="fp-path-input"
                           value=${editing}
-                          placeholder="A path: ~/code or /srv"
-                          label="Go to a path"
+                          placeholder=${t("A path: ~/code or /srv")}
+                          label=${t("Go to a path")}
                           onSubmit=${goTo}
                           onCancel=${() => {
                               setEditing(null);
@@ -454,8 +455,8 @@ export function CwdSheet({ mode }) {
                           class="fp-crumbs"
                           ref=${crumbsBox}
                           onScroll=${(event) => markCut(event.currentTarget)}
-                          aria-label="Folder"
-                          title="Click the path's end to type one (Ctrl+L)"
+                          aria-label=${t("Folder")}
+                          title=${t("Click the path's end to type one (Ctrl+L)")}
                       >
                           ${crumbs.map((crumb, index) =>
                               index === crumbs.length - 1
@@ -464,7 +465,7 @@ export function CwdSheet({ mode }) {
                                         type="button"
                                         class="fp-crumb here"
                                         aria-current="location"
-                                        aria-label=${`${crumb.name}: type a path`}
+                                        aria-label=${t("{{name}}: type a path", { name: crumb.name })}
                                         onClick=${() => setEditing(folder)}
                                     >
                                         ${crumb.name}
@@ -495,20 +496,20 @@ export function CwdSheet({ mode }) {
                     setNaming(true);
                 }}
             >
-                <${Icon} name="plus" size=${14} /> New folder
+                <${Icon} name="plus" size=${14} /> ${t("New folder")}
             </button>
         </div>
         ${
             missing !== null &&
             html`<div class="folder-missing">
                 <span>
-                    ${missingWhy ?? html`<span class="mono">${shortPath(missing, home)}</span> isn't there.`}
+                    ${missingWhy ?? html`<span class="mono">${shortPath(missing, home)}</span>${t(" isn't there.")}`}
                 </span>
                 <span class="fp-missing-actions">
                     ${
                         missingWhy === null &&
                         html`<button class="button small" onClick=${() => make(missing)}>
-                            Create it
+                            ${t("Create it")}
                         </button>`
                     }
                     ${
@@ -523,12 +524,12 @@ export function CwdSheet({ mode }) {
                                     (done) => done && setMissing(null),
                                 )}
                         >
-                            Remove from favorites
+                            ${t("Remove from favorites")}
                         </button>`
                     }
                     <button
                         class="icon-button"
-                        aria-label="Never mind"
+                        aria-label=${t("Never mind")}
                         onClick=${() => setMissing(null)}
                     >
                         <${Icon} name="close" size=${15} />
@@ -537,9 +538,9 @@ export function CwdSheet({ mode }) {
             </div>`
         }
         <div class="fp-main">
-            <nav class="fp-places" aria-label="Places">
+            <nav class="fp-places" aria-label=${t("Places")}>
                 ${places.map((each) => place(each.path, each.name, each.icon))}
-                ${favorites.length > 0 && html`<div class="fp-places-title">Favorites</div>`}
+                ${favorites.length > 0 && html`<div class="fp-places-title">${t("Favorites")}</div>`}
                 ${favorites.map((path, index) =>
                     place(
                         path,
@@ -550,7 +551,7 @@ export function CwdSheet({ mode }) {
                             : null,
                     ),
                 )}
-                ${recent.length > 0 && html`<div class="fp-places-title">Recent</div>`}
+                ${recent.length > 0 && html`<div class="fp-places-title">${t("Recent")}</div>`}
                 ${recent.map((path, index) => place(path, labels[index], "folder"))}
                 ${
                     !changing &&
@@ -568,7 +569,7 @@ export function CwdSheet({ mode }) {
                 class="fp-list"
                 ref=${list}
                 role="listbox"
-                aria-label="Folders"
+                aria-label=${t("Folders")}
                 tabindex="0"
                 onKeyDown=${onKeyDown}
             >
@@ -576,8 +577,8 @@ export function CwdSheet({ mode }) {
                     naming &&
                     html`<${LineInput}
                         class="fp-naming"
-                        placeholder="Folder name"
-                        label="The new folder's name"
+                        placeholder=${t("Folder name")}
+                        label=${t("The new folder's name")}
                         onSubmit=${(name) => make(joined(folder, name))}
                         onCancel=${() => {
                             setNaming(false);
@@ -586,7 +587,7 @@ export function CwdSheet({ mode }) {
                     />`
                 }
                 ${failed && html`<p class="fp-note">${failed}</p>`}
-                ${!listing && !failed && html`<p class="fp-note">Opening…</p>`}
+                ${!listing && !failed && html`<p class="fp-note">${t("Opening…")}</p>`}
                 ${dirs.map(
                     (dir) => html`<button
                         key=${dir.path}
@@ -615,12 +616,12 @@ export function CwdSheet({ mode }) {
                         ${touch && html`<${Icon} name="chevron" size=${14} class="fp-chev" />`}
                     </button>`,
                 )}
-                ${listing && dirs.length === 0 && html`<p class="fp-note">No folders in here.</p>`}
+                ${listing && dirs.length === 0 && html`<p class="fp-note">${t("No folders in here.")}</p>`}
             </div>
         </div>
         <div class="fp-foot">
             <div class="fp-target" title=${target ? shortPath(target, home) : ""}>
-                <span class="muted">Folder:</span>
+                <span class="muted">${t("Folder:")}</span>
                 <span class="mono">${target ? shortPath(target, home) : "…"}</span>
                 ${
                     mayStar &&
@@ -629,8 +630,8 @@ export function CwdSheet({ mode }) {
                         type="button"
                         class=${`icon-button fp-star ${starred ? "on" : ""}`}
                         aria-pressed=${starred ? "true" : "false"}
-                        aria-label=${starred ? "Remove from favorites" : "Add to favorites"}
-                        title=${starred ? "Remove from favorites" : "Add to favorites"}
+                        aria-label=${t(starred ? "Remove from favorites" : "Add to favorites")}
+                        title=${t(starred ? "Remove from favorites" : "Add to favorites")}
                         disabled=${saving}
                         onClick=${toggleFavorite}
                     >
@@ -643,22 +644,22 @@ export function CwdSheet({ mode }) {
                     !changing &&
                     html`<label
                         class="check"
-                        title="The session gets a branch of its own, apart from this folder"
+                        title=${t("The session gets a branch of its own, apart from this folder")}
                     >
                         <input
                             type="checkbox"
                             checked=${worktree}
                             onChange=${(event) => setWorktree(event.currentTarget.checked)}
                         />
-                        Own git worktree
+                        ${t("Own git worktree")}
                     </label>`
                 }
                 <label class="check">
-                    <input type="checkbox" checked=${hidden} onChange=${toggleHidden} /> Show hidden
+                    <input type="checkbox" checked=${hidden} onChange=${toggleHidden} /> ${t("Show hidden")}
                 </label>
             </div>
             <div class="fp-buttons">
-                <button type="button" class="button" onClick=${closeSheet}>Cancel</button>
+                <button type="button" class="button" onClick=${closeSheet}>${t("Cancel")}</button>
                 <button
                     type="button"
                     class="button primary"
@@ -666,7 +667,7 @@ export function CwdSheet({ mode }) {
                     disabled=${target === null || busy || here}
                     onClick=${() => use()}
                 >
-                    ${here ? "Already here" : changing ? "Move here" : "Open"}
+                    ${t(here ? "Already here" : changing ? "Move here" : "Open")}
                 </button>
             </div>
         </div>

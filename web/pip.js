@@ -3,6 +3,7 @@
 // while PiP works, or has something new. The panel watches PiP's conversation through a view of its own (`pipview`
 // events), so the session behind it stays as it was.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { t } from "./i18n.js";
 import { useBack } from "./back.js";
 import { useDragToClose } from "./gestures.js";
 import { createPipDraft } from "./pip-attachments.js";
@@ -237,7 +238,7 @@ export async function askPip(text) {
     }
 
     if (!pip) {
-        notify("error", "PiP is not ready yet: your message waits in its box.");
+        notify("error", t("PiP is not ready yet: your message waits in its box."));
     }
 
     // Not sent: the words wait in PiP's box rather than be lost (`send` said why), after what was there already.
@@ -302,20 +303,27 @@ function PipContext({ stats, window }) {
     const limit = at > 0 ? Math.min(at, window) : window;
     const percent = Math.min(100, Math.round((used / limit) * 100));
     const about = stats.contextEstimated ? "~" : "";
-    const tokens = `${about}${formatTokens(used)} of ${formatTokens(limit)} tokens in PiP's context.`;
+    const tokens = t("{{used}} of {{total}} tokens in PiP's context.", {
+        used: `${about}${formatTokens(used)}`,
+        total: formatTokens(limit),
+    });
     const when =
         at > window
-            ? `PiP's idle compaction limit is ${formatTokens(at)} tokens.`
+            ? t("PiP's idle compaction limit is {{tokens}} tokens.", {
+                  tokens: formatTokens(at),
+              })
             : at > 0
-              ? `PiP compacts itself above ${formatTokens(at)} once idle.`
-              : "Compact it when it grows.";
-    const cap = at > window ? " The meter is capped at the model's context window." : "";
+              ? t("PiP compacts itself above {{tokens}} once idle.", {
+                    tokens: formatTokens(at),
+                })
+              : t("Compact it when it grows.");
+    const cap = at > window ? t(" The meter is capped at the model's context window.") : "";
     const title = `${tokens} ${when}${cap}`;
 
     return html`<span
         class="pip-context"
         role="img"
-        aria-label=${`Context ${about}${percent}% full`}
+        aria-label=${t("Context {{percent}}% full", { percent: `${about}${percent}` })}
         title=${title}
     >
         <span class=${`meter ${contextLevel(percent)}`}><span style=${`width:${percent}%`}></span></span>
@@ -525,10 +533,10 @@ function Item({ item, last, busy, conversationId }) {
                     conversationId=${conversationId}
                 />`
             }
-            ${entry?.stopReason === "aborted" && html`<div class="pip-event"><span>Stopped</span></div>`}
+            ${entry?.stopReason === "aborted" && html`<div class="pip-event"><span>${t("Stopped")}</span></div>`}
             ${
                 entry?.stopReason === "error" &&
-                html`<div class="pip-error">${entry.error ?? "The model request failed."}</div>`
+                html`<div class="pip-error">${entry.error ?? t("The model request failed.")}</div>`
             }
         </div>`;
     }
@@ -540,8 +548,8 @@ function Welcome({ id, name, hasModel }) {
     const first = (name ?? "").split(/\s+/)[0];
 
     return html`<div class="pip-welcome">
-        <p class="pip-hello">Hi${first ? ` ${first}` : ""}. I’m PiP.</p>
-        <p class="pip-intro">${INTRO}</p>
+        <p class="pip-hello">${first ? t("Hi {{name}}. I’m PiP.", { name: first }) : t("Hi. I’m PiP.")}</p>
+        <p class="pip-intro">${t(INTRO)}</p>
         ${
             !hasModel &&
             html`<p class="pip-intro">
@@ -550,7 +558,7 @@ function Welcome({ id, name, hasModel }) {
                     class="button small"
                     onClick=${() => openSheet({ type: "model", pipId: id })}
                 >
-                    Choose a model to use these suggestions
+                    ${t("Choose a model to use these suggestions")}
                 </button>
             </p>`
         }
@@ -857,7 +865,13 @@ function PipPanel({ leaving, scrim }) {
     const waiting = ready ? (view.approvals ?? []) : [];
     const compacting = ready && (live.compactions ?? []).length > 0;
     const status =
-        waiting.length > 0 ? "needs you" : compacting ? "compacting…" : busy ? "working…" : "";
+        waiting.length > 0
+            ? t("needs you")
+            : compacting
+              ? t("compacting…")
+              : busy
+                ? t("working…")
+                : "";
     // Where the focus was before the panel: read as it first renders, before its box takes the focus.
     const [before] = useState(() => document.activeElement);
 
@@ -914,7 +928,7 @@ function PipPanel({ leaving, scrim }) {
         ref=${ref}
         role="dialog"
         aria-modal=${NARROW.matches ? "true" : undefined}
-        aria-label="PiP, your assistant"
+        aria-label=${t("PiP, your assistant")}
     >
         <div class="pip-resize pip-resize-left" data-pip-resize="left" aria-hidden="true"></div>
         <div class="pip-resize pip-resize-top" data-pip-resize="top" aria-hidden="true"></div>
@@ -948,8 +962,8 @@ function PipPanel({ leaving, scrim }) {
             }
             <button
                 class="icon-button"
-                aria-label="Compact"
-                title="Compact: PiP keeps a summary of older messages, and reads less each time"
+                aria-label=${t("Compact")}
+                title=${t("Compact: PiP keeps a summary of older messages, and reads less each time")}
                 disabled=${!ready || busy || compacting || rows.length === 0}
                 onClick=${() => compactPip(id)}
             >
@@ -958,18 +972,19 @@ function PipPanel({ leaving, scrim }) {
             <button
                 class="icon-button"
                 aria-label="Start fresh"
-                title="Start fresh: PiP forgets this conversation"
+                title=${t("Start fresh: PiP forgets this conversation")}
                 disabled=${!ready || busy || rows.length === 0}
                 onClick=${() =>
-                    confirm("Start fresh? PiP forgets this conversation; you can still read it.") &&
-                    attempt(() => api(`c/${id}/reset`, {}))}
+                    confirm(
+                        t("Start fresh? PiP forgets this conversation; you can still read it."),
+                    ) && attempt(() => api(`c/${id}/reset`, {}))}
             >
                 <${Icon} name="reload" size=${18} />
             </button>
             <button
                 class="icon-button"
-                aria-label="Open as a conversation"
-                title="Open as a conversation, with every step"
+                aria-label=${t("Open as a conversation")}
+                title=${t("Open as a conversation, with every step")}
                 disabled=${!ready}
                 onClick=${() => {
                     closePip();
@@ -978,7 +993,7 @@ function PipPanel({ leaving, scrim }) {
             >
                 <${Icon} name="external" size=${18} />
             </button>
-            <button class="icon-button" aria-label="Close PiP" title="Close (Esc)" onClick=${closePip}>
+            <button class="icon-button" aria-label=${t("Close PiP")} title=${t("Close (Esc)")} onClick=${closePip}>
                 <${Icon} name="close" size=${18} />
             </button>
         </header>
@@ -1019,7 +1034,7 @@ function PipPanel({ leaving, scrim }) {
                 items.at(-1)?.type !== "activity" &&
                 html`<div class="pip-steps working">
                     <${Spinner} hidden=${true} />
-                    <span>Thinking</span>
+                    <span>${t("Thinking")}</span>
                 </div>`
             }
         </div>
@@ -1027,7 +1042,7 @@ function PipPanel({ leaving, scrim }) {
             waiting.length > 0 &&
             html`<div class="pip-approval" role="status">
                 <${Icon} name="shield" size=${14} />
-                <span class="grow">PiP waits for your approval: ${waiting[0].tool}</span>
+                <span class="grow">${t("PiP waits for your approval: {{tool}}", { tool: waiting[0].tool })}</span>
                 <button
                     type="button"
                     class="button small"
@@ -1065,8 +1080,8 @@ function PipBubble() {
 
     return html`<button
         class=${`pip-bubble ${kept} ${leaving ? "leaving" : ""}`}
-        aria-label=${kept === "busy" ? "PiP is working: open PiP" : "PiP has something new: open PiP"}
-        title="PiP (Alt+A)"
+        aria-label=${t(kept === "busy" ? "PiP is working: open PiP" : "PiP has something new: open PiP")}
+        title=${t("PiP (Alt+A)")}
         onClick=${() => openPip()}
     >
         <${Icon} name="pip" size=${22} />
@@ -1115,8 +1130,8 @@ export function PipRailButton() {
         class=${`rail-button rail-pip ${pip?.busy ? "lit" : ""} ${pipOpen ? "open" : ""}`}
         data-part="rail-button"
         data-state=${railState(pipOpen, Boolean(pip?.busy))}
-        title="PiP, your assistant (Alt+A)"
-        aria-label=${["PiP", pip?.busy && "working", unread && "something new"].filter(Boolean).join(", ")}
+        title=${t("PiP, your assistant (Alt+A)")}
+        aria-label=${["PiP", pip?.busy && t("working"), unread && t("something new")].filter(Boolean).join(", ")}
         aria-pressed=${pipOpen}
         onClick=${togglePip}
     >

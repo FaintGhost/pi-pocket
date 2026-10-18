@@ -1,6 +1,7 @@
 // App state, the server connection, and API calls. Components read `store.state` and re-render on `store.subscribe`.
 import { onRoute, pushRoute } from "./back.js";
 import { sessionForest } from "./session-tree.js";
+import { currentLocale, setUiLocales, t } from "./i18n.js";
 
 /** A random id. crypto.randomUUID only exists on https and localhost pages; plain-http network addresses lack it. */
 export function uid() {
@@ -67,6 +68,8 @@ const emptyView = () => ({
 export const store = {
     state: {
         me: undefined, // undefined: unknown, null: signed out
+        uiLocale: "en",
+        uiLocaleRevision: 0,
         users: [],
         models: [],
         /** This tab's shared model refresh state and last result (`model-refresh.js`). */
@@ -321,7 +324,7 @@ function applyChat(data) {
         chatNotices.set(notify("info", message, open), store.state.conversationId);
 
     if (fresh.length > 1) {
-        return announce(`${fresh.length} new chat messages`);
+        return announce(t("{{count}} new chat messages", { count: fresh.length }));
     }
 
     const [message] = fresh;
@@ -330,7 +333,7 @@ function applyChat(data) {
     const mentioned = message.mentions?.includes(state.me?.id);
 
     announce(
-        `${name}${mentioned ? " mentioned you" : ""}: ${text.length > 120 ? `${text.slice(0, 119)}…` : text}`,
+        `${name}${mentioned ? ` ${t("mentioned you")}` : ""}: ${text.length > 120 ? `${text.slice(0, 119)}…` : text}`,
     );
 }
 
@@ -404,13 +407,14 @@ const countdowns = new Map();
 /**
  * Show a short notice, and return its id. With `action`, tapping it runs the action as well as dismissing it. It stays longer when it
  * offers something (an Undo) or says what went wrong, and its countdown holds while a pointer or the focus is on it.
+ * `ui` is a server notice's translation key and parameters: the app shows it in its own language, in place of `message`.
  */
-export function notify(level, message, action) {
+export function notify(level, message, action, ui) {
     const id = nextNotice++;
     const life = level === "error" ? 9000 : action ? 7000 : 4500;
 
     store.set((state) => ({
-        notices: [...state.notices, { id, level, message, action, life }].slice(-4),
+        notices: [...state.notices, { id, level, message, action, life, ui }].slice(-4),
     }));
     countdowns.set(id, {
         left: life,
@@ -556,9 +560,13 @@ export function onExtensionEvent(listener) {
 
 /** What the server sends, by event name. Both transports deliver the same events. */
 const handlers = {
-    hello: (data) =>
+    hello: (data) => {
+        const uiLocale = setUiLocales(data.server?.uiLocales);
+
         store.set({
             me: data.user,
+            uiLocale,
+            uiLocaleRevision: store.state.uiLocaleRevision + 1,
             users: data.users,
             folderFavorites: data.folderFavorites ?? [],
             models: data.models,
@@ -568,7 +576,8 @@ const handlers = {
             themeList: Array.isArray(data.themes) ? data.themes : [],
             // This connection's id, which peek lists name (`peeks.js`). `GET /api/me` answers without one.
             ...(data.connection === undefined ? {} : { streamId: data.connection }),
-        }),
+        });
+    },
     sessions: (sessions) =>
         store.set((state) => ({
             sessions,
@@ -618,6 +627,7 @@ const handlers = {
                           sheet: data.link.sheet ? { type: data.link.sheet } : null,
                       })
                 : undefined,
+            data.ui,
         );
 
         // A mention's: reading that chat takes it down.
@@ -746,7 +756,8 @@ function streamEvents(query) {
         } catch (error) {
             if (error.status === 401) {
                 connection.close();
-                store.set({ me: null });
+                setUiLocales([]);
+                store.set({ me: null, uiLocale: currentLocale() });
 
                 return;
             }
@@ -799,7 +810,8 @@ function pollEvents(query) {
 
                 if (response.status === 401) {
                     stopped = true;
-                    store.set({ me: null });
+                    setUiLocales([]);
+                    store.set({ me: null, uiLocale: currentLocale() });
 
                     return;
                 }
@@ -893,7 +905,12 @@ function handleAuth(data) {
 
         if (data.step === "done") {
             if (data.ok) {
-                notify("info", `Signed in to ${data.providerName ?? data.providerId}.`);
+                notify(
+                    "info",
+                    t("Signed in to {{provider}}.", {
+                        provider: data.providerName ?? data.providerId,
+                    }),
+                );
             }
 
             return { auth: data.ok ? null : { ...flow, prompt: null, done: data } };
@@ -985,8 +1002,12 @@ export async function start() {
     try {
         const hello = await api("me");
 
+        const uiLocale = setUiLocales(hello.server?.uiLocales);
+
         store.set({
             me: hello.user,
+            uiLocale,
+            uiLocaleRevision: store.state.uiLocaleRevision + 1,
             users: hello.users,
             models: hello.models,
             guard: hello.guard,
@@ -995,10 +1016,15 @@ export async function start() {
         });
         connect();
     } catch (error) {
-        store.set({ me: error.status === 401 ? null : undefined });
+        if (error.status === 401) {
+            setUiLocales([]);
+            store.set({ me: null, uiLocale: currentLocale() });
+        } else {
+            store.set({ me: undefined });
+        }
 
         if (error.status !== 401) {
-            notify("error", `Server unreachable: ${error.message}`);
+            notify("error", `${t("Server unreachable: ")}${error.message}`);
             setTimeout(start, 3000);
         }
     }

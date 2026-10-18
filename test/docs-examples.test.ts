@@ -100,6 +100,7 @@ test("the example extensions load as drop-ins, off until the owner turns them on
             ["my-words.ts", false],
             ["no-force-push.ts", false],
             ["server-status.ts", false],
+            ["zh-cn-ui.ts", false],
         ],
     );
 

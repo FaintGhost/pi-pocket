@@ -1,4 +1,5 @@
 // Appearance: the theme and the colors, and how the app looks and moves.
+import { t } from "../i18n.js";
 import { useEffect, useRef, useState } from "preact/hooks";
 import {
     actions,
@@ -47,15 +48,15 @@ function ThemeCard({ id, desktop = false }) {
         <div class="tc-win"><i></i><i></i><i class="lit"></i></div>
     </div>`;
     const name = html`<div class="tc-name">
-        ${desktop ? `Desktop · ${palette.name}` : palette.name}
-        ${palette.pair ? html`<small>light and dark</small>` : palette.colors.mode === "light" && html`<small>light</small>`}
+        ${desktop ? t("Desktop · {{theme}}", { theme: palette.name }) : palette.name}
+        ${palette.pair ? html`<small>${t("light and dark")}</small>` : palette.colors.mode === "light" && html`<small>${t("light")}</small>`}
     </div>`;
 
     return html`<button
         class=${`theme-card ${on ? "on" : ""} ${desktop ? "theme-desktop" : ""}`}
         aria-pressed=${on}
         style=${vars}
-        title=${desktop ? "Follow the Omarchy theme of the machine Pi Pocket runs on" : palette.name}
+        title=${desktop ? t("Follow the Omarchy theme of the machine Pi Pocket runs on") : palette.name}
         onMouseEnter=${() => matchMedia("(hover: hover)").matches && preview(id)}
         onMouseLeave=${() => preview(null)}
         onFocus=${() => preview(id)}
@@ -68,7 +69,7 @@ function ThemeCard({ id, desktop = false }) {
                 ? html`<div class="tc-text">
                     ${name}
                     <div class="tc-note">
-                        Follows your desktop: change the Omarchy theme and Pi Pocket changes with it.
+                        ${t("Running Pi Pocket on an Omarchy desktop adds “Desktop”: the app follows the theme the desktop uses.")}
                     </div>
                     <div class="tc-dots">
                         ${dots.map((dot) => html`<i style=${`background:var(${dot})`}></i>`)}
@@ -375,13 +376,13 @@ export function AppearanceSheet() {
 
     useEffect(() => () => preview(null), []);
 
-    return html`<${Sheet} title="Appearance" onClose=${closeSheet} wide=${true}>
-        <div class="label">Theme</div>
+    return html`<${Sheet} title=${t("Appearance")} onClose=${closeSheet} wide=${true}>
+        <div class="label">${t("Theme")}</div>
         <div class="look-grid">
             ${lookIds().map((id) => html`<${LookCard} key=${id} id=${id} />`)}
         </div>
         ${store.state.me?.role === "owner" && html`<${LookTools} />`}
-        <div class="label">Colors</div>
+        <div class="label">${t("Colors")}</div>
         <div class="theme-grid">
             ${desktop && html`<${ThemeCard} id="desktop" desktop=${true} />`}
             ${[...themeIds(), ...folderPaletteIds()].map(
@@ -393,53 +394,53 @@ export function AppearanceSheet() {
         ${
             !desktop &&
             html`<p class="muted small">
-                Running Pi Pocket on an Omarchy desktop adds “Desktop”: the app follows the theme the desktop uses.
+                ${t("Running Pi Pocket on an Omarchy desktop adds “Desktop”: the app follows the theme the desktop uses.")}
             </p>`
         }
-        <div class="label">Layout and motion</div>
+        <div class="label">${t("Layout and motion")}</div>
         <div class="sheet-list">
             <${SettingRow}
-                title="Tiled windows"
-                detail="Wide screens: the sidebar and the session as Hyprland windows, with gaps and the active border"
+                title=${t("Tiled windows")}
+                detail=${t("Wide screens: the sidebar and the session as Hyprland windows, with gaps and the active border")}
             >
                 <${Switch}
                     on=${p.tiling}
-                    label="Tiled windows"
+                    label=${t("Tiled windows")}
                     onChange=${() => setPrefs({ tiling: !p.tiling })}
                 />
             <//>
             <${SettingRow}
-                title="Peek tiles"
-                detail=${`Other sessions beside this one, live while on screen: working, waiting for you, done since you looked, and pinned. Also the tiles button in the top bar${touch ? "" : ", or Alt+P"}`}
+                title=${t("Peek tiles")}
+                detail=${t("Other sessions beside this one, live while on screen: working, waiting for you, done since you looked, and pinned. Also the tiles button in the top bar")}${touch ? "" : t(", or Alt+P")}
             >
                 <${Switch}
                     on=${p.peeks}
-                    label="Peek tiles"
+                    label=${t("Peek tiles")}
                     onChange=${() => setPrefs({ peeks: !p.peeks })}
                 />
             <//>
             ${
                 desktop?.wallpaper &&
                 html`<${SettingRow}
-                    title="Desktop wallpaper"
-                    detail="Your wallpaper in the gaps between windows, while following the desktop"
+                    title=${t("Desktop wallpaper")}
+                    detail=${t("Your wallpaper in the gaps between windows, while following the desktop")}
                 >
                     <${Switch}
                         on=${p.wallpaper}
                         disabled=${!p.tiling || p.theme !== "desktop"}
-                        label="Desktop wallpaper"
+                        label=${t("Desktop wallpaper")}
                         onChange=${() => setPrefs({ wallpaper: !p.wallpaper })}
                     />
                 <//>`
             }
             <${SettingRow}
-                title="Sidebar"
-                detail="Folded, it shows numbered sessions like workspaces"
+                title=${t("Sidebar")}
+                detail=${t("Folded, it shows numbered sessions like workspaces")}
             >
                 <div class="segmented">
                     ${[
-                        ["open", "Open"],
-                        ["rail", "Folded"],
+                        ["open", t("Open")],
+                        ["rail", t("Folded")],
                     ].map(
                         ([value, label]) =>
                             html`<button
@@ -453,14 +454,14 @@ export function AppearanceSheet() {
                 </div>
             <//>
             <${SettingRow}
-                title="Motion"
-                detail="Auto follows your system's reduced-motion setting"
+                title=${t("Motion")}
+                detail=${t("Auto follows your system's reduced-motion setting")}
             >
                 <div class="segmented">
                     ${[
-                        ["auto", "Auto"],
-                        ["full", "Full"],
-                        ["reduced", "Reduced"],
+                        ["auto", t("Auto")],
+                        ["full", t("Full")],
+                        ["reduced", t("Reduced")],
                     ].map(
                         ([value, label]) =>
                             html`<button
@@ -473,7 +474,7 @@ export function AppearanceSheet() {
                     )}
                 </div>
             <//>
-            <${SettingRow} title="Text size">
+            <${SettingRow} title=${t("Text size")}>
                 <div class="segmented">
                     ${[13, 14, 15, 16, 17].map(
                         (size) => html`<button
@@ -529,7 +530,7 @@ export function AppearanceSheet() {
                 </div>
             <//>
         </div>
-        <div class="label">Conversation</div>
+        <div class="label">${t("Conversation")}</div>
         <div class="sheet-list">
             <${SettingRow}
                 title="Show thinking"
@@ -542,15 +543,15 @@ export function AppearanceSheet() {
                 />
             <//>
         </div>
-        <div class="label">Status line</div>
+        <div class="label">${t("Status line")}</div>
         <div class="sheet-list">
             <${SettingRow}
-                title="Reply speed"
-                detail="Under the message box: how fast the last answer came, in tokens a second, and how long its first token took"
+                title=${t("Reply speed")}
+                detail=${t("Under the message box: how fast the last answer came, in tokens a second, and how long its first token took")}
             >
                 <${Switch}
                     on=${p.speed}
-                    label="Reply speed"
+                    label=${t("Reply speed")}
                     onChange=${() => setPrefs({ speed: !p.speed })}
                 />
             <//>
@@ -561,7 +562,7 @@ export function AppearanceSheet() {
                 class="button ghost wide sheet-footer"
                 onClick=${() => openSheet({ type: "shortcuts" })}
             >
-                <${Icon} name="keyboard" size=${16} /> Keyboard shortcuts
+                <${Icon} name="keyboard" size=${16} /> ${t("Keyboard shortcuts")}
             </button>`
         }
     <//>`;
