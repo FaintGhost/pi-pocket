@@ -185,9 +185,11 @@ const finger = (id: ConversationId, { ms, dy = 0 }: { ms: number; dy?: number })
 
         await wait(${ms} - Math.min(250, ${ms} / 2));
         fire("pointerup", y + ${dy});
-        document
-            .elementFromPoint(x, y + ${dy})
-            .dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1, clientX: x, clientY: y + ${dy} }));
+        for (const type of ["mousedown", "mouseup", "click"]) {
+            document
+                .elementFromPoint(x, y + ${dy})
+                .dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, detail: 1, clientX: x, clientY: y + ${dy} }));
+        }
 
         return JSON.stringify({ });
     `);
@@ -207,7 +209,8 @@ test(
     async () => {
         await fresh(true);
 
-        await finger(active, { ms: 600 });
+        // Past the opening tap guard: the lift's mousedown must not close the sheet before its click is caught.
+        await finger(active, { ms: 1000 });
         await settled(
             {
                 sheet: "session",

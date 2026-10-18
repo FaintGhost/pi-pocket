@@ -754,12 +754,16 @@ export function SessionList({ compact = false }) {
             after = setTimeout(stop, 400);
         };
 
-        // A finger's click only: Enter on the sheet's item is a click too.
+        // A finger's mouse events only: its mousedown can close the scrim before the click, and Enter on a sheet's
+        // item is a click too. Keep the guard through mousedown so the click cannot act on an item under the lift.
         const eat = (each) => {
             if (fired && each.detail > 0) {
                 each.preventDefault();
                 each.stopPropagation();
-                stop();
+
+                if (each.type === "click") {
+                    stop();
+                }
             }
         };
 
@@ -780,6 +784,7 @@ export function SessionList({ compact = false }) {
             removeEventListener("pointerup", lift, true);
             removeEventListener("pointercancel", lift, true);
             removeEventListener("pointerdown", stop, true);
+            removeEventListener("mousedown", eat, true);
             removeEventListener("click", eat, true);
             removeEventListener("contextmenu", quiet, true);
             removeEventListener("selectstart", hold, true);
@@ -791,6 +796,7 @@ export function SessionList({ compact = false }) {
         addEventListener("pointermove", move, true);
         addEventListener("pointerup", lift, true);
         addEventListener("pointercancel", lift, true);
+        addEventListener("mousedown", eat, true);
         addEventListener("click", eat, true);
         addEventListener("contextmenu", quiet, true);
         addEventListener("selectstart", hold, true);
