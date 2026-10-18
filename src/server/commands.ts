@@ -691,6 +691,10 @@ export class Commands {
         user: User,
         request: SubmitRequest,
         via?: string,
+        admission?: {
+            beforeSubmit(): Promise<{ user: User; context: Context }>;
+            afterSubmit(): void;
+        },
     ): Promise<{ submissionId: SubmissionId; requestId: string }> {
         const app = this.#app;
 
@@ -769,15 +773,30 @@ export class Commands {
                 : requestFor(user.id, clientKey(request.requestId));
         // A failed subagent's failure as the person writes to it: what their message comes to settles it.
         const failure = await this.#failureOf(id);
-        const submission = await conversation.submit(
-            {
-                type: "input",
-                content,
-                whenBusy: request.mode === "steer" ? "steer" : "followUp",
-                requestId,
-            },
-            context,
-        );
+
+        let submitContext = context;
+
+        // Human extension starts acquire a short policy lease after preparation. Its context checks policy again
+        // when durable admission reaches the mutation line, not just before it joins the queue.
+        if (admission !== undefined) {
+            const accepted = await admission.beforeSubmit();
+
+            user = accepted.user;
+            submitContext = accepted.context;
+            submitContext.abortSignal?.throwIfAborted();
+        }
+
+        const submission = await conversation
+            .submit(
+                {
+                    type: "input",
+                    content,
+                    whenBusy: request.mode === "steer" ? "steer" : "followUp",
+                    requestId,
+                },
+                submitContext,
+            )
+            .finally(() => admission?.afterSubmit());
 
         app.collab.setTyping(id, user, null);
         await this.#touched(id, typed, text === typed ? undefined : text);
