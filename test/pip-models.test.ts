@@ -187,6 +187,18 @@ test("words that name a model not signed in name no shorter one that is", () => 
     assert.deepEqual(modelsNamed("use zeta-5", signedIn, true, known), [zeta]);
 });
 
+test("a model's name that touches Chinese, Japanese or Korean text names it", () => {
+    const sol = model("openai-codex", "gpt-6.1-sol", "GPT-6.1 Sol");
+    const opus = model("anthropic", "claude-opus-5", "Claude Opus 5");
+    const all = [sol, opus];
+
+    // Such a script writes no spaces between words: text glued to the name, before it or after it, still names it.
+    assert.equal(personNamed("以后默认模型都用gpt-6.1 sol吧", sol, all), true);
+    assert.equal(personNamed("新会话可以用opus5试试", opus, all), true);
+    // Its words name no model on their own: an ordinary sentence such as this one names none.
+    assert.deepEqual(modelsNamed("我的M3电脑跑不动", all, true), []);
+});
+
 test("PiP acts on a session only after it looked at it, and sees how it stands after", async () => {
     const id = await pip();
     const session = Number(await newSession(app));
