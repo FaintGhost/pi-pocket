@@ -1365,6 +1365,14 @@ export const text = {
     "Plan mode": "计划模式",
     "Lancet Guard": "Lancet Guard",
     Triggers: "触发器",
+    "Extension gallery": "扩展画廊",
+    "Share…": "分享…",
+    "Add your own: put a": "自己加：把一个",
+    "extension module in": "扩展模块放到",
+    ". Drop-ins stay off until the owner turns them on, and run inside the server with the owner's rights.":
+        "。drop-in 默认关闭，要所有者打开，并且在服务器里以所有者的权限运行。",
+    "Weather tool: current weather for a city, via wttr.in.":
+        "天气工具：查某个城市的当前天气，走 wttr.in。",
 };
 
 /** Patterns for text with a number or a name in it. `$1` is the first capture group. */
