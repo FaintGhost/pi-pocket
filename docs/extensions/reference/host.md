@@ -118,7 +118,7 @@ shapeModelRequests(
 
 Since 0.18.0 · Experimental
 
-Shapes the request that every model call sends. `shape` gets the payload Pi built and the model, and returns a replacement payload, or `undefined` to keep it. It runs after Pi and the caller shaped the request, closest to the wire. The return value stops the shaping. Only the modules that the owner turned on shape requests.
+Shapes the request that every model call sends. `shape` gets the payload Pi built and the model, and returns a replacement payload (or a promise of one), or `undefined` to keep it. A shaper that throws is logged and skipped. It runs after Pi and the caller shaped the request, closest to the wire. The return value stops the shaping. Only the modules that the owner turned on shape requests.
 
 A shaper can change what a provider bills or how it answers, and its effect lasts until it is removed. Say so when you ask the owner to turn the module on.
 

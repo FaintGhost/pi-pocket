@@ -20,7 +20,7 @@ const ENTRYPOINT = "sdk-cli";
 /**
  * The Claude Code version requests are shaped as: the one pi-ai's Anthropic transport reports in its
  * `claude-cli/<version>` user-agent, which Anthropic gates models on. Set the environment variable to raise it when
- * a model's floor is higher.
+ * a model's floor is higher. It is read when the server starts.
  */
 const VERSION = process.env.PI_POCKET_ANTHROPIC_CC_VERSION ?? "2.1.280";
 
@@ -78,7 +78,10 @@ function firstUserText(messages: Message[] | undefined): string {
     return "";
 }
 
-/** The header value: the version, a suffix over the first message, and a hash of that message. */
+/**
+ * The header value: the version, a suffix over the first message, and a hash of that message. The hash is a stand-in
+ * of the same shape as Claude Code's, not its algorithm.
+ */
 function headerValue(text: string): string {
     const sampled = POSITIONS.map((index) => text[index] ?? "0").join("");
     const suffix = createHash("sha256")

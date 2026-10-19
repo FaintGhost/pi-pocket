@@ -493,7 +493,7 @@ export class PocketApp {
         }
 
         this.models = await ModelRuntime.create();
-        installRequestShaping(this.models, this.#shapers);
+        installRequestShaping(this.models, this.#shapers, this.#log);
         this.providers.modelRefresh.watch(this.models);
         this.#configureModels?.(this.models);
         measureModelStreams(this.models);
@@ -2905,9 +2905,14 @@ export class PocketApp {
 
 /**
  * Continue on the runtime's calls: after Pi and the caller shaped a request, each shaper may replace the payload, the
- * last one closest to the wire. With no shaper, the call goes on untouched.
+ * last one closest to the wire. With no shaper, the call goes on untouched. A shaper may answer with a promise. One
+ * that throws is logged and skipped: a faulty module must not fail the model call.
  */
-function installRequestShaping(models: ModelRuntime, shapers: readonly ModelRequestShaper[]): void {
+export function installRequestShaping(
+    models: { streamSimple: ModelRuntime["streamSimple"] },
+    shapers: readonly ModelRequestShaper[],
+    log: (line: string) => void,
+): void {
     const stream = models.streamSimple.bind(models);
 
     models.streamSimple = (model, context, options) => {
@@ -2922,12 +2927,16 @@ function installRequestShaping(models: ModelRuntime, shapers: readonly ModelRequ
                 let next = asked ?? payload;
                 let shaped = asked;
 
-                for (const shape of shapers) {
-                    const replaced = shape(next, model);
+                for (const shape of [...shapers]) {
+                    try {
+                        const replaced = await shape(next, model);
 
-                    if (replaced !== undefined) {
-                        next = replaced;
-                        shaped = replaced;
+                        if (replaced !== undefined) {
+                            next = replaced;
+                            shaped = replaced;
+                        }
+                    } catch (error) {
+                        log(`A model request shaper failed and was skipped: ${describe(error)}`);
                     }
                 }
 
