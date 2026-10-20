@@ -5,6 +5,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, join } from "node:path";
 import { APP_ROOT } from "../config.ts";
 import { HttpError } from "../errors.ts";
+import {
+    accepted,
+    compressFile,
+    compressible,
+    type Encoding,
+    MIN_COMPRESS_BYTES,
+} from "./compress.ts";
 import { send } from "./io.ts";
 
 export const WEB = join(APP_ROOT, "web");
@@ -144,27 +151,106 @@ export function serveApp(response: ServerResponse): void {
     });
 }
 
-export function serveFile(response: ServerResponse, file: string, fallbackType?: string): void {
-    let body: Buffer;
+/** A file as last read: its bytes, a hash of them, and the same compressed once each way a browser asked for. */
+interface ReadFile {
+    /** The file's identity, size, and time of change when read: any edit changes it. */
+    stamp: string;
+    body: Buffer;
+    hash: string;
+    encoded: Map<Encoding, Promise<Buffer>>;
+}
+
+/** The web app's files and the vendored modules served so far, each as last read. */
+const readFiles = new Map<string, ReadFile>();
+
+/**
+ * A file of the web app. The app is edited live, so the browser asks each time whether its copy is still the newest (`no-cache`):
+ * the answer is a short "not modified" while the file's bytes are the same (the ETag is their hash), else the file. Text
+ * goes compressed, compressed once for each edit.
+ */
+export async function serveFile(
+    request: IncomingMessage,
+    response: ServerResponse,
+    file: string,
+    fallbackType?: string,
+): Promise<void> {
+    let read: ReadFile;
 
     try {
-        body = readFileSync(file);
+        const stats = statSync(file, { bigint: true });
+        const stamp = `${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeNs}:${stats.ctimeNs}`;
+        const known = readFiles.get(file);
+
+        if (known?.stamp === stamp) {
+            read = known;
+        } else {
+            const body = readFileSync(file);
+
+            read = {
+                stamp,
+                body,
+                hash: createHash("sha256").update(body).digest("hex").slice(0, 24),
+                encoded: new Map(),
+            };
+            readFiles.set(file, read);
+        }
     } catch {
         send(response, 404, "Not found");
 
         return;
     }
 
-    // No caching: the app is edited live, and a reload should always get the newest files.
-    send(
-        response,
-        200,
-        body,
-        fallbackType ?? TYPES[extname(file).toLowerCase()] ?? "application/octet-stream",
-        {
-            "cache-control": "no-cache",
-        },
-    );
+    const type = fallbackType ?? TYPES[extname(file).toLowerCase()] ?? "application/octet-stream";
+    const encoding =
+        compressible(type) && read.body.length >= MIN_COMPRESS_BYTES
+            ? accepted(request)
+            : undefined;
+    const headers: Record<string, string> = {
+        "content-type": type,
+        "cache-control": "no-cache",
+        etag: `"${read.hash}${encoding === undefined ? "" : `-${encoding}`}"`,
+        ...(compressible(type) ? { vary: "accept-encoding" } : {}),
+    };
+
+    // Any encoding of the same bytes will do: the browser keeps them decoded.
+    const tags = String(request.headers["if-none-match"] ?? "")
+        .split(",")
+        .map((tag) =>
+            tag
+                .trim()
+                .replace(/^W\//, "")
+                .replace(/-(br|gzip)"$/, '"'),
+        );
+
+    if (tags.includes(`"${read.hash}"`)) {
+        response.writeHead(304, headers);
+        response.end();
+
+        return;
+    }
+
+    let body = read.body;
+
+    if (encoding !== undefined) {
+        let encoded = read.encoded.get(encoding);
+
+        if (encoded === undefined) {
+            encoded = compressFile(read.body, encoding);
+            read.encoded.set(encoding, encoded);
+        }
+
+        try {
+            body = await encoded;
+            headers["content-encoding"] = encoding;
+        } catch {
+            // Sent as it is, then; the next request tries again.
+            read.encoded.delete(encoding);
+            headers.etag = `"${read.hash}"`;
+        }
+    }
+
+    response.writeHead(200, { ...headers, "content-length": String(body.length) });
+    response.end(body);
 }
 
 /** An image file from this machine, for `![alt](path)` in replies and for uploaded attachments. */
