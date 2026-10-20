@@ -80,8 +80,11 @@ export type Attachment = { path: string; name: string; mime: string; size: numbe
 export interface SubmitRequest {
     text: string;
     attachments?: Attachment[];
-    /** `steer` joins the running work after its current tool round; anything else queues a follow-up while busy. */
-    mode?: "steer" | "followUp";
+    /**
+     * `steer` joins the running work after its current tool round; `interrupt` stops the run at once (as Stop does) and
+     * sends the message to the idle conversation; anything else queues a follow-up while busy.
+     */
+    mode?: "steer" | "followUp" | "interrupt";
     /** Client-generated, so a retried POST does not submit twice. */
     requestId: string;
     /** Send the files the message mentions with `@` along with it, so Pi need not read them first. */
@@ -784,6 +787,14 @@ export class Commands {
             user = accepted.user;
             submitContext = accepted.context;
             submitContext.abortSignal?.throwIfAborted();
+        }
+
+        // Interrupt: stop the run now, rather than waiting for its tool round or turn to end. Like Stop, this withdraws
+        // what waits in the queue. Only a person's own message interrupts, never one sent for them (`via`).
+        if (request.mode === "interrupt" && via === undefined && app.isBusy(id)) {
+            await this.#discardReports(id);
+            await conversation.abort(context);
+            await app.collab.activity(id, user, "interrupted the run");
         }
 
         const submission = await conversation

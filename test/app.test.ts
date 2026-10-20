@@ -5,6 +5,7 @@ import {
     context,
     fakeTab,
     lastText,
+    modelTexts,
     openApp,
     owner as ownerOf,
     root,
@@ -912,6 +913,27 @@ test("a tab gets the queue when it changes, not with each update of a turn, and 
         app.detach(tab.client);
         app.detach(late.client);
     }
+});
+
+test("interrupt stops a streaming run and withdraws the queue, then Pi answers the new message", async () => {
+    const id = await newSession();
+    const started = Date.now();
+
+    await app.commands.submit(id, owner(), { text: "stream a long answer", requestId: "i-1" });
+    await until(() => app.isBusy(id), "the run to start");
+    await app.commands.submit(id, owner(), { text: "queued one", requestId: "i-2" });
+    const { submissionId } = await app.commands.submit(id, owner(), {
+        text: "never mind",
+        mode: "interrupt",
+        requestId: "i-3",
+    });
+
+    await (await app.harness.submission(submissionId, context))!.wait(context);
+    const texts = (await modelTexts(app, id)).join("\n");
+
+    assert.match(texts, /echo: never mind/);
+    assert.doesNotMatch(texts, /queued one/);
+    assert.ok(Date.now() - started < 4000, "it did not wait for the long answer");
 });
 
 test("requests with the wrong types are refused, and nothing odd is stored", async () => {

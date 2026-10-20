@@ -116,6 +116,13 @@ const expandPastes = (text, pastes) => text.replace(PASTED, (whole, n) => pastes
  */
 const queuedReports = (item) => item.reports ?? null;
 
+/** How a message can go while Pi works: the value the server takes, its label, and what it does. */
+const SEND_MODES = [
+    ["steer", "Steer", "Pi reads it now, between steps"],
+    ["followUp", "Queue", "Pi reads it when this run ends"],
+    ["interrupt", "Interrupt", "Stops the run right now (also its tool call), then sends it"],
+];
+
 /** What kind of message waits for Pi: a steer, one queued for after its answer, a note, or subagents' reports. */
 function queuedMode(item) {
     const names = queuedReports(item);
@@ -352,7 +359,8 @@ export function Composer() {
     const historyScope = { person: store.state.me?.id, conversation: conversationId };
     const [text, setText] = useState(() => drafts.get(conversationId));
     const [files, setFiles] = useState([]);
-    const [steer, setSteer] = useState(true);
+    // How a message goes while Pi works: "steer", "followUp" (Queue), or "interrupt" (stop the run, then send).
+    const [sendMode, setSendMode] = useState("steer");
     // The queued message tapped open, wrapped: one line each until then. The queue holds only a message's start.
     const [reading, setReading] = useState(null);
     const [sending, setSending] = useState(false);
@@ -710,7 +718,7 @@ export function Composer() {
             actions.submit(
                 full,
                 attachments,
-                busy && steer ? "steer" : "followUp",
+                busy ? sendMode : "followUp",
                 inlineFiles && mentionsFiles,
             ),
         );
@@ -718,6 +726,11 @@ export function Composer() {
         setSending(false);
 
         if (ok) {
+            // Interrupting stops the run: do not let the next message stop one by habit.
+            if (sendMode === "interrupt") {
+                setSendMode("steer");
+            }
+
             sent(full);
             forget(files);
             setFiles([]);
@@ -994,9 +1007,11 @@ export function Composer() {
     const placeholder = dictation.listening
         ? "Listening…"
         : busy
-          ? steer
+          ? sendMode === "steer"
               ? "Steer the current run…"
-              : "Queue a message for after this run…"
+              : sendMode === "interrupt"
+                ? "Stop the run and send this now…"
+                : "Queue a message for after this run…"
           : "Ask Pi anything…";
     const inbox = view.inbox ?? [];
     const { me, users } = store.state;
@@ -1377,30 +1392,34 @@ export function Composer() {
                                 role="radiogroup"
                                 aria-label="Send as"
                                 onKeyDown=${(event) => {
-                                    // Arrows move between the two, as in any group of radio buttons.
+                                    // Arrows move between them, as in any group of radio buttons.
                                     if (/^Arrow(Left|Right|Up|Down)$/.test(event.key)) {
                                         const group = event.currentTarget;
+                                        const modes = SEND_MODES.map(([value]) => value);
+                                        const step = /^Arrow(Left|Up)$/.test(event.key) ? -1 : 1;
 
                                         event.preventDefault();
-                                        setSteer(!steer);
+                                        setSendMode(
+                                            modes[
+                                                (modes.indexOf(sendMode) + step + modes.length) %
+                                                    modes.length
+                                            ],
+                                        );
                                         requestAnimationFrame(() =>
                                             group.querySelector('[aria-checked="true"]')?.focus(),
                                         );
                                     }
                                 }}
                             >
-                                ${[
-                                    [true, "Steer", "Pi reads it now, between steps"],
-                                    [false, "Queue", "Pi reads it when this run ends"],
-                                ].map(
+                                ${SEND_MODES.map(
                                     ([value, label, tip]) => html`<button
                                         role="radio"
-                                        aria-checked=${steer === value ? "true" : "false"}
-                                        tabindex=${steer === value ? "0" : "-1"}
-                                        class=${steer === value ? "on" : ""}
+                                        aria-checked=${sendMode === value ? "true" : "false"}
+                                        tabindex=${sendMode === value ? "0" : "-1"}
+                                        class=${`${sendMode === value ? "on" : ""} ${value === "interrupt" ? "interrupt" : ""}`}
                                         title=${tip}
                                         onMouseDown=${(event) => event.preventDefault()}
-                                        onClick=${() => setSteer(value)}
+                                        onClick=${() => setSendMode(value)}
                                     >
                                         ${label}
                                     </button>`,

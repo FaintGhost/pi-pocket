@@ -3138,6 +3138,13 @@ pre.diff .del {
     }
 }
 
+/* Steer, Queue, and Interrupt leave no room for the model on a narrow box while Pi works: it shows again after. */
+@container composer (max-width: 480px) {
+    .composer.busy .composer-row .model-chip {
+        display: none;
+    }
+}
+
 .chip {
     display: inline-flex;
     align-items: center;
@@ -3240,6 +3247,10 @@ pre.diff .del {
 .mode-switch button.on {
     color: var(--text);
     background: var(--raised);
+}
+
+.mode-switch button.interrupt.on {
+    color: var(--err);
 }
 
 .stop-button,
