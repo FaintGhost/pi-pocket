@@ -376,6 +376,36 @@ Since 0.19.0 · Experimental
 
 Adds a button in the top bar, after the app's own buttons for the session's places and before the menu. On a phone, and in a narrow pane, it goes from the top bar, as the Files button does. See [`TopbarSpec`](#topbarspec).
 
+### `composerButton`
+
+```ts
+composerButton(spec: ComposerButtonSpec): Added<ComposerButtonSpec>;
+```
+
+Since 0.19.0 · Experimental
+
+Adds a button on the left of the message box's row, after the app's own (Attach, the model, Plan). Send, Stop, the mic, and Steer and Queue stay on the right. See [`ComposerButtonSpec`](#composerbuttonspec).
+
+### `replyAction`
+
+```ts
+replyAction(spec: ReplyActionSpec): Added<ReplyActionSpec>;
+```
+
+Since 0.19.0 · Experimental
+
+Adds an action under Pi's answers, before More. Its `run` gets the answer, or its sheet gets it as the prop `reply`. See [`ReplyActionSpec`](#replyactionspec) and [`Reply`](#reply). The actions show under each finished answer, as the app's own (Discuss, Pin, Copy) do.
+
+### `insertText`
+
+```ts
+insertText(text: string, options?: { inline?: boolean }): void;
+```
+
+Since 0.19.0 · Experimental
+
+Puts text into the message box of the session that the tab shows, after what is there: on a new paragraph, or with `inline: true`, after a space. The person sends it, or not: it never sends. A sheet that shows closes, so the box shows. With no session open, it does nothing. Text past 100,000 characters throws.
+
 ### `arrange`
 
 ```ts
@@ -709,15 +739,57 @@ Since 0.19.0 · Experimental
 
 A button in the top bar. `title`, `icon`, `iconPath`, and `badge` are as for a rail button. A button that opens a page or a panel shows when it is open, and a second tap closes it.
 
-### `SlotName`
+### `ComposerButtonSpec`
 
 ```ts
-type SlotName = "topbar" | "status";
+type ComposerButtonSpec = TopbarSpec;
 ```
 
 Since 0.19.0 · Experimental
 
-A slot: `"topbar"`, the buttons after the session's title, or `"status"`, the status line under the message box.
+A button in the message box's row, with the same fields as a top bar button.
+
+### `Reply`
+
+```ts
+interface Reply {
+    readonly id: string;
+    readonly text: string;
+    readonly conversationId: number;
+}
+```
+
+Since 0.19.0 · Experimental
+
+One of Pi's answers: its id in its session, its words as Markdown, and its session.
+
+### `ReplyActionSpec`
+
+```ts
+type ReplyActionSpec = (
+    { run: (reply: Reply) => unknown; sheet?: never } | { sheet: string; run?: never }
+) &
+    Placement & {
+        id: string;
+        label: string;
+        icon?: string;
+        iconPath?: string;
+    };
+```
+
+Since 0.19.0 · Experimental
+
+An action under Pi's answers: its `label`, an icon before it when you give one, and `run` or `sheet`. `run` gets the answer. The sheet gets it as the prop `reply`. When `run` throws or rejects, a notice says so.
+
+### `SlotName`
+
+```ts
+type SlotName = "topbar" | "status" | "places" | "composer" | "reply";
+```
+
+Since 0.19.0 · Experimental
+
+A slot: `"topbar"`, the buttons after the session's title; `"status"`, the status line under the message box; `"places"`, the tiles in the places and at the top of the menu; `"composer"`, the buttons on the left of the message box's row; or `"reply"`, the actions under Pi's answers.
 
 ### `Arrangement`
 
@@ -741,10 +813,13 @@ A slot is a place in the app that is a list of named items: the app's own items 
 
 What shows comes in layers, the last one wins: each item's default place, then the `before` or `after` of a module's own item, then each module's `arrange`, then the person's own choices in Appearance → Layout. These are kept in the browser.
 
-| Slot     | Ids, in their default order                                                                                                | Fixed                           | Modules' items go    |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | -------------------- |
-| `topbar` | `core:subagents`, `core:changes`, `core:peeks`, `core:files`, `core:browser`, `core:artifacts`, `core:people`, `core:menu` | `core:menu`, last               | after `core:browser` |
-| `status` | `core:connection`, `core:here`, `core:speed`, `core:context`, `core:cache`, `core:spend`, `core:guard`                     | `core:connection`, `core:guard` | after `core:cache`   |
+| Slot       | Ids, in their default order                                                                                                       | Fixed                                                               | Modules' items go           |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------- |
+| `topbar`   | `core:subagents`, `core:changes`, `core:peeks`, `core:files`, `core:browser`, `core:artifacts`, `core:people`, `core:menu`        | `core:menu`, last                                                   | after `core:browser`        |
+| `status`   | `core:connection`, `core:here`, `core:speed`, `core:context`, `core:cache`, `core:spend`, `core:guard`                            | `core:connection`, `core:guard`                                     | after `core:cache`          |
+| `places`   | `core:files`, `core:changes`, `core:browser`, `core:artifacts`, `core:chat`, `core:find`, `core:branch`, `core:pip`, `core:peeks` | none                                                                | last: a tile for each panel |
+| `composer` | `core:places`, `core:attach`, `core:model`, `core:plan`                                                                           | none (Send, Stop, the mic, and Steer and Queue are not in the slot) | after `core:plan`           |
+| `reply`    | `core:react`, `core:discuss`, `core:pin`, `core:copy`, `core:more`                                                                | `core:more`, last                                                   | before `core:more`          |
 
 An item that has nothing to show now shows nothing, wherever it is: Changes with no changes, the cache before the first answer, a quiet button.
 

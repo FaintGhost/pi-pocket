@@ -56,14 +56,14 @@ A gallery entry gives `pocketApi` and `minPocket`: the API version and the oldes
 
 Each member in the reference has its own Since line. These parts came together:
 
-| Part                                                    | Since  |
-| ------------------------------------------------------- | ------ |
-| Built-in modules, the host, tools, sections, hooks      | 0.1.0  |
-| Drop-ins in the drop-in folder                          | 0.3.0  |
-| `web`: routes, browser modules, events, cleanups        | 0.14.0 |
-| `pocketApi`, `web.api`, and `pocket.version`            | 0.14.0 |
-| Slash commands (`web.command`)                          | 0.14.0 |
-| `pocket.toolCall`                                       | 0.14.0 |
-| `host.linkedSessions`                                   | 0.14.0 |
-| `pocket.panel` and `pocket.status` (experimental)       | 0.19.0 |
-| Slots: `pocket.topbar`, `pocket.arrange` (experimental) | 0.19.0 |
+| Part                                                                                            | Since  |
+| ----------------------------------------------------------------------------------------------- | ------ |
+| Built-in modules, the host, tools, sections, hooks                                              | 0.1.0  |
+| Drop-ins in the drop-in folder                                                                  | 0.3.0  |
+| `web`: routes, browser modules, events, cleanups                                                | 0.14.0 |
+| `pocketApi`, `web.api`, and `pocket.version`                                                    | 0.14.0 |
+| Slash commands (`web.command`)                                                                  | 0.14.0 |
+| `pocket.toolCall`                                                                               | 0.14.0 |
+| `host.linkedSessions`                                                                           | 0.14.0 |
+| `pocket.panel` and `pocket.status` (experimental)                                               | 0.19.0 |
+| Slots: `pocket.topbar`, `composerButton`, `replyAction`, `insertText`, `arrange` (experimental) | 0.19.0 |

@@ -7,6 +7,7 @@ import {
     openApp,
     owner,
     root,
+    say,
     scriptedModel,
     until,
 } from "./helpers.ts";
@@ -67,6 +68,9 @@ const POCKET_MEMBERS: Record<keyof Pocket, true> = {
     panel: true,
     status: true,
     topbar: true,
+    composerButton: true,
+    replyAction: true,
+    insertText: true,
     arrange: true,
     toolCall: true,
     openPage: true,
@@ -110,6 +114,7 @@ export default function (pocket) {
 	pocket.panel({ id: "dial", title: "Dial", icon: "pulse", component: () => html\`<p class="dial">Dial</p>\` });
 	pocket.status({ id: "watts", text: "46W · 74° · 95%", short: "46W", title: "Node 1", panel: "dial", before: "core:here" });
 	pocket.arrange("status", { hide: ["core:spend"] });
+	pocket.replyAction({ id: "quote", label: "Quote", run: (reply) => pocket.insertText("> " + reply.text) });
 	const rail = pocket.rail({ id: "meter", title: "Meter", icon: "pulse", page: "meter" });
 	// The tests reach this version's pocket, and its rail button, through these.
 	globalThis.meterPocket = pocket;
@@ -327,6 +332,26 @@ test(
         await inPage(`(await import("/files-panel.js")).setFilesOpen(true); return "null";`);
         await until(async () => !(await has(".ext-panel")), "the Files panel in its place");
         await inPage(`(await import("/files-panel.js")).setFilesOpen(false); return "null";`);
+    },
+);
+
+test(
+    "an action under Pi's answer gets the answer, and puts text into the message box",
+    real,
+    async () => {
+        await say(app, session, "quote me");
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(".ext-reply-action"), "the action under the answer");
+        await settled();
+        await page.click({ selector: ".ext-reply-action" });
+        await until(
+            async () =>
+                (await inPage<string>(
+                    `return JSON.stringify(document.querySelector(".composer textarea").value)`,
+                )) === "> echo: quote me",
+            "the quote in the message box",
+        );
+        await inPage(`(await import("/store.js")).drafts.set(${session}, ""); return "null";`);
     },
 );
 

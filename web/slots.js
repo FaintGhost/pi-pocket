@@ -10,11 +10,15 @@ import { prefs, setPrefs } from "./theme.js";
 export const SLOTS = {
     topbar: { label: "Top bar buttons", extensions: 550 },
     status: { label: "Status line items", extensions: 500 },
+    places: { label: "Places", extensions: 1000 },
+    composer: { label: "Message box buttons", extensions: 500 },
+    reply: { label: "Under Pi's answers", extensions: 500 },
 };
 
 /**
- * The app's own items, by slot: `{ id, label, order, fixed, render(), detail() }`. `render` gives what shows, or null
- * when it has nothing to show now; `detail`, what a tap on the status line says of it.
+ * The app's own items, by slot: `{ id, label, order, fixed, render(context), detail(context) }`. `render` gives what
+ * shows, or null when it has nothing to show now; `detail`, what a tap on the status line says of it. `context` is what
+ * the place that draws the slot gives: the answer, for the actions under one.
  */
 const core = new Map(Object.keys(SLOTS).map((slot) => [slot, []]));
 /** Where extensions' items come from (`extension-ui.js`): `(slot) => items`, with `before` and `after` too. */
@@ -108,13 +112,26 @@ export function arranged(slot) {
  * What a slot shows now: `{ id, node, detail }` for each item that shows and has something to show, in its order. Each
  * node keeps its item's key, so a reorder moves it rather than drawing it again.
  */
-export function slotItems(slot) {
+export function slotItems(slot, context = {}) {
     return arranged(slot)
         .filter(({ hidden }) => !hidden)
-        .map(({ item }) => ({ id: item.id, node: item.render(), detail: item.detail?.() }))
+        .map(({ item }) => ({
+            id: item.id,
+            node: item.render(context),
+            detail: item.detail?.(context),
+        }))
         .filter(({ node }) => node !== null && node !== undefined && node !== false)
         .map(({ id, node, detail }) => ({ id, node: h(Fragment, { key: id }, node), detail }));
 }
+
+/**
+ * What a slot holds and how it is arranged, as one string: for a place that draws again only when its inputs change
+ * (the transcript's answers), so a change to the slot draws it again.
+ */
+export const slotKey = (slot) =>
+    arranged(slot)
+        .map(({ item, hidden }) => `${item.id}${hidden ? "-" : "+"}`)
+        .join();
 
 // ─── This browser's person's own choices ─────────────────────────────────────
 

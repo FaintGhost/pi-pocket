@@ -123,14 +123,18 @@ These, and slots, came in 0.19.0, and are experimental: they can change in a min
 
 **`topbar({ id, title, icon or iconPath, badge, … })`** adds a button to the top bar, after the app's own buttons for the session's places and before the menu. It does one thing, as a rail button does.
 
+**`composerButton({ id, title, icon or iconPath, … })`** adds a button on the left of the message box's row. **`insertText(text)`** puts text into the message box for the person to send: a prompt template, a snippet, a screenshot's description. It never sends.
+
+**`replyAction({ id, label, run(reply) or sheet })`** adds an action under Pi's answers, before More: "Send to Linear", "Read aloud". `run` gets the answer as `{ id, text, conversationId }`, and a sheet gets it as the prop `reply`.
+
 ## Slots and layout
 
-The top bar's buttons and the status line's items are **slots**: lists of named items, the app's own (`core:files`, `core:spend`) and modules' (`ext:<module>:<id>`). The same rules place them all, so a module, or a person, can change how they show.
+The top bar's buttons, the status line's items, the places' tiles, the message box's buttons on its left, and the actions under Pi's answers are **slots**: lists of named items, the app's own (`core:files`, `core:spend`) and modules' (`ext:<module>:<id>`). The same rules place them all, so a module, or a person, can change how they show.
 
 - **Where a module's item goes:** give a status item or a top bar button `before` or `after` an id: `pocket.status({ id: "watts", text, after: "core:context" })`.
 - **Arranging a slot:** `pocket.arrange("topbar", { hide: ["core:artifacts"], order: ["core:files", "core:browser"] })` hides and reorders items, the app's own too, in the tabs that load the module. This is for an owner who wants their own layout in a drop-in.
 - **A person's own choice wins.** Appearance → Layout lists each slot's items, with a switch to show or hide each one and arrows to move it. An item that a module hid says so there, and the person can show it again. Reset goes back to the defaults and what modules arranged.
-- **Fixed items** always show, in their places: the menu, the connection's warning, and Lancet Guard.
+- **Fixed items** always show, in their places: the menu, More under an answer, the connection's warning, and Lancet Guard. Send, Stop, the mic, and Steer and Queue are not in a slot.
 
 [The pocket reference](reference/pocket.md#slots) lists the ids of each slot.
 
@@ -140,7 +144,7 @@ To show data from a service on your network, read it in a route on the server ([
 
 - Each thing that a module adds has an `id` of its own: letters, digits, `.`, `_`, `:`, and `-`, that starts with a letter or a digit, up to a [length](reference/limits.md#names).
 - To add a thing with the same `id` again replaces it.
-- Each `rail`, `menu`, `launcher`, `page`, `sheet`, `panel`, `status`, and `topbar` returns `{ update(patch), remove() }`. `update` takes an object.
+- Each `rail`, `menu`, `launcher`, `page`, `sheet`, `panel`, `status`, `topbar`, `composerButton`, and `replyAction` returns `{ update(patch), remove() }`. `update` takes an object.
 
 ## Redraws
 
