@@ -223,14 +223,20 @@ export interface SafeText {
  */
 export interface LinkedSessions {
     /**
-     * Starts a session linked to `source`, in its folder, and sends it `message` as its first message. `model` is
+     * Starts a session linked to `source`, in `cwd` or the source's folder, and sends it `message` as its first message. `model` is
      * `provider/modelId`; `thinking` is a level no higher than the source's.
      * @since 0.14.0
      * @experimental
      */
     start(
         source: ConversationId,
-        request: { title?: string; message: string; model?: string; thinking?: string },
+        request: {
+            title?: string;
+            message: string;
+            model?: string;
+            thinking?: string;
+            cwd?: string;
+        },
         key: string,
     ): Promise<{ session: ConversationId; address: string }>;
     /**
@@ -307,11 +313,17 @@ export interface HumanLinkedSession extends LinkedSession {
  */
 export interface HumanLinkedSessions {
     /**
-     * Starts once for this key, as the clicking person. Explicit thinking must be supported and no higher than source.
+     * Starts once for this key, as the clicking person. Optional `cwd` selects an existing folder. Explicit thinking must be supported and no higher than source.
      * @since 0.16.0
      */
     start(
-        request: { title?: string; message: string; model?: string; thinking?: ModelThinkingLevel },
+        request: {
+            title?: string;
+            message: string;
+            model?: string;
+            thinking?: ModelThinkingLevel;
+            cwd?: string;
+        },
         key: string,
     ): Promise<{ session: ConversationId; address: string }>;
     /**
