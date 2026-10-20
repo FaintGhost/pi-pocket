@@ -108,3 +108,17 @@ test("a compressed event stream delivers each event as it happens", async () => 
         open.end();
     });
 });
+
+test("the app page lists the modules it loads, even those imported by others", async () => {
+    const page = (await get("/", { "accept-encoding": "identity" })).body.toString("utf8");
+    const listed = [...page.matchAll(/rel="modulepreload" href="([^"]+)"/g)].map((m) => m[1]);
+
+    for (const address of [
+        "/app.js",
+        "/store.js",
+        "/vendor/preact-hooks.mjs",
+        "/sheets/session.js",
+    ]) {
+        assert.ok(listed.includes(address), address);
+    }
+});
