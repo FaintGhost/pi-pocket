@@ -17,7 +17,7 @@ import {
 import { useBack } from "./back.js";
 import { describersChanged, setCallDescriber } from "./calls.js";
 import { leaveSafeMode, onSafeModeEnd, safeMode } from "./safe-mode.js";
-import { api, closeSheet, notify, onExtensionEvent, openSheet, store } from "./store.js";
+import { api, closeSheet, navigate, notify, onExtensionEvent, openSheet, store } from "./store.js";
 import { setCallSummary } from "./turns.js";
 import { html, Icon, iconPath, Loader, Markdown, railState, Sheet, Spinner, Switch } from "./ui.js";
 
@@ -373,7 +373,7 @@ function sync(list) {
             t(
                 "Extensions' browser parts are off in this tab, and so is the theme. Menu → Extensions turns them back on.",
             ),
-            () => openSheet({ type: "extensions" }),
+            () => openSheet({ type: "extensions", tab: "installed" }),
         );
     }
 
@@ -703,6 +703,9 @@ function pocketFor(record) {
 
     return Object.freeze({
         version: POCKET_API,
+        get pocketVersion() {
+            return store.state.server?.pocketVersion;
+        },
         module: record.module,
         title: record.title,
         // Drawing: the app's own Preact and htm, so components and hooks work with its renderer.
@@ -735,6 +738,18 @@ function pocketFor(record) {
             tick(record);
 
             return store.state.conversationId;
+        },
+        /** Open through the app's normal navigation; the server checks access on connection. */
+        openConversation: (id) => {
+            tick(record);
+
+            const value = typeof id === "string" && /^[1-9]\d*$/.test(id) ? Number(id) : id;
+
+            if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
+                throw new Error("pocket.openConversation: give a positive conversation id");
+            }
+
+            navigate(value);
         },
         /**
          * Call one of the module's routes: `api("status")` gets, `api("items", { name })` posts, and
@@ -1351,7 +1366,9 @@ class Guard extends Component {
     }
 
     render({ children, name }, { failed, message }) {
-        return failed ? html`<div class="error-box">${name} failed: ${message}</div>` : children;
+        return failed
+            ? html`<div class="error-box">${t("{{name}} failed: {{message}}", { name, message })}</div>`
+            : children;
     }
 }
 

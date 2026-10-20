@@ -917,7 +917,10 @@ export function Launcher({ leaving, returnTo }) {
                     <div class="launcher-group" data-part="launcher-group">
                         <span id="launcher-group-session">${t("Recent sessions")}</span>
                         <span class="launcher-count">
-                            ${recent.items.length} of ${recent.total}
+                            ${t("{{shown}} of {{total}}", {
+                                shown: recent.items.length,
+                                total: recent.total,
+                            })}
                         </span>
                     </div>
                     <button aria-label=${t("Show all sessions")} onClick=${() => chooseType("@")}>

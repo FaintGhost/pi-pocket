@@ -70,7 +70,7 @@ function SpendLimit({ budget, editable, save }) {
             budget !== undefined &&
             html`<button class="button small ghost" onClick=${() => done(null)}>${t("No limit")}</button>`
         }
-        <button class="icon-button" aria-label="Cancel" onClick=${() => setDraft(null)}>
+        <button class="icon-button" aria-label=${t("Cancel")} onClick=${() => setDraft(null)}>
             <${Icon} name="close" size=${16} />
         </button>
     </span>`;

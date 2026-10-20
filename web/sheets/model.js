@@ -371,7 +371,7 @@ export function ModelPicker() {
                     : forDefault
                       ? html`<div class="pop-menu-foot pop-menu-default">
                           <span class="muted">
-                              The owner default wins over project settings. Clear it to use a trusted project's model and thinking defaults for later new sessions. Existing sessions do not change.
+                              ${t("The owner default wins over project settings. Clear it to use a trusted project's model and thinking defaults for later new sessions. Existing sessions do not change.")}
                           </span>
                           ${
                               chosen

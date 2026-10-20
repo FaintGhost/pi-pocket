@@ -317,7 +317,7 @@ export function MemorySheet({ draft: initial = "", conversationId, pendingOnly =
 
     if (pendingOnly && store.state.me?.role !== "owner") {
         return html`<${Sheet} title=${title} onClose=${closeSheet}>
-            <p class="muted">Only the owner can review pending memories.</p>
+            <p class="muted">${t("Only the owner can review pending memories.")}</p>
         <//>`;
     }
 
@@ -364,8 +364,8 @@ export function MemorySheet({ draft: initial = "", conversationId, pendingOnly =
     if (pendingOnly) {
         return html`<${Sheet} title=${title} onClose=${closeSheet}>
             <p class="muted small">
-                Memories waiting for your approval, across every project and everywhere.
-                Approve only what you want Pi to keep; until then Pi goes on as before.
+                ${t("Memories waiting for your approval, across every project and everywhere.")}
+                ${t("Approve only what you want Pi to keep; until then Pi goes on as before.")}
             </p>
             <${Group}
                 title=${t("To approve · {{count}}", { count: waiting.length })}

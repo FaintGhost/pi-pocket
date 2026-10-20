@@ -14,7 +14,7 @@
  * fails when this file and Pi Pocket's code do not agree.
  */
 import type { Context } from "@earendil-works/chord";
-import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type { Skill } from "@earendil-works/pi-coding-agent";
 import type {
     ConversationId,
@@ -106,6 +106,18 @@ export interface Host {
      */
     readonly dataDir: string;
     /**
+     * The running server's Pi Pocket package version, not the extension API level.
+     * @since 0.16.0
+     */
+    readonly pocketVersion: string;
+    /**
+     * Local metadata for an exact provider/modelId, without network or sign-in information.
+     * @since 0.16.0
+     */
+    modelInfo(
+        spec: string,
+    ): { model: ModelRef; name: string; thinkingLevels: ModelThinkingLevel[] } | undefined;
+    /**
      * Pi's own folder, usually `~/.pi/agent`.
      * @since 0.1.0
      */
@@ -137,6 +149,15 @@ export interface Host {
      * @since 0.13.1
      */
     modelProblem(ref: ModelRef, fresh?: boolean): Promise<string | undefined>;
+    /**
+     * Shapes the request every model call sends: `shape` returns a replacement payload, or undefined to keep it. It runs
+     * after Pi and the caller shaped the request, closest to the wire. The return value stops the shaping.
+     * @since 0.18.0
+     * @experimental
+     */
+    shapeModelRequests(
+        shape: (payload: unknown, model: Model<Api>) => unknown | undefined,
+    ): () => void;
     /**
      * The id of the person that Pi works for in a session now: the person whose message started its current work.
      * @since 0.3.0
@@ -268,6 +289,38 @@ export interface LinkedSession {
     archived?: boolean;
 }
 
+/**
+ * A human-facing linked session that the authenticated person can see.
+ * @since 0.16.0
+ */
+export interface HumanLinkedSession extends LinkedSession {
+    /**
+     * Its id, for pocket.openConversation. Other metadata keeps LinkedSession's audience rules.
+     * @since 0.16.0
+     */
+    conversationId: ConversationId;
+}
+
+/**
+ * Linked sessions bound to the authenticated person and source of one route request.
+ * @since 0.16.0
+ */
+export interface HumanLinkedSessions {
+    /**
+     * Starts once for this key, as the clicking person. Explicit thinking must be supported and no higher than source.
+     * @since 0.16.0
+     */
+    start(
+        request: { title?: string; message: string; model?: string; thinking?: ModelThinkingLevel },
+        key: string,
+    ): Promise<{ session: ConversationId; address: string }>;
+    /**
+     * Visible linked sessions, with ids for human navigation. Valid only during this request.
+     * @since 0.16.0
+     */
+    list(): Promise<HumanLinkedSession[]>;
+}
+
 // ─── web: the module's part of the app ───────────────────────────────────────
 
 /**
@@ -318,6 +371,44 @@ export interface WebRequest {
      * @since 0.14.0
      */
     readonly signal: AbortSignal;
+    /**
+     * Fresh committed document reads; use this request's context.
+     * @since 0.16.0
+     */
+    readonly snapshot: DocumentReader["snapshot"];
+    /**
+     * Request-scoped context, cancelled on disconnect or handler return.
+     * @since 0.16.0
+     */
+    readonly context: Context;
+    /**
+     * Changes the module's documents atomically. Refused for viewers and after this request ends.
+     * @since 0.16.0
+     */
+    commit<T>(change: (tx: Tx) => T | Promise<T>): Promise<T>;
+}
+
+/**
+ * A request whose named path parameter resolved to an authorized conversation.
+ * @since 0.16.0
+ */
+export interface ConversationWebRequest extends WebRequest {
+    /**
+     * Authoritative source settings for this request; omitted model means none is selected.
+     * @since 0.16.0
+     */
+    readonly conversation: {
+        readonly id: ConversationId;
+        readonly title: string;
+        readonly cwd: string;
+        readonly model?: ModelRef;
+        readonly thinkingLevel: ModelThinkingLevel;
+    };
+    /**
+     * Starts and lists linked sessions as the authenticated person, never the source's last requester.
+     * @since 0.16.0
+     */
+    readonly linkedSessions: HumanLinkedSessions;
 }
 
 /**
@@ -351,6 +442,17 @@ export interface Web {
         path: string,
         handle: WebHandler,
         options?: { access?: WebAccess },
+    ): void;
+    /**
+     * Binds the path parameter named by options.conversation to a visible source before calling the handler.
+     * GET requires seeing; all other methods also require steering and the turn.
+     * @since 0.16.0
+     */
+    conversationRoute(
+        method: WebMethod,
+        path: string,
+        handle: (request: ConversationWebRequest) => unknown,
+        options: { conversation: string; access?: WebAccess },
     ): void;
     /**
      * Sets the browser module: a `.js` file beside the module, or a folder with an `index.js`.
@@ -819,6 +921,11 @@ export interface Pocket {
      */
     readonly version: number;
     /**
+     * The connected server's Pi Pocket package version; undefined with a server older than 0.16.0.
+     * @since 0.16.0
+     */
+    readonly pocketVersion: string | undefined;
+    /**
      * The module's name.
      * @since 0.14.0
      */
@@ -913,6 +1020,11 @@ export interface Pocket {
      * @since 0.14.0
      */
     conversationId(): number | null;
+    /**
+     * Opens a conversation through normal navigation. The server still checks access.
+     * @since 0.16.0
+     */
+    openConversation(id: number | string): void;
     /**
      * Calls one of the module's routes: a GET without `body`, a POST with it.
      * @since 0.14.0

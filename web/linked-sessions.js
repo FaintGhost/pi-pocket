@@ -49,7 +49,7 @@ export function LinkedSessions() {
         ${
             shown.length < started.length &&
             html`<button class="breadcrumb" onClick=${() => setOpenFor(conversationId)}>
-                +${started.length - shown.length} more
+                ${t("+{{count}} more", { count: started.length - shown.length })}
             </button>`
         }
     </nav>`;

@@ -254,7 +254,7 @@ export function HooksSheet() {
                 <div class="field">
                     <div class="label">${t("What Pi should do with each post")}</div>
                     <textarea
-                        aria-label="What Pi should do with each post"
+                        aria-label=${t("What Pi should do with each post")}
                         rows="3"
                         maxlength="2000"
                         placeholder=${t("When a deploy fails, find out why and fix it. Ignore the ones that pass.")}
@@ -331,7 +331,7 @@ export function HooksSheet() {
         ${
             list?.repoWatches?.length > 0 &&
             html`<div class="group">
-                <div class="group-title">Repositories watched</div>
+                <div class="group-title">${t("Repositories watched")}</div>
                 ${list.repoWatches.map(
                     (watch) =>
                         html`<${WatchRow}

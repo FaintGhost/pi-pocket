@@ -86,7 +86,7 @@ export function ShortcutsSheet() {
             </div>`,
         )}
         <p class="muted small">
-            ${t("In the launcher, start with")} <kbd>></kbd> ${t("for actions")}, <kbd>@</kbd> ${t("for sessions")}, or <kbd>#</kbd> ${t("for themes")}. ${t("Arrowing onto colors shows them; Enter keeps them.")}
+            ${t("In the launcher, start with")} <kbd>></kbd> ${t("for actions")}, <kbd>@</kbd> ${t("for sessions")}${t(", or")} <kbd>#</kbd> ${t("for themes")}. ${t("Arrowing onto colors shows them; Enter keeps them.")}
         </p>
     <//>`;
 }

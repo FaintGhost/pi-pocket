@@ -22,6 +22,7 @@ import type { BrowserPage } from "../src/server/browser/page.ts";
 import type { ExtensionWeb } from "../src/server/host.ts";
 import { createHandler } from "../src/server/http.ts";
 import type { Pocket } from "../types/pocket.d.ts";
+import { pocketVersion } from "../src/server/versions.ts";
 
 const chromium = findBrowser();
 const real = {
@@ -34,6 +35,7 @@ const seen = globalThis as unknown as { meterWeb?: ExtensionWeb };
 /** `Pocket`'s members in the public types: `npm run check` holds this to them, and the first test holds `pocket` to it. */
 const POCKET_MEMBERS: Record<keyof Pocket, true> = {
     version: true,
+    pocketVersion: true,
     module: true,
     title: true,
     h: true,
@@ -53,6 +55,7 @@ const POCKET_MEMBERS: Record<keyof Pocket, true> = {
     Switch: true,
     me: true,
     conversationId: true,
+    openConversation: true,
     api: true,
     on: true,
     notify: true,
@@ -264,10 +267,19 @@ test(
             "the reading from its route",
         );
 
+        assert.equal(
+            await withMeter<string>(`return JSON.stringify(pocket.pocketVersion)`),
+            pocketVersion(),
+        );
         seen.meterWeb!.send("reading", 7);
         await until(
             async () => (await text(".ext-page .meter")) === "Reading: 7",
             "the reading the server sent",
+        );
+        await withMeter(`pocket.openConversation("${session}"); return "null"`);
+        await until(
+            async () => (await has(".composer")) && !(await has(".ext-page")),
+            "normal conversation navigation",
         );
     },
 );
@@ -356,7 +368,9 @@ test("Lancet Guard stays on until its inline confirmation is accepted", real, as
     await app.setExtensionEnabled(owner(app), "guard.ts", true);
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(".composer"), "the conversation");
-    await inPage(`(await import("/store.js")).openSheet({ type: "extensions" }); return "null";`);
+    await inPage(
+        `(await import("/store.js")).openSheet({ type: "extensions", tab: "installed" }); return "null";`,
+    );
     await until(() => has('.switch[aria-label="Lancet Guard: on"]'), "the guard switch");
     await settled();
     await inPage(

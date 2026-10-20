@@ -279,11 +279,11 @@ function Dismiss({ agent }) {
 
     return html`<button
         class="button board-dismiss"
-        title="It stays here as failed, and no longer needs you"
+        title=${t("It stays here as failed, and no longer needs you")}
         disabled=${asked === failure}
         onClick=${run}
     >
-        Dismiss
+        ${t("Dismiss")}
     </button>`;
 }
 

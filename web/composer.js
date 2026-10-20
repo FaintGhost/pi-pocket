@@ -1735,7 +1735,7 @@ function StatusLine() {
                         : t(guard?.enabled ? "Lancet Guard on" : "Lancet Guard off")
                 }
                 title=${guard.detail}
-                onClick=${() => openSheet({ type: "extensions" })}
+                onClick=${() => openSheet({ type: "extensions", tab: "installed" })}
             >
                 <${Icon} name="shield" size=${11} />
                 <span><span class="word">${t("guard")}${" "}</span>${t(state)}</span>

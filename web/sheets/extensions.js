@@ -76,16 +76,18 @@ function WebPart({ module }) {
     const parts = [
         web.routes.length > 0 && `routes: ${web.routes.join(", ")}`,
         web.commands?.length > 0 && `commands: ${web.commands.join(", ")}`,
-        web.client && `browser module for ${ACCESS_WORDS[web.client] ?? web.client}`,
-        here?.status === "loading" && "loading here",
-        here?.status === "off" && "off in this tab",
+        web.client &&
+            t("browser module for {{who}}", { who: t(ACCESS_WORDS[web.client] ?? web.client) }),
+        here?.status === "loading" && t("loading here"),
+        here?.status === "off" && t("off in this tab"),
     ].filter(Boolean);
 
     return html`${parts.length > 0 && html`<div class="muted small mono">${parts.join(" · ")}</div>`}
     ${
         here?.status === "failed" &&
         html`<div class="error-box small">
-            In this browser: ${here.error}. An edit to it, or reloading the page, tries again.
+            ${t("In this browser: {{error}}", { error: here.error })}.
+            ${t("An edit to it, or reloading the page, tries again.")}
         </div>`
     }`;
 }
@@ -100,8 +102,10 @@ function SafeMode() {
     }
 
     return html`<div class="setting wrap safe-mode">
-        <div class="grow small">Extensions' browser parts are off in this tab, and so is the theme.</div>
-        <button class="button" onClick=${leaveSafeMode}>Turn them back on</button>
+        <div class="grow small">
+            ${t("Extensions' browser parts are off in this tab, and so is the theme.")}
+        </div>
+        <button class="button" onClick=${leaveSafeMode}>${t("Turn them back on")}</button>
     </div>`;
 }
 
@@ -128,7 +132,7 @@ function GalleryPart({ module, installed, busy, turnOff }) {
     return html`${
         installed.revoked !== null &&
         html`<div class="error-box small">
-            The gallery revoked this version: ${installed.revoked}
+            ${t("The gallery revoked this version: {{reason}}", { reason: installed.revoked })}
             ${
                 module.enabled &&
                 html`<div class="sheet-actions">
@@ -140,11 +144,19 @@ function GalleryPart({ module, installed, busy, turnOff }) {
         </div>`
     }
     <div class="extension-gallery">
-        <span class="pi-tag gallery-plain">from the gallery · ${installed.version}</span>
+        <span class="pi-tag gallery-plain">
+            ${t("from the gallery · {{version}}", { version: installed.version })}
+        </span>
         ${installed.update && html`<span class="pi-tag behind">update available</span>`}
         <button
             class="link small"
-            onClick=${() => openSheet({ type: "gallery-entry", id: installed.name })}
+            onClick=${() =>
+                openSheet({
+                    type: "gallery-entry",
+                    id: installed.name,
+                    tab: "installed",
+                    origin: store.state.sheet?.origin ?? "extensions",
+                })}
         >
             Details
         </button>
@@ -186,6 +198,13 @@ function PipCompactAt({ owner }) {
 }
 
 export function ExtensionsSheet() {
+    return html`<${Sheet} title=${t("Extensions")} onClose=${closeSheet} wide=${true}>
+        <${ExtensionsContent} />
+    <//>`;
+}
+
+/** The same management controls standalone or in the hub's Installed tab. */
+export function ExtensionsContent({ galleryInstalled, query = "", onChanged = () => {} }) {
     const { me } = store.state;
     const owner = me?.role === "owner";
     const [data, setData] = useState(null);
@@ -203,6 +222,7 @@ export function ExtensionsSheet() {
                 setProblem(null);
 
                 if (
+                    galleryInstalled === undefined &&
                     galleryAvailable() &&
                     result.modules.some((each) => each.source === "drop-in")
                 ) {
@@ -225,7 +245,7 @@ export function ExtensionsSheet() {
 
     useEffect(() => {
         load();
-    }, []);
+    }, [galleryInstalled]);
     useLayoutEffect(() => {
         if (confirmGuard) {
             guardCancel.current?.focus();
@@ -243,6 +263,7 @@ export function ExtensionsSheet() {
         ).finally(() => {
             setBusy(null);
             load();
+            onChanged();
         });
     };
 
@@ -272,7 +293,28 @@ export function ExtensionsSheet() {
         change(module, "", { enabled: !module.enabled });
     };
 
-    return html`<${Sheet} title=${t("Extensions")} onClose=${closeSheet} wide=${true}>
+    const installedByFile =
+        galleryInstalled === undefined
+            ? fromGallery
+            : new Map(galleryInstalled.map((item) => [item.file, item]));
+    const needle = query.trim().toLowerCase();
+    const managed = (data?.modules ?? []).filter(
+        (module) =>
+            (galleryInstalled === undefined ||
+                !installedByFile.has(module.file) ||
+                // Keep failed gallery modules here too: their loader/browser errors are management data.
+                module.error ||
+                browserModuleState(module.file.replace(/\.ts$/, ""))?.status === "failed") &&
+            (!needle ||
+                [
+                    module.title,
+                    module.file,
+                    module.summary ?? "",
+                    ...module.extensions.flatMap((extension) => extension.tools),
+                ].some((text) => text.toLowerCase().includes(needle))),
+    );
+
+    return html`<div class="extension-management">
         <p class="muted small">
             ${t("Extensions give Pi its tools and checks in Pi Pocket, and can add pages and buttons to the app. A change applies to every session right away and stays after restarts.")}${owner ? "" : ` ${t("Only the owner can change them.")}`}
         </p>
@@ -281,15 +323,16 @@ export function ExtensionsSheet() {
             owner &&
             html`<div class="sheet-list">
                 ${
+                    galleryInstalled === undefined &&
                     galleryAvailable() &&
                     html`<button class="list-item" onClick=${() => openSheet({ type: "gallery" })}>
-                        <span><${Icon} name="search" size=${16} /> Find extensions</span>
-                        <span class="muted small">extensions and themes other people made</span>
+                        <span><${Icon} name="search" size=${16} /> ${t("Find extensions")}</span>
+                        <span class="muted small">${t("extensions and themes other people made")}</span>
                     </button>`
                 }
                 <a class="list-item" href=${GUIDE} target="_blank" rel="noopener noreferrer">
-                    <span><${Icon} name="external" size=${16} /> How to write one</span>
-                    <span class="muted small">the guide (latest release)</span>
+                    <span><${Icon} name="external" size=${16} /> ${t("How to write one")}</span>
+                    <span class="muted small">${t("the guide (latest release)")}</span>
                 </a>
             </div>`
         }
@@ -298,8 +341,8 @@ export function ExtensionsSheet() {
         ${
             data &&
             [
-                [t("Built in"), data.modules.filter((module) => module.source !== "drop-in")],
-                [t("Yours"), data.modules.filter((module) => module.source === "drop-in")],
+                [t("Built in"), managed.filter((module) => module.source !== "drop-in")],
+                [t("Yours"), managed.filter((module) => module.source === "drop-in")],
             ]
                 .filter(([, modules]) => modules.length > 0)
                 .map(
@@ -383,7 +426,7 @@ export function ExtensionsSheet() {
                                         <${WebPart} module=${module} />
                                         <${GalleryPart}
                                             module=${module}
-                                            installed=${fromGallery.get(module.file)}
+                                            installed=${installedByFile.get(module.file)}
                                             busy=${busy !== null}
                                             turnOff=${() => change(module, "", { enabled: false })}
                                         />
@@ -424,5 +467,5 @@ export function ExtensionsSheet() {
                 ${t("Add your own:")} ${t("Put a .ts extension module in")} <span class="mono">${shortPath(data.dropIns, store.state.server?.home)}</span>. ${t("Drop-ins stay off until the owner turns them on, and run inside the server with the owner's rights.")}
             </p>`
         }
-    <//>`;
+    </div>`;
 }

@@ -640,7 +640,7 @@ document.addEventListener(
         const note = document.createElement("span");
 
         note.className = "image-missing";
-        note.textContent = `🖼 ${image.alt || "Image"} could not be loaded`;
+        note.textContent = `🖼 ${t("{{name}} could not be loaded", { name: image.alt || t("Image") })}`;
         image.after(note);
     },
     true,
@@ -1357,7 +1357,7 @@ export function Sheet({ title, onClose, children, wide = false, actions = null, 
                 <div class="grip" aria-hidden="true"></div>
                 ${
                     onBack &&
-                    html`<button class="icon-button sheet-back" onClick=${onBack} aria-label="Back">
+                    html`<button class="icon-button sheet-back" onClick=${onBack} aria-label=${t("Back")}>
                         <${Icon} name="back" size=${18} />
                     </button>`
                 }

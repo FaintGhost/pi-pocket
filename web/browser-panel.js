@@ -626,7 +626,7 @@ function StartScreen({ steer }) {
     }, []);
 
     return html`<div class="browser-start">
-        <h2>Browser</h2>
+        <h2>${t("Browser")}</h2>
         <p>
             ${steer ? t("Type an address above, such as {{address}}, or ask Pi to open one.", { address: "localhost:5173" }) : t("Nothing is open yet. Pi, or someone who can steer, opens pages here.")}
         </p>

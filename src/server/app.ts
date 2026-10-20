@@ -72,12 +72,19 @@ import { defang, quoted } from "./fence.ts";
 import { FolderFavorites } from "./folder-favorites.ts";
 import { Gallery } from "./gallery.ts";
 import { Goals } from "./goals.ts";
-import { type ApprovalRequest, Approvals, type PocketHost, type WebAccess } from "./host.ts";
+import {
+    type ApprovalRequest,
+    Approvals,
+    type ModelRequestShaper,
+    type PocketHost,
+    type WebAccess,
+} from "./host.ts";
 import { type GuardStatus, LancetGuard } from "./lancet.ts";
 import { takeLock } from "./lock.ts";
 import { Memory } from "./memory.ts";
 import { Magpie } from "./magpie.ts";
-import { isThinkingLevel, modelList, resolveModel, THINKING_LEVELS } from "./models.ts";
+import { isThinkingLevel, modelInfo, modelList, resolveModel, THINKING_LEVELS } from "./models.ts";
+import { pocketVersion } from "./versions.ts";
 import { configureHttp } from "./net.ts";
 import { PiSessions } from "./pi-sessions.ts";
 import { Hooks } from "./hooks.ts";
@@ -335,6 +342,8 @@ export class PocketApp {
     #closing: Promise<void> | undefined;
     readonly #log: (line: string) => void;
     readonly #configureModels: ((models: ModelRuntime) => void) | undefined;
+    /** Request shapers from the extension modules the owner turned on (`host.shapeModelRequests`). */
+    readonly #shapers: ModelRequestShaper[] = [];
     readonly #home: string;
     /** The clock durable work runs by. */
     readonly now: () => number;
@@ -487,6 +496,7 @@ export class PocketApp {
         }
 
         this.models = await ModelRuntime.create();
+        installRequestShaping(this.models, this.#shapers, this.#log);
         this.providers.modelRefresh.watch(this.models);
         this.#configureModels?.(this.models);
         // Magpie, when this machine has one: its catalog becomes a provider, and a gateway that is not there (or is
@@ -524,6 +534,8 @@ export class PocketApp {
             approvals: this.approvals,
             agentDir: getAgentDir(),
             dataDir: this.dataDir,
+            pocketVersion: pocketVersion(),
+            modelInfo: (spec) => modelInfo(this.models, spec),
             skillPaths: () => {
                 try {
                     return this.settings.getSkillPaths();
@@ -535,6 +547,17 @@ export class PocketApp {
             resolveModel: (spec) => resolveModel(this.models, spec, this.signInNeeded),
             subagentModels: () => this.config.subagentModels,
             modelProblem: (ref, fresh) => this.providers.problem(ref, fresh),
+            shapeModelRequests: (shape) => {
+                this.#shapers.push(shape);
+
+                return () => {
+                    const index = this.#shapers.indexOf(shape);
+
+                    if (index >= 0) {
+                        this.#shapers.splice(index, 1);
+                    }
+                };
+            },
             requesterOf: (conversationId) => this.attribution.requesterOf(conversationId),
             notice: (level, message, conversationId, ui) =>
                 this.notice(level, message, conversationId, ui),
@@ -1747,6 +1770,7 @@ export class PocketApp {
             models: await this.modelList(),
             guard: await this.guardStatus(),
             server: {
+                pocketVersion: pocketVersion(),
                 supervised: this.supervised,
                 startedAt: this.startedAt,
                 home: homedir(),
@@ -2926,4 +2950,47 @@ export class PocketApp {
 
         return this.#closing;
     }
+}
+
+/**
+ * Continue on the runtime's calls: after Pi and the caller shaped a request, each shaper may replace the payload, the
+ * last one closest to the wire. With no shaper, the call goes on untouched. A shaper may answer with a promise. One
+ * that throws is logged and skipped: a faulty module must not fail the model call.
+ */
+export function installRequestShaping(
+    models: { streamSimple: ModelRuntime["streamSimple"] },
+    shapers: readonly ModelRequestShaper[],
+    log: (line: string) => void,
+): void {
+    const stream = models.streamSimple.bind(models);
+
+    models.streamSimple = (model, context, options) => {
+        if (shapers.length === 0) {
+            return stream(model, context, options);
+        }
+
+        return stream(model, context, {
+            ...options,
+            onPayload: async (payload, payloadModel) => {
+                const asked = await options?.onPayload?.(payload, payloadModel);
+                let next = asked ?? payload;
+                let shaped = asked;
+
+                for (const shape of [...shapers]) {
+                    try {
+                        const replaced = await shape(next, model);
+
+                        if (replaced !== undefined) {
+                            next = replaced;
+                            shaped = replaced;
+                        }
+                    } catch (error) {
+                        log(`A model request shaper failed and was skipped: ${describe(error)}`);
+                    }
+                }
+
+                return shaped;
+            },
+        });
+    };
 }

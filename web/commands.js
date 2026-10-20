@@ -42,7 +42,10 @@ export async function watchPr(pr) {
 
     notify(
         "info",
-        `Watching PR #${number}: Pi hears when its checks fail, it has conflicts, or reviewers comment, until it is merged.`,
+        t(
+            "Watching PR #{{number}}: Pi hears when its checks fail, it has conflicts, or reviewers comment, until it is merged.",
+            { number },
+        ),
     );
 }
 

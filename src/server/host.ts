@@ -1,7 +1,7 @@
 import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
 import type { Skill } from "@earendil-works/pi-coding-agent";
-import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
+import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type {
     ConversationId,
     DocumentReader,
@@ -55,6 +55,19 @@ export interface LinkedSessionsApi {
     ): Promise<void>;
     /** The sessions linked to `source`, at any distance, that the person Pi works for there sees. */
     list(source: ConversationId): Promise<LinkedSession[]>;
+}
+
+/** Human-facing linked sessions, bound to the signed-in person and source of one route request. */
+export interface HumanLinkedSession extends LinkedSession {
+    conversationId: ConversationId;
+}
+
+export interface HumanLinkedSessions {
+    start(
+        request: { title?: string; message: string; model?: string; thinking?: ModelThinkingLevel },
+        key: string,
+    ): Promise<{ session: ConversationId; address: string }>;
+    list(): Promise<HumanLinkedSession[]>;
 }
 
 export interface ApprovalRequest {
@@ -205,12 +218,24 @@ export interface ExtensionCommand {
 /** What browsers know about a command: no handler, and no file. The id changes with each version of its module. */
 export type CommandInfo = Omit<ExtensionCommand, "handler"> & { id: string; name: string };
 
+/**
+ * Shapes one model request: the payload Pi built and the model. Returns a replacement payload, or undefined to keep
+ * it.
+ */
+export type ModelRequestShaper = (payload: unknown, model: Model<Api>) => unknown | undefined;
+
 /** What the app gives its extensions. Extensions are reloaded on edit; the host is not. */
 export interface PocketHost {
     readonly guard: LancetGuard;
     readonly approvals: Approvals;
     readonly agentDir: string;
     readonly dataDir: string;
+    /** The running server's Pi Pocket package version, not the extension API level. */
+    readonly pocketVersion: string;
+    /** Local metadata for an exact provider/modelId; no sign-in check or network request. */
+    modelInfo(
+        spec: string,
+    ): { model: ModelRef; name: string; thinkingLevels: ModelThinkingLevel[] } | undefined;
     /** Pi's configured extra skill paths, from its settings. */
     skillPaths(): string[];
     /** Pi's skills for a session working in `cwd`, from the places Pi looks (`skills.ts`). */
@@ -230,6 +255,12 @@ export interface PocketHost {
      * sign-in expired), or undefined when it may. `fresh` asks the provider's sign-in again first.
      */
     modelProblem(ref: ModelRef, fresh?: boolean): Promise<string | undefined>;
+    /**
+     * Shape the request every model call sends: `shape` returns a replacement payload, or undefined to keep it. It runs
+     * after Pi and the caller shaped the request, closest to the wire. Returns how to stop shaping. Only the modules
+     * the owner turned on shape requests.
+     */
+    shapeModelRequests(shape: ModelRequestShaper): () => void;
     /** Who Pi works for in a conversation now: whose message led to its current work. */
     requesterOf(conversationId: ConversationId): string | undefined;
     /** Report something odd to the log and the connected clients: with `conversationId`, to that session's tabs only. */
@@ -340,6 +371,23 @@ export interface WebRequest {
     readonly user: { readonly id: string; readonly name: string; readonly role: Role };
     /** Aborted when the browser stops waiting for the answer. */
     readonly signal: AbortSignal;
+    /** Fresh committed document reads. Use the request's context. */
+    readonly snapshot: DocumentReader["snapshot"];
+    readonly context: Context;
+    /** Change the module's documents; refused for viewers and after this request ends. */
+    commit<T>(change: (tx: Tx) => T | Promise<T>): Promise<T>;
+}
+
+/** A route request whose named path parameter resolved to a visible conversation. */
+export interface ConversationWebRequest extends WebRequest {
+    readonly conversation: {
+        readonly id: ConversationId;
+        readonly title: string;
+        readonly cwd: string;
+        readonly model?: ModelRef;
+        readonly thinkingLevel: ModelThinkingLevel;
+    };
+    readonly linkedSessions: HumanLinkedSessions;
 }
 
 /**
@@ -365,6 +413,13 @@ export interface ExtensionWeb {
         path: string,
         handle: WebHandler,
         options?: { access?: WebAccess },
+    ): void;
+    /** Bind a named path parameter to a conversation before calling the handler. */
+    conversationRoute(
+        method: WebMethod,
+        path: string,
+        handle: (request: ConversationWebRequest) => unknown,
+        options: { conversation: string; access?: WebAccess },
     ): void;
     /**
      * The browser module that adds to the app: a `.js` file beside this module, or a folder with an `index.js` and the

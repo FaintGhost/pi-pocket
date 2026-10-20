@@ -816,7 +816,7 @@ function PeopleTabs({ ask, focus }) {
                 onClick=${() => (featured.entryId !== undefined ? jumpToEntry(featured.entryId) : setHighlight(featured.chatId))}
             >
                 <${Icon} name="pin" size=${13} />
-                <span><b>Pinned by ${pinnedBy}</b> · ${featured.text}</span>
+                <span><b>${t("Pinned by {{name}}", { name: pinnedBy })}</b> · ${featured.text}</span>
             </button>`
         }
         ${

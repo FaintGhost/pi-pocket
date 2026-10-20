@@ -263,7 +263,7 @@ async function send(id, text, busy, attachments = []) {
     }
 
     if (target === undefined) {
-        notify("error", "PiP is not ready yet. Try again in a moment.");
+        notify("error", t("PiP is not ready yet. Try again in a moment."));
 
         return false;
     }
@@ -645,7 +645,7 @@ function Composer({ id, busy }) {
         }
 
         if (compact && id === undefined) {
-            notify("error", "PiP is not ready yet. Try again in a moment.");
+            notify("error", t("PiP is not ready yet. Try again in a moment."));
 
             return;
         }

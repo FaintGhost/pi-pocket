@@ -325,7 +325,7 @@ function AuthFrame({ title, onClose, inline, focusKey, children }) {
         ? html`<section class="auth-inline" aria-label=${title} tabindex="-1" ref=${ref}>
             <div class="auth-inline-head">
                 <strong>${title}</strong>
-                <button class="icon-button" aria-label="Close" onClick=${onClose}>
+                <button class="icon-button" aria-label=${t("Close")} onClick=${onClose}>
                     <${Icon} name="close" size=${16} />
                 </button>
             </div>

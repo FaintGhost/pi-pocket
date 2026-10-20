@@ -34,6 +34,8 @@ A module split into parts keeps its name for the part others import, with the re
 | `lock.ts`               | One process per data folder                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `errors.ts`, `paths.ts` | `HttpError`, `describe`, and input checks; `~` paths                                                                                                                                                                                                                                                                                                                                                                                        |
 
+`extension-request.ts` owns extension routes' request-lifetime document/context capabilities and fresh person/source authorization. `http/extension-routes.ts` binds named source parameters and supplies human linked-session capabilities. `linked-sessions.ts` keeps the short final-admission lease; its child context watches policy publications and checks current config when Durable enters admission. `models.ts` supplies exact local `host.modelInfo` metadata. `versions.ts` supplies `host.pocketVersion` and `hello.server.pocketVersion`, read by browser `pocket.pocketVersion`; `pocket.openConversation` delegates to normal `store.navigate`.
+
 ### People
 
 | File                   | Owns                                                                                                                    |
@@ -186,6 +188,8 @@ Plain ES modules, loaded as they are. `store.js` holds the shared state, and not
 | `highlight.js`         | Syntax colors without dependencies: `highlightLines` gives escaped HTML with flat `hl-` spans per line, which `diff.js` marks changed words in                                                                                                                                                                                                                                                                                                                                                |
 
 Manual refresh lives in `src/server/model-refresh.ts`, owned by `Providers.modelRefresh`; `web/model-refresh.js` shares the refresh and its feedback between the menu, Providers, and the launcher. `test/model-refresh.test.ts` checks local configuration, external sign-ins, provider isolation, cancellation, session use, and endpoint access.
+
+The Extensions hub in `sheets/gallery.js` shares one listing between Discover, Installed, Updates, and the selected entry. `sheets.js` maps its sheet routes to one retained hub; `sheets/extensions.js` supplies the built-in and local drop-in management controls for Installed, and the standalone sheet when the gallery is unavailable.
 
 PiP's `pip-window.js` handles pointer resize zones and the account/browser size preference.
 
