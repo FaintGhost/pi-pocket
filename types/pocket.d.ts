@@ -223,8 +223,9 @@ export interface SafeText {
  */
 export interface LinkedSessions {
     /**
-     * Starts a session linked to `source`, in `cwd` or the source's folder, and sends it `message` as its first message. `model` is
-     * `provider/modelId`; `thinking` is a level no higher than the source's.
+     * Starts a session linked to `source`, in `cwd` or the source's folder, and sends it `message` as its first
+     * message. `model` is `provider/modelId`; `thinking` is a level no higher than the source's. `cwd` is since 0.19.0:
+     * an older Pi Pocket ignores it, and starts the session in the source's folder.
      * @since 0.14.0
      * @experimental
      */
@@ -313,7 +314,8 @@ export interface HumanLinkedSession extends LinkedSession {
  */
 export interface HumanLinkedSessions {
     /**
-     * Starts once for this key, as the clicking person. Optional `cwd` selects an existing folder. Explicit thinking must be supported and no higher than source.
+     * Starts once for this key, as the clicking person. Optional `cwd` (since 0.19.0) selects an existing folder.
+     * Explicit thinking must be supported and no higher than source.
      * @since 0.16.0
      */
     start(

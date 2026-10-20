@@ -67,3 +67,4 @@ Each member in the reference has its own Since line. These parts came together:
 | `host.linkedSessions`                                                                           | 0.14.0 |
 | `pocket.panel` and `pocket.status` (experimental)                                               | 0.19.0 |
 | Slots: `pocket.topbar`, `composerButton`, `replyAction`, `insertText`, `arrange` (experimental) | 0.19.0 |
+| `cwd` in `host.linkedSessions.start` and the human-bound `linkedSessions.start`                 | 0.19.0 |
