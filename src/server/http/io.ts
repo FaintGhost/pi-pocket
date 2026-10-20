@@ -46,7 +46,12 @@ export function send(
 
     if (encoding !== undefined) {
         body = compressed(body, encoding);
-        headers = { ...headers, "content-encoding": encoding, vary: "accept-encoding" };
+        headers = {
+            ...headers,
+            "content-encoding": encoding,
+            vary:
+                headers.vary === undefined ? "accept-encoding" : `${headers.vary}, accept-encoding`,
+        };
     }
 
     response.writeHead(status, { "content-type": type, "cache-control": "no-store", ...headers });

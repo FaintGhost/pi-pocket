@@ -107,12 +107,11 @@ export function createEventStreams(app: PocketApp) {
 
         /** Whether the stream may take more: false, and cut off, when it took nothing for long while far behind, or is too far behind. */
         const keepsUp = (): boolean => {
-            if (response.writableEnded || response.destroyed) {
+            if (response.writableEnded || response.destroyed || compressor?.stream.writableEnded) {
                 return false;
             }
 
-            // Text still in the compressor counts too, though it is soon out.
-            const behind = response.writableLength + (compressor?.stream.writableLength ?? 0);
+            const behind = response.writableLength;
             const now = Date.now();
 
             if (written - behind > taken || behind <= BEHIND_BYTES) {
@@ -120,7 +119,14 @@ export function createEventStreams(app: PocketApp) {
                 tookAt = now;
             }
 
-            if (behind > MAX_BEHIND_BYTES || now - tookAt > STALLED_MS) {
+            // Text not yet compressed is not in `behind` (that counts what the tab must take), but it is held too.
+            const pending = compressor?.stream.writableLength ?? 0;
+
+            if (
+                behind > MAX_BEHIND_BYTES ||
+                pending > MAX_BEHIND_BYTES ||
+                now - tookAt > STALLED_MS
+            ) {
                 response.destroy();
 
                 return false;

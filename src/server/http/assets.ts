@@ -158,6 +158,9 @@ function readNow(file: string): ReadFile {
     }
 
     const body = readFileSync(file);
+    // A file changed this moment may change again within the file system's clock tick, with the same size and times: it
+    // is read again for each request until it has been still for a while.
+    const settled = Date.now() - Number(stats.mtimeNs / 1_000_000n) > 2000;
     const read: ReadFile = {
         stamp,
         body,
@@ -165,7 +168,11 @@ function readNow(file: string): ReadFile {
         encoded: new Map(),
     };
 
-    readFiles.set(file, read);
+    if (settled) {
+        readFiles.set(file, read);
+    } else {
+        readFiles.delete(file);
+    }
 
     return read;
 }
