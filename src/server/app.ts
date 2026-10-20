@@ -1067,7 +1067,7 @@ export class PocketApp {
         }
 
         client.send("hello", this.#helloFor(client, hello));
-        client.send("sessions", this.sessions(client.user));
+        this.#sendSessions(client, this.sessions(client.user));
         this.#sendPip(client);
 
         if (client.user.role === "owner" && this.themes.failure !== undefined) {
@@ -1828,16 +1828,19 @@ export class PocketApp {
         this.#sessionsTimer = setTimeout(() => {
             this.#sessionsTimer = undefined;
             const all = this.sessions();
+            const allJson = JSON.stringify(all);
             let board: SubagentEntry[] | undefined;
 
             for (const client of this.#clients) {
                 const scope = client.user.sessions;
 
-                client.send(
-                    "sessions",
+                if (scope === undefined) {
+                    this.#sendSessions(client, all, allJson);
+                } else {
                     // Scoped lists need their own metadata projection, not just a filter over the global list.
-                    scope === undefined ? all : this.sessions(client.user),
-                );
+                    this.#sendSessions(client, this.sessions(client.user));
+                }
+
                 this.#sendPip(client);
 
                 if (client.board === true) {
@@ -1851,6 +1854,18 @@ export class PocketApp {
                 }
             }
         }, 400);
+    }
+
+    /** Send a tab its session list, unless it is what the tab last got: the list is large, and changes come often. */
+    #sendSessions(
+        client: Client,
+        sessions: ReturnType<PocketApp["sessions"]>,
+        json = JSON.stringify(sessions),
+    ): void {
+        if (json !== client.sessionsSent) {
+            client.sessionsSent = json;
+            client.send("sessions", sessions);
+        }
     }
 
     /** The session list, with who is in each session and its newest chat message. Scoped people see only theirs. */
@@ -2233,7 +2248,7 @@ export class PocketApp {
             }
 
             client.send("hello", this.#helloFor(client, await this.hello(user)));
-            client.send("sessions", this.sessions(user));
+            this.#sendSessions(client, this.sessions(user));
 
             // An open board too: it must not keep subagents of sessions no longer shared.
             if (client.board === true) {
