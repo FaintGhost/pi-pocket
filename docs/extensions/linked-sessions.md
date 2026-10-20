@@ -8,14 +8,15 @@ A tool can start a session from the session that it runs in, and send messages b
 
 A linked session is an ordinary session. The session list shows it under the session that started it (the source).
 
-- It works in the source's folder. It does not get a worktree of its own.
+- It works in `cwd` when supplied, otherwise the source's folder. It does not get a worktree of its own.
 - It starts with a copy of the source's agent settings. It does not get the source's history, plan mode, or budget. The source's budget covers it (see [Limits of a team](#limits-of-a-team)).
 - The link (`linkedFrom` in its session entry) gives no access, and owns nothing.
 
 ## Start a session
 
-`start(source, { title?, message, model?, thinking? }, key)` makes the session, and sends `message` to it as its first message. It returns `{ session, address }`: the id of the new session, and the source's address for it.
+`start(source, { title?, message, model?, thinking?, cwd? }, key)` makes the session, and sends `message` to it as its first message. It returns `{ session, address }`: the id of the new session, and the source's address for it.
 
+- `cwd` selects an existing working folder using the same path rules as the folder picker (including `~`). Prefer an absolute path. The child loads that folder's project context and tools; the source stays in its own folder. A missing path or a file is rejected before a session is created.
 - Without `title`, the title is the first line of the message.
 - `model` is `provider/modelId`. It must be the source's model, or a model that the owner allows for subagents (Menu → Providers → Models for subagents). Without it, the session uses the source's model.
 - `thinking` can be at most the source's level. Without it, the session uses the source's level. Pi Pocket lowers it to the highest level that the model has.
@@ -23,7 +24,7 @@ A linked session is an ordinary session. The session list shows it under the ses
 
 ## Starts from a human page
 
-Since 0.16.0, a [conversation-bound route](routes.md#bind-a-source-conversation) gets `request.linkedSessions.start({ title?, message, model?, thinking? }, key)` and `list()`. These methods act as the authenticated person and bound source, not `host.requesterOf(source)`. They have no source-id or actor parameter. They end with the request, so await each start in the handler.
+Since 0.16.0, a [conversation-bound route](routes.md#bind-a-source-conversation) gets `request.linkedSessions.start({ title?, message, model?, thinking?, cwd? }, key)` and `list()`. These methods act as the authenticated person and bound source, not `host.requesterOf(source)`. They have no source-id or actor parameter. They end with the request, so await each start in the handler.
 
 - The same team, source plan, turn, spend, allowed-model, and provider checks apply. No message is added to the source, and its requester is unchanged.
 - Explicit thinking must be supported by the chosen model and no higher than the source's level. It is rejected rather than silently lowered. Omitted thinking inherits with the existing model cap policy. Read `request.conversation.model` and `thinkingLevel`, with `host.modelInfo("provider/modelId")`, to show the effective choices.

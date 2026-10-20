@@ -483,7 +483,13 @@ export class LinkedSessions implements LinkedSessionsApi {
     /** One call makes the session and sends its first message; its record makes a repeat do neither again. */
     async start(
         source: ConversationId,
-        request: { title?: string; message: string; model?: string; thinking?: string },
+        request: {
+            title?: string;
+            message: string;
+            model?: string;
+            thinking?: string;
+            cwd?: string;
+        },
         key: string,
     ): Promise<{ session: ConversationId; address: string }> {
         return this.#start(source, request, key);
@@ -491,7 +497,13 @@ export class LinkedSessions implements LinkedSessionsApi {
 
     async #start(
         source: ConversationId,
-        request: { title?: string; message: string; model?: string; thinking?: string },
+        request: {
+            title?: string;
+            message: string;
+            model?: string;
+            thinking?: string;
+            cwd?: string;
+        },
         key: string,
         actor?: RequestActor,
     ): Promise<{ session: ConversationId; address: string }> {
@@ -534,7 +546,7 @@ export class LinkedSessions implements LinkedSessionsApi {
             const selected = this.#selection(agent, request, true);
 
             approved = {
-                cwd: agent.cwd ?? app.cwdOf(source),
+                cwd: this.#directory(source, agent, request.cwd),
                 model: selected.model,
                 thinkingLevel: selected.thinking,
             };
@@ -560,6 +572,19 @@ export class LinkedSessions implements LinkedSessionsApi {
         actor?.current();
 
         return { session, address };
+    }
+
+    /** Use the normal folder-picker validation for an explicit working directory. */
+    #directory(source: ConversationId, agent: AgentState, cwd?: string): string {
+        if (cwd === undefined) {
+            return agent.cwd ?? this.#app.cwdOf(source);
+        }
+
+        if (typeof cwd !== "string") {
+            throw new HttpError(400, "The working directory must be a folder path.");
+        }
+
+        return this.#app.workspace.checkDirectory(cwd);
     }
 
     /** Resolve exactly the requested policy, without network work. Human choices are never silently lowered. */
@@ -614,7 +639,7 @@ export class LinkedSessions implements LinkedSessionsApi {
     async #create(
         source: ConversationId,
         user: User,
-        request: { title: string; model?: string; thinking?: string },
+        request: { title: string; model?: string; thinking?: string; cwd?: string },
         token: string,
         actor?: RequestActor,
     ): Promise<ConversationId> {
@@ -648,7 +673,7 @@ export class LinkedSessions implements LinkedSessionsApi {
             throw new HttpError(400, `The model ${spec} cannot be used now: ${problem}.`);
         }
 
-        const cwd = agent.cwd ?? app.cwdOf(source);
+        const cwd = this.#directory(source, agent, request.cwd);
         const now = Date.now();
 
         return app.harness.commit(async (tx) => {

@@ -5,10 +5,12 @@ import {
     cleanUp,
     context,
     fakeTab,
+    lastText,
     modelTexts,
     newSession,
     openApp,
     owner,
+    root,
     recordCost,
     say,
     scriptedModel,
@@ -16,8 +18,11 @@ import {
 } from "./helpers.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { ConversationId } from "@earendil-works/pi-durable";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import { LinkedSessionCallsDoc, LinkedSessionRelayDoc, TurnsDoc } from "../src/server/docs.ts";
 
 let app: App;
@@ -54,6 +59,100 @@ const sent = async (id: ConversationId) =>
     (await modelTexts(app, id)).filter(
         (text) => text.includes("<linked-session-message>") && !text.includes("echo:"),
     ).length;
+
+test("linked sessions can work in another folder without moving the source", async () => {
+    const id = await source();
+    const original = app.cwdOf(id);
+    const cwd = join(root, "specialist-repository");
+
+    mkdirSync(cwd);
+    const request = { message: "Work in the specialist repository", cwd };
+    const { session } = await app.linkedSessions.start(id, request, "other-folder");
+
+    assert.equal(app.cwdOf(session), cwd);
+    assert.equal((await app.agentState(session))?.cwd, cwd);
+    assert.equal(app.cwdOf(id), original);
+    assert.equal((await app.linkedSessions.start(id, request, "other-folder")).session, session);
+    const inherited = await start(id);
+
+    assert.equal(app.cwdOf(inherited.session), original);
+});
+
+test("the first linked request loads the destination's project instructions and runs tools there", async () => {
+    const origin = join(root, "context-source");
+    const destination = join(root, "context-destination");
+
+    mkdirSync(origin);
+    mkdirSync(destination);
+    writeFileSync(join(origin, "AGENTS.md"), "SOURCE_PROJECT_ONLY: Instructions for the source.");
+    writeFileSync(
+        join(destination, "AGENTS.md"),
+        "DESTINATION_PROJECT_ONLY: Instructions for the destination.",
+    );
+    let firstRequest = "";
+    const model = scriptedModel((request) => {
+        const { text, role } = lastText(request as never);
+
+        if (role === "user" && text.includes("RUN_DIRECTORY_PROBE")) {
+            firstRequest ||= JSON.stringify(request);
+
+            return fauxAssistantMessage([fauxToolCall("bash", { command: "pwd" })], {
+                stopReason: "toolUse",
+            });
+        }
+
+        return fauxAssistantMessage([fauxText("Done.")]);
+    });
+    const isolated = await openApp(model, join(root, "context-data"));
+
+    try {
+        const source = await newSession(isolated, origin);
+
+        await say(isolated, source, "Hello");
+        const { session } = await isolated.linkedSessions.start(
+            source,
+            { cwd: destination, message: "RUN_DIRECTORY_PROBE" },
+            "context-and-tools",
+        );
+
+        await until(() => !isolated.isBusy(session), "the directory probe to finish");
+        assert.match(firstRequest, /DESTINATION_PROJECT_ONLY/);
+        assert.doesNotMatch(firstRequest, /SOURCE_PROJECT_ONLY/);
+        const view = await (await isolated.harness.conversation(session, context))!.context(
+            context,
+        );
+        const result = view.messages.find((message) => message.role === "toolResult");
+
+        assert(result && result.role === "toolResult", "the first turn ran its shell tool");
+        assert.equal(result.isError, false);
+        assert.equal(
+            result.content
+                .flatMap((part) => (part.type === "text" ? [part.text] : []))
+                .join("")
+                .trim(),
+            destination,
+        );
+        assert.equal(isolated.cwdOf(source), origin);
+    } finally {
+        await isolated.close();
+    }
+});
+
+test("an invalid working directory creates no linked session", async () => {
+    const id = await source();
+    const file = join(root, "not-a-directory");
+
+    writeFileSync(file, "file");
+    const count = app.sessions().length;
+
+    for (const cwd of [join(root, "missing-directory"), file]) {
+        await assert.rejects(
+            app.linkedSessions.start(id, { message: "a task", cwd }, crypto.randomUUID()),
+            /isn't there|not a folder/,
+        );
+        assert.equal(app.sessions().length, count);
+    }
+});
 
 test("a repeated start or send makes one session or one message", async () => {
     const id = await source();
