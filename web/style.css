@@ -138,15 +138,15 @@
      * buttons and list rows; icon buttons, fields, and segmented tracks; cards and primary buttons; windows, approval
      * cards, and peek tiles; the message box, sheets, and the launcher; PiP. Pills and avatars are round (999px).
      */
-    --r-mark: 3px;
-    --r-tag: 5px;
-    --r-seg: 7px;
-    --r-row: 9px;
-    --r-control: 10px;
-    --r-card: 12px;
-    --r-window: 14px;
-    --r-sheet: 18px;
-    --r-float: 20px;
+    --r-mark: 2px;
+    --r-tag: 4px;
+    --r-seg: 5px;
+    --r-row: 6px;
+    --r-control: 7px;
+    --r-card: 8px;
+    --r-window: 10px;
+    --r-sheet: 12px;
+    --r-float: 12px;
     --r-pill: 999px;
     /* Fields and plain controls that name no corner of their own. */
     --radius: var(--r-control);
