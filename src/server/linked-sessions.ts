@@ -797,7 +797,8 @@ export class LinkedSessions implements LinkedSessionsApi {
 
     /**
      * Send `message` from `source` to `target` as `user`, once for `token`: a repeat finds the first. The checks run
-     * first, then the count of messages without a person, then `record`, then the message goes.
+     * first, then the count of messages since a person wrote (counted only, no limit since 0.19.0), then `record`, then
+     * the message goes.
      */
     async #deliver(
         source: ConversationId,
