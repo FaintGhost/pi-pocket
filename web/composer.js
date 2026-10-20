@@ -416,6 +416,13 @@ export function Composer() {
     const busy = view.live.busy;
     const agent = view.agent;
 
+    // A send mode is for the run it was chosen in: when Pi stops working, the next run starts with Steer, so an unused
+    // Interrupt does not stop it.
+    useEffect(() => {
+        if (!busy) {
+            setSendMode("steer");
+        }
+    }, [busy]);
     useEffect(() => {
         const draft = drafts.get(conversationId);
 

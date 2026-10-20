@@ -3148,6 +3148,18 @@ pre.diff .del {
     }
 }
 
+/* At 320 px (an iPhone SE), Steer, Queue, and Interrupt would push Stop out of the box: while Pi works, Attach goes and
+ * the three get closer. Attach comes back when Pi stops. */
+@container composer (max-width: 320px) {
+    .composer.busy .composer-row .attach-button {
+        display: none;
+    }
+
+    .composer.busy .mode-switch button {
+        padding-inline: 6px;
+    }
+}
+
 .chip {
     display: inline-flex;
     align-items: center;
