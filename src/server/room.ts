@@ -158,6 +158,8 @@ export interface Client {
     boardSeq?: number;
     /** The JSON of the subagents this tab's board last got, so an unchanged list is not sent again. */
     boardSent?: string;
+    /** The JSON of the session list this tab last got, so an unchanged list is not sent again. */
+    sessionsSent?: string;
     /**
      * This tab's PiP panel, while open: a view of PiP's conversation beside the one the tab shows, which reaches the tab
      * as `pipview` events (`PocketApp.setPip`).
