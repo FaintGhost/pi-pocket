@@ -64,11 +64,17 @@ const POCKET_MEMBERS: Record<keyof Pocket, true> = {
     launcher: true,
     page: true,
     sheet: true,
+    panel: true,
+    status: true,
+    topbar: true,
+    arrange: true,
     toolCall: true,
     openPage: true,
     closePage: true,
     openSheet: true,
     closeSheet: true,
+    openPanel: true,
+    closePanel: true,
     style: true,
     onDispose: true,
 };
@@ -101,6 +107,9 @@ export default function (pocket) {
 	}
 
 	pocket.page({ id: "meter", title: "Meter", component: Meter });
+	pocket.panel({ id: "dial", title: "Dial", icon: "pulse", component: () => html\`<p class="dial">Dial</p>\` });
+	pocket.status({ id: "watts", text: "46W · 74° · 95%", short: "46W", title: "Node 1", panel: "dial", before: "core:here" });
+	pocket.arrange("status", { hide: ["core:spend"] });
 	const rail = pocket.rail({ id: "meter", title: "Meter", icon: "pulse", page: "meter" });
 	// The tests reach this version's pocket, and its rail button, through these.
 	globalThis.meterPocket = pocket;
@@ -281,6 +290,43 @@ test(
             async () => (await has(".composer")) && !(await has(".ext-page")),
             "normal conversation navigation",
         );
+    },
+);
+
+test(
+    "a status item opens its panel beside the conversation, which the Files panel replaces",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has('[data-part="status-item"]'), "the meter's status item");
+        assert.equal(await text('[data-part="status-item"] .long'), "46W · 74° · 95%");
+        // The module put its item first and hid the spend; the person's own choice brings the spend back.
+        const line = () =>
+            inPage<string>(
+                `return JSON.stringify(document.querySelector(".status-line").innerText.replace(/\\s+/g, " ").trim())`,
+            );
+
+        assert.match(await line(), /^46W · 74° · 95% 1 here/);
+        assert.doesNotMatch(await line(), /\$0\.00/);
+        await inPage(
+            `(await import("/slots.js")).setShown("status", "core:spend", true); return "null";`,
+        );
+        await until(async () => /\$0\.00/.test(await line()), "the spend shown again");
+        await inPage(`(await import("/slots.js")).resetSlot("status"); return "null";`);
+        await settled();
+        await page.click({ selector: '[data-part="status-item"]' });
+        await until(
+            () => has(".layout.paneling .ext-panel .dial"),
+            "the panel beside the conversation",
+        );
+        assert.equal(await has(".composer"), true, "the conversation stays beside it");
+
+        // A reload keeps it, and one panel shows at a time.
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(".ext-panel .dial"), "the panel after a reload");
+        await inPage(`(await import("/files-panel.js")).setFilesOpen(true); return "null";`);
+        await until(async () => !(await has(".ext-panel")), "the Files panel in its place");
+        await inPage(`(await import("/files-panel.js")).setFilesOpen(false); return "null";`);
     },
 );
 

@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import { browserAvailable, displayUrl, setBrowserOpen } from "../browser.js";
 import { chatUnread } from "../chat.js";
 import { schedulesAvailable, triggersOn, watchAvailable, watchPr } from "../commands.js";
-import { extensionMenuItems, safeMode } from "../extension-ui.js";
+import { extensionMenuItems, extensionPlaces, safeMode } from "../extension-ui.js";
 import { useChanges } from "../diff.js";
 import { filesAvailable, setFilesOpen } from "../files-panel.js";
 import { peeksOn, togglePeeks } from "../peeks.js";
@@ -148,6 +148,8 @@ function PlacesGrid({ changes = null }) {
                 closeSheet();
             },
         },
+        // Extensions' panels, after the app's own places.
+        ...extensionPlaces(),
     ].filter(Boolean);
 
     return html`<nav class="places" aria-label="Places">
@@ -157,13 +159,14 @@ function PlacesGrid({ changes = null }) {
                 type="button"
                 class=${`place ${place.on ? "on" : ""}`}
                 data-place=${place.id}
-                aria-label=${place.count > 0 ? `${place.label}, ${place.count} ${place.counted ?? ""}`.trim() : place.dot ? `${place.label}, ${place.dotLabel ?? "a page open"}` : place.label}
+                aria-label=${place.count > 0 ? `${place.label}, ${place.count} ${place.counted ?? ""}`.trim() : place.badge ? `${place.label}, ${place.badge}` : place.dot ? `${place.label}, ${place.dotLabel ?? "a page open"}` : place.label}
                 aria-pressed=${place.on === undefined ? undefined : place.on ? "true" : "false"}
                 onClick=${place.run}
             >
                 <span class="place-icon badge-host">
-                    <${Icon} name=${place.icon} size=${20} />
+                    <${Icon} name=${place.icon} path=${place.iconPath} size=${20} />
                     ${place.count > 0 && html`<span class="badge">${place.count}</span>`}
+                    ${place.badge && html`<span class="badge">${place.badge}</span>`}
                     ${place.dot && html`<span class="browser-dot" aria-hidden="true"></span>`}
                 </span>
                 <span class="place-label">${place.label}</span>

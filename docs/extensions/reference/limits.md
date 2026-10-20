@@ -16,7 +16,7 @@ All the numbers that limit a module, in one place. Each group links to the guide
 [Names](names.md)
 
 - **A module that adds to the app:** a name of 64 characters at most. [Modules, loading, and errors](../modules.md)
-- **An id of a rail button, menu row, launcher action, page, or sheet:** 64 characters at most. [Browser modules](../browser-modules.md)
+- **An id of a rail button, menu row, launcher action, page, sheet, panel, or status item:** 64 characters at most. [Browser modules](../browser-modules.md)
 - **A command's name:** 64 characters at most. [Slash commands](../commands.md)
 - **An event's name:** 1 to 64 characters. [Events](../events.md)
 - **A gallery entry's name:** 2 to 64 characters. [Publishing to the gallery](../publishing.md)
@@ -50,7 +50,8 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **Notices from `pocket.notify`:** 5 every 5 s for a module, for all its versions together. The app drops the rest.
 - **Rail buttons of modules:** together, the height of 4 buttons. Past that, they scroll.
 - **A count on a rail button:** a count past 99, and `Infinity`, shows "99+".
-- **Text on a rail button:** past 24 characters, it is cut to 23 characters and "…".
+- **Text on a rail button:** past 24 characters, it is cut to 23 characters and "…". A panel's badge is the same.
+- **Text of a status item:** past 40 characters, `text` and `short` are cut to 39 characters and "…".
 - **Swipe back on a page:** on touch screens up to 699 px wide.
 
 ## Tool calls
