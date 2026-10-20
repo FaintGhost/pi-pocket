@@ -2496,6 +2496,41 @@ export class PocketApp {
         }
     }
 
+    /**
+     * The owner starts the LANCET model download. It runs on in the background; every tab hears each step in the guard's
+     * status, and everyone in the app is told how it ended.
+     */
+    async setupGuardModel(user: User): Promise<void> {
+        if (user.role !== "owner") {
+            throw new HttpError(403, "Only the owner can do that");
+        }
+
+        if (this.guard.directory === undefined) {
+            throw new HttpError(400, "specpi-lancet-guard is not installed in Pi");
+        }
+
+        if ((await this.guard.model())?.state === "ready") {
+            return;
+        }
+
+        const refresh = () => void this.#refreshClients().catch(() => {});
+        const run = this.guard.setupModel(refresh);
+
+        this.notice("info", `${user.name} started the LANCET model download.`);
+        refresh();
+        run.then(
+            () => {
+                this.notice("info", "The LANCET model is installed.");
+
+                if (this.guardOn()) {
+                    void this.guard.warm().catch(() => {});
+                }
+            },
+            (error: unknown) =>
+                this.notice("warning", `The LANCET model download failed: ${describe(error)}`),
+        ).finally(refresh);
+    }
+
     /** The owner changes who may allow risky calls. */
     async setApprovalRule(user: User, rule: unknown): Promise<void> {
         if (user.role !== "owner") {
@@ -2854,6 +2889,7 @@ export class PocketApp {
             this.#unsubscribeCommits?.();
             this.#unsubscribeApprovals?.();
             this.#unsubscribeBrowsers?.();
+            this.guard.close();
 
             // Modules' cleanups may wait (closing a connection), but not for long: the rest must close too.
             const cleaned = this.loader?.close();

@@ -35,6 +35,36 @@ function guardNote(module, guard) {
     };
 }
 
+/** The LANCET model Lancet Guard scores commands with: a one-time download the owner starts here. */
+function GuardModel({ owner, model, onStart }) {
+    if (!model || model.state === "ready") {
+        return null;
+    }
+
+    const downloading = model.state === "downloading";
+
+    return html`<div class="setting">
+        <div class="grow">
+            <div class="small">LANCET model</div>
+            <div class=${`small ${model.state === "failed" ? "warn" : "muted"}`}>
+                ${
+                    model.state === "missing"
+                        ? "Not downloaded yet. The guard needs it to score commands. The download (about 109 MB) comes from the LANCET-model GitHub release, is checked against fixed checksums, and Pi uses it too."
+                        : model.detail
+                }
+            </div>
+        </div>
+        ${
+            downloading
+                ? html`<${Loader} label="Downloading" />`
+                : owner &&
+                  html`<button class="button small primary" onClick=${onStart}>
+                      ${model.state === "failed" ? "Try again" : "Download"}
+                  </button>`
+        }
+    </div>`;
+}
+
 /** Who may allow a risky call: anyone who can steer, or (for guests) someone other than whoever asked for it. */
 function ApprovalRule({ owner }) {
     const others = store.state.server?.approvalRule === "others";
@@ -231,6 +261,14 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
     useEffect(() => {
         load();
     }, [galleryInstalled]);
+    // The model download changes the guard's status in every tab (the server pushes it): read the list again.
+    const modelState = store.state.guard?.model?.state;
+
+    useEffect(() => {
+        if (data) {
+            load();
+        }
+    }, [modelState]);
     useLayoutEffect(() => {
         if (confirmGuard) {
             guardCancel.current?.focus();
@@ -350,6 +388,17 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
                                         ${
                                             note &&
                                             html`<div class=${`small ${note.warn ? "warn" : "ok"}`}>${note.text}</div>`
+                                        }
+                                        ${
+                                            module.file === "guard.ts" &&
+                                            html`<${GuardModel}
+                                                owner=${owner}
+                                                model=${store.state.guard?.model ?? data.guard.model}
+                                                onStart=${() =>
+                                                    attempt(async () =>
+                                                        setData(await api("guard/model", {})),
+                                                    )}
+                                            />`
                                         }
                                         ${
                                             module.file === "guard.ts" &&
