@@ -1,6 +1,7 @@
 // The sign-in screen, for a browser that is not signed in.
 
 import { useState } from "preact/hooks";
+import { t } from "./i18n.js";
 import { html } from "./ui.js";
 
 export function SignIn() {

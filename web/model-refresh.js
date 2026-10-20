@@ -1,4 +1,5 @@
 // One refresh action and its persistent feedback, shared by the menu, Providers, and the launcher.
+import { t } from "./i18n.js";
 import { api, notify, store } from "./store.js";
 import { html, Icon } from "./ui.js";
 
