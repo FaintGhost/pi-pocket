@@ -1620,3 +1620,23 @@ export function readable(text) {
         return text;
     }
 }
+
+/** A place's tile: its icon, with a count or a dot, and its label. */
+export function PlaceTile({ place }) {
+    return html`<button
+        type="button"
+        class=${`place ${place.on ? "on" : ""}`}
+        data-place=${place.id}
+        aria-label=${place.count > 0 ? `${place.label}, ${place.count} ${place.counted ?? ""}`.trim() : place.badge ? `${place.label}, ${place.badge}` : place.dot ? `${place.label}, ${place.dotLabel ?? "a page open"}` : place.label}
+        aria-pressed=${place.on === undefined ? undefined : place.on ? "true" : "false"}
+        onClick=${place.run}
+    >
+        <span class="place-icon badge-host">
+            <${Icon} name=${place.icon} path=${place.iconPath} size=${20} />
+            ${place.count > 0 && html`<span class="badge">${place.count}</span>`}
+            ${place.badge && html`<span class="badge">${place.badge}</span>`}
+            ${place.dot && html`<span class="browser-dot" aria-hidden="true"></span>`}
+        </span>
+        <span class="place-label">${place.label}</span>
+    </button>`;
+}

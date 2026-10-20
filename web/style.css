@@ -822,10 +822,13 @@ kbd {
     :root[data-tiling="on"][data-focus="sidebar"] .sidebar,
     :root[data-tiling="on"][data-focus="browser-panel"] .browser,
     :root[data-tiling="on"][data-focus="files-panel"] .files-tile,
+    :root[data-tiling="on"][data-focus="extension-panel"] .ext-panel,
     :root[data-tiling="on"][data-focus="people-panel"] .people,
     :root[data-tiling="on"]:not([data-focus="sidebar"]):not([data-focus="browser-panel"]):not(
             [data-focus="files-panel"]
-        ):not([data-focus="people-panel"]):not([data-focus="peeks"])
+        ):not([data-focus="extension-panel"]):not([data-focus="people-panel"]):not(
+            [data-focus="peeks"]
+        )
         .pane {
         border-color: var(--window-border-active);
         box-shadow: var(--window-ring);
@@ -3493,6 +3496,39 @@ pre.diff .del {
 
 .status-line[data-short~="words"] .speed .short {
     display: inline;
+}
+
+/* Extensions' items: their text, in a tone, and their short form on a narrow line. */
+.status-line .ext-status .short,
+.status-line[data-short~="ext"] .ext-status .long {
+    display: none;
+}
+
+.status-line[data-short~="ext"] .ext-status .short {
+    display: inline;
+}
+
+.status-line .ext-status.warn {
+    color: var(--warn);
+}
+
+.status-line .ext-status.error {
+    color: var(--err);
+}
+
+.status-line .ext-status.muted {
+    color: var(--faint);
+}
+
+/* One whose page or panel is open: lit in the accent, as the top bar's toggles are. */
+.status-line .ext-status.on {
+    color: var(--accent);
+}
+
+@media (hover: hover) {
+    .status-line button.ext-status:hover {
+        color: var(--text);
+    }
 }
 
 /* Words that go from sight but not from a screen reader: "77%" is still the context's, "1.2s" the first token's. */
@@ -8896,6 +8932,33 @@ textarea.notes {
     color: var(--muted);
 }
 
+/* Appearance → Layout: a slot's items, each with arrows to move it and a switch to show it. */
+.slot-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.slot-moves {
+    display: flex;
+    flex: none;
+}
+
+.slot-moves .icon-button {
+    width: 30px;
+    height: 30px;
+    color: var(--muted);
+}
+
+.slot-moves .icon-button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.slot-moves .slot-earlier {
+    transform: scaleX(-1);
+}
+
 .shortcuts {
     display: grid;
     grid-template-columns: 9.5rem 1fr;
@@ -10744,6 +10807,101 @@ textarea.notes {
     }
 }
 
+/* ─── Extension panels ─────────────────────────────────────── */
+
+/* An extension's panel takes the Files tile's place: over the conversation below 1100px, a window beside it above. */
+.ext-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    animation: popin var(--t-in) var(--ease-out);
+}
+
+@media (max-width: 1099px) {
+    :root[data-tiling="on"] .ext-panel.window {
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+}
+
+@media (min-width: 1100px) {
+    .layout.paneling .ext-panel {
+        position: relative;
+        inset: auto;
+        z-index: auto;
+        flex: 0 0 var(--ext-panel-w, 400px);
+        max-width: calc(100% - 440px);
+        height: 100dvh;
+        border-left: 1px solid var(--hair);
+        animation-delay: 90ms;
+    }
+    .layout.paneling .ext-panel.wide {
+        --ext-panel-w: 44%;
+    }
+    :root[data-tiling="on"] .layout.paneling .ext-panel {
+        height: auto;
+    }
+}
+
+.ext-panel-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    height: calc(58px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 10px 0 14px;
+    border-bottom: 1px solid var(--hair);
+}
+
+.ext-panel-bar .icon-button {
+    width: 34px;
+    height: 34px;
+    color: var(--muted);
+}
+
+.ext-panel-bar .ext-panel-back {
+    width: 44px;
+    height: 44px;
+    margin-left: -8px;
+    color: var(--text);
+}
+
+@media (hover: hover) {
+    .ext-panel-bar .icon-button:hover {
+        color: var(--text);
+    }
+}
+
+.ext-panel-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.ext-panel-title h2 {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.ext-panel-sub {
+    color: var(--faint);
+    font-size: 11.5px;
+}
+
+.ext-panel-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+}
+
 /* The bar: Files and Changes as a switch, the folder, and close. */
 .files-bar {
     display: flex;
@@ -12299,7 +12457,7 @@ textarea.notes {
 }
 
 /* Focus lands on the whole tile or panel where it covers the conversation: no ring around the screen. */
-.layout > :is(.files-tile, .browser):focus-visible {
+.layout > :is(.files-tile, .browser, .ext-panel):focus-visible {
     outline: none;
 }
 
@@ -12310,11 +12468,13 @@ textarea.notes {
 @media (max-width: 1099px) {
     /* Past the tiled windows' pop-in, which would otherwise win. */
     :root .layout > .files-tile.window,
-    :root .layout > .browser.window {
+    :root .layout > .browser.window,
+    :root .layout > .ext-panel.window {
         animation: push-in 0.36s var(--ease-out);
     }
     :root .layout > .files-tile.window.leaving,
-    :root .layout > .browser.window.leaving {
+    :root .layout > .browser.window.leaving,
+    :root .layout > .ext-panel.window.leaving {
         animation: push-out 0.24s var(--ease-in-out) forwards;
     }
 }

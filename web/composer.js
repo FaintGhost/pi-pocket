@@ -26,6 +26,7 @@ import {
     uid,
 } from "./store.js";
 import { useDock } from "./dock.js";
+import { defineItem, slotItems } from "./slots.js";
 import { SubagentsBar } from "./subagents.js";
 import { TrustBar } from "./trust.js";
 import { prefs } from "./theme.js";
@@ -1337,16 +1338,7 @@ export function Composer() {
                         enterkeyhint=${coarse ? "enter" : "send"}
                     ></textarea>
                     <div class="composer-row" data-part="composer-tools">
-                        <${PlacesButton} />
-                        <button
-                            class="icon-button attach-button"
-                            data-part="composer-button"
-                            aria-label="Attach files"
-                            title="Attach files"
-                            onClick=${() => picker.current?.click()}
-                        >
-                            <${Icon} name="clip" size=${17} />
-                        </button>
+                        ${slotItems("composer", { picker, agent, level, view }).map(({ node }) => node)}
                         <input
                             ref=${picker}
                             type="file"
@@ -1357,32 +1349,6 @@ export function Composer() {
                                 event.currentTarget.value = "";
                             }}
                         />
-                        <button
-                            class=${`model-chip ${agent?.available === false ? "warn" : ""}`}
-                            data-part="model-chip"
-                            aria-label=${`Model: ${modelLabel(agent)}${level ? `, thinking ${level}` : ""}`}
-                            title=${`Model and thinking: ${modelLabel(agent)}${level ? `, ${level}` : ""}`}
-                            onClick=${() => openSheet({ type: "model" })}
-                        >
-                            <${Icon} name="sparkle" size=${12} class="model-spark" />
-                            <span class="model-name">${shortModel(agent)}</span>
-                            ${level && html`<span class="model-level">${level}</span>`}
-                            <${Icon} name="chevron" size=${12} stroke=${2.2} class="model-caret" />
-                        </button>
-                        ${
-                            planAvailable() &&
-                            view.conversation?.kind !== "subagent" &&
-                            html`<button
-                                class=${`plan-chip ${view.plan?.on ? "on" : ""}`}
-                                data-part="composer-button plan-chip"
-                                aria-pressed=${view.plan?.on === true}
-                                title="Plan mode: Pi reads and proposes, and changes nothing until you approve"
-                                onMouseDown=${(event) => event.preventDefault()}
-                                onClick=${() => attempt(() => actions.setPlan(!view.plan?.on))}
-                            >
-                                Plan
-                            </button>`
-                        }
                         <span class="grow"></span>
                         ${
                             busy &&
@@ -1454,6 +1420,68 @@ export function Composer() {
     </footer>`;
 }
 
+// The buttons on the left of the message box's row: the app's own items of the `composer` slot (slots.js), which a
+// person can hide and reorder in Appearance, with extensions' after them. Each gets what the box knows: its file
+// picker, the model and thinking level, and the session's view. Send, Stop, the mic, and Steer and Queue stay on the
+// right, always.
+defineItem("composer", {
+    id: "core:places",
+    label: "Places (phones)",
+    order: 100,
+    render: () => html`<${PlacesButton} />`,
+});
+defineItem("composer", {
+    id: "core:attach",
+    label: "Attach files",
+    order: 200,
+    render: ({ picker }) =>
+        html`<button
+            class="icon-button attach-button"
+            data-part="composer-button"
+            aria-label="Attach files"
+            title="Attach files"
+            onClick=${() => picker.current?.click()}
+        >
+            <${Icon} name="clip" size=${17} />
+        </button>`,
+});
+defineItem("composer", {
+    id: "core:model",
+    label: "Model",
+    order: 300,
+    render: ({ agent, level }) =>
+        html`<button
+            class=${`model-chip ${agent?.available === false ? "warn" : ""}`}
+            data-part="model-chip"
+            aria-label=${`Model: ${modelLabel(agent)}${level ? `, thinking ${level}` : ""}`}
+            title=${`Model and thinking: ${modelLabel(agent)}${level ? `, ${level}` : ""}`}
+            onClick=${() => openSheet({ type: "model" })}
+        >
+            <${Icon} name="sparkle" size=${12} class="model-spark" />
+            <span class="model-name">${shortModel(agent)}</span>
+            ${level && html`<span class="model-level">${level}</span>`}
+            <${Icon} name="chevron" size=${12} stroke=${2.2} class="model-caret" />
+        </button>`,
+});
+defineItem("composer", {
+    id: "core:plan",
+    label: "Plan",
+    order: 400,
+    render: ({ view }) =>
+        planAvailable() &&
+        view.conversation?.kind !== "subagent" &&
+        html`<button
+            class=${`plan-chip ${view.plan?.on ? "on" : ""}`}
+            data-part="composer-button plan-chip"
+            aria-pressed=${view.plan?.on === true}
+            title="Plan mode: Pi reads and proposes, and changes nothing until you approve"
+            onMouseDown=${(event) => event.preventDefault()}
+            onClick=${() => attempt(() => actions.setPlan(!view.plan?.on))}
+        >
+            Plan
+        </button>`,
+});
+
 /**
  * The message box grows with what is written, to 40% of the screen; its least height (two lines, or one on a short
  * screen) is the stylesheet's, and changes with the screen.
@@ -1512,10 +1540,10 @@ function PlacesButton() {
 
 /**
  * The status line's shorter forms, in the order a narrow line takes them until it fits on one row: shorter words and
- * gaps, no "1 here" while you are alone, the guard's and the context's labels, then the cache, then the wait for the
- * first token.
+ * gaps, no "1 here" while you are alone, extensions' items' short forms, the guard's and the context's labels, then the
+ * cache, then the wait for the first token.
  */
-const SHORTER = ["words", "here", "guard", "context", "cache", "wait"];
+const SHORTER = ["words", "here", "ext", "guard", "context", "cache", "wait"];
 /** What each status line was last fitted for: its text. Its width is the observer's to watch. */
 const fitted = new WeakMap();
 
@@ -1635,105 +1663,180 @@ function SpeedPart({ stats }) {
     </span>`;
 }
 
-/** Under the message box: who is here, how fast the last answer came (when turned on), how full the context is, the
- *  cache, the spend, and Lancet Guard. On one row: a narrow one takes shorter forms (`SHORTER`). */
-function StatusLine() {
-    const { view, connection, guard } = store.state;
-    const stats = view.stats ?? {};
-    const window = view.agent?.contextWindow;
-    const line = useRef(null);
-    const parts = [];
-    // What each item says, for a tap on the line: a touch screen shows no tooltips.
-    const details = [];
+// The status line's items: the app's own items of the `status` slot (slots.js), which a person can hide and reorder in
+// Appearance, with extensions' before the spend. The connection's warning leads and Lancet Guard ends it, always.
+defineItem("status", {
+    id: "core:connection",
+    label: "Connection",
+    order: 0,
+    fixed: true,
+    render() {
+        const { connection } = store.state;
 
-    useStatusFit(line);
-
-    if (connection !== "open") {
-        parts.push(
+        return (
+            connection !== "open" &&
             html`<span class="warn">
                 ${connection === "connecting" ? "connecting…" : "reconnecting…"}
-            </span>`,
+            </span>`
         );
-    }
+    },
+});
+defineItem("status", {
+    id: "core:here",
+    label: "People here",
+    order: 100,
+    render() {
+        const { view, presence } = store.state;
+        // People, not tabs: one person with a phone and a laptop open is one here (presence has a row per person).
+        const here = presence.length || view.viewers?.length || 1;
 
-    // People, not tabs: one person with a phone and a laptop open is one here (presence has a row per person).
-    const here = store.state.presence.length || view.viewers?.length || 1;
-
-    parts.push(
-        html`<span
+        return html`<span
             class=${`here ${here === 1 ? "alone" : ""}`}
             title=${`${(view.viewers ?? []).join(", ")}${view.clients > here ? ` · ${view.clients} tabs` : ""}`}
         >
             ${here} here
-        </span>`,
-    );
+        </span>`;
+    },
+});
+defineItem("status", {
+    id: "core:speed",
+    label: "Reply speed",
+    order: 200,
+    render: () =>
+        prefs().speed === true && html`<${SpeedPart} stats=${store.state.view.stats ?? {}} />`,
+});
 
-    if (prefs().speed === true) {
-        parts.push(html`<${SpeedPart} stats=${stats} />`);
+/** How full the context is: `{ used, window, percent, about }`, or null with no context window known. */
+function contextFill() {
+    const { view } = store.state;
+    const window = view.agent?.contextWindow;
+
+    if (!window) {
+        return null;
     }
 
-    if (window) {
-        const used = stats.contextTokens ?? 0;
-        const percent = Math.min(100, Math.round((used / window) * 100));
+    const used = view.stats?.contextTokens ?? 0;
+
+    return {
+        used,
+        window,
+        percent: Math.min(100, Math.round((used / window) * 100)),
         // Compacted since the last answer: what is left, estimated until the next answer measures it.
-        const about = stats.contextEstimated ? "~" : "";
-        const title = `${about}${formatTokens(used)} of ${formatTokens(window)} tokens in context`;
+        about: view.stats?.contextEstimated ? "~" : "",
+    };
+}
 
-        details.push(title);
+const contextTitle = ({ used, window, about }) =>
+    `${about}${formatTokens(used)} of ${formatTokens(window)} tokens in context`;
 
-        parts.push(
-            html`<span class="context" title=${title}>
+defineItem("status", {
+    id: "core:context",
+    label: "Context",
+    order: 300,
+    render() {
+        const fill = contextFill();
+
+        return (
+            fill &&
+            html`<span class="context" title=${contextTitle(fill)}>
                 <span class="word">context</span>
-                <span class=${`meter ${contextLevel(percent)}`} aria-hidden="true">
-                    <span style=${`width:${percent}%`}></span>
+                <span class=${`meter ${contextLevel(fill.percent)}`} aria-hidden="true">
+                    <span style=${`width:${fill.percent}%`}></span>
                 </span>
-                <span class="num">${about}${percent}%</span>
-            </span>`,
+                <span class="num">${fill.about}${fill.percent}%</span>
+            </span>`
         );
-    }
+    },
+    detail() {
+        const fill = contextFill();
 
-    if (stats.cacheRate !== undefined) {
-        details.push(`${Math.round(stats.cacheRate * 100)}% of the input came from the cache`);
-        parts.push(html`<span class="cache">
-                cache <span class="num">${Math.round(stats.cacheRate * 100)}%</span>
-            </span>`);
-    }
+        return fill && contextTitle(fill);
+    },
+});
 
-    // The session's spend, its subagents' included, and its limit; with a limit on a session that started others, the
-    // team's spend, which is what counts against it.
-    const spend = view.conversation?.spend;
-    const spent = spend?.spent ?? stats.cost ?? 0;
+const cacheRate = () => store.state.view.stats?.cacheRate;
 
-    details.push(
-        `$${spent.toFixed(2)} spent${spend?.budget !== undefined ? ` of $${spend.budget.toFixed(2)}` : ""}`,
-    );
-    parts.push(
-        html`<span class=${spend?.budget !== undefined && spent >= spend.budget ? "warn" : ""}>
-            <span class="num">
-                $${spent.toFixed(2)}
-                ${spend?.budget !== undefined ? `/$${spend.budget.toFixed(2)}` : ""}
-            </span>
+defineItem("status", {
+    id: "core:cache",
+    label: "Cache",
+    order: 400,
+    render: () =>
+        cacheRate() !== undefined &&
+        html`<span class="cache">
+            cache <span class="num">${Math.round(cacheRate() * 100)}%</span>
         </span>`,
-    );
+    detail: () =>
+        cacheRate() !== undefined &&
+        `${Math.round(cacheRate() * 100)}% of the input came from the cache`,
+});
 
-    // On but not loaded: the guard blocks bash, write, and edit until it loads or is turned off.
-    const failed = guard?.enabled && guard.available === false;
+/**
+ * The session's spend, its subagents' included, and its limit; with a limit on a session that started others, the
+ * team's spend, which is what counts against it.
+ */
+function spendNow() {
+    const { view } = store.state;
+    const spend = view.conversation?.spend;
 
-    if (guard?.enabled || guard?.available) {
+    return { spent: spend?.spent ?? view.stats?.cost ?? 0, budget: spend?.budget };
+}
+
+defineItem("status", {
+    id: "core:spend",
+    label: "Spend",
+    order: 600,
+    render() {
+        const { spent, budget } = spendNow();
+
+        return html`<span class=${budget !== undefined && spent >= budget ? "warn" : ""}>
+            <span class="num">
+                $${spent.toFixed(2)} ${budget !== undefined ? `/$${budget.toFixed(2)}` : ""}
+            </span>
+        </span>`;
+    },
+    detail() {
+        const { spent, budget } = spendNow();
+
+        return `$${spent.toFixed(2)} spent${budget !== undefined ? ` of $${budget.toFixed(2)}` : ""}`;
+    },
+});
+defineItem("status", {
+    id: "core:guard",
+    label: "Lancet Guard",
+    order: 700,
+    fixed: true,
+    render() {
+        const { guard } = store.state;
+        // On but not loaded: the guard blocks bash, write, and edit until it loads or is turned off.
+        const failed = guard?.enabled && guard.available === false;
+
+        if (!guard?.enabled && !guard?.available) {
+            return null;
+        }
+
         const state = failed ? "failed" : guard.enabled ? "on" : "off";
 
-        parts.push(
-            html`<button
-                class=${`guard ${guard.enabled && !failed ? "" : "off"}`}
-                aria-label=${`Lancet Guard ${state}`}
-                title=${guard.detail}
-                onClick=${() => openSheet({ type: "extensions", tab: "installed" })}
-            >
-                <${Icon} name="shield" size=${11} />
-                <span><span class="word">guard${" "}</span>${state}</span>
-            </button>`,
-        );
-    }
+        return html`<button
+            class=${`guard ${guard.enabled && !failed ? "" : "off"}`}
+            aria-label=${`Lancet Guard ${state}`}
+            title=${guard.detail}
+            onClick=${() => openSheet({ type: "extensions", tab: "installed" })}
+        >
+            <${Icon} name="shield" size=${11} />
+            <span><span class="word">guard${" "}</span>${state}</span>
+        </button>`;
+    },
+});
+
+/** Under the message box: the `status` slot's items, on one row: a narrow one takes shorter forms (`SHORTER`). */
+function StatusLine() {
+    const line = useRef(null);
+    const items = slotItems("status");
+    const parts = items.map(({ node }) => node);
+    // What each item says, for a tap on the line: a touch screen shows no tooltips.
+    const details = items.map(({ detail }) => detail).filter(Boolean);
+
+    useStatusFit(line);
 
     // A tap on the line says what it shows (the guard's pill has its own); with a mouse, the tooltips do.
     const explain = (event) => {

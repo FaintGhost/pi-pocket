@@ -65,6 +65,21 @@ const emptyView = () => ({
     subagentsHeld: null,
 });
 
+/** Where a tab keeps the extension panel it shows (`extPanel`), as `{ module, id }`. */
+export const EXT_PANEL_KEY = "pocket.extPanel";
+
+function readExtPanel() {
+    try {
+        const kept = JSON.parse(sessionStorage.getItem(EXT_PANEL_KEY));
+
+        return typeof kept?.module === "string" && typeof kept.id === "string"
+            ? { module: kept.module, id: kept.id }
+            : null;
+    } catch {
+        return null;
+    }
+}
+
 export const store = {
     state: {
         me: undefined, // undefined: unknown, null: signed out
@@ -111,6 +126,11 @@ export const store = {
         boardAgents: null,
         /** An extension's page in the conversation's place, as the board shows (`extension-ui.js`): `{ module, id }`. */
         page: null,
+        /**
+         * An extension's panel beside the conversation, where the Browser and Files panels dock (`extension-ui.js`):
+         * `{ module, id }`. Kept per tab, like the browser's.
+         */
+        extPanel: readExtPanel(),
         /** Counts changes to what extensions' browser modules add (`extension-ui.js`), so what shows them draws again. */
         extensionsRev: 0,
         /** Counts the lists of files for @ mentions that arrived; the lists themselves are kept in `files.js`. */
@@ -1187,12 +1207,14 @@ function sheetChange(sheet, state) {
     sessionStorage.setItem(PEOPLE_KEY, "1");
     sessionStorage.removeItem("pocket.browser");
     sessionStorage.removeItem("pocket.files");
+    sessionStorage.removeItem(EXT_PANEL_KEY);
 
     return {
         sheet: null,
         peopleOpen: true,
         browserOpen: false,
         filesOpen: false,
+        extPanel: null,
         peopleAsk: {
             tab: sheet.tab ?? null,
             highlight: sheet.highlight ?? null,
