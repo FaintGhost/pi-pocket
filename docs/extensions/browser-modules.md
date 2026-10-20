@@ -131,10 +131,10 @@ These, and slots, came in 0.19.0, and are experimental: they can change in a min
 
 The top bar's buttons, the status line's items, the places' tiles, the message box's buttons on its left, and the actions under Pi's answers are **slots**: lists of named items, the app's own (`core:files`, `core:spend`) and modules' (`ext:<module>:<id>`). The same rules place them all, so a module, or a person, can change how they show.
 
-- **Where a module's item goes:** give a status item or a top bar button `before` or `after` an id: `pocket.status({ id: "watts", text, after: "core:context" })`.
+- **Where a module's item goes:** give a status item, a top bar button, a message box button, or an action under answers `before` or `after` an id: `pocket.status({ id: "watts", text, after: "core:context" })`.
 - **Arranging a slot:** `pocket.arrange("topbar", { hide: ["core:artifacts"], order: ["core:files", "core:browser"] })` hides and reorders items, the app's own too, in the tabs that load the module. This is for an owner who wants their own layout in a drop-in.
 - **A person's own choice wins.** Appearance → Layout lists each slot's items, with a switch to show or hide each one and arrows to move it. An item that a module hid says so there, and the person can show it again. Reset goes back to the defaults and what modules arranged.
-- **Fixed items** always show, in their places: the menu, More under an answer, the connection's warning, and Lancet Guard. Send, Stop, the mic, and Steer and Queue are not in a slot.
+- **Fixed items** always show, in their places: the menu, More under an answer, the connection's warning, and Lancet Guard. Send, Stop, the mic, and Steer, Queue and Interrupt are not in a slot.
 
 [The pocket reference](reference/pocket.md#slots) lists the ids of each slot.
 

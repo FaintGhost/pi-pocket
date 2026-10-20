@@ -16,7 +16,7 @@ All the numbers that limit a module, in one place. Each group links to the guide
 [Names](names.md)
 
 - **A module that adds to the app:** a name of 64 characters at most. [Modules, loading, and errors](../modules.md)
-- **An id of a rail button, menu row, launcher action, page, sheet, panel, or status item:** 64 characters at most. [Browser modules](../browser-modules.md)
+- **An id of a rail button, menu row, launcher action, page, sheet, panel, status item, top bar button, message box button, or action under answers:** 64 characters at most. [Browser modules](../browser-modules.md)
 - **A command's name:** 64 characters at most. [Slash commands](../commands.md)
 - **An event's name:** 1 to 64 characters. [Events](../events.md)
 - **A gallery entry's name:** 2 to 64 characters. [Publishing to the gallery](../publishing.md)

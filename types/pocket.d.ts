@@ -880,7 +880,7 @@ export type StatusSpec = (Action | { page?: never; sheet?: never; panel?: never;
 export type Placement = { before?: string; after?: never } | { after?: string; before?: never };
 
 /**
- * A button in the top bar, after the app's own buttons for the session's places and before the menu.
+ * A button in the top bar, after `core:browser` and before `core:artifacts`, `core:people`, and the menu.
  * @since 0.19.0
  * @experimental
  */

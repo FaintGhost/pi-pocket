@@ -1,6 +1,6 @@
 // Server status's browser module: a button on the rail, an action in the launcher, an item in the status line, and a
-// page in the conversation's place with what `server-status.ts` reports. The app loads it and calls its default export with `pocket`, the app's
-// API for extensions (docs/extensions.md).
+// page in the conversation's place with what `server-status.ts` reports. The app loads it and calls its default
+// export with `pocket`, the app's API for extensions (docs/extensions.md).
 
 /** The version of `pocket` this module was written for: an older app does not load it. */
 export const pocketApi = 1;

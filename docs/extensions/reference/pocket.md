@@ -374,7 +374,7 @@ topbar(spec: TopbarSpec): Added<TopbarSpec>;
 
 Since 0.19.0 · Experimental
 
-Adds a button in the top bar, after the app's own buttons for the session's places and before the menu. On a phone, and in a narrow pane, it goes from the top bar, as the Files button does. See [`TopbarSpec`](#topbarspec).
+Adds a button in the top bar, after `core:browser` and before `core:artifacts`, `core:people`, and the menu. On a phone, and in a narrow pane, it goes from the top bar, as the Files button does. See [`TopbarSpec`](#topbarspec).
 
 ### `composerButton`
 
@@ -384,7 +384,7 @@ composerButton(spec: ComposerButtonSpec): Added<ComposerButtonSpec>;
 
 Since 0.19.0 · Experimental
 
-Adds a button on the left of the message box's row, after the app's own (Attach, the model, Plan). Send, Stop, the mic, and Steer and Queue stay on the right. See [`ComposerButtonSpec`](#composerbuttonspec).
+Adds a button on the left of the message box's row, after the app's own (Attach, the model, Plan). Send, Stop, the mic, and Steer, Queue and Interrupt stay on the right. See [`ComposerButtonSpec`](#composerbuttonspec).
 
 ### `replyAction`
 
@@ -720,7 +720,7 @@ type Placement = { before?: string; after?: never } | { after?: string; before?:
 
 Since 0.19.0 · Experimental
 
-Where a status item or a top bar button goes in its slot: just before or just after the item with this id, such as `"core:spend"`. When that item is not there, or without either field, it goes in the place that the slot keeps for extensions. A person's order wins. [Slots](#slots) lists the ids.
+Where a status item, a top bar button, a message box button, or an action under answers goes in its slot: just before or just after the item with this id, such as `"core:spend"`. When that item is not there, or without either field, it goes in the place that the slot keeps for extensions. A person's order wins. [Slots](#slots) lists the ids.
 
 ### `TopbarSpec`
 
@@ -813,13 +813,13 @@ A slot is a place in the app that is a list of named items: the app's own items 
 
 What shows comes in layers, the last one wins: each item's default place, then the `before` or `after` of a module's own item, then each module's `arrange`, then the person's own choices in Appearance → Layout. These are kept in the browser.
 
-| Slot       | Ids, in their default order                                                                                                       | Fixed                                                               | Modules' items go           |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | --------------------------- |
-| `topbar`   | `core:subagents`, `core:changes`, `core:peeks`, `core:files`, `core:browser`, `core:artifacts`, `core:people`, `core:menu`        | `core:menu`, last                                                   | after `core:browser`        |
-| `status`   | `core:connection`, `core:here`, `core:speed`, `core:context`, `core:cache`, `core:spend`, `core:guard`                            | `core:connection`, `core:guard`                                     | after `core:cache`          |
-| `places`   | `core:files`, `core:changes`, `core:browser`, `core:artifacts`, `core:chat`, `core:find`, `core:branch`, `core:pip`, `core:peeks` | none                                                                | last: a tile for each panel |
-| `composer` | `core:places`, `core:attach`, `core:model`, `core:plan`                                                                           | none (Send, Stop, the mic, and Steer and Queue are not in the slot) | after `core:plan`           |
-| `reply`    | `core:react`, `core:discuss`, `core:pin`, `core:copy`, `core:more`                                                                | `core:more`, last                                                   | before `core:more`          |
+| Slot       | Ids, in their default order                                                                                                       | Fixed                                                                          | Modules' items go           |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------- |
+| `topbar`   | `core:subagents`, `core:changes`, `core:peeks`, `core:files`, `core:browser`, `core:artifacts`, `core:people`, `core:menu`        | `core:menu`, last                                                              | after `core:browser`        |
+| `status`   | `core:connection`, `core:here`, `core:speed`, `core:context`, `core:cache`, `core:spend`, `core:guard`                            | `core:connection`, `core:guard`                                                | after `core:cache`          |
+| `places`   | `core:files`, `core:changes`, `core:browser`, `core:artifacts`, `core:chat`, `core:find`, `core:branch`, `core:pip`, `core:peeks` | none                                                                           | last: a tile for each panel |
+| `composer` | `core:places`, `core:attach`, `core:model`, `core:plan`                                                                           | none (Send, Stop, the mic, and Steer, Queue and Interrupt are not in the slot) | after `core:plan`           |
+| `reply`    | `core:react`, `core:discuss`, `core:pin`, `core:copy`, `core:more`                                                                | `core:more`, last                                                              | before `core:more`          |
 
 An item that has nothing to show now shows nothing, wherever it is: Changes with no changes, the cache before the first answer, a quiet button.
 
