@@ -216,7 +216,7 @@ interface HumanLinkedSessions {
 
 Since 0.16.0 · Stable
 
-`cwd` is since 0.19.0. It names an existing folder for the new session, as in [`host.linkedSessions.start`](host.md#linkedsessions). An older Pi Pocket ignores it.
+`cwd` is since 0.19.0. It names an existing folder for the new session, as in [`host.linkedSessions.start`](host.md#linkedsessions). A blank `cwd` counts as no `cwd`. A relative `cwd` resolves against the folder of the server process, not the folder of the source. An older Pi Pocket ignores it.
 
 - `start` acts as the authenticated person and bound source, never the source's last requester. There is no actor override. Current seeing, steering, turn, plan, spend, team, model allow-list, and provider checks apply. The person must see all sessions to start one.
 - Explicit `thinking` must be supported and no higher than the source's level; it is never silently lowered. Omission inherits with the existing model cap policy. Use `host.modelInfo` for effective choices.

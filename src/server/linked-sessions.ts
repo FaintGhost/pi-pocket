@@ -570,7 +570,8 @@ export class LinkedSessions implements LinkedSessionsApi {
 
     /** Use the normal folder-picker validation for an explicit working directory. */
     #directory(source: ConversationId, agent: AgentState, cwd?: string): string {
-        if (cwd === undefined) {
+        // A blank field (an empty form input) is no folder, not the home folder.
+        if (cwd === undefined || (typeof cwd === "string" && cwd.trim() === "")) {
             return agent.cwd ?? this.#app.cwdOf(source);
         }
 

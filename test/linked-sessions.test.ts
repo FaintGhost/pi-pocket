@@ -138,6 +138,20 @@ test("the first linked request loads the destination's project instructions and 
     }
 });
 
+test("a blank working directory starts the linked session in the source's folder", async () => {
+    const id = await source();
+
+    for (const cwd of ["", "   "]) {
+        const { session } = await app.linkedSessions.start(
+            id,
+            { message: "a task", cwd },
+            crypto.randomUUID(),
+        );
+
+        assert.equal(app.cwdOf(session), app.cwdOf(id), `cwd ${JSON.stringify(cwd)}`);
+    }
+});
+
 test("an invalid working directory creates no linked session", async () => {
     const id = await source();
     const file = join(root, "not-a-directory");
