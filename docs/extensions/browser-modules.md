@@ -49,7 +49,7 @@ export default function setup(pocket) {
 }
 ```
 
-Keep the top level of the module to declarations, and do its work in the default export: the app checks `pocketApi` after it imports the module ([API versions](reference/api-versions.md)).
+Keep the top level of the module to declarations, and do its work in the default export: the app checks `pocketApi` after it imports the module ([API versions](reference/api-versions.md)). This module uses nothing that changed in version 2 of the extension API (a tool's `output`), so it keeps `pocketApi = 1` and still loads on Pi Pocket 0.18.
 
 ## What the folder serves
 

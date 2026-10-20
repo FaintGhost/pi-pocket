@@ -82,6 +82,9 @@ const clock = defineTool({
     }),
 });
 
+// It returns `output`, so it needs version 2 of the extension API: Pi Pocket 0.18 says so, and does not load it.
+export const pocketApi = 2;
+
 export default function createClock() {
     return defineExtension({ name: "example-clock", tools: [clock] });
 }

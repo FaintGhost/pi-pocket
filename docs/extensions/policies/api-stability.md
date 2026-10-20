@@ -151,7 +151,7 @@ See [Deprecation](#deprecation).
 
 ### `pocketApi`
 
-- `POCKET_API` is one number for the whole public API, on the server and in the browser. `web.api` and `pocket.version` give it. It is 1 from Pi Pocket 0.14.0.
+- `POCKET_API` is one number for the whole public API, on the server and in the browser. `web.api` and `pocket.version` give it. It was 1 from Pi Pocket 0.14.0. It is 2 from 0.19.0, because the Pi Durable 1.2 rename of `content` to `output` breaks a hook or a wrap that returns `content` (A2, A7). The oldest supported version is 1 (A9).
 - **A7. `pocketApi` goes up by one in a release that has a breaking change to a stable member.** A release with many breaking changes adds one.\
   _Reason:_ one number tells if a module can work, with no need to compare release numbers.
 - **A8. Additions do not change `pocketApi`. Changes to experimental members do not change it.**\
@@ -265,4 +265,4 @@ These can change in any release: the words of errors and notices, timing that th
 ## Warnings
 
 - Nothing is deprecated now, and Pi Pocket shows no deprecation warnings. The first release that deprecates a public member adds a warning that the owner sees when a module uses it. Its notes say so under "Deprecated".
-- The check for the oldest supported `pocketApi` (A9) comes with `pocketApi` 2. Until then, every version is supported.
+- Since 0.19.0 (`pocketApi` 2), Pi Pocket checks the oldest supported `pocketApi` (A9). It is 1: a module that exports 1, or no `pocketApi`, loads. A module for an older version is refused, with an error that tells the owner to update the module.

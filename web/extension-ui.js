@@ -47,9 +47,11 @@ import {
 
 /**
  * The version of `pocket`. It goes up only when something extensions use changes in a way that breaks them; additions
- * keep it. The server's `web.api` is the same number.
+ * keep it. The server's `web.api` is the same number: 2 since 0.19.0 (`extension-web.ts`).
  */
-export const POCKET_API = 1;
+export const POCKET_API = 2;
+/** The oldest version that browser modules can still be written for: they load. */
+const OLDEST_POCKET_API = 1;
 
 /** What a browser module can add, each kept by its id. */
 const KINDS = [
@@ -465,9 +467,14 @@ async function load(entry) {
 
         const needs = loaded.pocketApi;
 
-        if (needs !== undefined && !(typeof needs === "number" && needs <= POCKET_API)) {
+        if (
+            needs !== undefined &&
+            !(typeof needs === "number" && needs >= OLDEST_POCKET_API && needs <= POCKET_API)
+        ) {
             throw new Error(
-                `it needs version ${needs} of the app's extension API, and this app has ${POCKET_API}`,
+                typeof needs === "number" && needs < OLDEST_POCKET_API
+                    ? `it was written for version ${needs} of the app's extension API, and this app loads ${OLDEST_POCKET_API} to ${POCKET_API}`
+                    : `it needs version ${needs} of the app's extension API, and this app has ${POCKET_API}`,
             );
         }
 

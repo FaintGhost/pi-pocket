@@ -230,6 +230,22 @@ before(async () => {
 };
 `,
     );
+
+    // Browser modules for API 2 (this one) and 3 (a newer app's): the first loads, the second is refused.
+    for (const [name, api] of [
+        ["fresh", 2],
+        ["future", 3],
+    ] as const) {
+        writeFileSync(
+            join(dropIns, `${name}.ts`),
+            `/** ${name}: a browser module for API ${api}. */\nexport default (_host, web) => { web.client("${name}.js"); };\n`,
+        );
+        writeFileSync(
+            join(dropIns, `${name}.js`),
+            `export const pocketApi = ${api};\nexport default (pocket) => { pocket.rail({ id: "x", title: "${name}", run() {} }); };\n`,
+        );
+    }
+
     app = await openApp(scriptedModel());
 
     // Broken is turned on in its own test: its notice would cover the top bar's buttons in the others.
@@ -404,6 +420,29 @@ test(
 
         assert.deepEqual([...after].sort(), [...before].sort(), "each button once, none lost");
         await withMeter(`pocket.arrange("topbar", {}); return "null";`);
+    },
+);
+
+test(
+    "a browser module for API 2 loads, and one for a newer API says why it does not",
+    real,
+    async () => {
+        await app.setExtensionEnabled(owner(app), "fresh.ts", true);
+        await app.setExtensionEnabled(owner(app), "future.ts", true);
+        await page.navigate(`${base}/s/${session}`);
+        await until(
+            async () =>
+                (await notices()).some((each) =>
+                    each.includes(
+                        "it needs version 3 of the app's extension API, and this app has 2",
+                    ),
+                ),
+            "the newer API's notice",
+        );
+        await until(() => has(rail("fresh")), "the API 2 module's button");
+        assert.equal(await has(rail("future")), false);
+        await app.setExtensionEnabled(owner(app), "fresh.ts", false);
+        await app.setExtensionEnabled(owner(app), "future.ts", false);
     },
 );
 

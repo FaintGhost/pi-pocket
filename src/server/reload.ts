@@ -29,7 +29,7 @@ import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Extension, Registry } from "@earendil-works/pi-durable";
 import { describe } from "./errors.ts";
-import { ExtensionWebs, POCKET_API } from "./extension-web.ts";
+import { ExtensionWebs, OLDEST_POCKET_API, POCKET_API } from "./extension-web.ts";
 import type { ExtensionModule, PocketHost, WebAccess } from "./host.ts";
 
 /**
@@ -593,6 +593,12 @@ export class ExtensionLoader {
         }
 
         const needs = loaded.pocketApi;
+
+        if (typeof needs === "number" && needs < OLDEST_POCKET_API) {
+            throw new Error(
+                `the module was written for version ${String(needs)} of Pi Pocket's extension API, and this Pi Pocket loads ${OLDEST_POCKET_API} to ${POCKET_API}: update the module`,
+            );
+        }
 
         if (needs !== undefined && (typeof needs !== "number" || !(needs <= POCKET_API))) {
             throw new Error(

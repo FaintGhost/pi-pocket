@@ -37,6 +37,9 @@ const wordCount = defineTool({
     }),
 });
 
+// It returns `output`, so it needs version 2 of the extension API: Pi Pocket 0.18 says so, and does not load it.
+export const pocketApi = 2;
+
 export default function createMyWords(_host: unknown, web: Web) {
     web.command("my-words", {
         description: "Count the words in a text",

@@ -17,6 +17,9 @@ const wordCount = defineTool({
     }),
 });
 
+// It returns `output`, so it needs version 2 of the extension API: Pi Pocket 0.18 says so, and does not load it.
+export const pocketApi = 2;
+
 export default function createMyWords() {
     return defineExtension({ name: "my-words", tools: [wordCount] });
 }
@@ -30,7 +33,7 @@ export default function createMyWords() {
 ## Return a result
 
 - Return `{ output: [{ type: "text", text }] }`. The model reads the text.
-- Pi Durable 1.2 renamed the result field `content` to `output`. Pi Pocket still reads `content` from what `execute` of a drop-in's tool returns, but new code must use `output`. A hook (`afterTool`) or a wrap (`wrapTool`) that reads or returns a result must use `output` too.
+- Pi Durable 1.2 renamed the result field `content` to `output`. Pi Pocket still reads `content` from what `execute` of a drop-in's tool returns, but new code must use `output`. A hook (`afterTool`) or a wrap (`wrapTool`) that reads or returns a result must use `output` too. A module that returns `output` exports `pocketApi = 2` ([API versions](reference/api-versions.md)): Pi Pocket 0.18 then refuses it with a clear message.
 - To give the model an error, throw an `Error`. The model gets its message as an error result.
 - `api.output(text)` streams output while the tool runs. When `execute` returns no `output`, this output becomes the result.
 

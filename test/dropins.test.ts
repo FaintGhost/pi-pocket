@@ -216,3 +216,43 @@ test("a drop-in cannot take a name Pi Pocket keeps: it is refused", async () => 
     await refused("guard-twin.ts", named("pocket-guard"), /pocket-guard is Pi Pocket's own/);
     await refused("my-bash.ts", named("my-bash", "bash"), /bash is a built-in tool's/);
 });
+
+/** A drop-in that says which version of the extension API it was written for, with a tool that returns `output`. */
+const versioned = (name: string, api: string) => `/** Versioned ${name}. */
+import { Type } from "@earendil-works/pi-ai";
+import { defineExtension, defineTool } from "@earendil-works/pi-durable";
+
+${api}
+
+export default () =>
+	defineExtension({
+		name: "${name}",
+		tools: [defineTool({ name: "${name}_tool", description: "x", parameters: Type.Object({}), execute: async () => ({ output: [{ type: "text", text: "ok" }] }) })],
+	});
+`;
+
+test("a drop-in for API 2, 1, or none loads; one for a newer API is refused with a clear error", async () => {
+    for (const [file, api] of [
+        ["api-two.ts", "export const pocketApi = 2;"],
+        ["api-one.ts", "export const pocketApi = 1;"],
+        ["api-none.ts", ""],
+    ] as const) {
+        writeFileSync(
+            join(dropIns, file),
+            versioned(file.replace(/\W/g, "_").replace(/_ts$/, ""), api),
+        );
+        await app.setExtensionEnabled(owner(app), file, true);
+        assert.equal(module(file)[0]?.error, undefined, `${file} loads`);
+        assert.equal(module(file)[0]?.extensions.length, 1, `${file} installed its extension`);
+    }
+
+    writeFileSync(
+        join(dropIns, "api-three.ts"),
+        versioned("api_three", "export const pocketApi = 3;"),
+    );
+    await assert.rejects(
+        app.setExtensionEnabled(owner(app), "api-three.ts", true),
+        /needs version 3 of Pi Pocket's extension API, and this Pi Pocket has 2: update Pi Pocket/,
+    );
+    assert.deepEqual(module("api-three.ts")[0]?.extensions, [], "api-three.ts installed nothing");
+});
