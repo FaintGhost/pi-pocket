@@ -231,10 +231,11 @@ before(async () => {
 `,
     );
 
-    // Browser modules for API 2 (this one) and 3 (a newer app's): the first loads, the second is refused.
+    // Browser modules for API 2 (this one), 3 (a newer app's), and 0 (older than the oldest): only the first loads.
     for (const [name, api] of [
         ["fresh", 2],
         ["future", 3],
+        ["past", 0],
     ] as const) {
         writeFileSync(
             join(dropIns, `${name}.ts`),
@@ -429,6 +430,7 @@ test(
     async () => {
         await app.setExtensionEnabled(owner(app), "fresh.ts", true);
         await app.setExtensionEnabled(owner(app), "future.ts", true);
+        await app.setExtensionEnabled(owner(app), "past.ts", true);
         await page.navigate(`${base}/s/${session}`);
         await until(
             async () =>
@@ -439,10 +441,19 @@ test(
                 ),
             "the newer API's notice",
         );
+        await until(
+            async () =>
+                (await notices()).some((each) =>
+                    each.includes("it was written for version 0 of the app's extension API"),
+                ),
+            "the older API's notice",
+        );
         await until(() => has(rail("fresh")), "the API 2 module's button");
         assert.equal(await has(rail("future")), false);
+        assert.equal(await has(rail("past")), false);
         await app.setExtensionEnabled(owner(app), "fresh.ts", false);
         await app.setExtensionEnabled(owner(app), "future.ts", false);
+        await app.setExtensionEnabled(owner(app), "past.ts", false);
     },
 );
 

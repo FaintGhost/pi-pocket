@@ -469,7 +469,12 @@ async function load(entry) {
 
         if (
             needs !== undefined &&
-            !(typeof needs === "number" && needs >= OLDEST_POCKET_API && needs <= POCKET_API)
+            !(
+                typeof needs === "number" &&
+                Number.isInteger(needs) &&
+                needs >= OLDEST_POCKET_API &&
+                needs <= POCKET_API
+            )
         ) {
             throw new Error(
                 typeof needs === "number" && needs < OLDEST_POCKET_API

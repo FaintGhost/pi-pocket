@@ -207,30 +207,47 @@ test("an Interrupt chosen but not used does not stay armed for the next run", re
     await setBusy(false);
 });
 
-test("at 320 px wide, Stop stays inside the message box while Pi works", real, async () => {
-    await home({ width: 320, height: 700, scale: 2, mobile: true });
-    await page.navigate(`${base}/s/${Number(one)}`);
-    await opened(one);
+test(
+    "at 320 px and 350 px wide, Stop stays inside the message box while Pi works",
+    real,
+    async () => {
+        for (const width of [320, 350]) {
+            await home({ width, height: 700, scale: 2, mobile: true });
+            await page.navigate(`${base}/s/${Number(one)}`);
+            await opened(one);
 
-    // With an empty box (the mic) and with words in it (Send in the mic's place).
-    for (const words of ["", "a few words"]) {
-        await page.type({ selector: BOX }, words);
-        await setBusy(true);
-        const fit = await inPage<{ scroll: number; client: number; stop: number; right: number }>(`
-            const row = document.querySelector(".composer-row");
-            const stop = row.querySelector(".stop-button").getBoundingClientRect();
-            return JSON.stringify({
-                scroll: row.scrollWidth,
-                client: row.clientWidth,
-                stop: stop.right,
-                right: row.getBoundingClientRect().right,
-            });
-        `);
+            // With an empty box (the mic) and with words in it (Send in the mic's place).
+            for (const words of ["", "a few words"]) {
+                await page.type({ selector: BOX }, words);
+                await setBusy(true);
+                const fit = await inPage<{
+                    scroll: number;
+                    client: number;
+                    stop: number;
+                    right: number;
+                }>(`
+                const row = document.querySelector(".composer-row");
+                const stop = row.querySelector(".stop-button").getBoundingClientRect();
+                return JSON.stringify({
+                    scroll: row.scrollWidth,
+                    client: row.clientWidth,
+                    stop: stop.right,
+                    right: row.getBoundingClientRect().right,
+                });
+            `);
 
-        await setBusy(false);
-        assert.ok(fit.scroll <= fit.client, `the row overflows: ${JSON.stringify(fit)}`);
-        assert.ok(fit.stop <= fit.right, `Stop is outside the row: ${JSON.stringify(fit)}`);
-    }
+                await setBusy(false);
+                assert.ok(
+                    fit.scroll <= fit.client,
+                    `the row overflows at ${width} px: ${JSON.stringify(fit)}`,
+                );
+                assert.ok(
+                    fit.stop <= fit.right,
+                    `Stop is outside the row at ${width} px: ${JSON.stringify(fit)}`,
+                );
+            }
 
-    await page.type({ selector: BOX }, "");
-});
+            await page.type({ selector: BOX }, "");
+        }
+    },
+);

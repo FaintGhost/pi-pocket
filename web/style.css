@@ -3148,9 +3148,9 @@ pre.diff .del {
     }
 }
 
-/* At 320 px (an iPhone SE), Steer, Queue, and Interrupt would push Stop out of the box: while Pi works, Attach goes and
- * the three get closer. Attach comes back when Pi stops. */
-@container composer (max-width: 320px) {
+/* Below a 360 px screen (an iPhone SE is 320 px), Steer, Queue, and Interrupt would push Stop out of the box: while Pi
+ * works, Attach goes and the three get closer. Attach comes back when Pi stops. A 360 px screen's box is 334 px. */
+@container composer (max-width: 333px) {
     .composer.busy .composer-row .attach-button {
         display: none;
     }

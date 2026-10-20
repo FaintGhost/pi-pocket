@@ -594,13 +594,16 @@ export class ExtensionLoader {
 
         const needs = loaded.pocketApi;
 
-        if (typeof needs === "number" && needs < OLDEST_POCKET_API) {
+        if (typeof needs === "number" && Number.isInteger(needs) && needs < OLDEST_POCKET_API) {
             throw new Error(
                 `the module was written for version ${String(needs)} of Pi Pocket's extension API, and this Pi Pocket loads ${OLDEST_POCKET_API} to ${POCKET_API}: update the module`,
             );
         }
 
-        if (needs !== undefined && (typeof needs !== "number" || !(needs <= POCKET_API))) {
+        if (
+            needs !== undefined &&
+            (typeof needs !== "number" || !Number.isInteger(needs) || !(needs <= POCKET_API))
+        ) {
             throw new Error(
                 `the module needs version ${String(needs)} of Pi Pocket's extension API, and this Pi Pocket has ${POCKET_API}: update Pi Pocket`,
             );

@@ -791,7 +791,8 @@ export class Commands {
 
         // Interrupt: stop the run now, rather than waiting for its tool round or turn to end. Like Stop, this withdraws
         // what waits in the queue. Only a person's own message interrupts, never one sent for them (`via`).
-        // A retried request finds its first submission: it must not stop the run that the first one started.
+        // A retried request finds its first submission: it must not stop the run that the first one started. (Two POSTs
+        // of one request at the same moment can both find none and both stop the run: a rare race, left as it is.)
         if (
             request.mode === "interrupt" &&
             via === undefined &&

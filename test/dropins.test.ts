@@ -255,4 +255,27 @@ test("a drop-in for API 2, 1, or none loads; one for a newer API is refused with
         /needs version 3 of Pi Pocket's extension API, and this Pi Pocket has 2: update Pi Pocket/,
     );
     assert.deepEqual(module("api-three.ts")[0]?.extensions, [], "api-three.ts installed nothing");
+
+    // Older than the oldest supported version (1), or not a version at all.
+    writeFileSync(
+        join(dropIns, "api-zero.ts"),
+        versioned("api_zero", "export const pocketApi = 0;"),
+    );
+    await assert.rejects(
+        app.setExtensionEnabled(owner(app), "api-zero.ts", true),
+        /written for version 0 of Pi Pocket's extension API, and this Pi Pocket loads 1 to 2: update the module/,
+    );
+    writeFileSync(
+        join(dropIns, "api-half.ts"),
+        versioned("api_half", "export const pocketApi = 1.5;"),
+    );
+    await assert.rejects(
+        app.setExtensionEnabled(owner(app), "api-half.ts", true),
+        /needs version 1\.5 of Pi Pocket's extension API/,
+    );
+
+    // A draft for the gallery says the version that the module was written for, not this Pi Pocket's.
+    assert.equal((await app.gallery.share("api-none.ts")).entry.pocketApi, 1);
+    assert.equal((await app.gallery.share("api-one.ts")).entry.pocketApi, 1);
+    assert.equal((await app.gallery.share("api-two.ts")).entry.pocketApi, 2);
 });
