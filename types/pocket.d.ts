@@ -905,12 +905,81 @@ export type TopbarSpec = Action &
     };
 
 /**
- * A place in the app built from named items: `"topbar"` (the buttons after the session's title) or `"status"` (the
- * status line under the message box).
+ * A button on the left of the message box's row, after the app's own (Attach, the model, Plan).
  * @since 0.19.0
  * @experimental
  */
-export type SlotName = "topbar" | "status";
+export type ComposerButtonSpec = TopbarSpec;
+
+/**
+ * One of Pi's answers, as an action under it gets it.
+ * @since 0.19.0
+ * @experimental
+ */
+export interface Reply {
+    /**
+     * The answer's id in its session.
+     * @since 0.19.0
+     * @experimental
+     */
+    readonly id: string;
+    /**
+     * Its words, as Markdown.
+     * @since 0.19.0
+     * @experimental
+     */
+    readonly text: string;
+    /**
+     * The session it is in.
+     * @since 0.19.0
+     * @experimental
+     */
+    readonly conversationId: number;
+}
+
+/**
+ * An action under Pi's answers, before More. `run` gets the answer; a sheet gets it as the prop `reply`.
+ * @since 0.19.0
+ * @experimental
+ */
+export type ReplyActionSpec = (
+    { run: (reply: Reply) => unknown; sheet?: never } | { sheet: string; run?: never }
+) &
+    Placement & {
+        /**
+         * The action's id in the module.
+         * @since 0.19.0
+         * @experimental
+         */
+        id: string;
+        /**
+         * The action's words.
+         * @since 0.19.0
+         * @experimental
+         */
+        label: string;
+        /**
+         * The name of one of the app's icons, before the words.
+         * @since 0.19.0
+         * @experimental
+         */
+        icon?: string;
+        /**
+         * An icon of your own: a stroked path in a 24 × 24 box.
+         * @since 0.19.0
+         * @experimental
+         */
+        iconPath?: string;
+    };
+
+/**
+ * A place in the app built from named items: `"topbar"` (the buttons after the session's title), `"status"` (the
+ * status line under the message box), `"places"` (the tiles of the places and the menu), `"composer"` (the buttons on
+ * the left of the message box's row), or `"reply"` (the actions under Pi's answers).
+ * @since 0.19.0
+ * @experimental
+ */
+export type SlotName = "topbar" | "status" | "places" | "composer" | "reply";
 
 /**
  * How a module arranges a slot: items to hide, and an order for some of them. The named items take the places those
@@ -1260,6 +1329,24 @@ export interface Pocket {
      * @experimental
      */
     topbar(spec: TopbarSpec): Added<TopbarSpec>;
+    /**
+     * Adds a button on the left of the message box's row.
+     * @since 0.19.0
+     * @experimental
+     */
+    composerButton(spec: ComposerButtonSpec): Added<ComposerButtonSpec>;
+    /**
+     * Adds an action under Pi's answers.
+     * @since 0.19.0
+     * @experimental
+     */
+    replyAction(spec: ReplyActionSpec): Added<ReplyActionSpec>;
+    /**
+     * Puts text into the message box, after what is there, for the person to send. It never sends.
+     * @since 0.19.0
+     * @experimental
+     */
+    insertText(text: string, options?: { inline?: boolean }): void;
     /**
      * Hides or reorders a slot's items, the app's own too. A person's own choices in Appearance → Layout win.
      * @since 0.19.0

@@ -1338,16 +1338,7 @@ export function Composer() {
                         enterkeyhint=${coarse ? "enter" : "send"}
                     ></textarea>
                     <div class="composer-row" data-part="composer-tools">
-                        <${PlacesButton} />
-                        <button
-                            class="icon-button attach-button"
-                            data-part="composer-button"
-                            aria-label="Attach files"
-                            title="Attach files"
-                            onClick=${() => picker.current?.click()}
-                        >
-                            <${Icon} name="clip" size=${17} />
-                        </button>
+                        ${slotItems("composer", { picker, agent, level, view }).map(({ node }) => node)}
                         <input
                             ref=${picker}
                             type="file"
@@ -1358,32 +1349,6 @@ export function Composer() {
                                 event.currentTarget.value = "";
                             }}
                         />
-                        <button
-                            class=${`model-chip ${agent?.available === false ? "warn" : ""}`}
-                            data-part="model-chip"
-                            aria-label=${`Model: ${modelLabel(agent)}${level ? `, thinking ${level}` : ""}`}
-                            title=${`Model and thinking: ${modelLabel(agent)}${level ? `, ${level}` : ""}`}
-                            onClick=${() => openSheet({ type: "model" })}
-                        >
-                            <${Icon} name="sparkle" size=${12} class="model-spark" />
-                            <span class="model-name">${shortModel(agent)}</span>
-                            ${level && html`<span class="model-level">${level}</span>`}
-                            <${Icon} name="chevron" size=${12} stroke=${2.2} class="model-caret" />
-                        </button>
-                        ${
-                            planAvailable() &&
-                            view.conversation?.kind !== "subagent" &&
-                            html`<button
-                                class=${`plan-chip ${view.plan?.on ? "on" : ""}`}
-                                data-part="composer-button plan-chip"
-                                aria-pressed=${view.plan?.on === true}
-                                title="Plan mode: Pi reads and proposes, and changes nothing until you approve"
-                                onMouseDown=${(event) => event.preventDefault()}
-                                onClick=${() => attempt(() => actions.setPlan(!view.plan?.on))}
-                            >
-                                Plan
-                            </button>`
-                        }
                         <span class="grow"></span>
                         ${
                             busy &&
@@ -1454,6 +1419,68 @@ export function Composer() {
         <${StatusLine} />
     </footer>`;
 }
+
+// The buttons on the left of the message box's row: the app's own items of the `composer` slot (slots.js), which a
+// person can hide and reorder in Appearance, with extensions' after them. Each gets what the box knows: its file
+// picker, the model and thinking level, and the session's view. Send, Stop, the mic, and Steer and Queue stay on the
+// right, always.
+defineItem("composer", {
+    id: "core:places",
+    label: "Places (phones)",
+    order: 100,
+    render: () => html`<${PlacesButton} />`,
+});
+defineItem("composer", {
+    id: "core:attach",
+    label: "Attach files",
+    order: 200,
+    render: ({ picker }) =>
+        html`<button
+            class="icon-button attach-button"
+            data-part="composer-button"
+            aria-label="Attach files"
+            title="Attach files"
+            onClick=${() => picker.current?.click()}
+        >
+            <${Icon} name="clip" size=${17} />
+        </button>`,
+});
+defineItem("composer", {
+    id: "core:model",
+    label: "Model",
+    order: 300,
+    render: ({ agent, level }) =>
+        html`<button
+            class=${`model-chip ${agent?.available === false ? "warn" : ""}`}
+            data-part="model-chip"
+            aria-label=${`Model: ${modelLabel(agent)}${level ? `, thinking ${level}` : ""}`}
+            title=${`Model and thinking: ${modelLabel(agent)}${level ? `, ${level}` : ""}`}
+            onClick=${() => openSheet({ type: "model" })}
+        >
+            <${Icon} name="sparkle" size=${12} class="model-spark" />
+            <span class="model-name">${shortModel(agent)}</span>
+            ${level && html`<span class="model-level">${level}</span>`}
+            <${Icon} name="chevron" size=${12} stroke=${2.2} class="model-caret" />
+        </button>`,
+});
+defineItem("composer", {
+    id: "core:plan",
+    label: "Plan",
+    order: 400,
+    render: ({ view }) =>
+        planAvailable() &&
+        view.conversation?.kind !== "subagent" &&
+        html`<button
+            class=${`plan-chip ${view.plan?.on ? "on" : ""}`}
+            data-part="composer-button plan-chip"
+            aria-pressed=${view.plan?.on === true}
+            title="Plan mode: Pi reads and proposes, and changes nothing until you approve"
+            onMouseDown=${(event) => event.preventDefault()}
+            onClick=${() => attempt(() => actions.setPlan(!view.plan?.on))}
+        >
+            Plan
+        </button>`,
+});
 
 /**
  * The message box grows with what is written, to 40% of the screen; its least height (two lines, or one on a short

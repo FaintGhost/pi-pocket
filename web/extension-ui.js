@@ -22,6 +22,7 @@ import {
     closePeople,
     closeSheet,
     EXT_PANEL_KEY,
+    insertIntoComposer,
     navigate,
     notify,
     onExtensionEvent,
@@ -31,7 +32,18 @@ import {
 } from "./store.js";
 import { fromExtensions, SLOTS } from "./slots.js";
 import { setCallSummary } from "./turns.js";
-import { html, Icon, iconPath, Loader, Markdown, railState, Sheet, Spinner, Switch } from "./ui.js";
+import {
+    html,
+    Icon,
+    iconPath,
+    Loader,
+    Markdown,
+    PlaceTile,
+    railState,
+    Sheet,
+    Spinner,
+    Switch,
+} from "./ui.js";
 
 /**
  * The version of `pocket`. It goes up only when something extensions use changes in a way that breaks them; additions
@@ -40,9 +52,22 @@ import { html, Icon, iconPath, Loader, Markdown, railState, Sheet, Spinner, Swit
 export const POCKET_API = 1;
 
 /** What a browser module can add, each kept by its id. */
-const KINDS = ["rail", "menu", "launcher", "page", "sheet", "panel", "status", "topbar"];
+const KINDS = [
+    "rail",
+    "menu",
+    "launcher",
+    "page",
+    "sheet",
+    "panel",
+    "status",
+    "topbar",
+    "composerButton",
+    "replyAction",
+];
 /** What a rail button, menu row, launcher action, or status item can open: one of the module's own. */
 const OPENS = ["page", "sheet", "panel"];
+/** The most text `pocket.insertText` puts into the message box at once. */
+const INSERT_MAX = 100_000;
 /** A status item's tones, as the line's own items show them. */
 const TONES = new Set(["warn", "error", "muted"]);
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
@@ -562,7 +587,7 @@ function check(kind, spec) {
         }
     };
 
-    if (["rail", "page", "sheet", "panel", "topbar"].includes(kind)) {
+    if (["rail", "page", "sheet", "panel", "topbar", "composerButton"].includes(kind)) {
         text("title");
     } else if (kind === "status") {
         text("text");
@@ -639,6 +664,11 @@ function check(kind, spec) {
         throw new Error(
             `${name} ${spec.id}: say what it does: page, sheet, panel, or a run function`,
         );
+    }
+
+    // An action under an answer gets the answer: its run as an argument, its sheet as `reply`.
+    if (kind === "replyAction" && spec.run === undefined && spec.sheet === undefined) {
+        throw new Error(`${name} ${spec.id}: it does run or sheet, which get the answer`);
     }
 
     for (const field of OPENS) {
@@ -846,6 +876,20 @@ function pocketFor(record) {
         panel: (spec) => add("panel", spec),
         status: (spec) => add("status", spec),
         topbar: (spec) => add("topbar", spec),
+        composerButton: (spec) => add("composerButton", spec),
+        replyAction: (spec) => add("replyAction", spec),
+        /** Put text into the message box, after what is there, for the person to send: never sent by itself. */
+        insertText(text, options) {
+            tick(record);
+
+            if (typeof text !== "string" || text.length > INSERT_MAX) {
+                throw new Error(`pocket.insertText: give it text, up to ${INSERT_MAX} characters`);
+            }
+
+            if (live() && store.state.conversationId !== null) {
+                insertIntoComposer(text, [], { inline: options?.inline === true });
+            }
+        },
         /**
          * Hide or reorder a slot's items, the app's own too, for the people who load this module: what a person chooses
          * in Appearance → Layout wins. Again for the same slot replaces it; `remove` takes it back.
@@ -1323,7 +1367,7 @@ function openExtensionSheet(module, id, props = {}) {
  * Do what a rail button, menu row, or launcher action says: open its page or sheet, or run its function. A function that
  * fails, at once or later (an async one), says so in a notice.
  */
-function activate(record, spec) {
+function activate(record, spec, input) {
     const failed = (error) => {
         console.error(`${record.title}: ${spec.id} failed`, error);
         noticeFrom(record, "error", `${record.title}: ${reason(error)}`);
@@ -1333,11 +1377,11 @@ function activate(record, spec) {
         if (spec.page !== undefined) {
             openPage(record.module, spec.page);
         } else if (spec.sheet !== undefined) {
-            openExtensionSheet(record.module, spec.sheet);
+            openExtensionSheet(record.module, spec.sheet, input);
         } else if (spec.panel !== undefined) {
             openExtPanel(record.module, spec.panel);
         } else if (spec.run !== undefined) {
-            Promise.resolve(spec.run()).catch(failed);
+            Promise.resolve(input === undefined ? spec.run() : spec.run(input)).catch(failed);
         }
     } catch (error) {
         failed(error);
@@ -1650,33 +1694,106 @@ function topbarButton(record, spec, action) {
     </button>`;
 }
 
+/** The places that extensions added: a tile for each panel. */
+function placeItems() {
+    return added("panel").map(({ record, spec }) => ({
+        id: itemId(record, spec),
+        label: spec.title,
+        module: record.title,
+        render: () =>
+            html`<${PlaceTile}
+                place=${{
+                    id: itemId(record, spec),
+                    label: spec.title,
+                    iconPath: pathOf(spec),
+                    badge: badgeFor(spec),
+                    on: opened(record, { panel: spec.id }),
+                    run: () => openExtPanel(record.module, spec.id),
+                }}
+            />`,
+    }));
+}
+
+/** The buttons that extensions added to the message box's row, after the app's own on its left. */
+function composerItems() {
+    return added("composerButton").map(({ record, spec }) => ({
+        id: itemId(record, spec),
+        label: spec.title,
+        module: record.title,
+        before: spec.before,
+        after: spec.after,
+        render: () => {
+            const on = opened(record, spec);
+            const badge = badgeFor(spec);
+
+            return html`<button
+                class=${`icon-button badge-host ext-composer-button ${on ? "on" : ""}`}
+                data-part="composer-button"
+                data-module=${record.module}
+                aria-label=${badge === "" ? spec.title : `${spec.title}, ${badge}`}
+                title=${spec.title}
+                onMouseDown=${(event) => event.preventDefault()}
+                onClick=${() => (on ? closeOf(spec) : activate(record, spec))}
+            >
+                <${Icon} path=${pathOf(spec)} size=${17} />
+                ${badge !== "" && html`<span class="badge">${badge}</span>`}
+            </button>`;
+        },
+    }));
+}
+
+/**
+ * The actions that extensions added under Pi's answers, before More. Each gets the answer as `{ id, text,
+ * conversationId }`: its run as an argument, its sheet as the prop `reply`.
+ */
+function replyItems() {
+    return added("replyAction").map(({ record, spec }) => ({
+        id: itemId(record, spec),
+        label: spec.label,
+        module: record.title,
+        before: spec.before,
+        after: spec.after,
+        render: ({ entry, text }) => {
+            const reply = Object.freeze({
+                id: String(entry.id),
+                text,
+                conversationId: store.state.conversationId,
+            });
+
+            return html`<button
+                class="answer-tool ext-reply-action"
+                data-module=${record.module}
+                onClick=${() =>
+                    spec.sheet === undefined
+                        ? activate(record, spec, reply)
+                        : activate(record, spec, { reply })}
+            >
+                ${
+                    (spec.icon !== undefined || spec.iconPath !== undefined) &&
+                    html`<${Icon} path=${pathOf(spec)} size=${12} />`
+                }
+                ${spec.label}
+            </button>`;
+        },
+    }));
+}
+
+const sources = {
+    status: statusItems,
+    topbar: topbarItems,
+    places: placeItems,
+    composer: composerItems,
+    reply: replyItems,
+};
+
 fromExtensions(
-    (slot) => (slot === "status" ? statusItems() : slot === "topbar" ? topbarItems() : []),
+    (slot) => sources[slot]?.() ?? [],
     (slot) =>
         order
             .map((module) => modules.get(module))
             .filter((record) => liveRecord(record) && record.arrangements.has(slot))
             .map((record) => ({ title: record.title, ...record.arrangements.get(slot) })),
 );
-
-/** The panels that extensions added, as the menu's places: `{ id, label, iconPath, badge, on, run }`. */
-export function extensionPlaces() {
-    return added("panel").map(({ record, spec }) => {
-        const on = opened(record, { panel: spec.id });
-
-        return {
-            id: `ext:${record.module}:${spec.id}`,
-            label: spec.title,
-            iconPath: pathOf(spec),
-            badge: badgeFor(spec),
-            on,
-            run: () => {
-                openExtPanel(record.module, spec.id);
-                closeSheet();
-            },
-        };
-    });
-}
 
 /**
  * Something an extension draws, which may fail: it says so in its place, and the rest of the app goes on. Whatever was
