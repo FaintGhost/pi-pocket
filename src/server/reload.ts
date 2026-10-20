@@ -643,6 +643,9 @@ export class ExtensionLoader {
 
             if (module.source === "drop-in") {
                 this.#checkNames(file, extensions);
+                extensions.forEach((extension, index) => {
+                    extensions[index] = keepsContent(extension);
+                });
             }
 
             this.#webs.check(part);
@@ -950,6 +953,35 @@ class Overtaken extends Error {
     constructor(file: string) {
         super(`a newer load of ${file} replaced this one`);
     }
+}
+
+/**
+ * Pi Durable 1.2 renamed a tool result's `content` to `output`. A drop-in written before still returns `content`, and
+ * would give the model nothing: read it as `output`, so those modules keep working.
+ */
+function keepsContent(extension: Extension): Extension {
+    if (extension.tools === undefined) {
+        return extension;
+    }
+
+    const tools = extension.tools.map((tool) => ({
+        ...tool,
+        execute: async (...args: Parameters<typeof tool.execute>) => {
+            const result = await tool.execute(...args);
+
+            if (typeof result !== "object" || result === null) {
+                return result;
+            }
+
+            const { content, ...rest } = result as typeof result & { content?: unknown };
+
+            return content === undefined || result.output !== undefined
+                ? result
+                : ({ ...rest, output: content } as typeof result);
+        },
+    }));
+
+    return { ...extension, tools } as Extension;
 }
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {

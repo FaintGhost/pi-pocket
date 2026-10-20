@@ -23,7 +23,7 @@ import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi
 const dataDir = join(root, "data");
 const dropIns = join(dataDir, "extensions");
 
-/** A drop-in that imports Pi Durable and pi-ai by name, offers a tool, and blocks bash with a hook. */
+/** A drop-in that imports Pi Durable and pi-ai by name, offers a tool (with the old `content` result, which Pi Pocket still reads), and blocks bash with a hook. */
 const shout = (suffix: string) => `/** Shout offers a tool that shouts${suffix}. */
 import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool, hook, ToolTask } from "@earendil-works/pi-durable";
@@ -199,7 +199,7 @@ export default () =>
 		tools: [${
             tool === undefined
                 ? ""
-                : `defineTool({ name: "${tool}", description: "x", parameters: Type.Object({}), execute: async () => ({ content: [{ type: "text", text: "${extension}" }] }) })`
+                : `defineTool({ name: "${tool}", description: "x", parameters: Type.Object({}), execute: async () => ({ output: [{ type: "text", text: "${extension}" }] }) })`
         }],
 	});
 `;
