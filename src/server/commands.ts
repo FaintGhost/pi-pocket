@@ -791,7 +791,14 @@ export class Commands {
 
         // Interrupt: stop the run now, rather than waiting for its tool round or turn to end. Like Stop, this withdraws
         // what waits in the queue. Only a person's own message interrupts, never one sent for them (`via`).
-        if (request.mode === "interrupt" && via === undefined && app.isBusy(id)) {
+        // A retried request finds its first submission: it must not stop the run that the first one started.
+        if (
+            request.mode === "interrupt" &&
+            via === undefined &&
+            app.isBusy(id) &&
+            (await app.harness.commit((tx) => tx.submissionByRequest(id, requestId), context)) ===
+                undefined
+        ) {
             await this.#discardReports(id);
             await conversation.abort(context);
             await app.collab.activity(id, user, "interrupted the run");

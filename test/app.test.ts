@@ -999,6 +999,34 @@ test("interrupt stops a streaming run and withdraws the queue, then Pi answers t
     assert.ok(Date.now() - started < 4000, "it did not wait for the long answer");
 });
 
+test("an interrupt sent again with the same request id does not stop the run that it started", async () => {
+    const id = await newSession();
+
+    await app.commands.submit(id, owner(), { text: "stream a long answer", requestId: "r-1" });
+    await until(() => app.isBusy(id), "the first run");
+    const request = {
+        text: "stream a long answer again",
+        mode: "interrupt" as const,
+        requestId: "r-2",
+    };
+    const first = await app.commands.submit(id, owner(), request);
+
+    await until(
+        async () => (await modelTexts(app, id)).some((text) => text.includes("long answer again")),
+        "the second run",
+    );
+    await until(() => app.isBusy(id), "the second run to stream");
+    // A proxy or a client sends the same POST again, after a network drop.
+    const again = await app.commands.submit(id, owner(), request);
+
+    assert.equal(again.submissionId, first.submissionId);
+    await (await app.harness.submission(first.submissionId, context))!.wait(context);
+    const entries = await app.transcripts.allEntries(id, false);
+    const last = entries.findLast((entry) => entry.kind === "assistant") as { stopReason?: string };
+
+    assert.notEqual(last.stopReason, "aborted", "the retry left the second run alone");
+});
+
 test("requests with the wrong types are refused, and nothing odd is stored", async () => {
     const id = await newSession();
 
