@@ -1022,9 +1022,11 @@ test("an interrupt sent again with the same request id does not stop the run tha
     assert.equal(again.submissionId, first.submissionId);
     await (await app.harness.submission(first.submissionId, context))!.wait(context);
     const entries = await app.transcripts.allEntries(id, false);
-    const last = entries.findLast((entry) => entry.kind === "assistant") as { stopReason?: string };
+    const last = entries.findLast((entry) => entry.kind === "assistant") as
+        { stopReason?: string } | undefined;
 
-    assert.notEqual(last.stopReason, "aborted", "the retry left the second run alone");
+    // The second run answers in full: the retry did not abort it.
+    assert.equal(last?.stopReason, "stop");
 });
 
 test("requests with the wrong types are refused, and nothing odd is stored", async () => {
