@@ -355,6 +355,58 @@ test(
     },
 );
 
+test("an action under answers redraws on update, and runs the new run", real, async () => {
+    await say(app, session, "an answer to act on");
+    await page.navigate(`${base}/s/${session}`);
+    await until(() => has(".ext-reply-action"), "the actions under the answer");
+    await withMeter(
+        `globalThis.sayAction = pocket.replyAction({ id: "say", label: "Say v1", run: () => { globalThis.said = "v1"; } }); return "null";`,
+    );
+    const labels = () =>
+        inPage<string[]>(
+            `return JSON.stringify([...document.querySelectorAll(".ext-reply-action")].map((each) => each.textContent.trim()))`,
+        );
+
+    await until(async () => (await labels()).includes("Say v1"), "the new action");
+    await withMeter(
+        `globalThis.sayAction.update({ label: "Say v2", run: () => { globalThis.said = "v2"; } }); return "null";`,
+    );
+    await until(async () => (await labels()).includes("Say v2"), "the updated label");
+    await inPage(
+        `[...document.querySelectorAll(".ext-reply-action")].find((each) => each.textContent.trim() === "Say v2").click(); return "null";`,
+    );
+    await until(
+        async () => (await inPage<string>(`return JSON.stringify(globalThis.said ?? "")`)) === "v2",
+        "the new run",
+    );
+    await withMeter(`globalThis.sayAction.remove(); return "null";`);
+});
+
+test(
+    "a top bar button cannot take its panel's id, and an order that names an id twice keeps every button",
+    real,
+    async () => {
+        const clash = await withMeter<string>(
+            `try { pocket.topbar({ id: "dial", title: "Twin", run() {} }); return JSON.stringify("accepted"); } catch (error) { return JSON.stringify(error.message); }`,
+        );
+
+        assert.match(clash, /share their ids/);
+        const ids = () =>
+            inPage<string[]>(
+                `return JSON.stringify((await import("/slots.js")).arranged("topbar").map(({ item }) => item.id))`,
+            );
+        const before = await ids();
+
+        await withMeter(
+            `pocket.arrange("topbar", { order: ["core:files", "core:files", "core:changes"] }); return "null";`,
+        );
+        const after = await ids();
+
+        assert.deepEqual([...after].sort(), [...before].sort(), "each button once, none lost");
+        await withMeter(`pocket.arrange("topbar", {}); return "null";`);
+    },
+);
+
 test("a browser module that fails says so, and the rest of the app goes on", real, async () => {
     await app.setExtensionEnabled(owner(app), "broken.ts", true);
     await page.navigate(`${base}/s/${session}`);

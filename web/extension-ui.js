@@ -732,6 +732,14 @@ function pocketFor(record) {
         tick(record);
 
         let current = specOf(kind, spec);
+        // A panel's top bar button has the panel's id: a top bar button of the same id would be a second item of it.
+        const sharing = { panel: "topbar", topbar: "panel" }[kind];
+
+        if (sharing !== undefined && record.adds[sharing].has(current.id)) {
+            throw new Error(
+                `pocket.${kind} ${current.id}: a panel and a top bar button share their ids in the top bar: give another`,
+            );
+        }
 
         if (live()) {
             const before = record.adds[kind].get(current.id);
@@ -1612,6 +1620,18 @@ function arrangementOf(slot, arrangement) {
 /** An extension's item's name in its slot. */
 const itemId = (record, spec) => `ext:${record.module}:${spec.id}`;
 
+/** A number for each version of a spec: an update makes a new one, so what draws only on a change draws it again. */
+const revisions = new WeakMap();
+let lastRevision = 0;
+
+function revisionOf(spec) {
+    if (!revisions.has(spec)) {
+        revisions.set(spec, ++lastRevision);
+    }
+
+    return revisions.get(spec);
+}
+
 /**
  * The status line's items that extensions added. One that opens or runs something is a button. A narrow line shows
  * each one's `short` form, after it gives up "1 here" and before the guard's word (`SHORTER`, composer.js).
@@ -1749,6 +1769,7 @@ function composerItems() {
 function replyItems() {
     return added("replyAction").map(({ record, spec }) => ({
         id: itemId(record, spec),
+        revision: `@${revisionOf(spec)}`,
         label: spec.label,
         module: record.title,
         before: spec.before,

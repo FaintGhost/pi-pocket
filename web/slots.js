@@ -42,7 +42,10 @@ export function fromExtensions(items, arrangements) {
  * an order saved before an item came still holds, and the new item keeps its default place.
  */
 function reorder(list, ids) {
-    const named = ids.map((id) => list.find((item) => item.id === id)).filter(Boolean);
+    // Each id once: a list with an id twice would put one item in two places, and drop another.
+    const named = [...new Set(ids)]
+        .map((id) => list.find((item) => item.id === id))
+        .filter(Boolean);
     const places = new Set(named);
     let next = 0;
 
@@ -130,7 +133,7 @@ export function slotItems(slot, context = {}) {
  */
 export const slotKey = (slot) =>
     arranged(slot)
-        .map(({ item, hidden }) => `${item.id}${hidden ? "-" : "+"}`)
+        .map(({ item, hidden }) => `${item.id}${item.revision ?? ""}${hidden ? "-" : "+"}`)
         .join();
 
 // ─── This browser's person's own choices ─────────────────────────────────────
