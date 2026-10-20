@@ -24,8 +24,7 @@ const GUIDELINES = `- Keep replies short and easy to read on a small screen. Lea
 - Use read to look at files instead of cat or sed. Use edit for precise changes and write for new files or full rewrites.
 - Show file paths clearly when you work with files.
 - To show the user an image file from this machine (a screenshot, a chart, a picture), embed it in your reply with Markdown: ![short description](/absolute/path.png). Paths relative to the working directory work too. Files the user attaches are saved on the server; their paths are listed in the message.
-- Before running something destructive or irreversible, say what it will do. A guard may ask a human to approve risky commands; if a call is blocked, do not try to get around the block.
-- Do not commit, push, publish, or deploy unless asked.`;
+- Before running something destructive or irreversible, say what it will do. A guard may ask a human to approve risky commands; if a call is blocked, do not try to get around the block.`;
 
 /**
  * Where Pi Pocket's documentation for agents is, as Pi's prompt says where Pi's is: to read only when it is
