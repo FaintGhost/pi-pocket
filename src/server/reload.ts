@@ -643,22 +643,23 @@ export class ExtensionLoader {
 
             if (module.source === "drop-in") {
                 this.#checkNames(file, extensions);
-                extensions.forEach((extension, index) => {
-                    extensions[index] = keepsContent(extension);
-                });
             }
 
+            // A new array, so that one the module froze or keeps is not changed.
+            const installed =
+                module.source === "drop-in" ? extensions.map(keepsContent) : extensions;
+
             this.#webs.check(part);
-            this.#replace(extensions, this.#installed.get(file) ?? []);
-            this.#installed.set(file, extensions);
+            this.#replace(installed, this.#installed.get(file) ?? []);
+            this.#installed.set(file, installed);
             this.#errors.delete(file);
             this.#webs.commit(
                 part,
-                extensions.flatMap((extension) => declared(extension).tools),
+                installed.flatMap((extension) => declared(extension).tools),
             );
             committed = true;
 
-            return extensions;
+            return installed;
         } finally {
             if (!committed) {
                 this.#webs.discard(part);
@@ -964,24 +965,38 @@ function keepsContent(extension: Extension): Extension {
         return extension;
     }
 
-    const tools = extension.tools.map((tool) => ({
-        ...tool,
-        execute: async (...args: Parameters<typeof tool.execute>) => {
-            const result = await tool.execute(...args);
+    const tools = extension.tools.map((tool) =>
+        withValues(tool, {
+            execute: async (...args: Parameters<typeof tool.execute>) => {
+                const result = await tool.execute(...args);
 
-            if (typeof result !== "object" || result === null) {
-                return result;
-            }
+                if (typeof result !== "object" || result === null) {
+                    return result;
+                }
 
-            const { content, ...rest } = result as typeof result & { content?: unknown };
+                const { content, ...rest } = result as typeof result & { content?: unknown };
 
-            return content === undefined || result.output !== undefined
-                ? result
-                : ({ ...rest, output: content } as typeof result);
-        },
-    }));
+                return content === undefined || result.output !== undefined
+                    ? result
+                    : ({ ...rest, output: content } as typeof result);
+            },
+        }),
+    );
 
-    return { ...extension, tools } as Extension;
+    return withValues(extension, { tools });
+}
+
+/** A copy of `object` with these values replaced: its prototype, getters, and other properties stay as they were. */
+function withValues<T extends object>(object: T, values: Partial<T>): T {
+    return Object.create(Object.getPrototypeOf(object), {
+        ...Object.getOwnPropertyDescriptors(object),
+        ...Object.fromEntries(
+            Object.entries(values).map(([key, value]) => [
+                key,
+                { value, enumerable: true, writable: true, configurable: true },
+            ]),
+        ),
+    }) as T;
 }
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {
