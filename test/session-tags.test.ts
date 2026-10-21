@@ -7,6 +7,8 @@ import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
 import type { ConversationId } from "@earendil-works/pi-durable";
+import createSessionTags from "../src/server/extensions/session-tags.ts";
+import type { ExtensionWeb, PocketHost } from "../src/server/host.ts";
 import { createHandler } from "../src/server/http.ts";
 
 const dataDir = join(root, "data");
@@ -191,4 +193,17 @@ test("taking off a session's last tag leaves no entry, and tags last across a re
     await stop();
     await start();
     assert.deepEqual(await tagsOf(), { [second]: ["bug", "review"] });
+});
+
+test("a server older than 0.20.0, which loads the file as its checkout changes, gets nothing from it", () => {
+    const calls: string[] = [];
+    const web = new Proxy(
+        {},
+        { get: (_target, name) => () => void calls.push(String(name)) },
+    ) as unknown as ExtensionWeb;
+
+    createSessionTags({ pocketVersion: "0.19.0" } as PocketHost, web);
+    assert.equal(calls.length, 0);
+    createSessionTags({ pocketVersion: "0.20.0" } as PocketHost, web);
+    assert.ok(calls.includes("client") && calls.includes("route"));
 });

@@ -1143,6 +1143,18 @@ export type SessionActionSpec = (
      * @experimental
      */
     access?: "steer" | "view";
+    /**
+     * The name of one of the app's icons. An action with an icon is also a button on rows, where a mouse hovers.
+     * @since 0.20.0
+     * @experimental
+     */
+    icon?: string;
+    /**
+     * An icon of your own: a stroked path in a 24 × 24 box.
+     * @since 0.20.0
+     * @experimental
+     */
+    iconPath?: string;
 };
 
 /**
@@ -1187,6 +1199,13 @@ export type SessionFilterSpec = Action & {
      * @experimental
      */
     match?: ((session: SessionInfo) => boolean) | null;
+    /**
+     * Runs when a person starts a session with New in the session list while the filter is on. It gets the new
+     * session's id, so that the module can make it meet the filter.
+     * @since 0.20.0
+     * @experimental
+     */
+    started?: (id: number) => unknown;
 };
 
 /**

@@ -4789,6 +4789,10 @@ pre.diff .del {
     .session-row.three-acts:hover .session-side {
         min-width: 86px;
     }
+    /* And an extension's action (`pocket.sessionAction` with an icon). */
+    .session-row.four-acts:hover .session-side {
+        min-width: 116px;
+    }
     /* Keyboard focus in the row shows them too, not the focus a click leaves on the open session's row. Kept apart
        from the rules above: a browser without :has() drops only these. */
     .session-row:has(:focus-visible) .session-act {
@@ -4804,6 +4808,9 @@ pre.diff .del {
     }
     .session-row.three-acts:has(:focus-visible) .session-side {
         min-width: 86px;
+    }
+    .session-row.four-acts:has(:focus-visible) .session-side {
+        min-width: 116px;
     }
     /* While Ctrl/⌘ drags a selection, rows do not show their buttons. */
     :root.selecting .session-row .session-act {

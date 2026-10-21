@@ -323,6 +323,7 @@ function SessionRow({
     folders,
     onPick,
     onSelect,
+    hoverAction,
 }) {
     const { conversationId, server, me } = store.state;
     const pinned = isPinned(session.id);
@@ -372,10 +373,11 @@ function SessionRow({
     // Finished since this browser last looked: its result is unread, so its title reads bold.
     const unseen = finishedUnseen(session);
     // Archive, pin, and mark-unread show on hover; an archived session only comes back, and only for people who steer.
-    const acts = (canSteer() ? 1 : 0) + (session.archived ? 0 : 2);
+    // And the first extension action with an icon (`pocket.sessionAction`).
+    const acts = (canSteer() ? 1 : 0) + (session.archived ? 0 : 2) + (hoverAction ? 1 : 0);
 
     return html`<div
-        class=${`session-row ${open ? "active" : ""} ${selected ? "selected" : ""} ${pressing ? "pressing" : ""} ${moving ? "moving" : ""} ${marked ? "marked-unread" : ""} ${unseen ? "unseen" : ""} ${chips.length > 0 ? "with-chips" : ""} ${["no-acts", "one-act", "", "three-acts"][acts]}`}
+        class=${`session-row ${open ? "active" : ""} ${selected ? "selected" : ""} ${pressing ? "pressing" : ""} ${moving ? "moving" : ""} ${marked ? "marked-unread" : ""} ${unseen ? "unseen" : ""} ${chips.length > 0 ? "with-chips" : ""} ${["no-acts", "one-act", "", "three-acts", "four-acts"][acts]}`}
         data-part="session-row"
         data-state=${ROW_STATES[mark.shape.split(" ")[0]]}
         data-id=${session.id}
@@ -491,6 +493,17 @@ function SessionRow({
             </span>`
         }
         <span class="session-actions">
+            ${
+                hoverAction &&
+                html`<button
+                    class="session-act session-ext-act"
+                    title=${hoverAction.title}
+                    aria-label=${hoverAction.title}
+                    onClick=${() => hoverAction.run([session.id])}
+                >
+                    <${Icon} path=${hoverAction.iconPath} size=${14} />
+                </button>`
+            }
             ${
                 canSteer() &&
                 html`<button
@@ -1048,6 +1061,7 @@ function AllSessions({ compact = false }) {
     const count = sessions.filter((session) => !session.archived).length;
     const filters = sessionFilters();
     const extActions = sessionActions();
+    const hoverAction = extActions.find((action) => action.iconPath !== null);
     let index = 0;
 
     return html`<div
@@ -1062,7 +1076,7 @@ function AllSessions({ compact = false }) {
                 html`<button
                     class="new-button"
                     title="New session (Alt+N)"
-                    onClick=${() => openSheet({ type: "cwd", mode: "new" })}
+                    onClick=${() => openSheet({ type: "cwd", mode: "new", fromList: true })}
                 >
                     <${Icon} name="plus" size=${14} />
                     New
@@ -1223,6 +1237,7 @@ function AllSessions({ compact = false }) {
                                         folders=${tab === "folders" && needle === ""}
                                         onPick=${pick}
                                         onSelect=${select}
+                                        hoverAction=${hoverAction}
                                     />`,
                             )}
                         </div>

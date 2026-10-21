@@ -15,8 +15,17 @@ const MAX_TAGS = 10;
 const MAX_LENGTH = 32;
 const MAX_IDS = 500;
 
-export default function createSessionTags(_host: PocketHost, web?: ExtensionWeb) {
-    if (web === undefined) {
+/** Whether Pi Pocket `version` is 0.20.0 or newer: a server started before then has none of what this module uses. */
+function supported(version: string | undefined): boolean {
+    const [major = 0, minor = 0] = (version ?? "0.0.0").split(".").map(Number);
+
+    return major > 0 || minor >= 20;
+}
+
+export default function createSessionTags(host: PocketHost, web?: ExtensionWeb) {
+    // A server that runs older code, which loaded this file as its checkout changed, has no session list extension
+    // points, nor `request.sessions()`, and would turn this module on: it then adds nothing, until a restart.
+    if (web === undefined || !supported(host.pocketVersion)) {
         return;
     }
 

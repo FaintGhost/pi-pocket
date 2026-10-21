@@ -34,8 +34,8 @@ const LABELS_JS = `export default (pocket) => {
 		chips: (session) => [{ label: "id" + session.id, title: session.title, run: () => (globalThis.chipRan = session.id) }],
 	});
 	pocket.sessionSearch({ id: "words", words: (session) => ["word" + session.id] });
-	globalThis.labelsFilter = pocket.sessionFilter({ id: "one", title: "Only one", icon: "grid", run: () => (globalThis.filterRan = true) });
-	pocket.sessionAction({ id: "note", label: "Note", run: (ids) => (globalThis.noted = [...ids]) });
+	globalThis.labelsFilter = pocket.sessionFilter({ id: "one", title: "Only one", icon: "grid", run: () => (globalThis.filterRan = true), started: (id) => (globalThis.started = id) });
+	pocket.sessionAction({ id: "note", label: "Note", icon: "pin", run: (ids) => (globalThis.noted = [...ids]) });
 };
 `;
 
@@ -250,6 +250,56 @@ test(
     },
 );
 
+test("an action with an icon is a button on each row too", real, async () => {
+    await inPage(`globalThis.noted = null; return "null"`);
+    assert.equal(
+        await inPage<string>(
+            `return JSON.stringify(document.querySelector('.sidebar .session-row[data-id="${first}"] .session-ext-act')?.getAttribute("aria-label") ?? null)`,
+        ),
+        "Note",
+    );
+    await inPage(
+        `document.querySelector('.sidebar .session-row[data-id="${first}"] .session-ext-act').click(); return "null"`,
+    );
+    await until(
+        async () => ((await value<number[]>("noted")) ?? []).join() === String(first),
+        "the action on that row",
+    );
+});
+
+test(
+    "New in the list, while a filter is on, gives the new session to the filter's started",
+    real,
+    async () => {
+        await inPage(`globalThis.labelsFilter.update({ match: () => true }); return "null"`);
+        await page.click({ selector: ".sidebar .new-button" });
+        await until(
+            () =>
+                inPage<boolean>(
+                    `return JSON.stringify([...document.querySelectorAll(".sheet button")].some((each) => each.textContent.trim() === "Open"))`,
+                ),
+            "the folder picker",
+        );
+        // A click soon after a layer opened is let go (back.js): wait it out.
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        await page.click({ label: "Open" });
+        await until(
+            async () => typeof (await value<number>("started")) === "number",
+            "the filter's started",
+        );
+
+        const started = await value<number>("started");
+
+        assert.equal(
+            await inPage<string>(`return JSON.stringify(location.pathname)`),
+            `/s/${started}`,
+        );
+        await inPage(`globalThis.labelsFilter.update({ match: null }); return "null"`);
+        await page.navigate(`${base}/`);
+        await until(async () => (await rows()).length === 3, "the three sessions");
+    },
+);
+
 test("chips that throw stop their module, and the list draws without them", real, async () => {
     await inPage(
         `globalThis.labelsChips.update({ chips: () => { throw new Error("boom"); } }); return "null"`,
@@ -264,7 +314,7 @@ test("chips that throw stop their module, and the list draws without them", real
             )?.status === "failed",
         "the module stopped",
     );
-    assert.equal((await rows()).length, 2, "the list still shows every session");
+    assert.equal((await rows()).length, 3, "the list still shows every session");
 });
 
 test(

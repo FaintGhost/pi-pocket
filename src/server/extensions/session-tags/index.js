@@ -119,6 +119,12 @@ export default function setup(pocket) {
         sheet: "filter",
         badge: chosen.size,
         match: matchOf(),
+        // New in the filtered list: the session gets the chosen tags, so it stays in the list.
+        started: async (id) => {
+            if (chosen.size > 0) {
+                saved(await pocket.api("tags", { ids: [id], add: [...chosen] }));
+            }
+        },
     });
 
     function changed() {
@@ -129,6 +135,22 @@ export default function setup(pocket) {
         for (const listener of [...listeners]) {
             listener();
         }
+    }
+
+    /**
+     * What a save answered: those sessions' tags now. Shown at once, not only when the event comes, which a tab that
+     * reconnects (a new session opening) can miss.
+     */
+    function saved(answer) {
+        for (const [id, names] of Object.entries(answer?.tags ?? {})) {
+            if (names.length === 0) {
+                tags.delete(Number(id));
+            } else {
+                tags.set(Number(id), names);
+            }
+        }
+
+        changed();
     }
 
     let told = false;
@@ -175,6 +197,12 @@ export default function setup(pocket) {
 
     void load();
     pocket.onDispose(pocket.on("changed", () => void load()));
+
+    // An event sent while the tab was away (asleep, or reconnecting) is lost: look again when it comes back.
+    const back = () => document.visibilityState === "visible" && void load();
+
+    document.addEventListener("visibilitychange", back);
+    pocket.onDispose(() => document.removeEventListener("visibilitychange", back));
 
     /** Draw again when the tags or the filter change. */
     function useTags() {
@@ -350,7 +378,7 @@ export default function setup(pocket) {
             setError(null);
 
             try {
-                await pocket.api("tags", { ids, add: adding, remove: [...removing] });
+                saved(await pocket.api("tags", { ids, add: adding, remove: [...removing] }));
                 close();
             } catch (failure) {
                 setError(failure.message);
@@ -459,7 +487,7 @@ export default function setup(pocket) {
 
     // Viewers see tags, and filter by them; people who steer edit them (the app shows the action to them alone).
     pocket.sheet({ id: "edit", title: "Edit tags", component: EditSheet });
-    pocket.sessionAction({ id: "edit", label: "Edit tags", sheet: "edit" });
+    pocket.sessionAction({ id: "edit", label: "Edit tags", iconPath: TAG_PATH, sheet: "edit" });
 
     if (pocket.me()?.role !== "viewer") {
         pocket.launcher({

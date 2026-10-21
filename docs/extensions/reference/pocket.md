@@ -879,12 +879,16 @@ type SessionActionSpec = (
     id: string;
     label: string;
     access?: "steer" | "view";
+    icon?: string;
+    iconPath?: string;
 };
 ```
 
 Since 0.20.0 · Experimental
 
-An action on sessions: its `label` (past 24 characters, cut with "…"), and `run` or `sheet`. By default (`access: "steer"`), only people who can steer see it. Give `access: "view"` for an action that changes nothing, which viewers may use too. `run` gets the ids of the sessions. The sheet gets them as the prop `sessions`. From the bar, they are the selected sessions that the list shows, and the selection then ends. From a row's sheet, it is that session. When `run` throws or rejects, a notice says so.
+An action on sessions: its `label` (past 24 characters, cut with "…"), and `run` or `sheet`. By default (`access: "steer"`), only people who can steer see it. Give `access: "view"` for an action that changes nothing, which viewers may use too.
+
+With `icon` or `iconPath`, the action is also a button on each row, beside archive, pin, and mark unread, where a mouse hovers or the keyboard focuses. Only the first such action gets a button: rows keep room for their titles. Touch screens use the row's sheet. `run` gets the ids of the sessions. The sheet gets them as the prop `sessions`. From the bar, they are the selected sessions that the list shows, and the selection then ends. From a row's sheet, it is that session. When `run` throws or rejects, a notice says so.
 
 ### `SessionFilterSpec`
 
@@ -896,6 +900,7 @@ type SessionFilterSpec = Action & {
     iconPath?: string;
     badge?: number | string | null | false;
     match?: ((session: SessionInfo) => boolean) | null;
+    started?: (id: number) => unknown;
 };
 ```
 
@@ -904,6 +909,8 @@ Since 0.20.0 · Experimental
 A filter button. `title`, `icon`, `iconPath`, and `badge` are as for a rail button. It does one thing when tapped, as an [`Action`](#action) does.
 
 - `match`: whether the list keeps a session. Only `true` keeps it. While it is a function, the filter is on. Null or no `match` turns it off. The list calls it for each session each time it draws, so keep it fast, and do not call `pocket` in it. A `match` that throws stops its module in that browser, and the list then shows the sessions again.
+
+- `started`: runs when a person starts a session with **New** in the session list's head while the filter is on. It gets the new session's id, so the module can make the session meet the filter, as Session tags gives it the chosen tags. Other ways to start a session (the launcher, Alt+N, the rail) do not run it. When it throws or rejects, a notice says so.
 
 The filter is in each tab that loads the module, not saved for the person: a module that wants its choices to last keeps them itself.
 

@@ -718,6 +718,14 @@ function check(kind, spec) {
 
     if (
         kind === "sessionFilter" &&
+        spec.started !== undefined &&
+        typeof spec.started !== "function"
+    ) {
+        throw new Error(`${name} ${spec.id}: started is a function`);
+    }
+
+    if (
+        kind === "sessionFilter" &&
         spec.match !== undefined &&
         spec.match !== null &&
         typeof spec.match !== "function"
@@ -1739,6 +1747,8 @@ export function sessionActions() {
             label: cutText(spec.label, ACTION_TEXT),
             title: spec.label,
             module: record.title,
+            // One with an icon is also a button on rows, where a mouse hovers (`sessions.js`).
+            iconPath: spec.icon !== undefined || spec.iconPath !== undefined ? pathOf(spec) : null,
             run: (ids) => {
                 const sessions = Object.freeze([...ids]);
 
@@ -1762,6 +1772,18 @@ export function sessionFilters() {
             on: typeof spec.match === "function",
             run: () => activate(record, spec, undefined, true),
         }));
+}
+
+/**
+ * A person started a session with New in the session list: the filters that are on and have `started` get its id, so
+ * that it meets them (Session tags gives it the chosen tags). One that fails says so in a notice.
+ */
+export function sessionStarted(id) {
+    for (const { record, spec } of added("sessionFilter").slice(0, FILTERS_MAX)) {
+        if (typeof spec.match === "function" && typeof spec.started === "function") {
+            activate(record, { id: spec.id, run: spec.started }, id);
+        }
+    }
 }
 
 /** Whether every filter that is on keeps a session in the list; null while none is on. Only those with a button count. */

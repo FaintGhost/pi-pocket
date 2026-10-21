@@ -193,7 +193,7 @@ function sheetBody(sheet) {
             body = view.conversation ? html`<${BranchPicker} />` : null;
             break;
         case "cwd":
-            body = html`<${CwdSheet} mode=${sheet.mode} />`;
+            body = html`<${CwdSheet} mode=${sheet.mode} fromList=${sheet.fromList === true} />`;
             break;
         case "artifacts":
             body = html`<${ArtifactsSheet} />`;
