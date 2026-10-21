@@ -244,7 +244,7 @@ test("PiP writes what agents read in ASD-STE100, and a session answers PiP in it
     assert.match(lastRequest.session, /\[via PiP\] write the release notes/);
     assert.match(
         lastRequest.session,
-        /A message with the marker \\"\[via PiP\]\\" at its start .* Write that answer in ASD-STE100/,
+        /A message with the marker \\"\[via PiP\]\\" or \\"\[via linked session …\]\\" at its start .* comes from another agent \(PiP, .* Write your answer to it, and what you send back to that agent, in ASD-STE100/,
     );
 });
 
