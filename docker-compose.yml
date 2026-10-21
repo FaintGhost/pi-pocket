@@ -11,6 +11,7 @@
 # Sign in at the link the launcher prints:
 #   docker compose logs pi-pocket | grep '/login?token='
 #   podman logs pi-pocket | grep '/login?token='
+# and change its address (the container's) to the host's, such as localhost.
 
 name: pi-pocket
 

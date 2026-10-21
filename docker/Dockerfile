@@ -95,5 +95,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 COPY docker/entrypoint.sh /usr/local/bin/pi-pocket-entrypoint
 RUN chmod 0755 /usr/local/bin/pi-pocket-entrypoint
 
+# No arguments by default: an --access argument would override PI_POCKET_ACCESS, and
+# the base image's CMD (node) is not one of the launcher's options.
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/pi-pocket-entrypoint"]
-CMD ["--access", "lan"]
+CMD []

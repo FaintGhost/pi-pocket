@@ -22,6 +22,8 @@ podman logs pi-pocket | grep '/login?token='
 
 The link is printed again on every start. Open it once per browser. The launcher's interactive menu is not available in a container, so the access mode comes from `PI_POCKET_ACCESS` (default `lan`).
 
+In `lan` mode the printed link names the container's own address (often `172.x.x.x`), which other devices cannot reach. Keep its path and token, and change the address to the host's: `http://localhost:8787/login?token=…` on the host, or the host's address on the local network for a phone. Invite links use the address the app is open at, so open it at the host's network address before you invite someone.
+
 Stop it with `docker compose down` or `podman compose down`. `down -v` is not needed for anything here: the state is in the host folders, not in an anonymous volume.
 
 The container's entrypoint clears Chromium's stale `Singleton*` locks in `./data/browser/profile`. Without that, a recreated container can refuse to start the embedded browser, because the old locks name the previous container.
@@ -48,14 +50,16 @@ Provider keys can go in `.env` and the `environment:` block of the Compose file 
 
 `PI_POCKET_BIND` is the host address the port is published on, and `PI_POCKET_PORT` is the port on both sides (default `8787`). For phones on the same network, leave the default `0.0.0.0` and `PI_POCKET_ACCESS=lan`.
 
-For a single machine only, set:
+For a single machine only, publish the port on the host's loopback address and keep `lan` inside the container:
 
 ```dotenv
 PI_POCKET_BIND=127.0.0.1
-PI_POCKET_ACCESS=local
+PI_POCKET_ACCESS=lan
 ```
 
-`cloudflare` needs outbound network access and a terminal to confirm the first `cloudflared` download; the image already contains `cloudflared`, so this mode works in the container. `tailscale` uses the container's addresses, which usually means the host needs to run Tailscale separately and point it at the published port: use `local` plus `tailscale serve`, or run the container with `network_mode: host` and install Tailscale in it.
+Do not use `PI_POCKET_ACCESS=local` with the published port: `local` listens on the container's own `127.0.0.1`, which the host cannot reach.
+
+`cloudflare` works in the container: the image already contains `cloudflared`, so the launcher does not need a terminal to download it. The tunnel runs inside the container, and the published port is not used. `tailscale` looks for a Tailscale address in the container, which it usually does not have. Run Tailscale on the host instead: publish the port on `127.0.0.1` as above and point `tailscale serve` at it, or run the container with `network_mode: host`.
 
 ## Permissions
 

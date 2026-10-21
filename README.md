@@ -43,7 +43,7 @@ docker compose up -d --build
 podman compose up -d --build
 ```
 
-The owner sign-in link is in the log (`docker compose logs pi-pocket | grep '/login?token='`). The container starts in `lan` mode by default; set `PI_POCKET_ACCESS` and `PI_POCKET_BIND` in `.env` to change who can reach it. [docs/docker.md](docs/docker.md) has the folders, permissions, and update notes.
+The owner sign-in link is in the log (`docker compose logs pi-pocket | grep '/login?token='`); swap its container address for the host's. The container starts in `lan` mode by default; set `PI_POCKET_ACCESS` and `PI_POCKET_BIND` in `.env` to change who can reach it. [docs/docker.md](docs/docker.md) has the folders, permissions, and update notes.
 
 ## Features
 
