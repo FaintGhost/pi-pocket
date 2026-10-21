@@ -3039,6 +3039,8 @@ pre.diff .del {
     max-height: 40vh;
     font-size: 15px;
     line-height: 1.5;
+    /* As tall as what is written, to the most above; browsers without this measure it in script (`fitBox`). */
+    field-sizing: content;
 }
 
 /* Touch screens keep 16px, below which iOS zooms into the field. */
