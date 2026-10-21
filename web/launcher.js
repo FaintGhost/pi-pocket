@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import { browserAvailable, toggleBrowser } from "./browser.js";
 import { folderColor } from "./avatar.js";
 import { planAvailable, schedulesAvailable } from "./commands.js";
-import { extensionLauncherItems } from "./extension-ui.js";
+import { extensionLauncherItems, sessionWords } from "./extension-ui.js";
 import { filesAvailable, toggleFiles } from "./files-panel.js";
 import { togglePeeks } from "./peeks.js";
 import { modelRefreshAvailable, refreshModels } from "./model-refresh.js";
@@ -368,6 +368,8 @@ function sessionItems() {
 
     return [...order, ...archived].map((session) => {
         const number = numbers.get(session.id) ?? -1;
+        // Words extensions give it (`pocket.sessionSearch`), such as tags: matched after the title and folder.
+        const words = sessionWords(session);
 
         return {
             kind: "session",
@@ -382,7 +384,8 @@ function sessionItems() {
                 ]
                     .filter(Boolean)
                     .join(" · ") || timeAgo(session.updatedAt),
-            text: `${session.title ?? "New session"} ${shortPath(session.cwd, server?.home)}`,
+            text: `${session.title ?? "New session"} ${shortPath(session.cwd, server?.home)}${words.length > 0 ? ` ${words.join(" ")}` : ""}`,
+            words,
             keys: number >= 0 && number < 9 ? `Alt ${number + 1}` : undefined,
             rank: session.archived ? -20 : -number * 0.01,
             run: () => navigate(session.id),
@@ -513,7 +516,7 @@ export function Launcher({ leaving, returnTo }) {
                 match.hits.length > 0 && hits.length === 0 && detailHits.length === 0
                     ? item.kind === "theme"
                         ? "Theme name or ID match"
-                        : "Keyword match"
+                        : (item.words?.find((word) => word.includes(needle)) ?? "Keyword match")
                     : null;
 
             scored.push({

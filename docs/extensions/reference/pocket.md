@@ -396,6 +396,46 @@ Since 0.19.0 · Experimental
 
 Adds an action under Pi's answers, before More. Its `run` gets the answer, or its sheet gets it as the prop `reply`. See [`ReplyActionSpec`](#replyactionspec) and [`Reply`](#reply). The actions show under each finished answer, as the app's own (Discuss, Pin, Copy) do.
 
+### `sessionChips`
+
+```ts
+sessionChips(spec: SessionChipsSpec): Added<SessionChipsSpec>;
+```
+
+Since 0.20.0 · Experimental
+
+Adds chips under the titles of rows in the session list, such as tags. The list calls `chips` for each row each time it draws. See [`SessionChipsSpec`](#sessionchipsspec) and [`SessionChip`](#sessionchip). A row with chips is taller. The space beside them opens the session, as the row does.
+
+### `sessionAction`
+
+```ts
+sessionAction(spec: SessionActionSpec): Added<SessionActionSpec>;
+```
+
+Since 0.20.0 · Experimental
+
+Adds an action on sessions. It shows in the sheet that a finger held on a row opens, and in the bar under the list while sessions are selected (Ctrl/⌘+click, or Select). Its `run` gets the ids of the sessions, or its sheet gets them as the prop `sessions`. See [`SessionActionSpec`](#sessionactionspec).
+
+### `sessionFilter`
+
+```ts
+sessionFilter(spec: SessionFilterSpec): Added<SessionFilterSpec>;
+```
+
+Since 0.20.0 · Experimental
+
+Adds a filter button in the session list's search field. A tap does what the button does, such as open a sheet where a person chooses. While `match` is a function, the filter is on: the button is lit, and the list shows only the sessions that `match` keeps, with every other filter that is on and the search. `update({ match: null })` turns it off. See [`SessionFilterSpec`](#sessionfilterspec).
+
+### `sessionSearch`
+
+```ts
+sessionSearch(spec: SessionSearchSpec): Added<SessionSearchSpec>;
+```
+
+Since 0.20.0 · Experimental
+
+Adds words that find sessions: the session list's search and the launcher match them after the title and the folder. A row that only a word matches shows the word after its title, and the launcher shows it in the result's details. See [`SessionSearchSpec`](#sessionsearchspec).
+
 ### `insertText`
 
 ```ts
@@ -780,6 +820,104 @@ type ReplyActionSpec = (
 Since 0.19.0 · Experimental
 
 An action under Pi's answers: its `label`, an icon before it when you give one, and `run` or `sheet`. `run` gets the answer. The sheet gets it as the prop `reply`. When `run` throws or rejects, a notice says so.
+
+### `SessionInfo`
+
+```ts
+interface SessionInfo {
+    readonly id: number;
+    readonly title: string;
+    readonly cwd: string;
+    readonly archived: boolean;
+}
+```
+
+Since 0.20.0 · Experimental
+
+A session as the session list's extension points get it: its id, a number as in its address (`/s/12`), its title, its folder, and whether it is archived. It is a frozen copy.
+
+### `SessionChip`
+
+```ts
+interface SessionChip {
+    label: string;
+    title?: string;
+    run?: () => unknown;
+}
+```
+
+Since 0.20.0 · Experimental
+
+- `label`: its words. Past 32 characters, they are cut with "…".
+- `title`: its tooltip. By default, its label.
+- `run`: what a tap on it does, such as turn on a filter. A chip with `run` is a button. Without `run`, the chip only shows, and a tap on it opens the session.
+
+### `SessionChipsSpec`
+
+```ts
+interface SessionChipsSpec {
+    id: string;
+    chips: (session: SessionInfo) => readonly SessionChip[];
+}
+```
+
+Since 0.20.0 · Experimental
+
+- `id`: the chips' id in the module.
+- `chips`: the chips for a session. Up to 6 show for each module. The list calls it for each row each time it draws, so keep it fast, and do not call `pocket` in it. Read what it needs from the module's own state. When that state changes, give `update` a new function, so the list draws again: `added.update({ chips: (session) => chipsOf(session) })`.
+
+A `chips` that throws stops its module in that browser, as a failed module stops.
+
+### `SessionActionSpec`
+
+```ts
+type SessionActionSpec = (
+    | { run: (sessions: readonly number[]) => unknown; sheet?: never }
+    | { sheet: string; run?: never }
+) & {
+    id: string;
+    label: string;
+};
+```
+
+Since 0.20.0 · Experimental
+
+An action on sessions: its `label`, and `run` or `sheet`. `run` gets the ids of the sessions. The sheet gets them as the prop `sessions`. From the bar, they are the selected sessions that the list shows, and the selection then ends. From a row's sheet, it is that session. When `run` throws or rejects, a notice says so.
+
+### `SessionFilterSpec`
+
+```ts
+type SessionFilterSpec = Action & {
+    id: string;
+    title: string;
+    icon?: string;
+    iconPath?: string;
+    badge?: number | string | null | false;
+    match?: ((session: SessionInfo) => boolean) | null;
+};
+```
+
+Since 0.20.0 · Experimental
+
+A filter button. `title`, `icon`, `iconPath`, and `badge` are as for a rail button. It does one thing when tapped, as an [`Action`](#action) does.
+
+- `match`: whether the list keeps a session. Only `true` keeps it. While it is a function, the filter is on. Null or no `match` turns it off. The list calls it for each session each time it draws, so keep it fast, and do not call `pocket` in it. A `match` that throws stops its module in that browser, and the list then shows the sessions again.
+
+The filter is in each tab that loads the module, not saved for the person: a module that wants its choices to last keeps them itself.
+
+### `SessionSearchSpec`
+
+```ts
+interface SessionSearchSpec {
+    id: string;
+    words: (session: SessionInfo) => readonly string[];
+}
+```
+
+Since 0.20.0 · Experimental
+
+- `id`: the words' id in the module.
+- `words`: the words for a session, up to 32, each up to 100 characters. The search lowercases them. It is called as people search, so keep it fast, and do not call `pocket` in it. Give `update` a new function when the words change.
 
 ### `SlotName`
 

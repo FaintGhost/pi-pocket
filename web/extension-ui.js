@@ -65,6 +65,10 @@ const KINDS = [
     "topbar",
     "composerButton",
     "replyAction",
+    "sessionChips",
+    "sessionAction",
+    "sessionFilter",
+    "sessionSearch",
 ];
 /** What a rail button, menu row, launcher action, or status item can open: one of the module's own. */
 const OPENS = ["page", "sheet", "panel"];
@@ -593,13 +597,28 @@ function check(kind, spec) {
         throw new Error(`${name}: an id is up to 64 letters, digits, and . _ : -`);
     }
 
+    // Chips on session rows and words for the session search are only a function the session list calls.
+    const reads = { sessionChips: "chips", sessionSearch: "words" }[kind];
+
+    if (reads !== undefined) {
+        if (typeof spec[reads] !== "function") {
+            throw new Error(`${name} ${spec.id}: give it a ${reads} function`);
+        }
+
+        return;
+    }
+
     const text = (field) => {
         if (typeof spec[field] !== "string" || spec[field].trim() === "") {
             throw new Error(`${name} ${spec.id}: give it a ${field}`);
         }
     };
 
-    if (["rail", "page", "sheet", "panel", "topbar", "composerButton"].includes(kind)) {
+    if (
+        ["rail", "page", "sheet", "panel", "topbar", "composerButton", "sessionFilter"].includes(
+            kind,
+        )
+    ) {
         text("title");
     } else if (kind === "status") {
         text("text");
@@ -681,6 +700,20 @@ function check(kind, spec) {
     // An action under an answer gets the answer: its run as an argument, its sheet as `reply`.
     if (kind === "replyAction" && spec.run === undefined && spec.sheet === undefined) {
         throw new Error(`${name} ${spec.id}: it does run or sheet, which get the answer`);
+    }
+
+    // An action on sessions gets their ids: its run as an argument, its sheet as `sessions`.
+    if (kind === "sessionAction" && spec.run === undefined && spec.sheet === undefined) {
+        throw new Error(`${name} ${spec.id}: it does run or sheet, which get the sessions`);
+    }
+
+    if (
+        kind === "sessionFilter" &&
+        spec.match !== undefined &&
+        spec.match !== null &&
+        typeof spec.match !== "function"
+    ) {
+        throw new Error(`${name} ${spec.id}: match is a function, or null while the filter is off`);
     }
 
     for (const field of OPENS) {
@@ -901,6 +934,10 @@ function pocketFor(record) {
         topbar: (spec) => add("topbar", spec),
         composerButton: (spec) => add("composerButton", spec),
         replyAction: (spec) => add("replyAction", spec),
+        sessionChips: (spec) => add("sessionChips", spec),
+        sessionAction: (spec) => add("sessionAction", spec),
+        sessionFilter: (spec) => add("sessionFilter", spec),
+        sessionSearch: (spec) => add("sessionSearch", spec),
         /** Put text into the message box, after what is there, for the person to send: never sent by itself. */
         insertText(text, options) {
             tick(record);
@@ -1577,6 +1614,136 @@ export function extensionLauncherItems() {
         keywords: Array.isArray(spec.keywords) ? spec.keywords.join(" ") : "",
         run: () => activate(record, spec),
     }));
+}
+
+// ─── The session list ────────────────────────────────────────────────────────
+
+/** The most chips one module puts on a row, the longest a chip's text shows, and the most search words per session. */
+const CHIPS_MAX = 6;
+const CHIP_TEXT = 32;
+const WORDS_MAX = 32;
+const WORD_TEXT = 100;
+
+/** What extensions see of a session: a frozen copy, made once for each version of the session the server sent. */
+const infos = new WeakMap();
+
+function sessionInfo(session) {
+    let info = infos.get(session);
+
+    if (info === undefined) {
+        info = Object.freeze({
+            id: session.id,
+            title: session.title ?? "New session",
+            cwd: session.cwd,
+            archived: Boolean(session.archived),
+        });
+        infos.set(session, info);
+    }
+
+    return info;
+}
+
+/**
+ * Call a function a module gave the session list, as the list draws. One that throws stops its module, after this draw:
+ * the list draws without it.
+ */
+function drawCall(record, run, session, fallback) {
+    if (!liveRecord(record)) {
+        return fallback;
+    }
+
+    try {
+        return run(sessionInfo(session));
+    } catch (error) {
+        queueMicrotask(() => liveRecord(record) && fail(record, error, "failed"));
+
+        return fallback;
+    }
+}
+
+/** Text cut to `max` characters as a reader sees them, with "…". */
+function cutText(text, max) {
+    const characters = firstCharacters(text.trim(), max + 1);
+
+    return characters.length > max
+        ? `${characters.slice(0, max - 1).join("")}…`
+        : characters.join("");
+}
+
+/** The chips that extensions put on a session's row: `{ key, label, title, run }`, `run` only for one that does something. */
+export function sessionChips(session) {
+    return added("sessionChips").flatMap(({ record, spec }) => {
+        const chips = drawCall(record, spec.chips, session, []);
+
+        if (!Array.isArray(chips)) {
+            return [];
+        }
+
+        return chips
+            .filter((chip) => typeof chip?.label === "string" && chip.label.trim() !== "")
+            .slice(0, CHIPS_MAX)
+            .map((chip, index) => ({
+                key: `${record.module}:${spec.id}:${index}`,
+                label: cutText(chip.label, CHIP_TEXT),
+                title: typeof chip.title === "string" ? chip.title : chip.label,
+                run:
+                    typeof chip.run === "function"
+                        ? () => activate(record, { id: spec.id, run: chip.run })
+                        : undefined,
+            }));
+    });
+}
+
+/** The words that extensions give a session for the session list's search and the launcher's, lowercased. */
+export function sessionWords(session) {
+    return added("sessionSearch").flatMap(({ record, spec }) => {
+        const words = drawCall(record, spec.words, session, []);
+
+        return Array.isArray(words)
+            ? words
+                  .filter((word) => typeof word === "string" && word.trim() !== "")
+                  .slice(0, WORDS_MAX)
+                  .map((word) => word.trim().slice(0, WORD_TEXT).toLowerCase())
+            : [];
+    });
+}
+
+/** The actions extensions offer on sessions: `run(ids)` does the action on those sessions. */
+export function sessionActions() {
+    return added("sessionAction").map(({ record, spec }) => ({
+        key: itemId(record, spec),
+        label: spec.label,
+        module: record.title,
+        run: (ids) => {
+            const sessions = Object.freeze([...ids]);
+
+            activate(record, spec, spec.sheet === undefined ? sessions : { sessions });
+        },
+    }));
+}
+
+/** The filters extensions add beside the session search: a button each, `on` while its `match` narrows the list. */
+export function sessionFilters() {
+    return added("sessionFilter").map(({ record, spec }) => ({
+        key: itemId(record, spec),
+        title: spec.title,
+        iconPath: pathOf(spec),
+        badge: badgeFor(spec),
+        on: typeof spec.match === "function",
+        run: () => activate(record, spec),
+    }));
+}
+
+/** Whether every filter that is on keeps a session in the list; null while none is on. */
+export function sessionFilterTest() {
+    const on = added("sessionFilter").filter(({ spec }) => typeof spec.match === "function");
+
+    if (on.length === 0) {
+        return null;
+    }
+
+    return (session) =>
+        on.every(({ record, spec }) => drawCall(record, spec.match, session, true) === true);
 }
 
 /** The longest a status item's text shows, in characters as a reader sees them: past it, cut with "…". */

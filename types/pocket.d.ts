@@ -402,6 +402,50 @@ export interface WebRequest {
      * @since 0.16.0
      */
     commit<T>(change: (tx: Tx) => T | Promise<T>): Promise<T>;
+    /**
+     * The sessions that the person who asked can see now, as their session list shows them, archived ones too.
+     * @since 0.20.0
+     * @experimental
+     */
+    sessions(): readonly WebSession[];
+}
+
+/**
+ * A session in a person's session list, as `WebRequest.sessions` gives it.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface WebSession {
+    /**
+     * The session's id, a number as in its address (`/s/12`).
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly id: number;
+    /**
+     * Its title.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly title: string;
+    /**
+     * Its folder.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly cwd: string;
+    /**
+     * Whether it is archived.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly archived: boolean;
+    /**
+     * When it last moved up the list, in milliseconds since 1970.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly updatedAt: number;
 }
 
 /**
@@ -989,6 +1033,171 @@ export type ReplyActionSpec = (
     };
 
 /**
+ * A session as the session list's extension points get it.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface SessionInfo {
+    /**
+     * The session's id, a number as in its address (`/s/12`).
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly id: number;
+    /**
+     * Its title.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly title: string;
+    /**
+     * Its folder.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly cwd: string;
+    /**
+     * Whether it is archived.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly archived: boolean;
+}
+
+/**
+ * A chip under a session's title.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface SessionChip {
+    /**
+     * Its words, cut to 32 characters.
+     * @since 0.20.0
+     * @experimental
+     */
+    label: string;
+    /**
+     * Its tooltip. By default, its label.
+     * @since 0.20.0
+     * @experimental
+     */
+    title?: string;
+    /**
+     * What a tap on it does. Without it, the chip only shows, and a tap opens the session.
+     * @since 0.20.0
+     * @experimental
+     */
+    run?: () => unknown;
+}
+
+/**
+ * Chips under the titles of session rows. The list calls `chips` for each row each time it draws.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface SessionChipsSpec {
+    /**
+     * The chips' id in the module.
+     * @since 0.20.0
+     * @experimental
+     */
+    id: string;
+    /**
+     * The chips for a session: up to 6 show. Keep it fast, and do not call `pocket` in it.
+     * @since 0.20.0
+     * @experimental
+     */
+    chips: (session: SessionInfo) => readonly SessionChip[];
+}
+
+/**
+ * An action on one or more sessions. `run` gets their ids; a sheet gets them as the prop `sessions`.
+ * @since 0.20.0
+ * @experimental
+ */
+export type SessionActionSpec = (
+    | { run: (sessions: readonly number[]) => unknown; sheet?: never }
+    | { sheet: string; run?: never }
+) & {
+    /**
+     * The action's id in the module.
+     * @since 0.20.0
+     * @experimental
+     */
+    id: string;
+    /**
+     * The action's words.
+     * @since 0.20.0
+     * @experimental
+     */
+    label: string;
+};
+
+/**
+ * A filter button beside the session search. A tap does its one thing, such as open a sheet that sets `match`.
+ * @since 0.20.0
+ * @experimental
+ */
+export type SessionFilterSpec = Action & {
+    /**
+     * The button's id in the module.
+     * @since 0.20.0
+     * @experimental
+     */
+    id: string;
+    /**
+     * The button's label.
+     * @since 0.20.0
+     * @experimental
+     */
+    title: string;
+    /**
+     * The name of one of the app's icons.
+     * @since 0.20.0
+     * @experimental
+     */
+    icon?: string;
+    /**
+     * An icon of your own: a stroked path in a 24 × 24 box.
+     * @since 0.20.0
+     * @experimental
+     */
+    iconPath?: string;
+    /**
+     * A short count or word on the button, such as how many choices are on.
+     * @since 0.20.0
+     * @experimental
+     */
+    badge?: number | string | null | false;
+    /**
+     * Whether the list keeps a session. While it is set, the filter is on and the button is lit; null turns it off.
+     * @since 0.20.0
+     * @experimental
+     */
+    match?: ((session: SessionInfo) => boolean) | null;
+};
+
+/**
+ * Words that find sessions. The session list's search and the launcher call `words` for each session as they search.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface SessionSearchSpec {
+    /**
+     * The words' id in the module.
+     * @since 0.20.0
+     * @experimental
+     */
+    id: string;
+    /**
+     * The words for a session: up to 32. Keep it fast, and do not call `pocket` in it.
+     * @since 0.20.0
+     * @experimental
+     */
+    words: (session: SessionInfo) => readonly string[];
+}
+
+/**
  * A place in the app built from named items: `"topbar"` (the buttons after the session's title), `"status"` (the
  * status line under the message box), `"places"` (the tiles of the places and the menu), `"composer"` (the buttons on
  * the left of the message box's row), or `"reply"` (the actions under Pi's answers).
@@ -1357,6 +1566,30 @@ export interface Pocket {
      * @experimental
      */
     replyAction(spec: ReplyActionSpec): Added<ReplyActionSpec>;
+    /**
+     * Adds chips under the titles of rows in the session list.
+     * @since 0.20.0
+     * @experimental
+     */
+    sessionChips(spec: SessionChipsSpec): Added<SessionChipsSpec>;
+    /**
+     * Adds an action on sessions: in a row's sheet on a touch screen, and in the bar for selected sessions.
+     * @since 0.20.0
+     * @experimental
+     */
+    sessionAction(spec: SessionActionSpec): Added<SessionActionSpec>;
+    /**
+     * Adds a filter button beside the session search. While its `match` is set, the list shows only what it keeps.
+     * @since 0.20.0
+     * @experimental
+     */
+    sessionFilter(spec: SessionFilterSpec): Added<SessionFilterSpec>;
+    /**
+     * Adds words that find sessions in the session list's search and the launcher.
+     * @since 0.20.0
+     * @experimental
+     */
+    sessionSearch(spec: SessionSearchSpec): Added<SessionSearchSpec>;
     /**
      * Puts text into the message box, after what is there, for the person to send. It never sends.
      * @since 0.19.0
