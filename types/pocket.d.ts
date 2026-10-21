@@ -1062,6 +1062,12 @@ export interface SessionInfo {
      * @experimental
      */
     readonly archived: boolean;
+    /**
+     * When it last moved up the list, in milliseconds since 1970.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly updatedAt: number;
 }
 
 /**
@@ -1126,11 +1132,17 @@ export type SessionActionSpec = (
      */
     id: string;
     /**
-     * The action's words.
+     * The action's words, cut to 24 characters.
      * @since 0.20.0
      * @experimental
      */
     label: string;
+    /**
+     * Who it shows to: `"steer"` (by default), people who can steer, or `"view"`, viewers too.
+     * @since 0.20.0
+     * @experimental
+     */
+    access?: "steer" | "view";
 };
 
 /**
@@ -1579,7 +1591,7 @@ export interface Pocket {
      */
     sessionAction(spec: SessionActionSpec): Added<SessionActionSpec>;
     /**
-     * Adds a filter button beside the session search. While its `match` is set, the list shows only what it keeps.
+     * Adds a filter button beside the session search (the first 3 show). While its `match` is set, the list shows only what it keeps.
      * @since 0.20.0
      * @experimental
      */

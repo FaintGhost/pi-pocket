@@ -474,6 +474,7 @@ function SessionRow({
                             class="session-chip"
                             data-part="session-chip"
                             title=${chip.title}
+                            tabindex="-1"
                             onClick=${chip.run}
                         >
                             ${chip.label}
@@ -1049,7 +1050,10 @@ function AllSessions({ compact = false }) {
     const extActions = sessionActions();
     let index = 0;
 
-    return html`<div class=${`sessions ${compact ? "compact" : ""}`} data-part="session-list">
+    return html`<div
+        class=${`sessions ${compact ? "compact" : ""} ${tapping ? "tap-selecting" : ""}`}
+        data-part="session-list"
+    >
         <div class="sessions-head">
             <span class="sessions-name" data-part="session-list-title">Sessions</span>
             <span class="sessions-count">${sessionsLoaded ? count : ""}</span>
@@ -1119,9 +1123,9 @@ function AllSessions({ compact = false }) {
                     key=${filter.key}
                     class=${`search-filter badge-host ${filter.on ? "on" : ""}`}
                     data-part="session-filter"
+                    data-state=${filter.on ? "on" : "off"}
                     title=${filter.title}
-                    aria-label=${filter.badge === "" ? filter.title : `${filter.title}, ${filter.badge}`}
-                    aria-pressed=${filter.on ? "true" : "false"}
+                    aria-label=${[filter.title, filter.badge, filter.on ? "on" : ""].filter(Boolean).join(", ")}
                     onClick=${(event) => {
                         event.preventDefault();
                         filter.run();
@@ -1155,7 +1159,7 @@ function AllSessions({ compact = false }) {
                 sessionsLoaded &&
                 shown.length === 0 &&
                 html`<div class="sessions-empty">
-                    ${archived ? "No archived sessions." : needle ? "No matches." : kept !== null ? "No sessions match the filters." : "No sessions yet. Start one with New."}
+                    ${kept !== null && !needle ? "No sessions match the filters." : archived ? "No archived sessions." : needle ? "No matches." : "No sessions yet. Start one with New."}
                 </div>`
             }
             ${groups.map((group) => {
@@ -1249,7 +1253,7 @@ function AllSessions({ compact = false }) {
                     (action) => html`<button
                         key=${action.key}
                         class="button"
-                        title=${`${action.label} (${action.module})`}
+                        title=${`${action.title} (${action.module})`}
                         onClick=${() => {
                             clearSelection();
                             action.run(chosen);

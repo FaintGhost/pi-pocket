@@ -14,7 +14,7 @@
     min-height: 36px;
     padding: 6px 10px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--r-control);
     background: var(--bg);
     color: var(--text);
 }
@@ -72,7 +72,7 @@
     max-width: 100%;
     padding-left: 8px;
     border: 1px solid var(--line);
-    border-radius: 6px;
+    border-radius: var(--r-tag);
     background: var(--card);
     color: var(--text);
     font-size: 13px;
@@ -97,10 +97,6 @@
     color: var(--muted);
 }
 
-.tags-chip-x:hover {
-    color: var(--text);
-}
-
 .tags-add {
     display: flex;
     gap: 8px;
@@ -115,14 +111,20 @@
     min-height: 32px;
     padding: 0 10px;
     border: 1px dashed var(--line);
-    border-radius: 6px;
+    border-radius: var(--r-tag);
     color: var(--muted);
     font-size: 13px;
 }
 
-.tags-suggestion:hover {
-    color: var(--accent);
-    border-color: var(--accent);
+@media (hover: hover) {
+    .tags-chip-x:hover {
+        color: var(--text);
+    }
+
+    .tags-suggestion:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+    }
 }
 
 .tags-buttons {

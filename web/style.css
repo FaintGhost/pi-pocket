@@ -4857,6 +4857,7 @@ pre.diff .del {
 
 button.session-chip {
     pointer-events: auto;
+    cursor: pointer;
     transition:
         color var(--t-hover) var(--ease-out),
         border-color var(--t-hover) var(--ease-out);
@@ -4877,8 +4878,19 @@ button.session-chip {
     button.session-chip::before {
         content: "";
         position: absolute;
-        inset: -8px -2px;
+        inset: -6px -2px;
     }
+}
+
+/* While taps select rows (after Select), a tap on a chip selects its row too. */
+.sessions.tap-selecting button.session-chip {
+    pointer-events: none;
+}
+
+/* A linked row's branch turns into its title's line, not the middle of the taller row. */
+.session-row.with-chips .session-branches > .elbow::after {
+    bottom: auto;
+    height: calc(13px + 6px * var(--space-y));
 }
 
 /* Extensions' filters beside the search (`pocket.sessionFilter`): lit while one narrows the list. */

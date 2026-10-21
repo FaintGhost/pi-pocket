@@ -19,6 +19,7 @@ import { describersChanged, setCallDescriber } from "./calls.js";
 import { leaveSafeMode, onSafeModeEnd, safeMode } from "./safe-mode.js";
 import {
     api,
+    canSteer,
     closePeople,
     closeSheet,
     EXT_PANEL_KEY,
@@ -705,6 +706,14 @@ function check(kind, spec) {
     // An action on sessions gets their ids: its run as an argument, its sheet as `sessions`.
     if (kind === "sessionAction" && spec.run === undefined && spec.sheet === undefined) {
         throw new Error(`${name} ${spec.id}: it does run or sheet, which get the sessions`);
+    }
+
+    if (
+        kind === "sessionAction" &&
+        spec.access !== undefined &&
+        !["steer", "view"].includes(spec.access)
+    ) {
+        throw new Error(`${name} ${spec.id}: access is "steer" or "view"`);
     }
 
     if (
@@ -1419,15 +1428,22 @@ function opened(record, spec) {
     );
 }
 
-function openExtensionSheet(module, id, props = {}) {
-    openSheet({ type: "ext", module, sheetId: id, id: `${module}:${id}`, props });
+/** Open a module's sheet. From the session list (`over`), over the drawer, which stays, as a held row's sheet does. */
+function openExtensionSheet(module, id, props = {}, over = false) {
+    const sheet = { type: "ext", module, sheetId: id, id: `${module}:${id}`, props };
+
+    if (over) {
+        store.set({ sheet });
+    } else {
+        openSheet(sheet);
+    }
 }
 
 /**
  * Do what a rail button, menu row, or launcher action says: open its page or sheet, or run its function. A function that
  * fails, at once or later (an async one), says so in a notice.
  */
-function activate(record, spec, input) {
+function activate(record, spec, input, over = false) {
     const failed = (error) => {
         console.error(`${record.title}: ${spec.id} failed`, error);
         noticeFrom(record, "error", `${record.title}: ${reason(error)}`);
@@ -1437,7 +1453,7 @@ function activate(record, spec, input) {
         if (spec.page !== undefined) {
             openPage(record.module, spec.page);
         } else if (spec.sheet !== undefined) {
-            openExtensionSheet(record.module, spec.sheet, input);
+            openExtensionSheet(record.module, spec.sheet, input, over);
         } else if (spec.panel !== undefined) {
             openExtPanel(record.module, spec.panel);
         } else if (spec.run !== undefined) {
@@ -1623,6 +1639,9 @@ const CHIPS_MAX = 6;
 const CHIP_TEXT = 32;
 const WORDS_MAX = 32;
 const WORD_TEXT = 100;
+/** The most filter buttons the search field holds, and the longest an action's label shows. */
+const FILTERS_MAX = 3;
+const ACTION_TEXT = 24;
 
 /** What extensions see of a session: a frozen copy, made once for each version of the session the server sent. */
 const infos = new WeakMap();
@@ -1636,6 +1655,7 @@ function sessionInfo(session) {
             title: session.title ?? "New session",
             cwd: session.cwd,
             archived: Boolean(session.archived),
+            updatedAt: session.updatedAt,
         });
         infos.set(session, info);
     }
@@ -1710,33 +1730,45 @@ export function sessionWords(session) {
 
 /** The actions extensions offer on sessions: `run(ids)` does the action on those sessions. */
 export function sessionActions() {
-    return added("sessionAction").map(({ record, spec }) => ({
-        key: itemId(record, spec),
-        label: spec.label,
-        module: record.title,
-        run: (ids) => {
-            const sessions = Object.freeze([...ids]);
+    const steer = canSteer();
 
-            activate(record, spec, spec.sheet === undefined ? sessions : { sessions });
-        },
-    }));
+    return added("sessionAction")
+        .filter(({ spec }) => steer || spec.access === "view")
+        .map(({ record, spec }) => ({
+            key: itemId(record, spec),
+            label: cutText(spec.label, ACTION_TEXT),
+            title: spec.label,
+            module: record.title,
+            run: (ids) => {
+                const sessions = Object.freeze([...ids]);
+
+                activate(record, spec, spec.sheet === undefined ? sessions : { sessions }, true);
+            },
+        }));
 }
 
-/** The filters extensions add beside the session search: a button each, `on` while its `match` narrows the list. */
+/**
+ * The filters extensions add beside the session search, the first few of them (the field keeps its room): a button
+ * each, `on` while its `match` narrows the list.
+ */
 export function sessionFilters() {
-    return added("sessionFilter").map(({ record, spec }) => ({
-        key: itemId(record, spec),
-        title: spec.title,
-        iconPath: pathOf(spec),
-        badge: badgeFor(spec),
-        on: typeof spec.match === "function",
-        run: () => activate(record, spec),
-    }));
+    return added("sessionFilter")
+        .slice(0, FILTERS_MAX)
+        .map(({ record, spec }) => ({
+            key: itemId(record, spec),
+            title: spec.title,
+            iconPath: pathOf(spec),
+            badge: badgeFor(spec),
+            on: typeof spec.match === "function",
+            run: () => activate(record, spec, undefined, true),
+        }));
 }
 
-/** Whether every filter that is on keeps a session in the list; null while none is on. */
+/** Whether every filter that is on keeps a session in the list; null while none is on. Only those with a button count. */
 export function sessionFilterTest() {
-    const on = added("sessionFilter").filter(({ spec }) => typeof spec.match === "function");
+    const on = added("sessionFilter")
+        .slice(0, FILTERS_MAX)
+        .filter(({ spec }) => typeof spec.match === "function");
 
     if (on.length === 0) {
         return null;

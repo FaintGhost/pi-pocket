@@ -193,7 +193,7 @@ interface WebSession {
 
 Since 0.20.0 · Experimental
 
-A session in a person's session list: its id, a number as in its address (`/s/12`), its title, its folder, whether it is archived, and when it last moved up the list, in milliseconds since 1970. It has no subagents, and no other person's PiP.
+A session in a person's session list: its id, a number as in its address (`/s/12`), its title, its folder, whether it is archived, and when it last moved up the list, in milliseconds since 1970. It has no subagents, and no PiP's conversation.
 
 ### `ConversationWebRequest`
 

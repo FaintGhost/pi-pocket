@@ -19,7 +19,11 @@ const KEPT = "pocket.session-tags.filter";
 function tagName(text) {
     const name = text.trim().toLowerCase();
 
-    return name !== "" && [...name].length <= MAX_LENGTH && !/\p{Cc}/u.test(name) ? name : "";
+    return name !== "" &&
+        [...name].length <= MAX_LENGTH &&
+        !/[\p{Cc}\p{Bidi_Control}\u2028\u2029]/u.test(name)
+        ? name
+        : "";
 }
 
 function readKept() {
@@ -96,8 +100,9 @@ export default function setup(pocket) {
         }));
     const wordsOf = () => (session) => tags.get(session.id) ?? [];
 
+    // Off until the tags come: a filter kept from before would hide every session meanwhile, or for good if they fail.
     const matchOf = () =>
-        chosen.size === 0
+        chosen.size === 0 || !loaded
             ? null
             : (session) => {
                   const own = tags.get(session.id) ?? [];
@@ -127,10 +132,18 @@ export default function setup(pocket) {
     }
 
     let told = false;
+    // Only the newest load counts: an older answer that comes last would bring back tags from before.
+    let loads = 0;
 
     async function load() {
+        const mine = ++loads;
+
         try {
             const answer = await pocket.api("tags");
+
+            if (mine !== loads) {
+                return;
+            }
 
             tags = new Map(
                 Object.entries(answer.tags ?? {}).map(([id, names]) => [Number(id), names]),
@@ -146,6 +159,13 @@ export default function setup(pocket) {
                 changed();
             }
         } catch (error) {
+            if (mine !== loads) {
+                return;
+            }
+
+            loaded = false;
+            changed();
+
             if (!told) {
                 told = true;
                 pocket.notify("warning", `Session tags: ${error.message}`);
@@ -437,10 +457,11 @@ export default function setup(pocket) {
         sheet: "filter",
     });
 
-    // Viewers see tags, and filter by them; people who steer edit them.
+    // Viewers see tags, and filter by them; people who steer edit them (the app shows the action to them alone).
+    pocket.sheet({ id: "edit", title: "Edit tags", component: EditSheet });
+    pocket.sessionAction({ id: "edit", label: "Edit tags", sheet: "edit" });
+
     if (pocket.me()?.role !== "viewer") {
-        pocket.sheet({ id: "edit", title: "Edit tags", component: EditSheet });
-        pocket.sessionAction({ id: "edit", label: "Edit tags", sheet: "edit" });
         pocket.launcher({
             id: "edit",
             label: "Edit this session's tags",

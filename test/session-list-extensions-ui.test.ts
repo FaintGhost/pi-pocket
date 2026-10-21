@@ -192,9 +192,9 @@ test(
         await until(async () => (await value<boolean>("filterRan")) === true, "the filter's run");
         assert.equal(
             await inPage<string>(
-                `return JSON.stringify(document.querySelector('${button}').getAttribute("aria-pressed"))`,
+                `return JSON.stringify(document.querySelector('${button}').getAttribute("data-state"))`,
             ),
-            "false",
+            "off",
         );
 
         await inPage(
@@ -203,9 +203,9 @@ test(
         await until(async () => (await rows()).join() === String(first), "only the first session");
         assert.equal(
             await inPage<string>(
-                `return JSON.stringify(document.querySelector('${button}').getAttribute("aria-pressed"))`,
+                `return JSON.stringify(document.querySelector('${button}').getAttribute("data-state"))`,
             ),
-            "true",
+            "on",
         );
 
         await inPage(`globalThis.labelsFilter.update({ match: () => false }); return "null"`);

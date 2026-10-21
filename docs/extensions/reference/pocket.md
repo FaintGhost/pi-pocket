@@ -424,7 +424,7 @@ sessionFilter(spec: SessionFilterSpec): Added<SessionFilterSpec>;
 
 Since 0.20.0 · Experimental
 
-Adds a filter button in the session list's search field. A tap does what the button does, such as open a sheet where a person chooses. While `match` is a function, the filter is on: the button is lit, and the list shows only the sessions that `match` keeps, with every other filter that is on and the search. `update({ match: null })` turns it off. See [`SessionFilterSpec`](#sessionfilterspec).
+Adds a filter button in the session list's search field. The field keeps its room: the first 3 filters show, in the order that the server lists the modules, and only those filter the list. A tap does what the button does, such as open a sheet where a person chooses. A sheet opens over the drawer, which stays. While `match` is a function, the filter is on: the button is lit (`data-state="on"`), and the list shows only the sessions that `match` keeps, with every other filter that is on and the search. `update({ match: null })` turns it off. See [`SessionFilterSpec`](#sessionfilterspec).
 
 ### `sessionSearch`
 
@@ -829,12 +829,13 @@ interface SessionInfo {
     readonly title: string;
     readonly cwd: string;
     readonly archived: boolean;
+    readonly updatedAt: number;
 }
 ```
 
 Since 0.20.0 · Experimental
 
-A session as the session list's extension points get it: its id, a number as in its address (`/s/12`), its title, its folder, and whether it is archived. It is a frozen copy.
+A session as the session list's extension points get it: its id, a number as in its address (`/s/12`), its title, its folder, whether it is archived, and when it last moved up the list, in milliseconds since 1970. It has the fields of [`WebSession`](web.md#websession), the server's view of the same session. It is a frozen copy.
 
 ### `SessionChip`
 
@@ -877,12 +878,13 @@ type SessionActionSpec = (
 ) & {
     id: string;
     label: string;
+    access?: "steer" | "view";
 };
 ```
 
 Since 0.20.0 · Experimental
 
-An action on sessions: its `label`, and `run` or `sheet`. `run` gets the ids of the sessions. The sheet gets them as the prop `sessions`. From the bar, they are the selected sessions that the list shows, and the selection then ends. From a row's sheet, it is that session. When `run` throws or rejects, a notice says so.
+An action on sessions: its `label` (past 24 characters, cut with "…"), and `run` or `sheet`. By default (`access: "steer"`), only people who can steer see it. Give `access: "view"` for an action that changes nothing, which viewers may use too. `run` gets the ids of the sessions. The sheet gets them as the prop `sessions`. From the bar, they are the selected sessions that the list shows, and the selection then ends. From a row's sheet, it is that session. When `run` throws or rejects, a notice says so.
 
 ### `SessionFilterSpec`
 

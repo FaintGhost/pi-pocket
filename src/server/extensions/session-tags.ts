@@ -88,10 +88,13 @@ export default function createSessionTags(_host: PocketHost, web?: ExtensionWeb)
             if (
                 !Array.isArray(ids) ||
                 ids.length === 0 ||
-                ids.length > MAX_IDS ||
                 !ids.every((id) => typeof id === "number" && Number.isSafeInteger(id) && id > 0)
             ) {
                 throw web.error(400, "Choose the sessions to tag.");
+            }
+
+            if (ids.length > MAX_IDS) {
+                throw web.error(400, `Tag ${MAX_IDS} sessions at most at once.`);
             }
 
             const add = names(added);
