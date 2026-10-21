@@ -74,3 +74,4 @@ Each member in the reference has its own Since line. These parts came together:
 | Slots: `pocket.topbar`, `composerButton`, `replyAction`, `insertText`, `arrange` (experimental)                                      | 0.19.0 |
 | `cwd` in `host.linkedSessions.start` and the human-bound `linkedSessions.start`                                                      | 0.19.0 |
 | The session list: `pocket.sessionChips`, `sessionAction`, `sessionFilter`, `sessionSearch`, and `WebRequest.sessions` (experimental) | 0.20.0 |
+| `host.registerModelProvider` (experimental)                                                                                          | 0.20.0 |

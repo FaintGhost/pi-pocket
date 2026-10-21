@@ -1,6 +1,6 @@
 import type { Context } from "@earendil-works/chord";
 import { awaitWithContext } from "@earendil-works/chord/context";
-import type { Skill } from "@earendil-works/pi-coding-agent";
+import type { ProviderConfig, Skill } from "@earendil-works/pi-coding-agent";
 import type { Api, Model, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import type {
     ConversationId,
@@ -248,6 +248,13 @@ export interface PocketHost {
      * sign-in expired), or undefined when it may. `fresh` asks the provider's sign-in again first.
      */
     modelProblem(ref: ModelRef, fresh?: boolean): Promise<string | undefined>;
+    /**
+     * Register a model provider with Pi's model runtime, as a Pi extension does: `config` is Pi's own provider
+     * configuration, including the models it starts with and how it refreshes them. Returns how to remove it again;
+     * an older version's removal leaves a newer registration alone. The provider's models appear when Pi next refreshes
+     * the model list.
+     */
+    registerModelProvider(provider: string, config: ProviderConfig): () => void;
     /**
      * Shape the request every model call sends: `shape` returns a replacement payload, or undefined to keep it. It runs
      * after Pi and the caller shaped the request, closest to the wire. Returns how to stop shaping. Only the modules
