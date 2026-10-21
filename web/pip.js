@@ -4,6 +4,7 @@
 // events), so the session behind it stays as it was.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useBack } from "./back.js";
+import { boxKey, keyBox } from "./box-keys.js";
 import { useDragToClose } from "./gestures.js";
 import { createPipDraft } from "./pip-attachments.js";
 import { usePipResize } from "./pip-window.js";
@@ -764,6 +765,18 @@ function Composer({ id, busy }) {
                 onInput=${(event) => change(event.currentTarget.value)}
                 onPaste=${onPaste}
                 onKeyDown=${(event) => {
+                    // A module's key (`pocket.composerKey`) comes first, as in the session's box.
+                    const keyed = keyBox(event.currentTarget, "pip", (value, start, end) => {
+                        change(value);
+                        requestAnimationFrame(() => ref.current?.setSelectionRange(start, end));
+                    });
+
+                    if (boxKey(event, keyed)) {
+                        event.preventDefault();
+
+                        return;
+                    }
+
                     if (
                         event.key === "Enter" &&
                         !event.shiftKey &&

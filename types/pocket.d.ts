@@ -1238,6 +1238,77 @@ export interface SessionSearchSpec {
 }
 
 /**
+ * A message box, as a key's `run` gets it: its text and selection when the key came, and `set`.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface ComposerBox {
+    /**
+     * Which box: the session's message box, or PiP's.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly where: "session" | "pip";
+    /**
+     * The box's text when the key came.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly text: string;
+    /**
+     * Where the selection starts: the caret, when nothing is selected.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly start: number;
+    /**
+     * Where the selection ends: `start`, when nothing is selected.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly end: number;
+    /**
+     * Writes new text, as typing does, so the draft is kept, and puts the caret at `start` (default: the end), or
+     * selects up to `end`.
+     * @since 0.20.0
+     * @experimental
+     */
+    set(text: string, start?: number, end?: number): void;
+}
+
+/**
+ * A key in the message boxes, the session's and PiP's. It comes before the box's own keys.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface ComposerKeySpec {
+    /**
+     * The key's id in the module.
+     * @since 0.20.0
+     * @experimental
+     */
+    id: string;
+    /**
+     * The key, such as `"Ctrl+W"`, `"Alt+Backspace"`, or `"Mod+Shift+K"`, or a list of up to 8.
+     * @since 0.20.0
+     * @experimental
+     */
+    keys: string | readonly string[];
+    /**
+     * What it does, for the Keyboard shortcuts sheet.
+     * @since 0.20.0
+     * @experimental
+     */
+    label: string;
+    /**
+     * Runs when the key is pressed in a box. Return `false` to let the key through; anything else takes it.
+     * @since 0.20.0
+     * @experimental
+     */
+    run: (box: ComposerBox) => unknown;
+}
+
+/**
  * A place in the app built from named items: `"topbar"` (the buttons after the session's title), `"status"` (the
  * status line under the message box), `"places"` (the tiles of the places and the menu), `"composer"` (the buttons on
  * the left of the message box's row), or `"reply"` (the actions under Pi's answers).
@@ -1630,6 +1701,12 @@ export interface Pocket {
      * @experimental
      */
     sessionSearch(spec: SessionSearchSpec): Added<SessionSearchSpec>;
+    /**
+     * Adds a key in the message boxes, the session's and PiP's, before the box's own keys.
+     * @since 0.20.0
+     * @experimental
+     */
+    composerKey(spec: ComposerKeySpec): Added<ComposerKeySpec>;
     /**
      * Puts text into the message box, after what is there, for the person to send. It never sends.
      * @since 0.19.0

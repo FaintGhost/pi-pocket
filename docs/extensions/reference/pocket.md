@@ -436,6 +436,33 @@ Since 0.20.0 · Experimental
 
 Adds words that find sessions: the session list's search and the launcher match them after the title and the folder. A row that only a word matches shows the word after its title, and the launcher shows it in the result's details. See [`SessionSearchSpec`](#sessionsearchspec).
 
+### `composerKey`
+
+```ts
+composerKey(spec: ComposerKeySpec): Added<ComposerKeySpec>;
+```
+
+Since 0.20.0 · Experimental
+
+Adds a key in the message boxes: the session's and PiP's. It comes before the box's own keys, so it can take any of them, Enter too. While an input method composes text, keys go to it, not to modules. When two modules give the same key, the one earlier in the server's order of modules gets it. The Keyboard shortcuts sheet lists it with its `label`. Some keys never reach a page: in a browser tab, the browser keeps keys such as Ctrl+W, Ctrl+T, and Ctrl+N for itself. See [`ComposerKeySpec`](#composerkeyspec) and [`ComposerBox`](#composerbox).
+
+```js
+// Ctrl+W deletes the word before the caret, or the selection, as in a terminal.
+pocket.composerKey({
+    id: "delete-word",
+    keys: "Ctrl+W",
+    label: "Delete the word before the caret",
+    run(box) {
+        const start =
+            box.start === box.end
+                ? box.text.slice(0, box.start).replace(/\S+\s*$|\s+$/, "").length
+                : box.start;
+
+        box.set(box.text.slice(0, start) + box.text.slice(box.end), start);
+    },
+});
+```
+
 ### `insertText`
 
 ```ts
@@ -927,6 +954,42 @@ Since 0.20.0 · Experimental
 
 - `id`: the words' id in the module.
 - `words`: the words for a session, up to 32, each up to 100 characters. The search lowercases them. It is called as people search, so keep it fast, and do not call `pocket` in it. Give `update` a new function when the words change.
+
+### `ComposerKeySpec`
+
+```ts
+interface ComposerKeySpec {
+    id: string;
+    keys: string | readonly string[];
+    label: string;
+    run: (box: ComposerBox) => unknown;
+}
+```
+
+Since 0.20.0 · Experimental
+
+- `id`: the key's id in the module.
+- `keys`: the key, or a list of up to 8. A key is modifiers and then a character or a named key, joined by `+`: `"Ctrl+W"`, `"Alt+Backspace"`, `"Mod+Shift+K"`. The modifiers are `Ctrl`, `Alt` (or `Option`), `Shift`, `Meta` (or `Cmd`), and `Mod`, which is ⌘ on a Mac and Ctrl elsewhere. A key matches only with exactly its modifiers. The named keys are `Backspace`, `Delete`, `Enter`, `Tab`, `Escape`, `Space`, the arrows (`ArrowUp` or `Up`, and the others), `Home`, `End`, `PageUp`, `PageDown`, `Insert`, and `F1` to `F12`. With Alt, a letter or a digit also matches by its place on the keyboard, because Option on a Mac types another character.
+- `label`: what it does, for the Keyboard shortcuts sheet.
+- `run`: runs when the key is pressed in a box, with the box. Return `false` to let the key through, to the box and then the browser. Anything else takes the key: the box does nothing more with it. An async `run` takes it. When `run` throws, the key goes through, and a notice says so, as when it rejects.
+
+### `ComposerBox`
+
+```ts
+interface ComposerBox {
+    readonly where: "session" | "pip";
+    readonly text: string;
+    readonly start: number;
+    readonly end: number;
+    set(text: string, start?: number, end?: number): void;
+}
+```
+
+Since 0.20.0 · Experimental
+
+- `where`: the session's message box, or PiP's.
+- `text`, `start`, `end`: the box's text and selection when the key came. With nothing selected, `start` and `end` are the caret.
+- `set`: writes new text, as typing does, so the box keeps it as its draft. It puts the caret at `start` (by default, the end of the text), or selects from `start` to `end`. Text past 1,000,000 characters throws.
 
 ### `SlotName`
 

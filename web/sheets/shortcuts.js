@@ -1,4 +1,5 @@
 // The keyboard shortcuts, as a list. The keys themselves are handled in app.js.
+import { boxKeyRows } from "../box-keys.js";
 import { closeSheet } from "../store.js";
 import { html, Keys, Sheet } from "../ui.js";
 
@@ -72,8 +73,16 @@ function Chords({ keys }) {
 }
 
 export function ShortcutsSheet() {
+    // Extensions' keys in the message boxes (`pocket.composerKey`), right after the box's own.
+    const keys = boxKeyRows();
+    const groups = SHORTCUTS.flatMap((group) =>
+        group[0] === "Message box" && keys.length > 0
+            ? [group, ["Message box: from extensions", keys]]
+            : [group],
+    );
+
     return html`<${Sheet} title="Keyboard shortcuts" onClose=${closeSheet}>
-        ${SHORTCUTS.map(
+        ${groups.map(
             ([title, rows]) => html`<div class="group" key=${title}>
                 <div class="group-title">${title}</div>
                 <dl class="shortcuts">

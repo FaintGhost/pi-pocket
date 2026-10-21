@@ -15,6 +15,7 @@ import {
     useState,
 } from "preact/hooks";
 import { useBack } from "./back.js";
+import { parseKeys, setBoxKeys } from "./box-keys.js";
 import { describersChanged, setCallDescriber } from "./calls.js";
 import { leaveSafeMode, onSafeModeEnd, safeMode } from "./safe-mode.js";
 import {
@@ -70,6 +71,7 @@ const KINDS = [
     "sessionAction",
     "sessionFilter",
     "sessionSearch",
+    "composerKey",
 ];
 /** What a rail button, menu row, launcher action, or status item can open: one of the module's own. */
 const OPENS = ["page", "sheet", "panel"];
@@ -615,6 +617,23 @@ function check(kind, spec) {
         }
     };
 
+    // A key in the message boxes: only a run, which gets the box.
+    if (kind === "composerKey") {
+        text("label");
+
+        if (parseKeys(spec.keys) === null) {
+            throw new Error(
+                `${name} ${spec.id}: keys is a key such as "Ctrl+W" or "Alt+Backspace", or a list of up to 8`,
+            );
+        }
+
+        if (typeof spec.run !== "function") {
+            throw new Error(`${name} ${spec.id}: give it a run function, which gets the box`);
+        }
+
+        return;
+    }
+
     if (
         ["rail", "page", "sheet", "panel", "topbar", "composerButton", "sessionFilter"].includes(
             kind,
@@ -955,6 +974,7 @@ function pocketFor(record) {
         sessionAction: (spec) => add("sessionAction", spec),
         sessionFilter: (spec) => add("sessionFilter", spec),
         sessionSearch: (spec) => add("sessionSearch", spec),
+        composerKey: (spec) => add("composerKey", spec),
         /** Put text into the message box, after what is there, for the person to send: never sent by itself. */
         insertText(text, options) {
             tick(record);
@@ -1484,6 +1504,23 @@ function added(kind) {
         .sort((a, b) => at(a) - at(b))
         .flatMap((record) => [...record.adds[kind].values()].map((spec) => ({ record, spec })));
 }
+
+// The keys modules give the message boxes (`box-keys.js`), each run as its module: a failure says so in a notice.
+setBoxKeys(() =>
+    added("composerKey")
+        .filter(({ record }) => liveRecord(record))
+        .map(({ record, spec }) => ({
+            keys: parseKeys(spec.keys),
+            keysText: spec.keys,
+            label: spec.label,
+            module: record.title,
+            run: (box) => spec.run(box),
+            failed: (error) => {
+                console.error(`${record.title}: ${spec.id} failed`, error);
+                noticeFrom(record, "error", `${record.title}: ${reason(error)}`);
+            },
+        })),
+);
 
 /** An extension's icon: its own path, one of the app's by name, or a square of four when it gave none it knows. */
 const pathOf = (spec) => spec.iconPath ?? (iconPath(spec.icon ?? "") || iconPath("grid"));

@@ -2,6 +2,7 @@
 // what was sent before (↑, Ctrl+R), fold long pastes, pick the model, stop.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Avatar } from "./avatar.js";
+import { boxKey, keyBox } from "./box-keys.js";
 import { chatUnread, TypingLine } from "./chat.js";
 import {
     loadTemplates,
@@ -832,6 +833,18 @@ export function Composer() {
     };
 
     const onKey = (event) => {
+        // A module's key (`pocket.composerKey`) comes first: it may take any key, the box's own too.
+        const keyed = keyBox(event.currentTarget, "session", (value, start, end) => {
+            update(value, start);
+            requestAnimationFrame(() => box.current?.setSelectionRange(start, end));
+        });
+
+        if (boxKey(event, keyed)) {
+            event.preventDefault();
+
+            return;
+        }
+
         if (
             event.ctrlKey &&
             !event.metaKey &&
