@@ -344,6 +344,8 @@ export class PocketApp {
     readonly #configureModels: ((models: ModelRuntime) => void) | undefined;
     /** Request shapers from the extension modules the owner turned on (`host.shapeModelRequests`). */
     readonly #shapers: ModelRequestShaper[] = [];
+    /** The module whose registration of each provider counts, so an older version's cleanup cannot remove it. */
+    readonly #modelProviders = new Map<string, symbol>();
     readonly #home: string;
     /** The clock durable work runs by. */
     readonly now: () => number;
@@ -535,6 +537,21 @@ export class PocketApp {
             resolveModel: (spec) => resolveModel(this.models, spec, this.signInNeeded),
             subagentModels: () => this.config.subagentModels,
             modelProblem: (ref, fresh) => this.providers.problem(ref, fresh),
+            registerModelProvider: (provider, config) => {
+                const registration = Symbol(provider);
+
+                this.#modelProviders.set(provider, registration);
+                this.models.registerProvider(provider, config);
+
+                return () => {
+                    if (this.#modelProviders.get(provider) !== registration) {
+                        return;
+                    }
+
+                    this.#modelProviders.delete(provider);
+                    this.models.unregisterProvider(provider);
+                };
+            },
             shapeModelRequests: (shape) => {
                 this.#shapers.push(shape);
 

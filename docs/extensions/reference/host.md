@@ -108,6 +108,18 @@ Since 0.13.1 · Stable
 
 Why Pi cannot use a model now, in words that Pi can tell a person. For example, Pi Pocket does not know the model, its provider is not signed in, or its sign-in expired. It is `undefined` when Pi can use the model. With `fresh: true`, it asks the provider about the sign-in again first.
 
+### `registerModelProvider`
+
+```ts
+registerModelProvider(provider: string, config: ProviderConfig): () => void;
+```
+
+Since 0.20.0 · Experimental
+
+Registers a model provider with Pi's model runtime, as a Pi extension does. `config` is Pi's own `ProviderConfig`: the provider's name, base URL, API key, API, headers, and models or `refreshModels` function. The return value removes the provider again. A module that a reload replaces can call its removal safely: it leaves the newer registration alone. The provider's models appear when Pi next refreshes the model list, as with the app's own **Refresh models** action.
+
+A provider configured here has the same reach as one signed in from the app: the owner can choose its models and Pi can use them in every session. Say so when you ask the owner to turn the module on.
+
 ### `shapeModelRequests`
 
 ```ts
