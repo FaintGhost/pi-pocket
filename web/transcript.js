@@ -1398,6 +1398,22 @@ function ApprovalCard({ approval }) {
 // person can hide and reorder in Appearance, with extensions' before More, which stays last. Each gets the answer
 // (`entry`, its `text`), whether it is pinned, and the reaction picker's state.
 defineItem("reply", {
+    id: "core:time",
+    label: "Message time",
+    order: 0,
+    render: ({ entry }) => {
+        if (!entry.at) {
+            return null;
+        }
+
+        const at = new Date(fromServer(entry.at));
+
+        return html`<time class="muted" dateTime=${at.toISOString()} title=${at.toLocaleString()}>
+            ${clock(entry.at)}
+        </time>`;
+    },
+});
+defineItem("reply", {
     id: "core:react",
     label: "React",
     order: 100,
@@ -1476,7 +1492,7 @@ defineItem("reply", {
         </button>`,
 });
 
-/** Under Pi's answers: reactions, and ways to talk about the answer with the people here. */
+/** Under Pi's answers: the message time, reactions, and ways to talk about it with the people here. */
 function AnswerActions({ entry }) {
     const { view, me, users, server } = store.state;
     const [picking, setPicking] = useState(false);
