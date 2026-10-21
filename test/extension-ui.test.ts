@@ -400,6 +400,45 @@ test("an action under answers redraws on update, and runs the new run", real, as
 });
 
 test(
+    "the same action under answers added again keeps the slot's key; a new run changes it and runs",
+    real,
+    async () => {
+        await say(app, session, "an answer for the same action");
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(".ext-reply-action"), "the actions under the answer");
+        const key = () =>
+            inPage<string>(`return JSON.stringify((await import("/slots.js")).slotKey("reply"))`);
+
+        // (a) The same object 2 times.
+        await withMeter(
+            `globalThis.sameSpec = { id: "same", label: "Same", run: () => { globalThis.ran = "first"; } }; pocket.replyAction(globalThis.sameSpec); return "null";`,
+        );
+        const first = await key();
+
+        await withMeter(`pocket.replyAction(globalThis.sameSpec); return "null";`);
+        assert.equal(await key(), first, "the same object keeps the key");
+        // (b) A new object with the same fields and the same run.
+        await withMeter(`pocket.replyAction({ ...globalThis.sameSpec }); return "null";`);
+        assert.equal(await key(), first, "the same fields and run keep the key");
+        // (c) A new run: the key changes, and the new run runs.
+        await withMeter(
+            `pocket.replyAction({ ...globalThis.sameSpec, run: () => { globalThis.ran = "second"; } }); return "null";`,
+        );
+        assert.notEqual(await key(), first, "a new run changes the key");
+        await sleep(200);
+        await inPage(
+            `[...document.querySelectorAll(".ext-reply-action")].findLast((each) => each.textContent.trim() === "Same").click(); return "null";`,
+        );
+        await until(
+            async () =>
+                (await inPage<string>(`return JSON.stringify(globalThis.ran ?? "")`)) === "second",
+            "the new run",
+        );
+        await withMeter(`pocket.replyAction(globalThis.sameSpec).remove(); return "null";`);
+    },
+);
+
+test(
     "a top bar button cannot take its panel's id, and an order that names an id twice keeps every button",
     real,
     async () => {

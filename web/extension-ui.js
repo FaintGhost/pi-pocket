@@ -756,10 +756,13 @@ function pocketFor(record) {
         if (live()) {
             const before = record.adds[kind].get(current.id);
 
-            record.adds[kind].set(current.id, current);
-
-            // The same again (a component that adds as it draws) draws nothing again.
-            if (!sameSpec(before, current)) {
+            // The same again (a component that adds as it draws) keeps what is there and draws nothing again: a new
+            // object would get a new revision (`revisionOf`), and the actions under answers would draw again.
+            // The 2 handles then share 1 item: either one's update or remove changes it.
+            if (sameSpec(before, current)) {
+                current = before;
+            } else {
+                record.adds[kind].set(current.id, current);
                 redraw();
             }
         }

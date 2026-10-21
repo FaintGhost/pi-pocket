@@ -416,11 +416,11 @@ export function Composer() {
     const busy = view.live.busy;
     const agent = view.agent;
 
-    // A send mode is for the run it was chosen in: when Pi stops working, the next run starts with Steer, so an unused
-    // Interrupt does not stop it.
+    // An Interrupt is for the run it was chosen in: when Pi stops working, an unused one goes back to Steer, so it does
+    // not stop the next run. Steer and Queue stay as the person chose.
     useEffect(() => {
         if (!busy) {
-            setSendMode("steer");
+            setSendMode((mode) => (mode === "interrupt" ? "steer" : mode));
         }
     }, [busy]);
     useEffect(() => {

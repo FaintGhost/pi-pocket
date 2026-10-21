@@ -207,6 +207,19 @@ test("an Interrupt chosen but not used does not stay armed for the next run", re
     await setBusy(false);
 });
 
+test("a chosen Queue stays chosen for the next run", real, async () => {
+    await home(VIEWPORTS.desktop);
+    await page.navigate(`${base}/s/${Number(one)}`);
+    await opened(one);
+    await setBusy(true);
+    await page.click({ selector: '.mode-switch [role="radio"]:nth-child(2)' });
+    assert.equal((await modes()).Queue, "true");
+    await setBusy(false);
+    await setBusy(true);
+    assert.deepEqual(await modes(), { Steer: "false", Queue: "true", Interrupt: "false" });
+    await setBusy(false);
+});
+
 test(
     "at 320 px and 350 px wide, Stop stays inside the message box while Pi works",
     real,
