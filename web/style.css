@@ -4815,6 +4815,127 @@ pre.diff .del {
     }
 }
 
+/*
+ * Extensions' chips under a row's title (`pocket.sessionChips`), such as tags. The row's button grows to hold them, so
+ * its fill and its click take the whole row; only the chips that do something take clicks of their own.
+ */
+.session-row.with-chips .session {
+    height: calc(24px + 12px * var(--space-y) + 20px);
+    padding-bottom: 20px;
+}
+
+.session-row.with-chips .session-actions {
+    top: calc(12px + 6px * var(--space-y));
+}
+
+.session-chips {
+    position: absolute;
+    left: calc(var(--linked-depth, 0) * 14px + 30px);
+    right: 10px;
+    bottom: calc(4px + 2px * var(--space-y));
+    display: flex;
+    gap: 4px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.session-chip {
+    flex: none;
+    max-width: 100%;
+    height: 17px;
+    padding: 0 6px;
+    overflow: hidden;
+    border: 1px solid var(--hair);
+    border-radius: var(--r-tag);
+    background: var(--card-2);
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 15px;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+button.session-chip {
+    pointer-events: auto;
+    cursor: pointer;
+    transition:
+        color var(--t-hover) var(--ease-out),
+        border-color var(--t-hover) var(--ease-out);
+}
+
+@media (hover: hover) {
+    button.session-chip:hover {
+        color: var(--accent);
+        border-color: var(--accent-line);
+    }
+}
+
+/* A taller target for a finger, past the chip's own edges. */
+@media (pointer: coarse) {
+    button.session-chip {
+        position: relative;
+    }
+    button.session-chip::before {
+        content: "";
+        position: absolute;
+        inset: -6px -2px;
+    }
+}
+
+/* While taps select rows (after Select), a tap on a chip selects its row too. */
+.sessions.tap-selecting button.session-chip {
+    pointer-events: none;
+}
+
+/* A linked row's branch turns into its title's line, not the middle of the taller row. */
+.session-row.with-chips .session-branches > .elbow::after {
+    bottom: auto;
+    height: calc(13px + 6px * var(--space-y));
+}
+
+/* Extensions' filters beside the search (`pocket.sessionFilter`): lit while one narrows the list. */
+.search-filter {
+    position: relative;
+    flex: none;
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--r-seg);
+    color: var(--muted);
+    transition:
+        background-color var(--t-hover) var(--ease-out),
+        color var(--t-hover) var(--ease-out);
+}
+
+@media (hover: hover) {
+    .search-filter:hover {
+        background: var(--hover);
+        color: var(--text);
+    }
+}
+
+.search-filter.on {
+    color: var(--accent);
+}
+
+.search-filter.badge-host .badge {
+    top: -6px;
+    right: -7px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 3px;
+    font-size: 0.6rem;
+}
+
+@media (pointer: coarse) {
+    .search-filter::before {
+        content: "";
+        position: absolute;
+        inset: -9px -4px;
+    }
+}
+
 /* On its way into or out of the archive: dimmed until the server's list moves it. */
 .session-row.moving {
     opacity: 0.4;
@@ -4840,6 +4961,7 @@ pre.diff .del {
     flex: none;
     margin-top: 6px;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 5px;
     min-width: 0;

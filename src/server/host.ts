@@ -368,6 +368,17 @@ export interface WebRequest {
     readonly context: Context;
     /** Change the module's documents; refused for viewers and after this request ends. */
     commit<T>(change: (tx: Tx) => T | Promise<T>): Promise<T>;
+    /** The sessions the person who asked can see now, as their session list shows them (archived ones too). */
+    sessions(): readonly WebSession[];
+}
+
+/** A session in a person's session list, as `WebRequest.sessions` gives it. */
+export interface WebSession {
+    readonly id: number;
+    readonly title: string;
+    readonly cwd: string;
+    readonly archived: boolean;
+    readonly updatedAt: number;
 }
 
 /** A route request whose named path parameter resolved to a visible conversation. */
