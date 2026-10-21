@@ -159,6 +159,14 @@ export async function conversationRoutes(
         });
     }
 
+    if (third === "move" && method === "POST") {
+        const body = await readJson<{ submissionId?: number; mode?: string }>(request);
+
+        await app.commands.moveQueued(id, user, Number(body.submissionId), String(body.mode));
+
+        return json(response, 200, { ok: true });
+    }
+
     if (third === "configure" && method === "POST") {
         await app.commands.configure(id, user, await readJson(request));
 

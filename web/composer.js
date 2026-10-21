@@ -124,6 +124,15 @@ const SEND_MODES = [
     ["interrupt", "Interrupt", "Stops the run right now (also its tool call), then sends it"],
 ];
 
+/** What a send mode does, for a queued message's buttons. */
+const modeHint = (mode) => SEND_MODES.find(([value]) => value === mode)[2];
+
+/**
+ * Whether a queued message's Interrupt asks first: the first tap reads "Interrupt?", a second within 4 s sends it.
+ * Set to false to send it on the first tap.
+ */
+const CONFIRM_INTERRUPT = true;
+
 /** What kind of message waits for Pi: a steer, one queued for after its answer, a note, or subagents' reports. */
 function queuedMode(item) {
     const names = queuedReports(item);
@@ -364,6 +373,8 @@ export function Composer() {
     const [sendMode, setSendMode] = useState("steer");
     // The queued message tapped open, wrapped: one line each until then. The queue holds only a message's start.
     const [reading, setReading] = useState(null);
+    // The queued message whose Interrupt was tapped once (`CONFIRM_INTERRUPT`).
+    const [interrupting, setInterrupting] = useState(null);
     const [sending, setSending] = useState(false);
     // Slash command suggestions: the highlighted one, and whether Escape hid the list.
     const [pick, setPick] = useState(0);
@@ -423,6 +434,16 @@ export function Composer() {
             setSendMode((mode) => (mode === "interrupt" ? "steer" : mode));
         }
     }, [busy]);
+    // A queued message's Interrupt asks for a second tap for a few seconds only, as Undo in a diff does.
+    useEffect(() => {
+        if (interrupting === null) {
+            return;
+        }
+
+        const timer = setTimeout(() => setInterrupting(null), 4000);
+
+        return () => clearTimeout(timer);
+    }, [interrupting]);
     useEffect(() => {
         const draft = drafts.get(conversationId);
 
@@ -1103,6 +1124,44 @@ export function Composer() {
                                 >
                                     <${Icon} name="close" size=${13} />
                                 </button>`
+                            }
+                            ${
+                                // Tapped open, one's own message: move it, or send it now. Only its sender can.
+                                reading === item.id &&
+                                item.by !== undefined &&
+                                item.by === me?.id &&
+                                canSteer() &&
+                                !blocked &&
+                                (item.mode === "steer" || item.mode === "followUp") &&
+                                html`<div class="queued-actions">
+                                    <button
+                                        class="button small"
+                                        title=${modeHint(item.mode === "steer" ? "followUp" : "steer")}
+                                        onClick=${() =>
+                                            attempt(() =>
+                                                actions.move(
+                                                    item.id,
+                                                    item.mode === "steer" ? "followUp" : "steer",
+                                                ),
+                                            )}
+                                    >
+                                        ${item.mode === "steer" ? "Move to queue" : "Steer now"}
+                                    </button>
+                                    <button
+                                        class=${`button small ${interrupting === item.id ? "danger" : ""}`}
+                                        title=${
+                                            interrupting === item.id
+                                                ? "Tap again to stop the run and send this now"
+                                                : modeHint("interrupt")
+                                        }
+                                        onClick=${() =>
+                                            CONFIRM_INTERRUPT && interrupting !== item.id
+                                                ? setInterrupting(item.id)
+                                                : attempt(() => actions.move(item.id, "interrupt"))}
+                                    >
+                                        ${interrupting === item.id ? "Interrupt?" : "Interrupt"}
+                                    </button>
+                                </div>`
                             }
                         </div>`,
                     )}

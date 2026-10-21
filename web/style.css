@@ -2882,6 +2882,24 @@ pre.diff .del {
     color: var(--muted);
 }
 
+/* Tapped open, one's own message: a row of buttons under it to move it to Steer or Queue, or send it now. */
+.queued:has(> .queued-actions) {
+    flex-wrap: wrap;
+}
+
+.queued-actions {
+    flex-basis: 100%;
+    display: flex;
+    gap: 6px;
+    padding-bottom: 8px;
+}
+
+/* Interrupt, tapped once: the color of stopping the run. */
+.queued-actions .button.danger {
+    border-color: var(--err);
+    color: var(--err);
+}
+
 /* A thumb's room around the small mark. */
 @media (pointer: coarse) {
     .queued .queued-remove::after {
