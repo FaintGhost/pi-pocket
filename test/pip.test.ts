@@ -223,7 +223,7 @@ test("PiP starts a session for its person, and hears back when Pi there answers"
     assert.deepEqual(Object.values(authors?.entries ?? {}), [], "nobody wrote it themselves");
 });
 
-test("PiP writes what agents read in ASD-STE100, and a session's prompt has no such rule", async () => {
+test("PiP writes what agents read in ASD-STE100, and a session answers PiP in it", async () => {
     const id = await pip();
 
     await say(app, id, "start write the release notes");
@@ -234,7 +234,18 @@ test("PiP writes what agents read in ASD-STE100, and a session's prompt has no s
 
     assert.match(lastRequest.pip, /Write to agents in ASD-STE100 \(Simplified Technical English\)/);
     assert.match(lastRequest.pip, /It does not cover your answers to your person/);
-    assert.doesNotMatch(lastRequest.session, /ASD-STE100/);
+    // PiP asks each session to answer it in ASD-STE100, and a session answers a message through PiP so.
+    assert.match(
+        lastRequest.pip,
+        /In each task, ask the session to write its answers to you in ASD-STE100 too/,
+    );
+    assert.doesNotMatch(lastRequest.session, /Write to agents in ASD-STE100/);
+    // The session sees the marker that its rule names.
+    assert.match(lastRequest.session, /\[via PiP\] write the release notes/);
+    assert.match(
+        lastRequest.session,
+        /A message with the marker \\"\[via PiP\]\\" at its start .* Write that answer in ASD-STE100/,
+    );
 });
 
 test("PiP denies a waiting call, as its person through PiP, and cannot allow one", async () => {
