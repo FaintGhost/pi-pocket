@@ -102,6 +102,7 @@ import { type ExtensionInfo, ExtensionLoader, linkTypes, prepareDropInFolder } f
 import { InterruptTask, ResendTask } from "./resend.ts";
 import { type Client, reportingOf, Room, ROOM_DOCS, subagentView } from "./room.ts";
 import { Schedules } from "./schedules.ts";
+import { Shares } from "./share.ts";
 import { Shell } from "./shell.ts";
 import {
     loadSessionSkills,
@@ -300,6 +301,8 @@ export class PocketApp {
     readonly memory = new Memory(this);
     /** Each person's favorite working folders, shared by their devices. */
     readonly folderFavorites = new FolderFavorites(this);
+    /** Artifacts published to anyone with their address (`share.ts`), which needs no sign-in. */
+    readonly shares = new Shares(this);
     /** Other people's drop-ins, from a reviewed index: found, installed off, read, updated, removed (`gallery.ts`). */
     readonly gallery = new Gallery(this);
     /** Theme folders: the app's look and layout, built in and the owner's (`themes.ts`). */

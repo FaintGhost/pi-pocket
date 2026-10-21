@@ -415,6 +415,25 @@ export async function conversationRoutes(
         );
     }
 
+    // An artifact published to anyone with its address: the shares of this session, and ending one.
+    if (third === "shares" && fourth === undefined && method === "GET") {
+        // The address others reach this server by, as webhooks give it: a tunnel's, when one is up.
+        return json(response, 200, {
+            shares: await app.shares.list(id),
+            base: app.access?.url ?? null,
+        });
+    }
+
+    if (third === "shares" && fourth === undefined && method === "POST") {
+        return json(response, 200, await app.shares.create(id, user, await readJson(request)));
+    }
+
+    if (third === "shares" && fourth !== undefined && method === "POST") {
+        await app.shares.revoke(user, fourth);
+
+        return json(response, 200, { ok: true });
+    }
+
     // The folder's files for `@` mentions. A browser that has the newest list says so with `since` and gets only
     // that; a whole list goes compressed when the browser takes it so.
     if (third === "files" && method === "GET") {
