@@ -28,6 +28,7 @@ import {
     themeVars,
     varsStyle,
 } from "../theme.js";
+import { arranged, move, resetSlot, setShown, SLOTS } from "../slots.js";
 import { html, Icon, Sheet, Switch } from "../ui.js";
 import { galleryAvailable } from "./gallery.js";
 
@@ -137,7 +138,7 @@ function listed(id) {
 
 /** Ask for a new theme's name, and make it from `from`: its id, or a palette's. */
 function Duplicate({ from, label, colors = false, onDone }) {
-    const [name, setName] = useState(`My ${label}`);
+    const [name, setName] = useState(t("My {{name}}", { name: label }));
     const [busy, setBusy] = useState(false);
     const field = useRef(null);
 
@@ -205,7 +206,7 @@ function LookTools() {
     if (naming) {
         return html`<${Duplicate}
             from=${id}
-            label=${look?.name ?? "theme"}
+            label=${look?.name ?? t("theme")}
             onDone=${(made) => {
                 setNaming(false);
 
@@ -384,6 +385,67 @@ function SettingRow({ title, detail, children }) {
         </div>
         ${children}
     </div>`;
+}
+
+/**
+ * One slot's items, as Layout lists them: each with a switch to show or hide it and arrows to move it, the app's own and
+ * extensions' alike. Fixed ones (the menu, Lancet Guard) always show, in their place. Saved in this browser.
+ */
+function SlotLayout({ slot }) {
+    const list = arranged(slot);
+    const movable = list.filter(({ item }) => !item.fixed).map(({ item }) => item.id);
+    const changed = Object.keys(prefs().layout?.[slot] ?? {}).length > 0;
+
+    return html`<div class="label slot-label">
+            <span>${SLOTS[slot].label}</span>
+            ${
+                changed &&
+                html`<button class="button ghost small" onClick=${() => resetSlot(slot)}>
+                    ${t("Reset")}
+                </button>`
+            }
+        </div>
+        <div class="sheet-list slot-layout" data-slot=${slot}>
+            ${list.map(({ item, hidden, hiddenBy }) => {
+                const at = movable.indexOf(item.id);
+                const detail = [
+                    item.module && t("From {{module}}", { module: item.module }),
+                    hiddenBy && t("Hidden by {{name}}", { name: hiddenBy }),
+                    item.fixed && t("Always shown"),
+                ]
+                    .filter(Boolean)
+                    .join(" · ");
+
+                return html`<${SettingRow} key=${item.id} title=${item.label} detail=${detail}>
+                    ${
+                        !item.fixed &&
+                        html`<div class="slot-moves">
+                            <button
+                                class="icon-button"
+                                aria-label=${t("Move {{name}} earlier", { name: item.label })}
+                                disabled=${at <= 0}
+                                onClick=${() => move(slot, item.id, -1)}
+                            >
+                                <${Icon} name="chevron" size=${16} class="slot-earlier" />
+                            </button>
+                            <button
+                                class="icon-button"
+                                aria-label=${t("Move {{name}} later", { name: item.label })}
+                                disabled=${at === movable.length - 1}
+                                onClick=${() => move(slot, item.id, 1)}
+                            >
+                                <${Icon} name="chevron" size=${16} />
+                            </button>
+                        </div>
+                        <${Switch}
+                            on=${!hidden}
+                            label=${t("Show {{name}}", { name: item.label })}
+                            onChange=${() => setShown(slot, item.id, hidden)}
+                        />`
+                    }
+                <//>`;
+            })}
+        </div>`;
 }
 
 export function AppearanceSheet() {
@@ -575,6 +637,7 @@ export function AppearanceSheet() {
                 />
             <//>
         </div>
+        ${Object.keys(SLOTS).map((slot) => html`<${SlotLayout} key=${slot} slot=${slot} />`)}
         ${
             !touch &&
             html`<button

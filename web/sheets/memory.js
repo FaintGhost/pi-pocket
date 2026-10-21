@@ -230,7 +230,7 @@ function Lesson({ lesson, data, conversationId, pendingOnly = false }) {
         ${
             (lesson.pending || lesson.proposal) &&
             !data.owner &&
-            html`<div class="muted small">Waits for the owner's approval; until then Pi goes on as before.</div>`
+            html`<div class="muted small">${t("Waits for the owner's approval; until then Pi goes on as before.")}</div>`
         }
         <div class="lesson-foot">
             <${Source} lesson=${lesson} />
@@ -248,7 +248,7 @@ function Lesson({ lesson, data, conversationId, pendingOnly = false }) {
                                     t("Approved: Pi goes by it from its next message."),
                                 )}
                         >
-                            Approve
+                            ${t("Approve")}
                         </button>`
                     }
                     ${
@@ -330,7 +330,7 @@ export function MemorySheet({ draft: initial = "", conversationId, pendingOnly =
     if (pendingOnly && data.restartRequired) {
         return html`<${Sheet} title=${title} onClose=${closeSheet}>
             <p class="muted">
-                Restart the server from Menu → Restart server to review pending memories across projects.
+                ${t("Restart the server from Menu → Restart server to review pending memories across projects.")}
             </p>
         <//>`;
     }
@@ -373,14 +373,16 @@ export function MemorySheet({ draft: initial = "", conversationId, pendingOnly =
                 data=${data}
                 conversationId=${id}
                 pendingOnly=${true}
-                empty="No memories waiting for approval."
+                empty=${t("No memories waiting for approval.")}
             />
         <//>`;
     }
 
     return html`<${Sheet} title=${title} onClose=${closeSheet}>
         <p class="muted small">
-            ${t("Short lessons Pi keeps across sessions: how to build and test, gotchas, conventions, preferences.")} ${project ? t("Those for {{project}} go to every session in it, worktrees too; the rest go everywhere.", { project: project.name }) : t("PiP keeps lessons for everywhere.")} ${t("Pi proposes them as it learns, and the owner approves; yours count at once.")}
+            ${t("Short lessons Pi keeps across sessions: how to build and test, gotchas, conventions, preferences.")}
+            ${project ? t("Those for {{project}} go to every session in it, worktrees too; the rest go everywhere.", { project: project.name }) : t("PiP keeps lessons for everywhere.")}
+            ${t("Pi proposes one only when asked, or when sure it will help in many later sessions, and the owner approves; yours count at once.")}
         </p>
         ${
             data.canWrite &&
@@ -408,7 +410,7 @@ export function MemorySheet({ draft: initial = "", conversationId, pendingOnly =
                                 class=${chosen === "project" ? "on" : ""}
                                 onClick=${() => setScope("project")}
                             >
-                                This project
+                                ${t("This project")}
                             </button>
                             <button
                                 role="radio"
@@ -416,7 +418,7 @@ export function MemorySheet({ draft: initial = "", conversationId, pendingOnly =
                                 class=${chosen === "everywhere" ? "on" : ""}
                                 onClick=${() => setScope("everywhere")}
                             >
-                                Everywhere
+                                ${t("Everywhere")}
                             </button>
                         </div>`
                     }
@@ -425,7 +427,7 @@ export function MemorySheet({ draft: initial = "", conversationId, pendingOnly =
                         disabled=${busy || text.trim() === ""}
                         onClick=${add}
                     >
-                        Remember
+                        ${t("Remember")}
                     </button>
                 </div>
             </div>`
@@ -488,12 +490,12 @@ export function LessonCall({ lessonId, conversationId }) {
     // One waiting for the owner is hidden from others: say nothing rather than that it is gone.
     if (!lesson) {
         return data.owner
-            ? html`<div class="lesson-call muted small">No longer in memory.</div>`
+            ? html`<div class="lesson-call muted small">${t("No longer in memory.")}</div>`
             : null;
     }
 
     if (!lesson.pending && !lesson.proposal) {
-        return html`<div class="lesson-call muted small">In memory: Pi goes by it.</div>`;
+        return html`<div class="lesson-call muted small">${t("In memory: Pi goes by it.")}</div>`;
     }
 
     const what = lesson.pending
@@ -519,13 +521,13 @@ export function LessonCall({ lessonId, conversationId }) {
                             t("Approved: Pi goes by it from its next message."),
                         )}
                 >
-                    Approve
+                    ${t("Approve")}
                 </button>
                 <button
                     class="button small ghost"
                     onClick=${() => act("/discard", {}, t("Discarded."))}
                 >
-                    Discard
+                    ${t("Discard")}
                 </button>`
         }
     </div>`;

@@ -420,7 +420,7 @@ function lookItems() {
             kind: "theme",
             key: `look:${look.id}`,
             label: look.name,
-            detail: look.builtIn ? "theme, built in" : "theme",
+            detail: look.builtIn ? t("theme, built in") : t("theme"),
             text: `theme ${look.name} ${look.id}`,
             look: look.id,
             vars,
@@ -456,7 +456,8 @@ function themeItems() {
     ];
 }
 
-const GROUP_NAMES = { session: t("Sessions"), action: t("Actions"), theme: t("Themes") };
+/** The groups' names for people. A function, not a table: this module loads before the locale pack does (`i18n.js`). */
+const groupNames = () => ({ session: t("Sessions"), action: t("Actions"), theme: t("Themes") });
 const PREFIXES = { ">": "action", "@": "session", "#": "theme" };
 
 /** Hits in one displayed field, without changing the text or score used by the fuzzy matcher. */
@@ -743,7 +744,7 @@ export function Launcher({ leaving, returnTo }) {
                     ? t("No results for {{query}}.", { query: needle })
                     : t(prefix ? "{{count}} results in {{where}}." : "{{count}} results.", {
                           count: flat.length,
-                          ...(prefix ? { where: GROUP_NAMES[prefix].toLowerCase() } : {}),
+                          ...(prefix ? { where: groupNames()[prefix].toLowerCase() } : {}),
                       }),
             );
         }, 150);
@@ -945,14 +946,17 @@ export function Launcher({ leaving, returnTo }) {
                                         ${
                                             group.kind === "session" && recent
                                                 ? t("Recent sessions")
-                                                : GROUP_NAMES[group.kind]
+                                                : groupNames()[group.kind]
                                         }
                                     </span>
                                     <span class="launcher-count">
-                                        ${group.items.length}${
+                                        ${
                                             group.total > group.items.length
-                                                ? ` of ${group.total}`
-                                                : ""
+                                                ? t("{{shown}} of {{total}}", {
+                                                      shown: group.items.length,
+                                                      total: group.total,
+                                                  })
+                                                : group.items.length
                                         }
                                     </span>
                                 </div>`

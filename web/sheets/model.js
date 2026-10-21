@@ -379,10 +379,10 @@ export function ModelPicker() {
                                         class="pop-menu-link"
                                         onClick=${() => attempt(() => actions.setDefaultModel(null))}
                                     >
-                                        Clear owner default: use project defaults, then last picked
+                                        ${t("Clear owner default: use project defaults, then last picked")}
                                     </button>`
                                   : html`<span class="muted">
-                                        No owner default: new sessions use trusted project defaults, then the last model picked, then Pi's global default.
+                                        ${t("No owner default: new sessions use trusted project defaults, then the last model picked, then Pi's global default.")}
                                     </span>`
                           }
                       </div>`

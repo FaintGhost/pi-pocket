@@ -133,9 +133,9 @@ function SubagentModels({ names }) {
                                     ${spec}
                                     ${
                                         !model
-                                            ? html` · <span class="warn">not signed in</span>`
+                                            ? html` · <span class="warn">${t("not signed in")}</span>`
                                             : model.signIn &&
-                                              html` · <span class="warn">needs sign-in</span>`
+                                              html` · <span class="warn">${t("needs sign-in")}</span>`
                                     }
                                 </span>
                             </span>
@@ -194,92 +194,123 @@ export function ProvidersSheet() {
                 a.name.localeCompare(b.name),
         );
 
-    return html`<${Sheet} title=${t("Providers")} onClose=${closeSheet}>
-        <p class="muted small">
-            ${t("Pi Pocket shares Pi's sign-ins")} (<span class="mono">~/.pi/agent/auth.json</span>). ${owner ? "" : t("Only the owner can change them.")}
-        </p>
-        <${RefreshModels} />
+    // Signed-out providers wait at the end, and an expired sign-in comes first: that is the one to act on.
+    const groups = [
+        [t("Needs sign-in"), list.filter((provider) => provider.needsSignIn)],
+        [t("Signed in"), list.filter((provider) => !provider.needsSignIn && provider.configured)],
+        [
+            t("Not configured"),
+            list.filter((provider) => !provider.needsSignIn && !provider.configured),
+        ],
+    ].filter(([, each]) => each.length > 0);
+
+    const row = (provider) => html`<div class="provider" key=${provider.id}>
+        <div class="provider-info">
+            <div class="provider-name">
+                ${provider.name}
+                ${
+                    provider.needsSignIn
+                        ? html` <span class="warn provider-needs">${t("needs sign-in")}</span>`
+                        : provider.configured && html` <span class="ok">✓</span>`
+                }
+            </div>
+            <div class="muted small">
+                ${
+                    provider.needsSignIn
+                        ? t(
+                              "the sign-in expired and could not be renewed: sign in again. Until then, sessions on its models fail, and PiP and subagents on other models do not use them",
+                          )
+                        : provider.configured
+                          ? `${t("signed in")}${provider.label ? ` · ${provider.label}` : provider.source ? ` · ${provider.source}` : ""}`
+                          : t("not configured")
+                } · ${t("{{count}} models", { count: provider.models })}
+            </div>
+            ${
+                provider.needsSignIn &&
+                html`<div class="muted small mono provider-why">${provider.needsSignIn}</div>`
+            }
+        </div>
         ${
             owner &&
-            html`<${SubagentModels}
-                names=${Object.fromEntries((providers ?? []).map((each) => [each.id, each.name]))}
-            />`
+            html`<div class="provider-actions">
+                ${
+                    provider.oauth &&
+                    html`<button
+                        class="button small"
+                        onClick=${(event) => login(provider, "oauth", event.currentTarget)}
+                    >
+                        ${provider.oauth}
+                    </button>`
+                }
+                ${
+                    provider.apiKey &&
+                    html`<button
+                        class="button small"
+                        onClick=${(event) => login(provider, "api_key", event.currentTarget)}
+                    >
+                        ${t("API key")}
+                    </button>`
+                }
+                ${
+                    provider.configured &&
+                    provider.source === "stored" &&
+                    html`<button class="button small ghost" onClick=${() => logout(provider)}>
+                        ${t("Log out")}
+                    </button>`
+                }
+            </div>`
         }
-        ${store.state.auth && html`<${AuthDialog} inline=${true} />`}
-        <label class="search">
-            <${Icon} name="search" size=${16} />
-            <input
-                placeholder=${t("Search providers")}
-                value=${query}
-                onInput=${(event) => setQuery(event.currentTarget.value)}
-            />
-        </label>
-        ${providers === null && html`<${Loader} label=${t("Loading providers")} />`}
-        <div class="sheet-list">
+    </div>`;
+
+    return html`<${Sheet}
+        title=${t("Providers")}
+        onClose=${closeSheet}
+        className=${`providers-sheet ${owner ? "with-side" : ""}`}
+    >        <p class="muted small">
+            ${t("Pi Pocket shares Pi's sign-ins")} (<span class="mono">~/.pi/agent/auth.json</span>). ${owner ? "" : t("Only the owner can change them.")}
+        </p>
+        <div class="providers-layout">
             ${
-                providers !== null &&
-                list.length === 0 &&
-                needle !== "" &&
-                html`<div class="launcher-empty" role="status">
-                    <strong>${t("No providers match “{{query}}”.", { query: query.trim() })}</strong>
-                    <button class="button" onClick=${() => setQuery("")}>${t("Clear search")}</button>
-                </div>`
+                owner &&
+                html`<aside class="providers-side" aria-label=${t("Models")}>
+                    <${RefreshModels} />
+                    <${SubagentModels}
+                        names=${Object.fromEntries(
+                            (providers ?? []).map((each) => [each.id, each.name]),
+                        )}
+                    />
+                </aside>`
             }
-            ${list.map(
-                (provider) => html`<div class="provider">
-                    <div>
-                        <div>
-                            ${provider.name}
-                            ${
-                                provider.needsSignIn
-                                    ? html` <span class="warn provider-needs">${t("needs sign-in")}</span>`
-                                    : provider.configured && html` <span class="ok">✓</span>`
-                            }
-                        </div>
-                        <div class="muted small">
-                            ${provider.needsSignIn ? t("the sign-in expired and could not be renewed: sign in again. Until then, sessions on its models fail, and PiP and subagents on other models do not use them") : provider.configured ? `${t("signed in")}${provider.label ? ` · ${provider.label}` : provider.source ? ` · ${provider.source}` : ""}` : t("not configured")} · ${t("{{count}} models", { count: provider.models })}
-                        </div>
-                        ${
-                            provider.needsSignIn &&
-                            html`<div class="muted small mono provider-why">${provider.needsSignIn}</div>`
-                        }
-                    </div>
-                    ${
-                        owner &&
-                        html`<div class="provider-actions">
-                            ${
-                                provider.oauth &&
-                                html`<button
-                                    class="button small"
-                                    onClick=${(event) => login(provider, "oauth", event.currentTarget)}
-                                >
-                                    ${t(provider.oauth)}
-                                </button>`
-                            }
-                            ${
-                                provider.apiKey &&
-                                html`<button
-                                    class="button small"
-                                    onClick=${(event) => login(provider, "api_key", event.currentTarget)}
-                                >
-                                    ${t("API key")}
-                                </button>`
-                            }
-                            ${
-                                provider.configured &&
-                                provider.source === "stored" &&
-                                html`<button
-                                    class="button small ghost"
-                                    onClick=${() => logout(provider)}
-                                >
-                                    ${t("Log out")}
-                                </button>`
-                            }
-                        </div>`
-                    }
-                </div>`,
-            )}
-        </div>
+            <div class="providers-main">
+                ${store.state.auth && html`<${AuthDialog} inline=${true} />`}
+                <label class="search">
+                    <${Icon} name="search" size=${16} />
+                    <input
+                        placeholder=${t("Search providers")}
+                        aria-label=${t("Search providers")}
+                        value=${query}
+                        onInput=${(event) => setQuery(event.currentTarget.value)}
+                    />
+                </label>
+                ${providers === null && html`<${Loader} label=${t("Loading providers")} />`}
+                ${
+                    providers !== null &&
+                    list.length === 0 &&
+                    needle !== "" &&
+                    html`<div class="launcher-empty" role="status">
+                        <strong>${t("No providers match “{{query}}”.", { query: query.trim() })}</strong>
+                        <button class="button" onClick=${() => setQuery("")}>${t("Clear search")}</button>
+                    </div>`
+                }
+                ${groups.map(
+                    ([title, each]) => html`<section class="provider-group" key=${title}>
+                        <h3 class="provider-group-head">
+                            ${title} <span class="muted">${each.length}</span>
+                        </h3>
+                        <div class="sheet-list">${each.map(row)}</div>
+                    </section>`,
+                )}
+            </div>        </div>
     <//>`;
 }
 

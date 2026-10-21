@@ -64,7 +64,7 @@ function HookRow({ hook, base, fresh, onRemove, onRotate }) {
                     class="button small"
                     onClick=${() => copy(hook.secret, t("Secret copied: GitHub's Secret."))}
                 >
-                    Copy secret
+                    ${t("Copy secret")}
                 </button>`
             }
             <button class="button small ghost" onClick=${onRotate}>${t("New secret")}</button>
@@ -277,7 +277,7 @@ export function HooksSheet() {
                             aria-pressed=${!github}
                             onClick=${() => setGithub(false)}
                         >
-                            Another service
+                            ${t("Another service")}
                         </button>
                     </div>
                     <div class="muted small">
@@ -343,8 +343,8 @@ export function HooksSheet() {
                 )}
             </div>`
         }
-        ${list && html`<div class="group-title">Webhooks</div>`}
-        ${list?.hooks.length === 0 && html`<p class="muted">No webhooks yet.</p>`}
+        ${list && html`<div class="group-title">${t("Webhooks")}</div>`}
+        ${list?.hooks.length === 0 && html`<p class="muted">${t("No webhooks yet.")}</p>`}
         ${list?.hooks.map(
             (hook) => html`<${HookRow}
                 key=${hook.id}
