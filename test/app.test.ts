@@ -22,7 +22,7 @@ import { crc32, deflateSync } from "node:zlib";
 import { after, before, mock, test } from "node:test";
 import type { FauxResponseStep } from "@earendil-works/pi-ai";
 import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
-import type { ConversationId } from "@earendil-works/pi-durable";
+import { type ConversationId, InboxDoc } from "@earendil-works/pi-durable";
 import type { Attachment } from "../src/server/commands.ts";
 import createArtifacts from "../src/server/extensions/artifacts.ts";
 import type { PocketHost } from "../src/server/host.ts";
@@ -1071,6 +1071,61 @@ test("interrupt stops a streaming run and withdraws the queue, then Pi answers t
     assert.match(texts, /echo: never mind/);
     assert.doesNotMatch(texts, /queued one/);
     assert.ok(Date.now() - started < 4000, "it did not wait for the long answer");
+});
+
+test("a queued message moves between Queue and Steer, by its sender only", async () => {
+    const id = await newSession();
+    const guest = app.config.addUser("Alex", "guest").user;
+    const mode = async () => (await app.harness.snapshot(InboxDoc, id, context))?.items[0]?.mode;
+
+    try {
+        await app.commands.submit(id, owner(), { text: "stream a long answer", requestId: "m-1" });
+        await until(() => app.isBusy(id), "the run to start");
+        const { submissionId } = await app.commands.submit(id, owner(), {
+            text: "later",
+            mode: "followUp",
+            requestId: "m-2",
+        });
+
+        await app.commands.moveQueued(id, owner(), Number(submissionId), "steer");
+        assert.equal(await mode(), "steer");
+        await app.commands.moveQueued(id, owner(), Number(submissionId), "followUp");
+        assert.equal(await mode(), "followUp");
+        await assert.rejects(
+            app.commands.moveQueued(id, guest, Number(submissionId), "steer"),
+            /Only its sender/,
+        );
+        assert.equal(await mode(), "followUp");
+    } finally {
+        await app.commands.abort(id, owner());
+        app.config.removeUser(guest.id);
+    }
+});
+
+test("a queued message moved to Interrupt stops the run and withdraws the queue, then Pi answers it", async () => {
+    const id = await newSession();
+    const started = Date.now();
+
+    await app.commands.submit(id, owner(), { text: "stream a long answer", requestId: "mi-1" });
+    await until(() => app.isBusy(id), "the run to start");
+    const { submissionId } = await app.commands.submit(id, owner(), {
+        text: "right now",
+        mode: "followUp",
+        requestId: "mi-2",
+    });
+
+    await app.commands.submit(id, owner(), { text: "a steer", mode: "steer", requestId: "mi-3" });
+    await app.commands.moveQueued(id, owner(), Number(submissionId), "interrupt");
+    await until(
+        async () => (await modelTexts(app, id)).some((text) => text.includes("echo: right now")),
+        "the answer to the moved message",
+    );
+    assert.ok(Date.now() - started < 4000, "it did not wait for the long answer");
+    assert.doesNotMatch((await modelTexts(app, id)).join("\n"), /a steer/);
+    await assert.rejects(
+        app.commands.moveQueued(id, owner(), Number(submissionId), "steer"),
+        /already gone/,
+    );
 });
 
 test("an interrupt sent again with the same request id does not stop the run that it started", async () => {

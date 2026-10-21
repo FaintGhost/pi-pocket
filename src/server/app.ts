@@ -98,7 +98,7 @@ import { measureModelStreams } from "./timing.ts";
 import { Providers } from "./providers.ts";
 import { PushStore } from "./push.ts";
 import { type ExtensionInfo, ExtensionLoader, linkTypes, prepareDropInFolder } from "./reload.ts";
-import { ResendTask } from "./resend.ts";
+import { InterruptTask, ResendTask } from "./resend.ts";
 import { type Client, reportingOf, Room, ROOM_DOCS, subagentView } from "./room.ts";
 import { Schedules } from "./schedules.ts";
 import { Shell } from "./shell.ts";
@@ -511,6 +511,7 @@ export class PocketApp {
                 name: "pocket-core",
                 tasks: [
                     ResendTask,
+                    InterruptTask,
                     this.shell.task,
                     this.commands.followTask,
                     this.extensionCommands.task,
