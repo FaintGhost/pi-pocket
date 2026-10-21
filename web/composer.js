@@ -1156,10 +1156,17 @@ export function Composer() {
                                                 ? "Tap again to stop the run and send this now"
                                                 : modeHint("interrupt")
                                         }
-                                        onClick=${() =>
-                                            CONFIRM_INTERRUPT && interrupting !== item.id
-                                                ? setInterrupting(item.id)
-                                                : attempt(() => actions.move(item.id, "interrupt"))}
+                                        onClick=${() => {
+                                            if (CONFIRM_INTERRUPT && interrupting !== item.id) {
+                                                setInterrupting(item.id);
+
+                                                return;
+                                            }
+
+                                            // A third quick tap must not send it again.
+                                            setInterrupting(null);
+                                            void attempt(() => actions.move(item.id, "interrupt"));
+                                        }}
                                     >
                                         ${interrupting === item.id ? "Interrupt?" : "Interrupt"}
                                     </button>

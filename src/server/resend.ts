@@ -5,6 +5,7 @@
  */
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import { defineTask, type EntryId, type UserInput } from "@earendil-works/pi-durable";
+import { describe } from "./errors.ts";
 import { ownRequest } from "./requests.ts";
 
 /** What a fork sends: the text, by whom, and the message whose images go along, when the model takes images. */
@@ -106,10 +107,21 @@ export const InterruptTask = defineTask<Interrupt, { phase: "send" }, null>({
             }, context);
 
             if (!sent) {
-                const conversation = await runtime.conversation(id, context);
+                // The message has left the queue: a failure here must say so, not fault the task without a word.
+                try {
+                    const conversation = await runtime.conversation(id, context);
 
-                await conversation?.abort(context);
-                await conversation?.submit({ type: "input", content, requestId }, context);
+                    await conversation?.abort(context);
+                    await conversation?.submit({ type: "input", content, requestId }, context);
+                } catch (error) {
+                    if (context.abortSignal?.aborted === true) {
+                        throw error;
+                    }
+
+                    runtime.report(
+                        new Error(`A message moved to Interrupt was not sent: ${describe(error)}`),
+                    );
+                }
             }
 
             await runtime.commit(() => finished, context);

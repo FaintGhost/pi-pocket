@@ -1212,11 +1212,16 @@ export class Commands {
     ): Promise<void> {
         const app = this.#app;
 
+        app.requireSee(user, id);
+
+        if (!Number.isInteger(submissionId) || submissionId <= 0) {
+            throw new HttpError(400, "Say which queued message to move.");
+        }
+
         if (mode !== "steer" && mode !== "followUp" && mode !== "interrupt") {
             throw new HttpError(400, "Move a message to steer, followUp, or interrupt.");
         }
 
-        app.requireSee(user, id);
         await app.requireDriver(id, user);
 
         if (app.attribution.knownSubmitter(submissionId) !== user.id) {
@@ -1242,6 +1247,14 @@ export class Commands {
 
             items.splice(index, 1);
             tx.settleSubmission(item.id, { status: "unanswered", reason: "aborted" });
+            // The stop withdraws subagents' reports being sent, as the composer's Interrupt does: in this commit, so a
+            // restart cannot leave the task without it (`#discardReports`).
+            const subagents = await tx.doc(SubagentsDoc, id);
+
+            if (subagents.sending !== undefined && subagents.sending.discarded !== true) {
+                subagents.sending = { ...subagents.sending, discarded: true };
+            }
+
             await tx.createTask(
                 InterruptTask,
                 { content, requestId: ownRequest(user.id, `interrupt-${submissionId}`) },
@@ -1256,7 +1269,6 @@ export class Commands {
         }
 
         if (mode === "interrupt") {
-            await this.#discardReports(id);
             await app.collab.activity(id, user, "interrupted the run");
         }
     }
