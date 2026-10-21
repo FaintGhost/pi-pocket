@@ -118,7 +118,11 @@ Since 0.20.0 · Experimental
 
 Registers a model provider with Pi's model runtime, as a Pi extension does. `config` is Pi's own `ProviderConfig`: the provider's name, base URL, API key, API, headers, and models or `refreshModels` function. The return value removes the provider again. A module that a reload replaces can call its removal safely: it leaves the newer registration alone. The provider's models appear when Pi next refreshes the model list, as with the app's own **Refresh models** action.
 
-A provider configured here has the same reach as one signed in from the app: the owner can choose its models and Pi can use them in every session. Say so when you ask the owner to turn the module on.
+Two things to know about how Pi refreshes models.
+
+First, registration refreshes models locally only. A provider whose catalog comes from `refreshModels` alone shows no models until a network refresh, as with the app's **Refresh models** action. To look right away, ship a fallback list: a small static `models` with the provider's most common models. The network pass replaces it.
+
+Second, every refresh, even a local one, calls `refreshModels`. When `allowNetwork` is false, return the models you have: `stored?.models ?? []`, or another fallback list. Returning `[]` empties the provider in Pi until the next network pass, because an empty list still counts as the provider's answer.
 
 ### `shapeModelRequests`
 
