@@ -175,6 +175,31 @@ export const ArtifactBodyDoc = defineDocFamily<{ content: string }, { content: s
     initial: (seed) => ({ content: seed.content }),
 });
 
+/**
+ * One artifact version published to anyone with its address (`share.ts`), under a token that is the whole of the access:
+ * no sign-in. `version` is the version it shows, or absent to follow the artifact's newest.
+ */
+export type ArtifactShare = {
+    /** The conversation the artifact is in. */
+    conversation: string;
+    id: string;
+    version?: number;
+    /** Who published it, and when. */
+    by: string;
+    createdAt: number;
+    /** When it closes; absent: never. */
+    expiresAt?: number;
+};
+
+/** The artifact shares of the whole app, by their token. */
+export const ArtifactSharesDoc = defineDoc<{ items: Record<string, ArtifactShare> }>({
+    kind: "pocket.artifact-shares",
+    version: 1,
+    ...rebased,
+    scope: "session",
+    initial: () => ({ items: {} }),
+});
+
 export type SubagentRecord = {
     conversationId: ConversationId;
     /** Answers already reported to the parent: several messages can end in one answer, reported once. */
