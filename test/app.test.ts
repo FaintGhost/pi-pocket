@@ -2074,3 +2074,79 @@ test("sessions and artifacts survive closing and reopening the storage", async (
     assert.ok(app.sessions().some((each) => each.id === Number(id)));
     assert.equal((await app.artifactBody(id, "demo-page", undefined)).content, "<h1>one</h1>");
 });
+
+test("an extension reads a session's messages a page at a time, as its person may", async () => {
+    const { createServer } = await import("node:http");
+    const { createHandler } = await import("../src/server/http.ts");
+    const id = await newSession();
+    const other = await newSession();
+
+    for (const text of ["first", "second", "third", "fourth", "fifth"]) {
+        await say(id, text);
+    }
+
+    const server = createServer(
+        createHandler({ app, listen: { host: "127.0.0.1", port: 0 }, restart: () => {} }),
+    );
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    const elsewhere = app.config.addUser("Sam", "guest", [String(other)]);
+    const call = (token: string, query: string, session = id) =>
+        fetch(`http://127.0.0.1:${port}/api/c/${session}/messages${query}`, {
+            headers: { authorization: `Bearer ${token}` },
+        });
+
+    type Page = { messages: { id: number; kind: string; text: string }[]; before: number | null };
+    const page = async (query: string) =>
+        (await (await call(app.config.ownerToken, query)).json()) as Page;
+
+    try {
+        const newest = await page("?limit=2");
+
+        assert.deepEqual(
+            newest.messages.map((each) => [each.kind, each.text]),
+            [
+                ["user", "fourth"],
+                ["user", "fifth"],
+            ],
+            "only people's messages, oldest first",
+        );
+        assert.equal(newest.before, newest.messages[0]!.id);
+
+        const older = await page(`?limit=2&before=${newest.before}`);
+
+        assert.deepEqual(
+            older.messages.map((each) => each.text),
+            ["second", "third"],
+        );
+
+        const first = await page(`?limit=2&before=${older.before}`);
+
+        assert.deepEqual(
+            first.messages.map((each) => each.text),
+            ["first"],
+        );
+        assert.equal(first.before, null, "the start has no cursor");
+        assert.equal((await page("")).messages.length, 5, "50 by default");
+
+        // A cursor that is not a message of the context is stale, not the start.
+        assert.equal((await call(app.config.ownerToken, `?before=999999999`)).status, 409);
+
+        for (const bad of ["?limit=0", "?limit=201", "?limit=x", "?before=-3", "?before=abc"]) {
+            assert.equal((await call(app.config.ownerToken, bad)).status, 400, bad);
+        }
+
+        assert.equal((await call(elsewhere.token, "")).status, 404, "not their session");
+        assert.equal((await call(elsewhere.token, "", other)).status, 200, "their own session");
+        assert.equal(
+            (await fetch(`http://127.0.0.1:${port}/api/c/${id}/messages`)).status,
+            401,
+            "signed out",
+        );
+    } finally {
+        app.config.removeUser(elsewhere.user.id);
+        server.closeAllConnections();
+        server.close();
+    }
+});

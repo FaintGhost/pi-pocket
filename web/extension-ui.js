@@ -17,6 +17,7 @@ import {
 import { useBack } from "./back.js";
 import { parseKeys, setBoxKeys } from "./box-keys.js";
 import { describersChanged, setCallDescriber } from "./calls.js";
+import { jumpToEntry } from "./chat.js";
 import { leaveSafeMode, onSafeModeEnd, safeMode } from "./safe-mode.js";
 import {
     api,
@@ -45,6 +46,7 @@ import {
     Sheet,
     Spinner,
     Switch,
+    writtenText,
 } from "./ui.js";
 
 /**
@@ -77,6 +79,9 @@ const KINDS = [
 const OPENS = ["page", "sheet", "panel"];
 /** The most text `pocket.insertText` puts into the message box at once. */
 const INSERT_MAX = 100_000;
+/** The most of a message's text `pocket.messages` gives, and the most messages in a page. */
+const MESSAGE_TEXT = 1000;
+const MESSAGES_MAX = 200;
 /** A status item's tones, as the line's own items show them. */
 const TONES = new Set(["warn", "error", "muted"]);
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/;
@@ -911,6 +916,125 @@ function pocketFor(record) {
             tick(record);
 
             return store.state.conversationId;
+        },
+        /**
+         * Hear which session the tab shows: `listener` gets its id (or null) now, and again each time it changes. Returns
+         * how to stop; it stops with this version of the module too.
+         */
+        onConversation(listener) {
+            tick(record);
+
+            if (typeof listener !== "function") {
+                throw new Error("pocket.onConversation: give it a function");
+            }
+
+            if (!live()) {
+                return () => {};
+            }
+
+            let shown = store.state.conversationId;
+
+            const hear = (id) => {
+                try {
+                    listener(id);
+                } catch (error) {
+                    console.error(`${record.title}: an onConversation listener failed`, error);
+                }
+            };
+
+            const stop = store.subscribe((state) => {
+                if (state.conversationId !== shown && liveRecord(record)) {
+                    shown = state.conversationId;
+                    hear(shown);
+                }
+            });
+
+            record.disposers.push(stop);
+            hear(shown);
+
+            return stop;
+        },
+        /**
+         * A page of the people's messages in the session the tab shows, oldest first: the newest `limit` (50 by default,
+         * up to 200), or those before the cursor `before` that a page gave. Its `before` is null at the start. Rejects
+         * with `status` 409 when the cursor is stale (the context changed), and with an AbortError when `signal` aborts.
+         */
+        async messages(options = {}) {
+            tick(record);
+
+            const { before = null, limit = 50, signal } = options ?? {};
+
+            if (before !== null && !(typeof before === "string" && /^[1-9]\d*$/.test(before))) {
+                throw new Error("pocket.messages: before is a cursor that a page gave, or null");
+            }
+
+            if (!Number.isInteger(limit) || limit < 1 || limit > MESSAGES_MAX) {
+                throw new Error(
+                    `pocket.messages: limit is a whole number from 1 to ${MESSAGES_MAX}`,
+                );
+            }
+
+            const conversationId = store.state.conversationId;
+
+            if (!live() || conversationId === null) {
+                return Object.freeze({ conversationId, messages: [], before: null });
+            }
+
+            const query = new URLSearchParams({ limit: String(limit) });
+
+            if (before !== null) {
+                query.set("before", before);
+            }
+
+            const page = await api(`c/${conversationId}/messages?${query}`, undefined, { signal });
+            const { view, users, me } = store.state;
+            // Who wrote each: known only while the tab still shows that session.
+            const authors = view.conversation?.id === conversationId ? view.authors : undefined;
+
+            return Object.freeze({
+                conversationId,
+                before: page.before === null ? null : String(page.before),
+                messages: page.messages.map((entry) => {
+                    const text = writtenText(entry);
+                    const userId = authors?.[entry.id];
+                    const person = users.find((user) => user.id === userId);
+
+                    return Object.freeze({
+                        id: String(entry.id),
+                        text: text.slice(0, MESSAGE_TEXT),
+                        clipped: text.length > MESSAGE_TEXT,
+                        by: Object.freeze({
+                            id: userId ?? null,
+                            name:
+                                person?.name ??
+                                entry.from ??
+                                (userId === me?.id ? me?.name : null) ??
+                                null,
+                        }),
+                        at: entry.at ?? null,
+                    });
+                }),
+            });
+        },
+        /**
+         * Scroll the transcript of the session the tab shows to a message, loading earlier entries first when needed,
+         * and highlight it. Resolves true once it shows; false when it is not in this session's transcript, the session
+         * changed, or a newer reveal came first. A sheet that shows closes.
+         */
+        reveal(id) {
+            tick(record);
+
+            const entryId = typeof id === "string" && /^[1-9]\d*$/.test(id) ? Number(id) : id;
+
+            if (typeof entryId !== "number" || !Number.isSafeInteger(entryId) || entryId <= 0) {
+                throw new Error("pocket.reveal: give it the id of a message");
+            }
+
+            if (!live() || store.state.conversationId === null) {
+                return Promise.resolve(false);
+            }
+
+            return jumpToEntry(entryId, { quiet: true });
         },
         /** Open through the app's normal navigation; the server checks access on connection. */
         openConversation: (id) => {

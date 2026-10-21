@@ -1238,6 +1238,96 @@ export interface SessionSearchSpec {
 }
 
 /**
+ * What `pocket.messages` reads.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface MessagesOptions {
+    /**
+     * The cursor a page gave, for the messages before it. Null or none: the newest.
+     * @since 0.20.0
+     * @experimental
+     */
+    before?: string | null;
+    /**
+     * How many messages, from 1 to 200. Default 50.
+     * @since 0.20.0
+     * @experimental
+     */
+    limit?: number;
+    /**
+     * Stops the read: the promise rejects with an AbortError.
+     * @since 0.20.0
+     * @experimental
+     */
+    signal?: AbortSignal;
+}
+
+/**
+ * A page of the people's messages in a session, oldest first.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface MessagePage {
+    /**
+     * The session the page is from: the one the tab showed when it was asked for.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly conversationId: number | null;
+    /**
+     * The messages, oldest first.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly messages: readonly MessageInfo[];
+    /**
+     * The cursor for the page before this one, or null at the start.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly before: string | null;
+}
+
+/**
+ * A person's message in a session.
+ * @since 0.20.0
+ * @experimental
+ */
+export interface MessageInfo {
+    /**
+     * The message's id, for `pocket.reveal`. It names this message only, also after a reload.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly id: string;
+    /**
+     * What the person wrote, without attached files: up to 1,000 characters.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly text: string;
+    /**
+     * Whether `text` was cut.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly clipped: boolean;
+    /**
+     * Who wrote it, when known.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly by: { readonly id: string | null; readonly name: string | null };
+    /**
+     * When it was sent, in milliseconds since 1970 on the server's clock, when known.
+     * @since 0.20.0
+     * @experimental
+     */
+    readonly at: number | null;
+}
+
+/**
  * A message box, as a key's `run` gets it: its text and selection when the key came, and `set`.
  * @since 0.20.0
  * @experimental
@@ -1603,6 +1693,24 @@ export interface Pocket {
      * @since 0.16.0
      */
     openConversation(id: number | string): void;
+    /**
+     * Hears which session the tab shows: the listener gets its id, or null, now and on each change. Returns how to stop.
+     * @since 0.20.0
+     * @experimental
+     */
+    onConversation(listener: (conversationId: number | null) => void): () => void;
+    /**
+     * Reads a page of the people's messages in the session the tab shows, oldest first.
+     * @since 0.20.0
+     * @experimental
+     */
+    messages(options?: MessagesOptions): Promise<MessagePage>;
+    /**
+     * Scrolls the transcript to a message, loading earlier entries first when needed. Resolves whether it shows.
+     * @since 0.20.0
+     * @experimental
+     */
+    reveal(id: string): Promise<boolean>;
     /**
      * Calls one of the module's routes: a GET without `body`, a POST with it.
      * @since 0.14.0

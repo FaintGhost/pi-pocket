@@ -258,6 +258,71 @@ Since 0.16.0 · Stable
 
 Open a positive integer conversation id through normal app navigation. This closes the extension page and keeps normal Back behavior. Sheets close when changing conversations; call `pocket.closeSheet()` first to close your own sheet even when that conversation is already open. The server still checks access; an id grants no access. Invalid ids throw. Use a bound start's `session` or a human list item's `conversationId`, not a private app URL.
 
+### `onConversation`
+
+```ts
+onConversation(listener: (conversationId: number | null) => void): () => void;
+```
+
+Since 0.20.0 · Experimental
+
+Calls `listener` with the id of the session the tab shows, or null, at once, and again each time it changes: another session opens, the person goes to the list, or they lose access to it. Returns how to stop. It also stops when this version of the module goes. A listener that throws is logged, and the others go on.
+
+### `messages`
+
+```ts
+messages(options?: MessagesOptions): Promise<MessagePage>;
+```
+
+Since 0.20.0 · Experimental
+
+Reads a page of the people's messages in the session the tab shows, oldest first: Pi's answers, tool calls, and notes are not in it. With no `before`, it is the newest `limit` messages (50 by default, up to 200). The page's `before` is the cursor for the page before it, and null at the start. Read pages until `before` is null to have them all. The messages are those of the transcript: after a New context, the earlier ones are not in it.
+
+The server checks the person's access to the session for each page. A page is from the session that the tab showed when it was asked for (`conversationId`): compare it with the one shown now before you use it. It rejects with an error whose `status` is 409 when its cursor is stale, as after a compaction: read again from the newest. Abort it with `signal`. With no session open, or from a version of the module that is gone, the page is empty. See [`MessagesOptions`](#messagesoptions), [`MessagePage`](#messagepage), and [`MessageInfo`](#messageinfo).
+
+The text is what people wrote, and can hold anything they pasted. Keep it in memory only for as long as you show it, and show it as text, not HTML.
+
+### `reveal`
+
+```ts
+reveal(id: string): Promise<boolean>;
+```
+
+Since 0.20.0 · Experimental
+
+Scrolls the transcript of the session the tab shows to a message, and highlights it, as Find does. It loads earlier entries first when the transcript does not have them yet. A sheet that shows closes, so the transcript shows; the focus stays where it is, and with reduced motion on, it does not scroll smoothly. It resolves true once the message shows, and false when it cannot: it is not in this session's transcript, the session changed while it loaded, or a newer reveal (or a jump in the app) came first. Use the `id` of a [`MessageInfo`](#messageinfo). An id that is not a positive whole number throws.
+
+```js
+// An outline of the session's messages, in a sheet: each one jumps to its message.
+pocket.sheet({
+    id: "outline",
+    title: "Outline",
+    component() {
+        const [messages, setMessages] = pocket.useState(null);
+
+        pocket.useEffect(() => {
+            const stop = new AbortController();
+
+            pocket.messages({ limit: 200, signal: stop.signal }).then(
+                (page) => setMessages(page.messages),
+                () => setMessages([]),
+            );
+
+            return () => stop.abort();
+        }, []);
+
+        return messages === null
+            ? pocket.html`<${pocket.Loader} />`
+            : messages.map(
+                  (message) =>
+                      pocket.html`<button class="list-item" onClick=${() => pocket.reveal(message.id)}>
+                          ${message.text.split("\n")[0]}
+                      </button>`,
+              );
+    },
+});
+```
+
 ## Routes and events
 
 ### `api`
@@ -954,6 +1019,58 @@ Since 0.20.0 · Experimental
 
 - `id`: the words' id in the module.
 - `words`: the words for a session, up to 32, each up to 100 characters. The search lowercases them. It is called as people search, so keep it fast, and do not call `pocket` in it. Give `update` a new function when the words change.
+
+### `MessagesOptions`
+
+```ts
+interface MessagesOptions {
+    before?: string | null;
+    limit?: number;
+    signal?: AbortSignal;
+}
+```
+
+Since 0.20.0 · Experimental
+
+- `before`: the cursor that a page gave, for the messages before it. None or null: the newest.
+- `limit`: how many messages, from 1 to 200. 50 by default. Others throw.
+- `signal`: stops the read. The promise then rejects with an AbortError.
+
+### `MessagePage`
+
+```ts
+interface MessagePage {
+    readonly conversationId: number | null;
+    readonly messages: readonly MessageInfo[];
+    readonly before: string | null;
+}
+```
+
+Since 0.20.0 · Experimental
+
+- `conversationId`: the session that the tab showed when the page was asked for.
+- `messages`: the messages, oldest first.
+- `before`: the cursor for the page before this one, or null at the start.
+
+### `MessageInfo`
+
+```ts
+interface MessageInfo {
+    readonly id: string;
+    readonly text: string;
+    readonly clipped: boolean;
+    readonly by: { readonly id: string | null; readonly name: string | null };
+    readonly at: number | null;
+}
+```
+
+Since 0.20.0 · Experimental
+
+- `id`: the message's id, for `reveal`. Two messages with the same words have different ids, and an id names the same message after a reload, a restart, and a compaction. A fork's messages have ids of their own. Do not read meaning into it.
+- `text`: what the person wrote, without the files attached to it: up to 1,000 characters.
+- `clipped`: true when `text` was cut.
+- `by`: who wrote it: their id and name, when known. A message from before Pi Pocket kept authors has neither.
+- `at`: when it was sent, in milliseconds since 1970 on the server's clock, or null.
 
 ### `ComposerKeySpec`
 

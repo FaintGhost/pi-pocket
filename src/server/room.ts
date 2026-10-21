@@ -123,6 +123,9 @@ export type PeekSummary = {
 };
 
 /** One browser tab's event stream. */
+/** How much of a message's text `userMessages` sends: enough to show, and to cut where the browser wants. */
+const USER_MESSAGE_TEXT = 4000;
+
 export interface Client {
     readonly id: string;
     readonly user: User;
@@ -741,6 +744,41 @@ export class Room {
         }
 
         return rows === undefined ? earlier : earlier.slice(firstEntries(earlier, rows));
+    }
+
+    /**
+     * The people's messages in the active context, for extensions (`pocket.messages`): a page of up to `limit`, oldest
+     * first, from before the message `before` (or the newest), with the cursor of the page before it, or null at the
+     * start. Each text is cut at `USER_MESSAGE_TEXT` characters. Null when `before` is not a message in the context
+     * now, as after a compaction, so a stale cursor is not taken for the start.
+     */
+    userMessages(
+        before: number | undefined,
+        limit: number,
+    ): { messages: ClientEntry[]; before: number | null } | null {
+        const view = this.#view?.value;
+        const all = (view === undefined ? [] : this.#projectedEntries(view.entries)).filter(
+            (entry) => entry.kind === "user",
+        );
+        const end =
+            before === undefined ? all.length : all.findIndex((entry) => entry.id === before);
+
+        if (end === -1) {
+            return null;
+        }
+
+        const start = Math.max(0, end - limit);
+
+        return {
+            messages: all
+                .slice(start, end)
+                .map((entry) =>
+                    entry.kind === "user" && entry.text.length > USER_MESSAGE_TEXT
+                        ? { ...entry, text: entry.text.slice(0, USER_MESSAGE_TEXT) }
+                        : entry,
+                ),
+            before: start === 0 ? null : all[start]!.id,
+        };
     }
 
     /** The live run as tabs get it, projected once for each state of it. */

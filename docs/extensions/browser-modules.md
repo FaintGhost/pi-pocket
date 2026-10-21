@@ -127,6 +127,8 @@ These, and slots, came in 0.19.0, and are experimental: they can change in a min
 
 **`composerKey({ id, keys, label, run(box) })`** adds a key in the message boxes, the session's and PiP's: Ctrl+W to delete a word, Alt+Backspace, keys of an editor you are used to. It comes before the box's own keys. `run` gets the box's `text`, its selection (`start`, `end`), and `set(text, caret)`, which edits the box as typing does. It came in 0.20.0, and is experimental. A browser tab never gets some keys, such as Ctrl+W, which closes the tab: they reach the page only in an installed app's window, if at all.
 
+**`onConversation(listener)`**, **`messages({ before, limit, signal })`**, and **`reveal(id)`** let a module follow the session the tab shows, read its people's messages a page at a time, and scroll the transcript to one: an outline of a long session, a list of its questions. The app loads earlier history for `reveal`, and the server checks access for each page. They came in 0.20.0, and are experimental.
+
 **`replyAction({ id, label, run(reply) or sheet })`** adds an action under Pi's answers, before More: "Send to Linear", "Read aloud". `run` gets the answer as `{ id, text, conversationId }`, and a sheet gets it as the prop `reply`.
 
 ## The session list

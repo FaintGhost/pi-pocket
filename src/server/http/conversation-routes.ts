@@ -558,6 +558,36 @@ export async function conversationRoutes(
         }
     }
 
+    // The people's messages, a page at a time, for extensions' outlines (`pocket.messages`).
+    if (third === "messages" && method === "GET") {
+        const before = url.searchParams.get("before");
+        const limit = Number(url.searchParams.get("limit") ?? 50);
+
+        if (
+            (before !== null && !(Number.isSafeInteger(Number(before)) && Number(before) > 0)) ||
+            !(Number.isSafeInteger(limit) && limit > 0 && limit <= 200)
+        ) {
+            throw new HttpError(
+                400,
+                "before is an entry id, and limit a whole number from 1 to 200, if given",
+            );
+        }
+
+        const room = await app.room(id);
+
+        try {
+            const page = room.userMessages(before === null ? undefined : Number(before), limit);
+
+            if (page === null) {
+                throw new HttpError(409, "That page is gone: the session's context changed.");
+            }
+
+            return json(response, 200, page);
+        } finally {
+            app.releaseRoom(room);
+        }
+    }
+
     if (third === "upload" && method === "POST") {
         app.requireSteer(user);
 
