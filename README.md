@@ -62,6 +62,7 @@ The owner sign-in link is in the log (`docker compose logs pi-pocket | grep '/lo
 - **Omarchy colors.** Every Omarchy theme's colors, or follow your desktop's live; tiled Hyprland-style windows, a Walker-style launcher (Ctrl/⌘+K) with live color previews, and Hyprland's motion.
 - **Extension gallery.** Find drop-ins and themes other people wrote, read their source or ask Pi to review it, and install them: each file is checked against the index, an extension starts off, and an update shows its diff first. Share your own from Extensions.
 - **Agent Teams.** Off by default. Pi starts linked sessions that work beside the one that started them, and messages them both ways.
+- **Session tags.** Off by default. Shared labels on sessions, shown on their rows, found by search, and used to filter the session list.
 - **Favorite folders.** New session works like a desktop file dialog and opens in the folder you are already in: star a folder to start a session there with Ctrl/⌘+1…9 or from the launcher, or use **New session here** to stay where you are.
 - **Peek tiles.** One click (or Alt+P) shows your other sessions working beside the one you are in: approve their calls from there, and swap between them with a click. Only the tiles on screen stay live, so a long list scrolls cheaply.
 - **Built for phones.** Streaming answers, Pi's tool calls folded into a timeline with diffs and live output, push notifications you can allow or deny from, sharing into Pi from other apps, and a home-screen app.
