@@ -32,6 +32,19 @@ The launcher asks how your devices should connect, then prints the address, a si
 
 While it runs: **q** quit · **r** restart server · **a** change access · **o** open in browser · **s** show QR code.
 
+## Docker and Podman
+
+A container image and a Compose file are included. Extensions, themes, Pi's sign-ins, the database, and the workspace are bind-mounted from the host, so they survive rebuilds and stay editable outside the container.
+
+```bash
+cp .env.example .env    # optional: ports and external folders
+docker compose up -d --build
+# or
+podman compose up -d --build
+```
+
+The owner sign-in link is in the log (`docker compose logs pi-pocket | grep '/login?token='`). The container starts in `lan` mode by default; set `PI_POCKET_ACCESS` and `PI_POCKET_BIND` in `.env` to change who can reach it. [docs/docker.md](docs/docker.md) has the folders, permissions, and update notes.
+
 ## Features
 
 - **Durable.** Every model call, tool call, and subagent is stored as it happens. Restart the server mid-run and the work continues; a cut-off tool call reruns only if that is safe.
