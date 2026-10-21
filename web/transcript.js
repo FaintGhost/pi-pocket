@@ -1068,6 +1068,12 @@ function ToolStep({
 /** Groups opened or closed by hand, per conversation and group, for as long as the page is open. */
 const openedGroups = new Map();
 /**
+ * An open group draws its newest steps, this many, and a button for the rest: a long run of Pi's alone can be hundreds of
+ * steps, which made opening its session freeze on a phone. Groups shown in full, by hand or by a jump, are kept here.
+ */
+const GROUP_STEPS = 24;
+const wholeGroups = new Map();
+/**
  * The answer a jump asked to see last (`jumpToEntry` in chat.js says so with a `pocket:reveal` event), and when: a group
  * that shows only after the jump moved the rows shown opens when it first draws. Groups already shown hear the event.
  */
@@ -1155,6 +1161,7 @@ function ActivityGroup({
         item.anchors.includes(revealing.entryId)
     ) {
         keep(openedGroups, id, true);
+        keep(wholeGroups, id, true);
     }
 
     const chosen = openedGroups.get(id);
@@ -1211,6 +1218,8 @@ function ActivityGroup({
     let thoughts = 0;
     // A jump to one of its answers (Find, a pin, Changes) opens it: `jumpToEntry` says which.
     const anchors = item.anchors.join();
+    // The steps not drawn yet, the oldest: each still names the steps after it (below), so keys stay as they were.
+    const hidden = wholeGroups.get(id) ? 0 : Math.max(0, item.steps.length - GROUP_STEPS);
 
     useEffect(() => {
         if (anchors === "") {
@@ -1220,6 +1229,7 @@ function ActivityGroup({
         const reveal = (event) => {
             if (item.anchors.includes(event.detail)) {
                 keep(openedGroups, id, true);
+                keep(wholeGroups, id, true);
                 redraw((n) => n + 1);
             }
         };
@@ -1262,13 +1272,31 @@ function ActivityGroup({
             open &&
             !lone &&
             html`<div class="timeline" data-part="timeline">
+                ${
+                    hidden > 0 &&
+                    html`<button
+                        class="link timeline-earlier"
+                        data-part="timeline-earlier"
+                        onClick=${() => {
+                            keep(wholeGroups, id, true);
+                            redraw((n) => n + 1);
+                        }}
+                    >
+                        Show ${hidden} earlier ${hidden === 1 ? "step" : "steps"}
+                    </button>`
+                }
                 ${item.steps.map(({ block, entry, streaming, canRun }, index) => {
                     // A call is named by its id, the same streamed and stored; a thought by the call before it. Not by
                     // place: earlier steps join the front when earlier messages show.
                     if (block.type === "thinking") {
-                        return html`<${Memo} key=${`t:${lastCall}:${thoughts++}`} deps=${[block, streaming, reading]}>
-                            <${ThoughtStep} block=${block} streaming=${streaming} reading=${reading} />
-                        <//>`;
+                        const key = `t:${lastCall}:${thoughts++}`;
+
+                        return (
+                            index >= hidden &&
+                            html`<${Memo} key=${key} deps=${[block, streaming, reading]}>
+                                <${ThoughtStep} block=${block} streaming=${streaming} reading=${reading} />
+                            <//>`
+                        );
                     }
 
                     const slot = slots.get(block.id);
@@ -1286,6 +1314,10 @@ function ActivityGroup({
                     keys.add(key);
                     lastCall = key;
                     thoughts = 0;
+
+                    if (index < hidden) {
+                        return null;
+                    }
 
                     return html`<${Memo}
                         key=${key}

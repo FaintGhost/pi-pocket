@@ -2052,6 +2052,14 @@ kbd {
     animation: unroll var(--t-in) var(--ease-out);
 }
 
+/* Above a long group's newest steps: it shows the rest, from the rule's left. */
+.timeline-earlier {
+    display: block;
+    margin: 0 0 calc(4px * var(--space-y))
+        calc(var(--timeline-x) + var(--step-mark-size) / 2 + var(--step-gap));
+    padding: 4px 0;
+}
+
 .timeline::before {
     content: "";
     position: absolute;
