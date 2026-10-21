@@ -15,6 +15,7 @@ import {
     getAgentDir,
     ModelRuntime,
     resolveModelScopeWithDiagnostics,
+    type ProviderConfig,
     SettingsManager,
     type Skill,
 } from "@earendil-works/pi-coding-agent";
@@ -344,8 +345,11 @@ export class PocketApp {
     readonly #configureModels: ((models: ModelRuntime) => void) | undefined;
     /** Request shapers from the extension modules the owner turned on (`host.shapeModelRequests`). */
     readonly #shapers: ModelRequestShaper[] = [];
-    /** The module whose registration of each provider counts, so an older version's cleanup cannot remove it. */
-    readonly #modelProviders = new Map<string, symbol>();
+    /**
+     * Each provider's registrations by extension modules (`host.registerModelProvider`), newest last: the newest is in
+     * Pi's runtime, and removing it puts back the one before.
+     */
+    readonly #modelProviders = new Map<string, { token: symbol; config: ProviderConfig }[]>();
     readonly #home: string;
     /** The clock durable work runs by. */
     readonly now: () => number;
@@ -430,6 +434,92 @@ export class PocketApp {
             // Something about a module only the owner can mend: their tabs, as what it says can name the server's folders.
             warn: (message) => this.ownerNotice("warning", message),
         });
+    }
+
+    /**
+     * A module's model provider goes into Pi's runtime in place of the one in force, and stays until its removal. Pi
+     * merges a registration into the one before, so the one before goes first: a new version starts from its own config
+     * alone. When Pi refuses the config, the one before comes back and the registration throws.
+     */
+    #registerModelProvider(provider: string, config: ProviderConfig): () => void {
+        const token = Symbol(provider);
+        const registrations = this.#modelProviders.get(provider) ?? [];
+        const previous = registrations.at(-1);
+
+        if (previous !== undefined) {
+            this.models.unregisterProvider(provider);
+        }
+
+        try {
+            this.models.registerProvider(provider, config);
+        } catch (error) {
+            if (previous !== undefined) {
+                this.models.registerProvider(provider, previous.config);
+            }
+
+            throw error;
+        }
+
+        // Only once Pi took it: a registration that failed has no removal, and must not stand in for the one before.
+        registrations.push({ token, config });
+        this.#modelProviders.set(provider, registrations);
+        this.#modelProviderChanged(provider);
+
+        return () => this.#removeModelProvider(provider, token);
+    }
+
+    /** A registration goes. When it was in force, the one before it (another module's, or an older version's) is back. */
+    #removeModelProvider(provider: string, token: symbol): void {
+        const registrations = this.#modelProviders.get(provider);
+        const index =
+            registrations?.findIndex((registration) => registration.token === token) ?? -1;
+
+        if (registrations === undefined || index < 0) {
+            return;
+        }
+
+        const inForce = index === registrations.length - 1;
+
+        registrations.splice(index, 1);
+
+        if (registrations.length === 0) {
+            this.#modelProviders.delete(provider);
+        }
+
+        if (!inForce) {
+            return;
+        }
+
+        this.models.unregisterProvider(provider);
+        const before = registrations.at(-1);
+
+        if (before !== undefined) {
+            try {
+                this.models.registerProvider(provider, before.config);
+            } catch (error) {
+                this.#log(`Model provider ${provider} could not be put back: ${describe(error)}`);
+            }
+        }
+
+        this.#modelProviderChanged(provider);
+    }
+
+    /** Pi refreshes a provider locally once it changes: tabs get the models it has then, and sessions their state. */
+    #modelProviderChanged(provider: string): void {
+        if (this.#closing !== undefined) {
+            return;
+        }
+
+        void this.models
+            .refresh({ allowNetwork: false, providers: [provider] })
+            .catch((error: unknown) => {
+                this.#log(`Model provider ${provider} not refreshed: ${describe(error)}`);
+            })
+            .finally(() => {
+                if (this.#closing === undefined) {
+                    this.providers.modelsChanged();
+                }
+            });
     }
 
     /**
@@ -538,21 +628,8 @@ export class PocketApp {
             resolveModel: (spec) => resolveModel(this.models, spec, this.signInNeeded),
             subagentModels: () => this.config.subagentModels,
             modelProblem: (ref, fresh) => this.providers.problem(ref, fresh),
-            registerModelProvider: (provider, config) => {
-                const registration = Symbol(provider);
-
-                this.#modelProviders.set(provider, registration);
-                this.models.registerProvider(provider, config);
-
-                return () => {
-                    if (this.#modelProviders.get(provider) !== registration) {
-                        return;
-                    }
-
-                    this.#modelProviders.delete(provider);
-                    this.models.unregisterProvider(provider);
-                };
-            },
+            registerModelProvider: (provider, config) =>
+                this.#registerModelProvider(provider, config),
             shapeModelRequests: (shape) => {
                 this.#shapers.push(shape);
 

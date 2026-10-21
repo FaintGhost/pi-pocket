@@ -151,9 +151,9 @@ export interface Host {
     modelProblem(ref: ModelRef, fresh?: boolean): Promise<string | undefined>;
     /**
      * Registers a model provider with Pi's model runtime, as a Pi extension does. `config` is Pi's own provider
-     * configuration, including the models it starts with and how it refreshes them. The return value removes it again;
-     * an older version's removal leaves a newer registration alone. The provider's models appear when Pi next refreshes
-     * the model list.
+     * configuration, including the models it starts with and how it refreshes them. The last registration of a name
+     * wins. The return value removes it again and puts back the registration before it; pass it to `web.onDispose`. A
+     * removal of a registration that is not the last one changes nothing.
      * @since 0.20.0
      * @experimental
      */

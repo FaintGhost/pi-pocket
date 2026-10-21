@@ -31,6 +31,8 @@ A module that calls a member that is not there fails when it first uses it, in e
 
 A shaper can change what a provider bills, or how it answers. Tell the owner that before you ask them to turn the module on.
 
+`host.registerModelProvider(provider, config)` adds a model provider to Pi, or changes one, with Pi's own provider config. Pass the returned function to `web.onDispose`, so the provider goes with the module. The last registration of a name wins, and a registration with a built-in provider's name and another `baseUrl` sends the owner's stored key there. See [`registerModelProvider`](reference/host.md#registermodelprovider).
+
 ## Types
 
 To get the types of the host in your editor, import them from `_pocket.d.ts`. Pi Pocket links this file into the drop-in folder:

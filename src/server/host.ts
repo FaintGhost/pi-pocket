@@ -250,9 +250,9 @@ export interface PocketHost {
     modelProblem(ref: ModelRef, fresh?: boolean): Promise<string | undefined>;
     /**
      * Register a model provider with Pi's model runtime, as a Pi extension does: `config` is Pi's own provider
-     * configuration, including the models it starts with and how it refreshes them. Returns how to remove it again;
-     * an older version's removal leaves a newer registration alone. The provider's models appear when Pi next refreshes
-     * the model list.
+     * configuration, including the models it starts with and how it refreshes them. The last registration of a name
+     * wins. Returns how to remove it again, which puts back the registration before it; a removal of a registration
+     * that is not the last one changes nothing.
      */
     registerModelProvider(provider: string, config: ProviderConfig): () => void;
     /**

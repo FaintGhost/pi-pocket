@@ -116,7 +116,17 @@ registerModelProvider(provider: string, config: ProviderConfig): () => void;
 
 Since 0.20.0 · Experimental
 
-Registers a model provider with Pi's model runtime, as a Pi extension does. `config` is Pi's own `ProviderConfig`: the provider's name, base URL, API key, API, headers, and models or `refreshModels` function. The return value removes the provider again. A module that a reload replaces can call its removal safely: it leaves the newer registration alone. The provider's models appear when Pi next refreshes the model list, as with the app's own **Refresh models** action.
+Registers a model provider with Pi's model runtime, as a Pi extension does. `config` is Pi's own `ProviderConfig`: the provider's name, base URL, API key, API, headers, and models or `refreshModels` function. When Pi refuses the config, the call throws and changes nothing. Open tabs get the provider's models once Pi refreshed it locally.
+
+The return value removes the provider again. Give it to `web.onDispose`, or the provider stays after the module is edited or turned off:
+
+```ts
+web.onDispose(host.registerModelProvider("example", config));
+```
+
+The last registration of a name wins: Pi uses its config alone, not merged with the one before. Its removal puts back the registration before it, from another module or from an older version that is still in force. A removal of a registration that is not the last one changes nothing in Pi. So a version that a reload replaces can call its removal safely, and a new version that fails to load leaves the old version's provider in place.
+
+A name can be a built-in provider's, or one in Pi's `models.json`. The registration then changes that provider until its removal, and the API key the owner stored for it still applies. With another `baseUrl`, the owner's stored key goes to that address. Say so when you ask the owner to turn the module on.
 
 Two things to know about how Pi refreshes models.
 
