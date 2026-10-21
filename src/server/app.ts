@@ -2358,7 +2358,11 @@ export class PocketApp {
 
     async artifactBody(id: ConversationId, artifact: string, version: number | undefined) {
         const index = await this.harness.snapshot(ArtifactsDoc, id, context);
-        const meta = index?.items[artifact] as ArtifactMeta | undefined;
+        // Its own entries only: `__proto__` and the like name no artifact.
+        const meta =
+            index !== undefined && Object.hasOwn(index.items, artifact)
+                ? (index.items[artifact] as ArtifactMeta)
+                : undefined;
 
         if (meta === undefined) {
             throw new HttpError(404, "No such artifact");

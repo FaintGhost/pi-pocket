@@ -48,8 +48,11 @@ export function createHandler(options: HttpOptions) {
             }
 
             // An artifact published to anyone with its address: the token is the whole of the access, no sign-in.
+            // Exactly `/pub/<token>`: nothing under it is a page.
             if (parts[0] === "pub") {
-                return await publicArtifact(app, request, response, parts[1], url.searchParams);
+                const token = parts.length === 2 ? parts[1] : undefined;
+
+                return await publicArtifact(app, request, response, token, url.searchParams);
             }
 
             if (parts[0] === "a") {

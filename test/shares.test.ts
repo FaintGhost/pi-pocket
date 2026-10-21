@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { after, before, test } from "node:test";
 import type { ConversationId } from "@earendil-works/pi-durable";
+import { ArtifactSharesDoc, ArtifactsDoc } from "../src/server/docs.ts";
 import createArtifacts from "../src/server/extensions/artifacts.ts";
 import type { PocketHost } from "../src/server/host.ts";
 
@@ -107,15 +108,15 @@ test("a published artifact opens with no sign-in, and follows its newest version
     assert.equal(pinned.version, 1);
     assert.equal((await get(pinned.path)).body, "<h1>one</h1>");
 
-    const listed = await app.shares.list(id);
+    const listed = await app.shares.list(id, owner(app));
 
     assert.deepEqual(listed.map((each) => each.token).sort(), [follow.token, pinned.token].sort());
 });
 
-test("a share shows the artifact's own page, in the artifact's sandbox", async () => {
+test("a share shows the artifact's body as it was written, and only at its own address", async () => {
     const id = await publish("# Notes\n\nSome **text**.", "Notes");
 
-    // A Markdown artifact renders as `/a/…` does, with no viewer colors named.
+    // No type named: an HTML artifact, served as it was written, as `/a/…` serves it.
     const meta = await app.artifactBody(id, "demo", undefined);
 
     assert.equal(meta.meta.type, "html");
@@ -129,6 +130,11 @@ test("a share shows the artifact's own page, in the artifact's sandbox", async (
     assert.equal((await get(`/pub/${share.token}x`)).status, 404);
     assert.equal((await get("/pub/")).status, 404);
     assert.equal((await get("/pub")).status, 404);
+
+    // Exactly `/pub/<token>`: nothing under it is a page.
+    assert.equal((await get(`/pub/${share.token}/`)).status, 200);
+    assert.equal((await get(`/pub/${share.token}/x`)).status, 404);
+    assert.equal((await get(`/pub/${share.token}/x/y`)).status, 404);
 });
 
 test("a share closes at its time, and when it is ended", async () => {
@@ -139,15 +145,19 @@ test("a share closes at its time, and when it is ended", async () => {
 
     now += 24 * 60 * 60 * 1000 + 1;
     assert.equal((await get(timed.path)).status, 404, "a day later it is gone");
-    assert.deepEqual(await app.shares.list(id), [], "a share that closed is not listed");
+    assert.deepEqual(
+        await app.shares.list(id, owner(app)),
+        [],
+        "a share that closed is not listed",
+    );
 
     const ended = await app.shares.create(id, owner(app), { id: "demo" });
 
     assert.equal((await get(ended.path)).status, 200);
-    await app.shares.revoke(owner(app), ended.token);
+    await app.shares.revoke(owner(app), id, ended.token);
     assert.equal((await get(ended.path)).status, 404);
-    await assert.rejects(app.shares.revoke(owner(app), ended.token), { status: 404 });
-    assert.deepEqual(await app.shares.list(id), []);
+    await assert.rejects(app.shares.revoke(owner(app), id, ended.token), { status: 404 });
+    assert.deepEqual(await app.shares.list(id, owner(app)), []);
 });
 
 test("only people who see every session publish or end one, and only for their own sessions", async () => {
@@ -161,11 +171,11 @@ test("only people who see every session publish or end one, and only for their o
 
     const theirs = await app.shares.create(id, guest, { id: "demo" });
 
-    await assert.rejects(app.shares.revoke(scoped, theirs.token), { status: 403 });
+    await assert.rejects(app.shares.revoke(scoped, id, theirs.token), { status: 403 });
     await assert.rejects(app.shares.create(id, guest, { id: "missing" }), { status: 404 });
     await assert.rejects(app.shares.create(id, guest, { id: "demo", hours: 5 }), { status: 400 });
     assert.equal((await get(theirs.path)).status, 200);
-    await app.shares.revoke(owner(app), theirs.token);
+    await app.shares.revoke(owner(app), id, theirs.token);
 });
 
 test("a share is asked for without a cookie, and its page is the API's own answer to a signed-in reader", async () => {
@@ -195,6 +205,80 @@ test("a share is asked for without a cookie, and its page is the API's own answe
     assert.ok("base" in listed);
 });
 
+test("only people who may publish see a share's address", async () => {
+    const id = await publish("<p>listed</p>");
+    const share = await app.shares.create(id, owner(app), { id: "demo" });
+    const member = app.config.addUser("Member", "guest").user;
+    const viewer = app.config.addUser("Watcher", "viewer").user;
+    const scoped = app.config.addUser("Invited", "guest", [String(id)]);
+    const scopedViewer = app.config.addUser("Invited viewer", "viewer", [String(id)]).user;
+
+    assert.deepEqual(
+        (await app.shares.list(id, member)).map((each) => each.token),
+        [share.token],
+    );
+    assert.deepEqual(await app.shares.list(id, viewer), []);
+    assert.deepEqual(await app.shares.list(id, scoped.user), []);
+    assert.deepEqual(await app.shares.list(id, scopedViewer), []);
+
+    // Through the API too: someone invited to this session reads no address.
+    const response = await fetch(`http://127.0.0.1:${port}/api/c/${id}/shares`, {
+        headers: { authorization: `Bearer ${scoped.token}` },
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(((await response.json()) as { shares: unknown[] }).shares, []);
+});
+
+test("a share is ended only through its own session", async () => {
+    const id = await publish("<p>here</p>");
+    const other = await publish("<p>there</p>");
+    const share = await app.shares.create(id, owner(app), { id: "demo" });
+    const member = app.config.addUser("Ender", "guest").user;
+
+    await assert.rejects(app.shares.revoke(member, other, share.token), { status: 404 });
+    await assert.rejects(app.shares.revoke(owner(app), other, share.token), { status: 404 });
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/c/${other}/shares/${share.token}`, {
+        method: "POST",
+        headers: {
+            authorization: `Bearer ${app.config.ownerToken}`,
+            "x-pocket": "1",
+            "content-type": "application/json",
+        },
+        body: "{}",
+    });
+
+    assert.equal(response.status, 404);
+    assert.equal((await get(share.path)).status, 200, "still open");
+
+    await app.shares.revoke(member, id, share.token);
+    assert.equal((await get(share.path)).status, 404);
+});
+
+test("only shares in force count toward a session's limit, and closed ones are dropped", async () => {
+    const id = await publish("<p>many</p>");
+    const tokens: string[] = [];
+
+    for (let i = 0; i < 100; i += 1) {
+        tokens.push((await app.shares.create(id, owner(app), { id: "demo", hours: 24 })).token);
+    }
+
+    await assert.rejects(app.shares.create(id, owner(app), { id: "demo" }), { status: 409 });
+
+    now += 24 * 60 * 60 * 1000 + 1;
+
+    const next = await app.shares.create(id, owner(app), { id: "demo" });
+    const stored = (await app.harness.snapshot(ArtifactSharesDoc, context))?.items ?? {};
+
+    assert.equal((await get(next.path)).status, 200);
+    assert.ok(
+        tokens.every((token) => !Object.hasOwn(stored, token)),
+        "the closed ones are gone",
+    );
+    assert.ok(Object.hasOwn(stored, next.token));
+});
+
 test("a share whose artifact is gone, or which names a version that never was, shows nothing", async () => {
     const id = await publish("<p>x</p>");
 
@@ -202,5 +286,25 @@ test("a share whose artifact is gone, or which names a version that never was, s
         status: 404,
     });
     await assert.rejects(app.shares.create(id, owner(app), { id: "nope" }), { status: 404 });
+
+    // The names every object has are no artifact's.
+    for (const name of ["__proto__", "constructor", "toString"]) {
+        await assert.rejects(app.shares.create(id, owner(app), { id: name }), { status: 404 });
+        await assert.rejects(app.artifactBody(id, name, undefined), { status: 404 });
+    }
+
+    // The artifact goes: its address shows nothing, and the list leaves it out.
+    const share = await app.shares.create(id, owner(app), { id: "demo" });
+
+    assert.equal((await get(share.path)).status, 200);
+    await app.harness.commit(async (tx) => {
+        delete (await tx.doc(ArtifactsDoc, id)).items.demo;
+    }, context);
+
+    const gone = await get(share.path);
+
+    assert.equal(gone.status, 404);
+    assert.doesNotMatch(gone.body, /demo|<p>/);
+    assert.deepEqual(await app.shares.list(id, owner(app)), []);
     assert.ok(root.length > 0);
 });

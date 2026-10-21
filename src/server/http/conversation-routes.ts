@@ -419,7 +419,7 @@ export async function conversationRoutes(
     if (third === "shares" && fourth === undefined && method === "GET") {
         // The address others reach this server by, as webhooks give it: a tunnel's, when one is up.
         return json(response, 200, {
-            shares: await app.shares.list(id),
+            shares: await app.shares.list(id, user),
             base: app.access?.url ?? null,
         });
     }
@@ -429,7 +429,7 @@ export async function conversationRoutes(
     }
 
     if (third === "shares" && fourth !== undefined && method === "POST") {
-        await app.shares.revoke(user, fourth);
+        await app.shares.revoke(user, id, fourth);
 
         return json(response, 200, { ok: true });
     }

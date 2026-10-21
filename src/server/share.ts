@@ -46,9 +46,34 @@ export class Shares {
         this.#app = app;
     }
 
-    /** Every share of a conversation that is in force, newest first. One that has closed is left out. */
-    async list(conversation: ConversationId): Promise<ShareView[]> {
+    /**
+     * Whether someone may publish, end, and see the addresses of shares: only those who see every session and steer. A
+     * public page is out of the reach of whatever an invite to one session gave, and so is its address.
+     */
+    mayManage(user: User): boolean {
+        return user.role !== "viewer" && user.sessions === undefined;
+    }
+
+    /** Refuse someone who may not publish or end a share (`mayManage`). */
+    #requireManage(user: User, message: string): void {
+        this.#app.requireSteer(user);
+
+        if (!this.mayManage(user)) {
+            throw new HttpError(403, message);
+        }
+    }
+
+    /**
+     * Every share of a conversation that is in force, newest first. One that has closed is left out. Someone who may not
+     * manage shares gets none: a share's address is its whole access.
+     */
+    async list(conversation: ConversationId, user: User): Promise<ShareView[]> {
         const app = this.#app;
+
+        if (!this.mayManage(user)) {
+            return [];
+        }
+
         const doc = await app.harness.snapshot(ArtifactSharesDoc, BACKGROUND_CONTEXT);
         const artifacts =
             (await app.harness.snapshot(ArtifactsDoc, conversation, BACKGROUND_CONTEXT))?.items ??
@@ -93,14 +118,7 @@ export class Shares {
     ): Promise<ShareView> {
         const app = this.#app;
 
-        app.requireSteer(user);
-
-        if (user.sessions !== undefined) {
-            throw new HttpError(
-                403,
-                "Only people who see every session can publish one to anyone.",
-            );
-        }
+        this.#requireManage(user, "Only people who see every session can publish one to anyone.");
 
         const id = String(request.id ?? "");
         const pinned = request.version !== undefined && request.version !== null;
@@ -128,8 +146,16 @@ export class Shares {
 
         await app.harness.commit(async (tx) => {
             const doc = await tx.doc(ArtifactSharesDoc);
-            const mine = Object.entries(doc.items).filter(
-                ([, share]) => share.conversation === String(conversation),
+
+            // Shares that closed show nothing and are listed nowhere: they go, and count for nothing.
+            for (const [old, share] of Object.entries(doc.items)) {
+                if (closed(share, now)) {
+                    delete doc.items[old];
+                }
+            }
+
+            const mine = Object.values(doc.items).filter(
+                (share) => share.conversation === String(conversation),
             );
 
             if (mine.length >= MAX_SHARES) {
@@ -162,18 +188,20 @@ export class Shares {
         };
     }
 
-    /** End a share: its address answers nothing after. Only someone who sees every session may. */
-    async revoke(user: User, token: string): Promise<void> {
-        this.#app.requireSteer(user);
-
-        if (user.sessions !== undefined) {
-            throw new HttpError(403, "Only people who see every session end one.");
-        }
+    /**
+     * End a share of this conversation: its address answers nothing after. Only someone who sees every session may. A
+     * share of another conversation is not found here.
+     */
+    async revoke(user: User, conversation: ConversationId, token: string): Promise<void> {
+        this.#requireManage(user, "Only people who see every session end one.");
 
         const gone = await this.#app.harness.commit(async (tx) => {
             const doc = await tx.doc(ArtifactSharesDoc);
 
-            if (!Object.hasOwn(doc.items, token)) {
+            if (
+                !Object.hasOwn(doc.items, token) ||
+                doc.items[token]!.conversation !== String(conversation)
+            ) {
                 return false;
             }
 

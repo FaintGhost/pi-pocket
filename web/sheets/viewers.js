@@ -138,7 +138,7 @@ const shareAddress = (base, share) =>
     `${(base ?? location.origin).replace(/\/$/, "")}${share.path}`;
 
 /** One published page: what it shows, how long it has left, its address and a button to end it. */
-function ShareRow({ share, base, fresh, onRevoke }) {
+function ShareRow({ share, base, fresh, canEnd, onRevoke }) {
     const copy = () =>
         copyText(shareAddress(base, share)).then(
             () => notify("info", "Link copied. Anyone with it can open the page."),
@@ -159,7 +159,7 @@ function ShareRow({ share, base, fresh, onRevoke }) {
             </span>
             <button class="button small" onClick=${copy}>Copy link</button>
             <a class="button small" href=${share.path} target="_blank" rel="noopener">Open</a>
-            <button class="button small ghost" onClick=${onRevoke}>End</button>
+            ${canEnd && html`<button class="button small ghost" onClick=${onRevoke}>End</button>`}
         </div>
     </div>`;
 }
@@ -178,7 +178,8 @@ export function ArtifactShareSheet({ id, version }) {
     const [making, setMaking] = useState(false);
     const [fresh, setFresh] = useState(null);
     const makingNow = useRef(false);
-    const steer = me?.role !== "viewer";
+    // As the server checks: only people who steer and see every session publish or end a link.
+    const steer = me?.role !== undefined && me.role !== "viewer" && me.sessions === undefined;
 
     const load = () =>
         attempt(async () => {
@@ -289,6 +290,7 @@ export function ArtifactShareSheet({ id, version }) {
                 share,
                 base,
                 fresh: fresh === share.token,
+                canEnd: steer,
                 onRevoke: () => revoke(share),
             }),
         )}
