@@ -68,8 +68,11 @@ export const PIP_EXTENSIONS = [
     "pocket-codemode",
     "pocket-memory",
 ];
-/** Pi Durable's coding tools PiP goes without: it reads files, and changes nothing itself. */
-export const PIP_WITHOUT = ["bash", "write", "edit"];
+/**
+ * The tools PiP goes without: Pi Durable's coding tools (it reads files, and changes nothing itself), and the artifact
+ * card, which its small panel does not draw (`artifact` still opens in the viewer).
+ */
+export const PIP_WITHOUT = ["bash", "write", "edit", "artifact_inline"];
 /** How reports from followed sessions start, so PiP knows what they are. */
 export const REPORT_HEAD = "[report] ";
 /** Sessions PiP may start in an hour, so a confused loop cannot fill the list. */

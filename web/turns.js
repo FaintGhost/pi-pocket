@@ -320,6 +320,8 @@ export function itemsOf(rows, partial, { prefix = "", from = null, talk = false 
     let anchor = from?.anchor ?? "top";
     let groups = from?.groups ?? 0;
     let replies = from?.replies ?? 0;
+    // Cards of calls with no id: keyed by place, as a provider that sends none leaves no other name.
+    let inlines = 0;
     // A group the rows before left open goes on here, under its name.
     let open = from?.open ?? null;
     let group = null;
@@ -349,7 +351,7 @@ export function itemsOf(rows, partial, { prefix = "", from = null, talk = false 
                 close();
                 items.push({
                     type: "inline",
-                    key: `${prefix}i${block.id || `${anchor}:${replies++}`}`,
+                    key: `${prefix}i${block.id || `${anchor}:${inlines++}`}`,
                     anchors: anchored || speaks ? [] : [entry.id],
                     step: {
                         block,
@@ -358,7 +360,8 @@ export function itemsOf(rows, partial, { prefix = "", from = null, talk = false 
                         canRun: streaming || entry === asking,
                     },
                 });
-                anchored = true;
+                // Its words, when it has them, take the jump to this answer.
+                anchored ||= !speaks;
             } else if (block.type === "thinking" || block.type === "toolCall") {
                 words = null;
 

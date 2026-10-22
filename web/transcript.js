@@ -2123,7 +2123,8 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
                 (busy && index === items.length - 1));
         const newest = !past && index > lastMessage;
         // When what came before it was stored: a group still streaming began about then, also before a reload.
-        const after = items[index - 1]?.entry?.at;
+        const before = items[index - 1];
+        const after = before?.entry?.at ?? before?.step?.entry?.at;
         const deps = [
             item.steps.length,
             item.before.length,

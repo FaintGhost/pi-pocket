@@ -219,6 +219,9 @@ test("it takes content or nonempty edits, not both, not a path, and keeps the si
         call({ edits: [{ oldText: "a", newText: "b" }] }),
         /no artifact loan-calc to edit/,
     );
+    // The model may send a path or a type anyway: they are the artifact tool's, and change nothing here.
+    await assert.rejects(call({ path: "page.md" }), /exactly one of/);
+    await assert.rejects(call({ type: "markdown" }), /exactly one of/);
     await assert.rejects(call({ content: "x".repeat(2_000_001) }), /limited to/);
     await call({ content: PAGE });
     await assert.rejects(call({ edits: [{ oldText: "absent", newText: "b" }] }), /not found/);
@@ -287,4 +290,31 @@ test("cards and versions survive closing and reopening the storage", async () =>
     } finally {
         await second.close();
     }
+});
+
+test("a replay of an inline call still finds its version after the artifact became Markdown", async () => {
+    const id = await newSession(app);
+    const task = 850_000 + (calls += 1);
+    const first = await inlineCall(id, task, "same")({ content: PAGE });
+    const artifact = createArtifacts({} as PocketHost).tools![0]!;
+
+    await artifact.execute(
+        { id: "loan-calc", title: "Loan", type: "markdown", content: "# now Markdown" } as never,
+        {
+            conversationId: id,
+            taskId: task + 1,
+            callId: "other",
+            agent: async () => ({ cwd: work }),
+            snapshot: app.harness.snapshot.bind(app.harness),
+            commit: app.harness.commit.bind(app.harness),
+        } as never,
+        context,
+    );
+    const replay = await inlineCall(id, task, "same")({ content: PAGE });
+
+    assert.deepEqual(replay.details, first.details);
+    await assert.rejects(
+        inlineCall(id, task + 2, "new")({ content: PAGE }),
+        /is markdown, not HTML/,
+    );
 });

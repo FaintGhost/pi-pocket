@@ -270,10 +270,14 @@ setRichBlock(RichBlock);
 
 /** The pages fetched for cards, by address: a version never changes, so one is fetched once. The oldest go first. */
 const pages = new Map();
+/** The text of those that came, so a card drawn again (scrolled back to, stored after streaming) shows at once. */
+const known = new Map();
 const PAGES_KEPT = 20;
+const addressOf = (conversationId, id, version) =>
+    `/a/${conversationId}/${encodeURIComponent(id)}/${version}`;
 
 function pageOf(conversationId, id, version) {
-    const address = `/a/${conversationId}/${encodeURIComponent(id)}/${version}`;
+    const address = addressOf(conversationId, id, version);
     let page = pages.get(address);
 
     if (page === undefined) {
@@ -285,9 +289,16 @@ function pageOf(conversationId, id, version) {
             return response.text();
         });
         pages.set(address, page);
+        page.then(
+            (text) => known.set(address, text),
+            () => {},
+        );
 
         if (pages.size > PAGES_KEPT) {
-            pages.delete(pages.keys().next().value);
+            const oldest = pages.keys().next().value;
+
+            pages.delete(oldest);
+            known.delete(oldest);
         }
 
         // A page that did not come may on the next try.
@@ -303,12 +314,18 @@ function pageOf(conversationId, id, version) {
  * session may see the card; later versions never change it. Until it comes the card says so.
  */
 export function InlineArtifact({ conversationId, id, title, version }) {
-    const [page, setPage] = useState({ source: null, failed: false });
+    const [page, setPage] = useState({
+        source: known.get(addressOf(conversationId, id, version)) ?? null,
+        failed: false,
+    });
 
     useEffect(() => {
         let current = true;
 
-        setPage({ source: null, failed: false });
+        setPage({
+            source: known.get(addressOf(conversationId, id, version)) ?? null,
+            failed: false,
+        });
         pageOf(conversationId, id, version).then(
             (source) => current && setPage({ source, failed: false }),
             () => current && setPage({ source: null, failed: true }),
