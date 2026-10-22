@@ -693,12 +693,13 @@ export function AppearanceSheet() {
             <//>
             <${SettingRow}
                 title="Motion"
-                detail="Auto follows your system's reduced-motion setting"
+                detail="Auto follows your system's reduced-motion setting. Fluid adds springs, staggered entrances, and layout changes that morph"
             >
                 <div class="segmented">
                     ${[
                         ["auto", "Auto"],
                         ["full", "Full"],
+                        ["fluid", "Fluid"],
                         ["reduced", "Reduced"],
                     ].map(
                         ([value, label]) =>

@@ -121,6 +121,13 @@ export const TOKENS = [
     "--t-fade",
     "--t-border",
     "--t-hover",
+    "--ease-spring",
+    "--ease-glide",
+    "--ease-exit",
+    "--t-spring",
+    "--t-glide",
+    "--t-exit",
+    "--stagger",
 ];
 
 export const PARTS = [
