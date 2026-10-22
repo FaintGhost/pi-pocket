@@ -787,15 +787,22 @@ export class LinkedSessions implements LinkedSessionsApi {
 
         // With a list, a linked session gets work only while it runs on a model on it: a person may have changed its
         // model, or the owner its list, since it started.
-        if (
-            listed.length > 0 &&
-            runs !== undefined &&
-            !listed.includes(`${runs.provider}/${runs.modelId}`)
-        ) {
-            throw new HttpError(
-                403,
-                `That linked session runs on ${runs.provider}/${runs.modelId}, which is not one of the models the owner allows for subagents and linked sessions.`,
-            );
+        // A replay of a send already taken (its record names this session) finds the first message, whatever the list
+        // is now.
+        if (listed.length > 0 && previous?.conversationId !== target) {
+            if (runs === undefined) {
+                throw new HttpError(
+                    403,
+                    "That linked session has no model to check against the owner's list.",
+                );
+            }
+
+            if (!listed.includes(`${runs.provider}/${runs.modelId}`)) {
+                throw new HttpError(
+                    403,
+                    `That linked session runs on ${runs.provider}/${runs.modelId}, which is not one of the models the owner allows for subagents and linked sessions.`,
+                );
+            }
         }
 
         await this.#deliver(source, id, user, request.message, request.steer === true, token, () =>

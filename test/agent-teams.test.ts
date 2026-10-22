@@ -90,7 +90,10 @@ test("agents write to each other in ASD-STE100: team messages, replies, and suba
 
     // The source: its team messages, and its tasks for subagents.
     assert.match(all, /Write messages in ASD-STE100 \(Simplified Technical English\) at about 80%/);
-    assert.match(all, /Write briefs in ASD-STE100 \(Simplified Technical English\) at about 80%/);
+    assert.match(
+        all,
+        /Write each message to a subagent \(spawn and send\) in ASD-STE100 \(Simplified Technical English\) at about 80%/,
+    );
     assert.match(all, /ask for the report in it too/);
     assert.match(all, /ask for answers in it too/);
     // The linked session: the message asks for the reply in ASD-STE100, under a marker its prompt names.

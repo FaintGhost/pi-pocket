@@ -343,11 +343,13 @@ test("with a list, a message goes only to a linked session that runs on a listed
         await app.setSubagentModels(me, ["faux/faux-1"]);
         const { session, address } = await start(id);
 
-        await send(id, address);
+        await send(id, address, "taken-once");
         // The owner takes the list away from the model it runs on: no more work for it from another session.
         await app.setSubagentModels(me, ["faux/faux-2"]);
         await assert.rejects(send(id, address), /not one of the models the owner allows/);
         assert.equal((await app.agentState(session))?.model?.modelId, "faux-1");
+        // A replay of the send already taken finds it, whatever the list is now.
+        await send(id, address, "taken-once");
 
         // No list again: as before.
         await app.setSubagentModels(me, []);
