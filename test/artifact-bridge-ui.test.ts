@@ -78,6 +78,8 @@ let page: BrowserPage;
 let base = "";
 let session: ConversationId;
 let calls = 0;
+/** What a busy machine (the whole suite at once) may take to open a viewer and load its page. */
+const SLOW = 30_000;
 
 async function inPage<T>(script: string): Promise<T> {
     return JSON.parse(await page.evaluate(script)) as T;
@@ -109,6 +111,7 @@ async function openViewer(id: string) {
                 `return JSON.stringify(Boolean(document.querySelector(".viewer")))`,
             )),
         "no viewer open",
+        SLOW,
     );
     await inPage(`
         const { openSheet } = await import("/store.js");
@@ -121,6 +124,7 @@ async function openViewer(id: string) {
                 `return JSON.stringify(Boolean(document.querySelector(".viewer iframe")))`,
             ),
         "the viewer's frame",
+        SLOW,
     );
 }
 
@@ -187,6 +191,7 @@ before(async () => {
                 `return JSON.stringify(Boolean(document.querySelector(".composer textarea")))`,
             ),
         "the message box",
+        SLOW,
     );
 });
 
@@ -204,13 +209,21 @@ test(
     async () => {
         await setBox("my draft");
         await openViewer("calc");
-        await until(async () => (await savedFor("calc")) !== undefined, "the page's saved state");
+        await until(
+            async () => (await savedFor("calc")) !== undefined,
+            "the page's saved state",
+            SLOW,
+        );
         await new Promise((resolve) => setTimeout(resolve, 500));
         assert.equal(await boxText(), "my draft", "the follow-up at load, with no tap, is refused");
         assert.deepEqual(await savedFor("calc"), { count: 1 }, "the frame inside it saved nothing");
 
         await tapFrame(".viewer iframe");
-        await until(async () => (await boxText()).includes("option 1"), "the follow-up in the box");
+        await until(
+            async () => (await boxText()).includes("option 1"),
+            "the follow-up in the box",
+            SLOW,
+        );
         assert.equal(
             await boxText(),
             'my draft\n\nFrom the artifact “Calculator”:\nTell me about option 1\n\n```json\n{\n  "option": 1\n}\n```',
@@ -232,9 +245,14 @@ test("its saved state comes back when it opens again", real, async () => {
             (await savedFor("calc")) !== undefined &&
             ((await savedFor("calc")) as { count: number }).count === 2,
         "the count saved again",
+        SLOW,
     );
     await tapFrame(".viewer iframe");
-    await until(async () => (await boxText()).includes("option 2"), "the second open's follow-up");
+    await until(
+        async () => (await boxText()).includes("option 2"),
+        "the second open's follow-up",
+        SLOW,
+    );
     assert.match(
         await boxText(),
         /^From the artifact “Calculator”:/,
@@ -268,6 +286,7 @@ test("HTML run from a reply: one follow-up every 2 seconds", real, async () => {
                 `return JSON.stringify([...document.querySelectorAll(".rich-run")].length > 0)`,
             ),
         "the reply's Run",
+        SLOW,
     );
     await page.click({ selector: ".rich-run" });
     await until(
@@ -276,12 +295,13 @@ test("HTML run from a reply: one follow-up every 2 seconds", real, async () => {
                 `return JSON.stringify(Boolean(document.querySelector("iframe.run-frame")))`,
             ),
         "the running frame",
+        SLOW,
     );
     await new Promise((resolve) => setTimeout(resolve, 800));
     await setBox("");
     await tapFrame("iframe.run-frame");
     await tapFrame("iframe.run-frame");
-    await until(async () => (await boxText()).includes("ran"), "the first follow-up");
+    await until(async () => (await boxText()).includes("ran"), "the first follow-up", SLOW);
     await new Promise((resolve) => setTimeout(resolve, 500));
     assert.equal(
         await boxText(),
@@ -311,6 +331,7 @@ test("a viewer gets a notice, not a message", real, async () => {
                     `return JSON.stringify(Boolean(document.querySelector(".transcript")))`,
                 ),
             "the session, as a viewer",
+            SLOW,
         );
         await openViewer("calc");
         await new Promise((resolve) => setTimeout(resolve, 800));
@@ -318,6 +339,7 @@ test("a viewer gets a notice, not a message", real, async () => {
         await until(
             async () => (await notices()).some((each) => each.includes("you can only view here")),
             "the notice",
+            SLOW,
         );
         assert.ok(
             await inPage<boolean>(
