@@ -167,7 +167,11 @@ export function FileView({ path, line, onOpen = openFile, onLoad }) {
             page &&
             html`${
                 running
-                    ? html`<${RunFrame} source=${file.text} title=${name} from=${`the file “${name}”`} />`
+                    ? html`<${RunFrame}
+                          source=${file.text}
+                          title=${name}
+                          from=${`the file “${name}”`}
+                      />`
                     : html`<${HtmlPreview} source=${file.text} title=${name} />`
             }
             <p class="muted small file-note">

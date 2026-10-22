@@ -54,8 +54,8 @@ export function RunFrame({ source, title = "Preview", from = "the page in Pi's r
     const [height, fitHeight, resetFit] = useFitHeight(240, MIN_HEIGHT, MAX_HEIGHT);
 
     // It may offer a follow-up for the message box, as an artifact may; it has no id, so it keeps no state. `from`
-    // names it there.
-    useArtifactBridge(ref, { source: from });
+    // names it there. Its frame page loads, then the HTML it writes in: 2 loads are its own.
+    useArtifactBridge(ref, { source: from, pages: 2 });
 
     // Listening from the moment the frame is in the page, before it can load: it says it is ready only once.
     useLayoutEffect(() => {

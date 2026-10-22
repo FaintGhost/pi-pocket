@@ -11,15 +11,18 @@ const SELECTION_MAX = 2000;
 const FOLLOW_UP_MS = 2000;
 const REQUEST_ID = /^[\w.:-]{1,64}$/;
 
-/** A follow-up as it goes into the box: the page's words, then what it is from, and its selection as data. */
+/**
+ * A follow-up as it goes into the box: what it is from first, so the box never takes it for a command (`!`, `/`), then
+ * the page's words, then its selection as data.
+ */
 export function followUpText(text, selection, source) {
-    const from = `From ${source}`;
+    const from = `From ${source}:`;
 
     if (selection === undefined) {
-        return `${text}\n\n(${from}.)`;
+        return `${from}\n${text}`;
     }
 
-    return `${text}\n\n${from}:\n\`\`\`json\n${JSON.stringify(selection, null, 2)}\n\`\`\``;
+    return `${from}\n${text}\n\n\`\`\`json\n${JSON.stringify(selection, null, 2)}\n\`\`\``;
 }
 
 /** Why a follow-up cannot go in, or null when it can: its text and selection, checked. */
@@ -49,52 +52,80 @@ export function followUpProblem(data) {
     return null;
 }
 
+/** How many pages each frame has loaded: one that has gone on past its own page (a link, `location`) is not heard. */
+const loads = new WeakMap();
+
+// Loads do not bubble, but they pass through the document on their way down to each frame.
+addEventListener(
+    "load",
+    (event) => {
+        if (event.target instanceof HTMLIFrameElement) {
+            loads.set(event.target, (loads.get(event.target) ?? 0) + 1);
+        }
+    },
+    true,
+);
+
 /**
  * Hear the page in the frame `ref`: follow-ups always, saved state only for an artifact (`artifact`, its id). `source`
- * names the page in the box ("the artifact “Plan”"). A frame inside PiP's panel adds nothing to the session's box.
+ * names the page in the box ("the artifact “Plan”"). `pages` is how many loads its own page takes: 1 for an artifact,
+ * 2 for a reply's HTML, which its frame page writes in. A frame that loads more has gone elsewhere, and is not heard. A
+ * follow-up needs the person in the frame (it has the focus: they tapped it); a frame inside PiP's panel adds nothing
+ * to the session's box.
  */
-export function useArtifactBridge(ref, { artifact = null, source }) {
+export function useArtifactBridge(ref, { artifact = null, source, pages = 1 }) {
     useLayoutEffect(() => {
         const conversationId = store.state.conversationId;
         let lastFollowUp = 0;
 
-        const reply = (message) => ref.current?.contentWindow?.postMessage(message, "*");
-
-        const followUp = (data) => {
+        const followUp = (frame, data) => {
+            const reply = (fields) =>
+                frame.contentWindow?.postMessage({ type: "pocket-follow-up", ...fields }, "*");
             const problem = followUpProblem(data);
-            const shown = store.state.conversationId === conversationId;
             const now = Date.now();
 
             if (problem !== null) {
-                return reply({ type: "pocket-follow-up", ok: false, error: problem });
+                return reply({ ok: false, error: problem });
             }
 
-            if (!shown || ref.current?.closest(".pip-panel")) {
-                return reply({ type: "pocket-follow-up", ok: false, error: "Not in this session" });
+            if (store.state.conversationId !== conversationId || frame.closest(".pip-panel")) {
+                return reply({ ok: false, error: "Not in this session" });
             }
+
+            if (document.activeElement !== frame) {
+                return reply({ ok: false, error: "Only after the person taps the page" });
+            }
+
+            if (now - lastFollowUp < FOLLOW_UP_MS) {
+                return reply({ ok: false, error: "Too soon" });
+            }
+
+            lastFollowUp = now;
 
             if (!canSteer()) {
                 notify("info", `${capital(source)} offered a message, but you can only view here.`);
 
-                return reply({ type: "pocket-follow-up", ok: false, error: "View only" });
+                return reply({ ok: false, error: "View only" });
             }
 
-            if (now - lastFollowUp < FOLLOW_UP_MS) {
-                return reply({ type: "pocket-follow-up", ok: false, error: "Too soon" });
-            }
-
-            lastFollowUp = now;
             insertIntoComposer(followUpText(data.text.trim(), data.selection, source));
             notify(
                 "info",
                 `${capital(source)} added a message to your box: read it, then send it.`,
             );
-            reply({ type: "pocket-follow-up", ok: true });
+            reply({ ok: true });
         };
 
-        const state = async (data) => {
+        const state = async (frame, data) => {
             const requestId = data.requestId;
-            const answer = (fields) => reply({ type: "pocket-state", requestId, ...fields });
+            // The window that asked: an answer that comes after the frame changed goes nowhere.
+            const asker = frame.contentWindow;
+
+            const answer = (fields) => {
+                if (ref.current === frame && frame.contentWindow === asker) {
+                    asker.postMessage({ type: "pocket-state", requestId, ...fields }, "*");
+                }
+            };
 
             if (!REQUEST_ID.test(String(requestId ?? ""))) {
                 return;
@@ -139,6 +170,7 @@ export function useArtifactBridge(ref, { artifact = null, source }) {
             if (
                 !frame ||
                 event.source !== frame.contentWindow ||
+                (loads.get(frame) ?? 0) > pages ||
                 typeof data !== "object" ||
                 !data
             ) {
@@ -146,16 +178,16 @@ export function useArtifactBridge(ref, { artifact = null, source }) {
             }
 
             if (data.type === "pocket-follow-up") {
-                followUp(data);
+                followUp(frame, data);
             } else if (data.type === "pocket-state-get" || data.type === "pocket-state-set") {
-                void state(data);
+                void state(frame, data);
             }
         };
 
         addEventListener("message", onMessage);
 
         return () => removeEventListener("message", onMessage);
-    }, [artifact, source]);
+    }, [artifact, source, pages]);
 }
 
 const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);

@@ -13,8 +13,11 @@ import { HttpError } from "./errors.ts";
 
 /** The most one value may take, as JSON. */
 export const STATE_BYTES = 16 * 1024;
-/** The most values one session keeps: artifacts times the people who saved for them. */
-const MAX_VALUES = 2000;
+/**
+ * The most values one session keeps, artifacts times the people who saved for them: with `STATE_BYTES`, under 5 MB.
+ * A person removed from the app keeps their values until the session goes, counted here.
+ */
+const MAX_VALUES = 300;
 /** How many saves one person may make for one artifact within `WINDOW_MS`: a page saves as its controls change. */
 const SAVES = 20;
 const WINDOW_MS = 10_000;
@@ -72,7 +75,7 @@ export async function readState(
 
 /**
  * Save this person's value for the artifact, or clear it with null. Throws 413 past `STATE_BYTES`, 429 past `SAVES` in
- * `WINDOW_MS`, and 507 when the session keeps `MAX_VALUES` already.
+ * `WINDOW_MS`, and 409 when the session keeps `MAX_VALUES` already.
  */
 export async function writeState(
     app: PocketApp,
@@ -132,7 +135,7 @@ export async function writeState(
         const fresh = !own || doc.items[artifact]![user.id] === undefined;
 
         if (fresh && count >= MAX_VALUES) {
-            throw new HttpError(507, "This session keeps no more saved pages");
+            throw new HttpError(409, "This session keeps no more saved pages");
         }
 
         if (!own) {
