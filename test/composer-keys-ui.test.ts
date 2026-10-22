@@ -216,3 +216,46 @@ test("the Keyboard shortcuts sheet lists the modules' keys", real, async () => {
     assert.match(text, /Delete the word before the caret \(keys\)/);
     assert.match(text, /Count \(keys\)/);
 });
+
+test(
+    "Alt+↓ in the model menu still switches sessions: the list keeps only plain arrows",
+    real,
+    async () => {
+        const other = await newSession(app);
+
+        await until(
+            () =>
+                inPage<boolean>(
+                    `const { store } = await import("/store.js"); return JSON.stringify(store.state.sessions.some((each) => each.id === ${Number(other)}))`,
+                ),
+            "the second session in the list",
+        );
+        await inPage(`(await import("/store.js")).openSheet({ type: "model" }); return "null"`);
+        await until(
+            () =>
+                inPage<boolean>(
+                    `return JSON.stringify(Boolean(document.querySelector('[role="dialog"][aria-label="Model"]')))`,
+                ),
+            "the model menu",
+        );
+        const before = await inPage<number>(
+            `return JSON.stringify((await import("/store.js")).store.state.conversationId)`,
+        );
+
+        await inPage(`
+        const menu = document.querySelector('[role="dialog"][aria-label="Model"]');
+        const at = menu.querySelector(".pop-menu-search input") ?? menu;
+        at.focus();
+        at.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", code: "ArrowDown", altKey: true, bubbles: true, cancelable: true }));
+        return "null";
+    `);
+        await until(
+            async () =>
+                (await inPage<number>(
+                    `return JSON.stringify((await import("/store.js")).store.state.conversationId)`,
+                )) !== before,
+            "another session open",
+        );
+        await inPage(`(await import("/store.js")).closeSheet(); return "null"`);
+    },
+);

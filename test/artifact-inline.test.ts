@@ -422,3 +422,96 @@ test("an artifact with inline versions stays HTML, so an old card keeps showing 
     );
     assert.equal((await app.artifactBody(id, "other", undefined)).meta.type, "markdown");
 });
+
+test("one tap serves one follow-up: no other event of the same tap gives it back", async () => {
+    const html = withBridge("");
+    const body = html.slice(
+        html.indexOf("<script>(() => {") + 16,
+        html.lastIndexOf("})();</script>"),
+    );
+    const heard: string[] = [];
+    // The channels it opens, to close after: an open port keeps the test running.
+    const channels: MessageChannel[] = [];
+    const Channel = class extends MessageChannel {
+        constructor() {
+            super();
+            channels.push(this);
+        }
+    };
+    const listeners = new Map<string, ((event: unknown) => void)[]>();
+    const parent = {
+        postMessage: (_message: unknown, _origin: string, ports?: MessagePort[]) => {
+            if (ports?.[0]) {
+                ports[0].onmessage = (event) => heard.push(event.data.text);
+            }
+        },
+    };
+    const window = {
+        parent,
+        addEventListener: (type: string, listener: (event: unknown) => void) =>
+            listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+        dispatchEvent: () => true,
+        setTimeout,
+    };
+
+    new Function(
+        "window",
+        "self",
+        "location",
+        "performance",
+        "structuredClone",
+        "MessageEvent",
+        "MessageChannel",
+        body,
+    )(
+        window,
+        { origin: "null" },
+        { origin: "null" },
+        performance,
+        structuredClone,
+        class {},
+        Channel,
+    );
+
+    const fire = (type: string, fields: object = {}) => {
+        for (const listener of listeners.get(type) ?? []) {
+            listener({ isTrusted: true, key: "a", ...fields });
+        }
+    };
+    const ask = (text: string) =>
+        (window.parent as typeof parent).postMessage({ type: "pocket-follow-up", text }, "*");
+
+    // A mouse's click: the page spends the tap at its first event, then asks again after each later one.
+    fire("pointerdown", { pointerType: "mouse" });
+    ask("click");
+
+    for (const type of ["mousedown", "pointerup", "mouseup", "click"]) {
+        fire(type, { pointerType: "mouse" });
+        ask(`after ${type}`);
+    }
+
+    // A finger's tap, the same.
+    fire("pointerdown", { pointerType: "touch" });
+    fire("touchstart");
+    fire("pointerup", { pointerType: "touch" });
+    ask("tap");
+
+    for (const type of ["touchend", "mousedown", "mouseup", "click"]) {
+        fire(type, { pointerType: "touch" });
+        ask(`after ${type}`);
+    }
+
+    // A key held down: its repeats are not taps.
+    fire("keydown");
+    ask("key");
+    fire("keydown", { repeat: true });
+    ask("after a repeat");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    for (const channel of channels) {
+        channel.port1.close();
+        channel.port2.close();
+    }
+
+    assert.deepEqual(heard, ["click", "tap", "key"]);
+});

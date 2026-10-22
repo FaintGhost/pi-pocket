@@ -72,7 +72,9 @@ function markdownTheme(query: URLSearchParams): string {
  * reach it. The page's `parent` becomes a stand-in whose `postMessage` takes follow-ups and saved state down the channel
  * (everything else still goes to the real parent), and its answers arrive as `message` events from that stand-in, so
  * `event.source === parent` holds. A follow-up goes down only after a tap that a person made on the page (a trusted
- * event: the page cannot make one) within 5 seconds, and each tap serves one. The message is copied before it is read,
+ * event: the page cannot make one) within 5 seconds, and each tap serves one: one event counts for each (a mouse's
+ * press, a finger's or pen's lift, a key's press but not its repeats), or a page could spend the tap in one event and
+ * get it back from the next of the same tap (mousedown after pointerdown, touchend after pointerup). The message is copied before it is read,
  * so a getter cannot show one type to this check and another to the app. Runs outside a frame or a sandbox: nothing.
  * `rearm` puts the tap listeners back, for a page that wipes them with `document.open()`.
  */
@@ -104,11 +106,9 @@ const ARTIFACT_BRIDGE = `
     };
 
     const rearm = () => {
-        listen("keydown", (event) => event.key !== "Escape" && tap(event), true);
-        listen("mousedown", tap, true);
+        listen("keydown", (event) => event.key !== "Escape" && !event.repeat && tap(event), true);
         listen("pointerdown", (event) => event.pointerType === "mouse" && tap(event), true);
         listen("pointerup", (event) => event.pointerType !== "mouse" && tap(event), true);
-        listen("touchend", tap, true);
     };
 
     const tell = (data) => fire(new Heard("message", { data, source: stand, origin: address }));
