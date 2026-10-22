@@ -142,6 +142,8 @@ test("the module has both tools, and the guide says when to use each", async () 
 
     assert.match(withBoth, /artifact_inline shows the page as a card in your reply/);
     assert.match(withBoth, /only a call you make directly shows a card/i);
+    assert.match(withBoth, /schema, optional, is a string such as "v1"/);
+    assert.match(withBoth, /focus alone does not count/);
     // A session without the tool (PiP's) is not told about it.
     const without = await render(["artifact"]);
 
@@ -191,6 +193,33 @@ test("it shares the artifact tool's store: the page is served, and a Markdown ar
     assert.equal(slugify("Loan Calc"), "loan-calc");
 });
 
+test("a frame's page starts with the bridge's script, after the doctype; a tab's or a fetch's is as written", async () => {
+    const id = await newSession(app);
+
+    await inlineCall(id, 850_000 + (calls += 1), "bridge")({ content: PAGE });
+    const me = app.config.ownerToken;
+    const get = async (dest?: string) =>
+        (
+            await fetch(`http://127.0.0.1:${port}/a/${id}/loan-calc/1`, {
+                headers: {
+                    authorization: `Bearer ${me}`,
+                    ...(dest ? { "sec-fetch-dest": dest } : {}),
+                },
+            })
+        ).text();
+
+    assert.equal(await get(), PAGE);
+    assert.equal(await get("document"), PAGE);
+    const framed = await get("iframe");
+
+    assert.ok(framed.startsWith("<!doctype html><script>"), "after the doctype: no quirks mode");
+    assert.ok(
+        framed.endsWith(PAGE.slice("<!doctype html>".length)),
+        "the page follows, as written",
+    );
+    assert.match(framed, /structuredClone/);
+});
+
 test("a replayed call finds its version; another call of the same task makes the next one", async () => {
     const id = await newSession(app);
     const call = inlineCall(id, 810_000 + (calls += 1), "one");
@@ -222,7 +251,12 @@ test("it takes content or nonempty edits, not both, not a path, and keeps the si
     await assert.rejects(call({}), /exactly one of/);
     await assert.rejects(
         call({ content: PAGE, edits: [{ oldText: "a", newText: "b" }] }),
-        /exactly one/,
+        (error: Error) => {
+            // It has no path: the message must not name one.
+            assert.equal(error.message, "Give exactly one of content or nonempty edits.");
+
+            return true;
+        },
     );
     await assert.rejects(call({ edits: [] }), /exactly one/);
     await assert.rejects(
@@ -235,6 +269,21 @@ test("it takes content or nonempty edits, not both, not a path, and keeps the si
     await assert.rejects(call({ content: "x".repeat(2_000_001) }), /limited to/);
     await call({ content: PAGE });
     await assert.rejects(call({ edits: [{ oldText: "absent", newText: "b" }] }), /not found/);
+});
+
+test("the result says a card shows only for a direct call, not for one inside codemode", async () => {
+    const id = await newSession(app);
+    const direct = await inlineCall(id, 840_000 + (calls += 1), "call_direct")({ content: PAGE });
+    const nested = await inlineCall(
+        id,
+        840_000 + (calls += 1),
+        "call_script/1",
+    )({ content: PAGE, id: "from-script" });
+    const text = (result: typeof direct) => (result.output![0] as { text: string }).text;
+
+    assert.match(text(direct), /It shows as a card in your reply/);
+    assert.match(text(nested), /does not show as a card here/);
+    assert.doesNotMatch(text(nested), /It shows as a card/);
 });
 
 test("a fork keeps every version its cards name, and an update there leaves the original alone", async () => {
@@ -324,7 +373,7 @@ test("an artifact with inline versions stays HTML, so an old card keeps showing 
 
     assert.match(
         (first.output as unknown as { text: string }[])[0]!.text,
-        /only a call made directly, not inside codemode/,
+        /It shows as a card in your reply, and keeps showing version 1/,
     );
     await assert.rejects(
         direct(task + 1, { type: "markdown", content: "# no" }),

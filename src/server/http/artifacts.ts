@@ -66,14 +66,106 @@ function markdownTheme(query: URLSearchParams): string {
 }
 
 /**
+ * The first script of every HTML artifact, and of the page a reply's HTML runs in (`RUN_FRAME`): it is what makes the
+ * bridge (`web/artifact-bridge.js`) safe. Run in a frame, it opens a channel to the app and hands the app one end:
+ * that channel belongs to this document, so a page the frame goes on to has no line to the app, and an answer cannot
+ * reach it. The page's `parent` becomes a stand-in whose `postMessage` takes follow-ups and saved state down the channel
+ * (everything else still goes to the real parent), and its answers arrive as `message` events from that stand-in, so
+ * `event.source === parent` holds. A follow-up goes down only after a tap that a person made on the page (a trusted
+ * event: the page cannot make one) within 5 seconds, and each tap serves one. The message is copied before it is read,
+ * so a getter cannot show one type to this check and another to the app. Runs outside a frame or a sandbox: nothing.
+ * `rearm` puts the tap listeners back, for a page that wipes them with `document.open()`.
+ */
+const ARTIFACT_BRIDGE = `
+    const realParent = window.parent;
+
+    if (realParent === window || self.origin !== "null") {
+        return undefined;
+    }
+
+    const realPost = realParent.postMessage.bind(realParent);
+    const clone = structuredClone;
+    const listen = window.addEventListener.bind(window);
+    const fire = window.dispatchEvent.bind(window);
+    const later = window.setTimeout.bind(window);
+    const now = performance.now.bind(performance);
+    const Heard = MessageEvent;
+    const channel = new MessageChannel();
+    const line = channel.port1;
+    const toApp = line.postMessage.bind(line);
+    const stand = new MessageChannel().port1;
+    const address = location.origin;
+    let tapped = -Infinity;
+
+    const tap = (event) => {
+        if (event.isTrusted) {
+            tapped = now();
+        }
+    };
+
+    const rearm = () => {
+        listen("keydown", (event) => event.key !== "Escape" && tap(event), true);
+        listen("mousedown", tap, true);
+        listen("pointerdown", (event) => event.pointerType === "mouse" && tap(event), true);
+        listen("pointerup", (event) => event.pointerType !== "mouse" && tap(event), true);
+        listen("touchend", tap, true);
+    };
+
+    const tell = (data) => fire(new Heard("message", { data, source: stand, origin: address }));
+
+    line.onmessage = (event) => tell(event.data);
+    Object.defineProperty(stand, "postMessage", {
+        value: (message, ...rest) => {
+            const copy = clone(message);
+            const type = copy !== null && typeof copy === "object" ? copy.type : undefined;
+
+            if (type === "pocket-follow-up") {
+                if (now() - tapped > 5000) {
+                    later(() => tell({ type, ok: false, error: "Only after the person taps the page" }), 0);
+
+                    return;
+                }
+
+                tapped = -Infinity;
+                toApp(copy);
+            } else if (type === "pocket-state-get" || type === "pocket-state-set") {
+                toApp(copy);
+            } else {
+                realPost(message, ...rest);
+            }
+        },
+    });
+    Object.defineProperty(window, "parent", { get: () => stand, configurable: false });
+    rearm();
+    realPost({ type: "pocket-bridge" }, "*", [channel.port2]);
+
+    return { realParent, realPost, rearm };
+`;
+
+/** The bridge as a script tag, for the start of an HTML artifact. */
+const BRIDGE_TAG = `<script>(() => {${ARTIFACT_BRIDGE}})();</script>`;
+
+/**
+ * The artifact's HTML with `BRIDGE_TAG` first: after a byte order mark, comments, and the doctype, so the page keeps
+ * its mode, and before anything of the page runs.
+ */
+export function withBridge(html: string): string {
+    const start = /^(?:\uFEFF?\s*(?:<!--[\s\S]*?-->\s*)*(?:<!doctype[^>]*>)?)/i.exec(html)![0];
+
+    return start + BRIDGE_TAG + html.slice(start.length);
+}
+
+/**
  * The page a reply's HTML runs in once someone taps Run (`web/run-frame.js`). It runs only what its parent sends it, and
  * only as the app's own sandboxed frame: with an opaque origin, from a parent at the app's address. The HTML then
  * replaces the page and reports its height, so the frame fits it. Like an artifact, it can reach the network, not the
- * app.
+ * app, and it has the same bridge (`ARTIFACT_BRIDGE`), which survives the page being replaced.
  */
 export const RUN_FRAME = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Preview</title></head><body><script>
 (() => {
-    if (self.origin !== "null" || window.parent === window) {
+    const bridge = (() => {${ARTIFACT_BRIDGE}})();
+
+    if (bridge === undefined) {
         return;
     }
 
@@ -85,15 +177,17 @@ export const RUN_FRAME = `<!doctype html><html><head><meta charset="utf-8"><meta
     addEventListener("message", (event) => {
         const data = event.data;
 
-        if (event.source !== window.parent || event.origin !== location.origin || data?.type !== "pocket-run" || typeof data.html !== "string") {
+        if (event.source !== bridge.realParent || event.origin !== location.origin || data?.type !== "pocket-run" || typeof data.html !== "string") {
             return;
         }
 
         document.open();
         document.write(data.html + size);
         document.close();
+        // document.open() wiped the listeners, the taps' too.
+        bridge.rearm();
     });
-    parent.postMessage({ type: "pocket-run-ready" }, "*");
+    bridge.realPost({ type: "pocket-run-ready" }, "*");
 })();
 </script></body></html>`;
 
@@ -123,7 +217,14 @@ export async function artifactResponse(
         return send(response, 200, html, "text/html; charset=utf-8", headers);
     }
 
-    return send(response, 200, found.content, "text/html; charset=utf-8", headers);
+    // The bridge's script goes in only for a frame (the browser says so in `Sec-Fetch-Dest`, which a page cannot set):
+    // in a tab of its own, or as fetched, the page is as it was written.
+    const content =
+        response.req?.headers["sec-fetch-dest"] === "iframe"
+            ? withBridge(found.content)
+            : found.content;
+
+    return send(response, 200, content, "text/html; charset=utf-8", headers);
 }
 
 export async function artifact(
