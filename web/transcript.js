@@ -1159,6 +1159,8 @@ function ActivityGroup({
     const id = `${conversationId}:${item.key}`;
     const [, redraw] = useState(0);
     const [fresh] = useState(() => settledFor !== null && settledFor === conversationId);
+    // When a click opened it: its first steps then drop in one after another (Fluid motion, style.css).
+    const unrolled = useRef(0);
 
     if (
         revealing.entryId !== null &&
@@ -1261,6 +1263,7 @@ function ActivityGroup({
             data-part="activity-head"
             aria-expanded=${open}
             onClick=${() => {
+                unrolled.current = open ? 0 : performance.now();
                 keep(openedGroups, id, !open);
                 redraw((n) => n + 1);
             }}
@@ -1280,7 +1283,10 @@ function ActivityGroup({
         ${
             open &&
             !lone &&
-            html`<div class="timeline" data-part="timeline">
+            html`<div
+                class=${`timeline ${performance.now() - unrolled.current < 600 ? "unrolling" : ""}`}
+                data-part="timeline"
+            >
                 ${
                     hidden > 0 &&
                     html`<button
