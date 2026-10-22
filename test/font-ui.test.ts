@@ -221,14 +221,16 @@ test(
         // Wide letters: Inter's are wider than Geist's, so the text wraps onto more lines and the box must grow.
         await page.type({ selector: ".composer textarea" }, "WWWW ".repeat(30));
 
-        // The height the box should have: its text's own, measured with nothing else on the page changing it.
+        // The height the box should have: its text's own, measured with nothing else on the page changing it. Its own
+        // height is put back as it was: a fixed one would keep the box from sizing itself (`field-sizing`) after.
         const fits = `
         const box = document.querySelector(".composer textarea");
         const height = box.offsetHeight;
+        const inline = box.style.height;
 
         box.style.height = "auto";
         const wanted = Math.min(box.scrollHeight, innerHeight * 0.4);
-        box.style.height = height + "px";
+        box.style.height = inline;
 
         return JSON.stringify(Math.abs(height - wanted) <= 1 ? height : -1);
     `;

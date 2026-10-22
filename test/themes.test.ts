@@ -2,7 +2,7 @@
 // these checks keep a theme from any other address on it (`url(/login?token=…)`, an API route), however it is written.
 import { root } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { APP_ROOT } from "../src/server/config.ts";
@@ -188,4 +188,69 @@ test("Appearance's fonts are saved into the owner's theme, and only its fonts th
     assert.equal(hues?.usable, true, hues?.problem ?? "");
     assert.equal(hues?.typography?.sans, "Pocket Inter");
     assert.equal(hues?.colors?.accent, "#00ff00", "its colors kept");
+});
+
+test("a theme's own font stays when Appearance changes another, and its files are never written through a link", async () => {
+    const data = join(root, "own-fonts-data");
+    const dir = join(data, "themes", "paper");
+    const outside = join(root, "outside.css");
+
+    mkdirSync(join(dir, "fonts"), { recursive: true });
+    writeFileSync(join(dir, "theme.json"), JSON.stringify({ themeApi: 1, name: "Paper" }));
+    writeFileSync(join(dir, "fonts", "paper.woff2"), "wOF2");
+    writeFileSync(
+        join(dir, "theme.css"),
+        [
+            `@charset "utf-8";`,
+            `@font-face { font-family: "Paper Sans"; src: url(fonts/paper.woff2); }`,
+            `:root { --sans: "Paper Sans", sans-serif; --mono: var(--sans); --ligatures: normal; }`,
+        ].join("\n"),
+    );
+
+    const themes = new Themes({
+        builtIn: join(root, "no-built-in-themes"),
+        dataDir: data,
+        notify: () => {},
+        changed: () => {},
+        log: () => {},
+    });
+
+    await themes.load();
+    const paper = () => themes.list().find((each) => each.id === "paper");
+
+    // Its own family shows as its own; a value that is not a family (`var(…)`) is not read as one.
+    assert.deepEqual(paper()?.typography, {
+        sans: "Paper Sans",
+        ligatures: true,
+        own: { sans: "Paper Sans" },
+    });
+
+    // Only what is given changes: the theme's own text font stays.
+    themes.setFonts("paper", { ligatures: false });
+    themes.setFonts("paper", { mono: "Pocket Iosevka" });
+    assert.deepEqual(paper()?.typography, {
+        sans: "Paper Sans",
+        mono: "Pocket Iosevka",
+        ligatures: false,
+        own: { sans: "Paper Sans" },
+    });
+    assert.match(
+        readFileSync(join(dir, "theme.css"), "utf8"),
+        /^@charset "utf-8";\n@import "fonts.css";\n/,
+    );
+
+    // Over it, and back to it with null.
+    themes.setFonts("paper", { sans: "Pocket Inter" });
+    assert.equal(paper()?.typography?.sans, "Pocket Inter");
+    themes.setFonts("paper", { sans: null });
+    assert.equal(paper()?.typography?.sans, "Paper Sans");
+    assert.equal(paper()?.typography?.mono, "Pocket Iosevka", "the code font kept");
+    assert.throws(() => themes.setFonts("paper", { ligatures: "yes" }), /Ligatures/);
+
+    // A fonts.css that is a link out of the folder is refused, and what it points to stays as it was.
+    writeFileSync(outside, "/* not the theme's */\n");
+    rmSync(join(dir, "fonts.css"));
+    symlinkSync(outside, join(dir, "fonts.css"));
+    assert.throws(() => themes.setFonts("paper", { sans: "Pocket Inter" }), /not a plain file/);
+    assert.equal(readFileSync(outside, "utf8"), "/* not the theme's */\n");
 });

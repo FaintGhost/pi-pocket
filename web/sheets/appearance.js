@@ -299,7 +299,8 @@ function TextSize({ size }) {
                         setPrefs({ text: textSizeOf(number) });
                     }
                 }}
-                onChange=${(event) => commit(event.currentTarget.value === "" ? size : event.currentTarget.value)}
+                onChange=${(event) =>
+                    commit(event.currentTarget.value === "" ? size : event.currentTarget.value)}
                 onBlur=${() => setDraft(null)}
                 onKeyDown=${(event) => event.key === "Enter" && event.currentTarget.blur()}
             />
@@ -340,35 +341,41 @@ function FontTools() {
     }
 
     const set = look.typography ?? { ligatures: false };
+    const own = set.own ?? {};
+    // Only what changed: the server keeps the rest as it was saved, and null goes back to the theme's own.
     const save = (patch) =>
-        attempt(() =>
-            api(`themes/${encodeURIComponent(id)}/fonts`, { ...set, ...patch }, { method: "PUT" }),
-        );
-    // A font the theme names that is not one of these shows as itself, so the menu says what is in use.
-    const choices = (fonts, value) =>
-        value && !fonts.some(([family]) => family === value) ? [...fonts, [value, value]] : fonts;
-    const menu = (label, fonts, value, key) =>
-        look.builtIn
+        attempt(() => api(`themes/${encodeURIComponent(id)}/fonts`, patch, { method: "PUT" }));
+    // A family of the theme's own, not one of these, shows as itself, as "": choosing it goes back to it.
+    const custom = (fonts, key) =>
+        [set[key], own[key]].find((family) => family && !fonts.some(([each]) => each === family));
+
+    const menu = (label, fonts, key) => {
+        const theirs = custom(fonts, key);
+        const value = theirs !== undefined && set[key] === theirs ? "" : (set[key] ?? fonts[0][0]);
+
+        return look.builtIn
             ? html`<div class="font-menu">
                   <span>${label}</span>
-                  <strong>${fontName(fonts, value)}</strong>
+                  <strong>${fontName(fonts, set[key])}</strong>
               </div>`
             : html`<label class="font-menu">
                   <span>${label}</span>
                   <select
-                      value=${value ?? fonts[0][0]}
-                      onChange=${(event) => save({ [key]: event.currentTarget.value })}
+                      value=${value}
+                      onChange=${(event) => save({ [key]: event.currentTarget.value || null })}
                   >
-                      ${choices(fonts, value).map(
+                      ${fonts.map(
                           ([family, name]) => html`<option value=${family}>${name}</option>`,
                       )}
+                      ${theirs && html`<option value="">${theirs}</option>`}
                   </select>
               </label>`;
+    };
 
     return html`<section class="font-tools" aria-label=${`Fonts for ${look.name}`}>
         <h4 class="font-title">Fonts for <em>${look.name}</em></h4>
-        ${menu("Text font", TEXT_FONTS, set.sans, "sans")}
-        ${menu("Code font", CODE_FONTS, set.mono, "mono")}
+        ${menu("Text font", TEXT_FONTS, "sans")}
+        ${menu("Code font", CODE_FONTS, "mono")}
         <div class="font-menu">
             <span>Ligatures</span>
             ${
@@ -405,7 +412,9 @@ function FontTools() {
                       <button class="button" onClick=${() => setNaming(true)}>
                           <${Icon} name="copy" size=${14} /> Duplicate to change
                       </button>
-                      <span class="muted small">${look.name} comes with the app: its fonts stay as they are.</span>
+                      <span class="muted small">
+                          ${look.name} comes with the app: its fonts stay as they are.
+                      </span>
                   </div>`)
         }
     </section>`;
@@ -703,7 +712,10 @@ export function AppearanceSheet() {
                     )}
                 </div>
             <//>
-            <${SettingRow} title="Text size" detail=${`The conversation's, in pixels: any from ${MIN_TEXT} to ${MAX_TEXT}`}>
+            <${SettingRow}
+                title="Text size"
+                detail=${`The conversation's, in pixels: any from ${MIN_TEXT} to ${MAX_TEXT}`}
+            >
                 <${TextSize} size=${textSizeOf(p.text)} />
             <//>
             <${SettingRow}
