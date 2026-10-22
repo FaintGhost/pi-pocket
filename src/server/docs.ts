@@ -175,6 +175,25 @@ export const ArtifactBodyDoc = defineDocFamily<{ content: string }, { content: s
     initial: (seed) => ({ content: seed.content }),
 });
 
+/** What one person saved for one artifact (`artifact-state.ts`): a JSON value, the page's schema label, and when. */
+export type ArtifactStateValue = { value: JsonValue; schema?: string; at: number };
+
+/**
+ * What artifact pages save for the people who use them, by artifact id, then person id: a filter, a form's inputs. It is
+ * not in the model's context, and a fork starts with none: each person's state stays in the session it was saved in.
+ */
+export const ArtifactStateDoc = defineDoc<{
+    items: Record<string, Record<string, ArtifactStateValue>>;
+}>({
+    kind: "pocket.artifact-state",
+    version: 1,
+    ...rebased,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({ items: {} }),
+});
+
 /**
  * One artifact version published to anyone with its address (`share.ts`), under a token that is the whole of the access:
  * no sign-in. `version` is the version it shows, or absent to follow the artifact's newest.

@@ -4,6 +4,7 @@ import { createWriteStream, rmSync } from "node:fs";
 import { basename, extname, join, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { ConversationId } from "@earendil-works/pi-durable";
+import { readState, writeState } from "../artifact-state.ts";
 import type { Attachment, SubmitRequest } from "../commands.ts";
 import { HttpError } from "../errors.ts";
 import type { CommandRequest } from "../extension-commands.ts";
@@ -416,6 +417,25 @@ export async function conversationRoutes(
     }
 
     // An artifact published to anyone with its address: the shares of this session, and ending one.
+    // What an artifact's page saved for this person (`artifact-state.ts`): anyone who sees the session keeps their own.
+    if (third === "artifact-state" && fourth !== undefined && parts.length === 4) {
+        if (method === "GET") {
+            return json(
+                response,
+                200,
+                await readState(app, id, user, fourth, url.searchParams.get("schema")),
+            );
+        }
+
+        if (method === "POST") {
+            return json(
+                response,
+                200,
+                await writeState(app, id, user, fourth, await readJson(request)),
+            );
+        }
+    }
+
     if (third === "shares" && fourth === undefined && method === "GET") {
         // The address others reach this server by, as webhooks give it: a tunnel's, when one is up.
         return json(response, 200, {

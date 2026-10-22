@@ -1,5 +1,6 @@
 // Artifacts and images, each in a viewer of its own; and sharing an artifact to anyone with a link.
 import { useEffect, useRef, useState } from "preact/hooks";
+import { useArtifactBridge } from "../artifact-bridge.js";
 import { api, attempt, closeSheet, notify, openSheet, store } from "../store.js";
 import { modeOf, paletteOf, themeVars } from "../theme.js";
 import { copyText, formatBytes, formatWhen, html, Icon, Loader, Sheet, timeAgo } from "../ui.js";
@@ -64,6 +65,10 @@ export function ArtifactsSheet() {
 export function ArtifactViewer({ id, version }) {
     const { view, me } = store.state;
     const artifact = view.artifacts.find((each) => each.id === id);
+    const frame = useRef(null);
+
+    // What its page may ask: a follow-up in the message box, and its own saved state (`artifact-bridge.js`).
+    useArtifactBridge(frame, { artifact: id, source: `the artifact “${artifact?.title ?? id}”` });
     const [shown, setShown] = useState(version ?? artifact?.versions.at(-1)?.version);
     const [nonce, setNonce] = useState(0);
     const latest = artifact?.versions.at(-1)?.version;
@@ -116,6 +121,7 @@ export function ArtifactViewer({ id, version }) {
             </button>
         </header>
         <iframe
+            ref=${frame}
             key=${`${src}#${nonce}`}
             src=${src}
             sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock allow-downloads"

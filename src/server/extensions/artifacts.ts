@@ -122,6 +122,10 @@ const GUIDE = `Use the artifact tool for results the user should see rendered ra
 - HTML artifacts open in a sandboxed frame on the user's device (often a phone). They cannot reach this app, its cookies, or the parent page. Make them self-contained, responsive (include a viewport meta tag), and touch-friendly.
 - Load libraries from a CDN with full URLs, such as https://esm.sh or https://cdn.jsdelivr.net. For ES modules that import bare specifiers (three.js addons import "three"), add an import map, for example: <script type="importmap">{"imports":{"three":"https://esm.sh/three@0.170.0","three/addons/":"https://esm.sh/three@0.170.0/examples/jsm/"}}</script>
 - Show loading and error states inside the page (window.onerror, a visible message), so a broken artifact explains itself.
+- In the app's viewer, an HTML artifact can ask the app for two things with parent.postMessage(message, "*"):
+  - {type:"pocket-follow-up", text, selection}: puts a message in the person's message box, for them to read and send; it is never sent by itself. text is up to 2,000 characters; selection, optional, is JSON up to 2,000. Use it for "Ask Pi about this" buttons.
+  - {type:"pocket-state-get", requestId, schema} and {type:"pocket-state-set", requestId, state, schema}: load and save up to 16 KB of JSON for the person using the artifact, so its controls survive a reload and follow them to other devices. The app answers with a message event from parent: {type:"pocket-state", requestId, ok, state, error}. Change schema when the state's shape changes: older state then reads as null. Save after changes settle (at most 20 saves in 10 seconds).
+  - Neither works in a published link or a tab of its own: the page must still work when no answer comes.
 - Reuse the id to publish a new version. For small fixes, send edits against the latest version instead of the whole content.
 - To publish an existing local HTML, Markdown, or SVG file without repeating its contents, give path instead of content or edits. This copies a UTF-8 snapshot (up to 2,000,000 bytes), not a live link or its neighboring assets. Everyone who can see the conversation can open the snapshot.`;
 
