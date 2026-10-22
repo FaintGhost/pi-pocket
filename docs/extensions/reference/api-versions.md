@@ -75,5 +75,6 @@ Each member in the reference has its own Since line. These parts came together:
 | `cwd` in `host.linkedSessions.start` and the human-bound `linkedSessions.start`                                                      | 0.19.0 |
 | The session list: `pocket.sessionChips`, `sessionAction`, `sessionFilter`, `sessionSearch`, and `WebRequest.sessions` (experimental) | 0.20.0 |
 | `host.registerModelProvider` (experimental)                                                                                          | 0.20.0 |
+| `host.fetchPublic` (experimental)                                                                                                    | 0.20.0 |
 | Keys in the message boxes: `pocket.composerKey` (experimental)                                                                       | 0.20.0 |
 | The session's messages: `pocket.onConversation`, `messages`, `reveal` (experimental)                                                 | 0.20.0 |
