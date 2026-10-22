@@ -16994,3 +16994,41 @@ pre.gallery-code {
 :root.layout-vt::view-transition-new(fluid-pane) {
     animation: fluid-fade var(--t-glide) var(--ease-glide) 80ms both;
 }
+
+/* A page Pi showed in its reply: the card is a code block (`.code.rich`) between the words around it. */
+.inline-row {
+    min-width: 0;
+}
+
+.inline-row > .code {
+    margin: 0;
+}
+
+/* The artifact's name as it was written, with its version; its buttons never break over two lines. */
+.inline-artifact .code-lang {
+    text-transform: none;
+}
+
+.inline-artifact .rich-run,
+.inline-artifact .rich-tabs button,
+.inline-artifact .code-head .copy {
+    white-space: nowrap;
+}
+
+/* On a phone the bar has two lines: the name, then the buttons. */
+@media (max-width: 699px) {
+    .inline-artifact .code-head {
+        flex-wrap: wrap;
+        height: auto;
+        row-gap: 2px;
+        padding-block: 4px;
+    }
+
+    .inline-artifact .code-lang {
+        flex: 1 0 100%;
+    }
+
+    .inline-artifact .rich-tabs {
+        margin-left: 0;
+    }
+}

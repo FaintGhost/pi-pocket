@@ -9,7 +9,7 @@ import { DiffBlock } from "./diff.js";
 import { LinkedSessions } from "./linked-sessions.js";
 import { fromServer } from "./seen.js";
 import { defineItem, slotItems, slotKey } from "./slots.js";
-import { Highlighted } from "./rich.js";
+import { Highlighted, InlineArtifact } from "./rich.js";
 import {
     actions,
     attempt,
@@ -29,6 +29,7 @@ import { openSubagent, stateOf } from "./subagents.js";
 import { prefs } from "./theme.js";
 import {
     diffCounts,
+    INLINE_TOOL,
     itemsOf,
     lineCount,
     matchCount,
@@ -451,6 +452,9 @@ function Collapsible({ text, limit = 600 }) {
 
 // ─── What Pi did: its thinking and tool calls, a line each on a timeline ───────────────
 
+/** The tools that publish artifacts: `artifact_inline` also shows its page as a card in the reply. */
+const isArtifactCall = (name) => name === "artifact" || name === INLINE_TOOL;
+
 /** What a step's mark says, by how the call went; a call still running shows a spinner instead. */
 const MARKS = { done: "✓", error: "×", denied: "×", stopped: "–", approval: "!" };
 
@@ -619,6 +623,7 @@ function outcome({ call, result, details, status }) {
         }
 
         case "artifact":
+        case "artifact_inline":
             return details?.version !== undefined
                 ? { text: `v${details.version}`, tone: "" }
                 : null;
@@ -888,7 +893,7 @@ function ToolStep({
             }
         }
 
-        if (call.name === "artifact" && (args.content || args.edits)) {
+        if (isArtifactCall(call.name) && (args.content || args.edits)) {
             parts.push(
                 html`<pre class="output">
                     ${args.content ?? JSON.stringify(args.edits, null, 2)}
@@ -912,6 +917,7 @@ function ToolStep({
                 "bash",
                 "subagent",
                 "artifact",
+                "artifact_inline",
                 "codemode",
                 "browser",
             ].includes(call.name)
@@ -941,7 +947,7 @@ function ToolStep({
         body = html`<div class="step-body" data-part="step-detail">${parts}</div>`;
     }
 
-    const artifact = call.name === "artifact" && details?.id ? details : null;
+    const artifact = isArtifactCall(call.name) && details?.id ? details : null;
     const artifactType = artifact
         ? view.artifacts.find((each) => each.id === artifact.id)?.type
         : undefined;
@@ -1359,6 +1365,57 @@ function ActivityGroup({
                     <//>`;
                 })}
             </div>`
+        }
+    </div>`;
+}
+
+/**
+ * A page Pi showed in its reply (`artifact_inline`): its card once the call has published, between the words around
+ * it. Until then, and if the call failed, was denied, or stopped, its step as the timeline draws it, so the reason shows.
+ */
+function InlineRow({ item, results, slots, approvals, busy, conversationId }) {
+    const { block, entry, canRun } = item.step;
+    const result = results.get(block.id);
+    const details = result?.details;
+    const slot = slots.get(block.id);
+    const approval =
+        slot?.taskId === undefined
+            ? undefined
+            : approvals.find((each) => each.taskId === slot.taskId);
+    const published =
+        result !== undefined &&
+        !result.isError &&
+        details?.inline === true &&
+        typeof details.id === "string" &&
+        Number.isInteger(details.version);
+
+    return html`<div class="inline-row">
+        ${item.anchors.map(
+            (entryId) => html`<span class="entry-anchor" id=${`entry-${entryId}`}></span>`,
+        )}
+        ${
+            published
+                ? html`<${InlineArtifact}
+                      conversationId=${conversationId}
+                      id=${details.id}
+                      title=${details.title ?? details.id}
+                      version=${details.version}
+                  />`
+                : html`<div class="activity open">
+                      <div class="timeline">
+                          <${ToolStep}
+                              call=${block}
+                              result=${result}
+                              slot=${slot}
+                              approval=${approval}
+                              entryId=${entry?.id}
+                              streaming=${entry === undefined}
+                              canRun=${canRun}
+                              busy=${busy}
+                              conversationId=${conversationId}
+                          />
+                      </div>
+                  </div>`
         }
     </div>`;
 }
@@ -1928,7 +1985,7 @@ function callDeps(block, results, slots, approvals) {
         deps.push(approvals.find((each) => each.taskId === slot.taskId)?.id);
     }
 
-    if (block.name === "artifact") {
+    if (isArtifactCall(block.name)) {
         deps.push((view.artifacts ?? []).map((each) => `${each.id}:${each.type}`).join());
     }
 
@@ -2015,6 +2072,33 @@ function Items({ items, results, slots, approvals, busy, past = false, conversat
         if (item.type === "row") {
             return html`<${Memo} key=${item.key} deps=${rowDeps(item.entry)}>
                 <${EntryView} entry=${item.entry} />
+            <//>`;
+        }
+
+        if (item.type === "inline") {
+            const { block, entry, streaming, canRun } = item.step;
+
+            return html`<${Memo}
+                key=${item.key}
+                deps=${[
+                    block,
+                    entry,
+                    streaming,
+                    canRun,
+                    busy,
+                    conversationId,
+                    item.anchors.join(),
+                    ...callDeps(block, results, slots, approvals),
+                ]}
+            >
+                <${InlineRow}
+                    item=${item}
+                    results=${results}
+                    slots=${slots}
+                    approvals=${approvals}
+                    busy=${busy}
+                    conversationId=${conversationId}
+                />
             <//>`;
         }
 

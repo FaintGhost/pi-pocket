@@ -46,16 +46,23 @@ export function useFitHeight(initial, min, max) {
 }
 
 /**
- * A frame running `source`. The frame page says when it is ready; then it gets the HTML and reports its height, and the
- * frame fits it. Messages count only from this frame's own window, and a height only when it is a sane number.
+ * A frame running `source`, as the artifact `artifact` when it is one. The frame page says when it is ready; then it
+ * gets the HTML and reports its height, and the frame fits it. Messages count only from this frame's own window, and a
+ * height only when it is a sane number.
  */
-export function RunFrame({ source, title = "Preview", from = "the page in Pi's reply" }) {
+export function RunFrame({
+    source,
+    title = "Preview",
+    from = "the page in Pi's reply",
+    artifact = null,
+}) {
     const ref = useRef(null);
     const [height, fitHeight, resetFit] = useFitHeight(240, MIN_HEIGHT, MAX_HEIGHT);
 
-    // It may offer a follow-up for the message box, as an artifact may; it has no id, so it keeps no state. `from`
-    // names it there. Its frame page loads, then the HTML it writes in: 2 loads are its own.
-    useArtifactBridge(ref, { source: from, pages: 2 });
+    // It may offer a follow-up for the message box, as an artifact may; `from` names it there. It keeps state only as
+    // an artifact (`artifact`, its id): a reply's HTML has none. Its frame page loads, then the HTML it writes in:
+    // 2 loads are its own.
+    useArtifactBridge(ref, { artifact, source: from, pages: 2 });
 
     // Listening from the moment the frame is in the page, before it can load: it says it is ready only once.
     useLayoutEffect(() => {

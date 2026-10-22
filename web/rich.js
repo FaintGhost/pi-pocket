@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { DiffBlock } from "./diff.js";
 import { highlight, langOf } from "./highlight.js";
 import { RunFrame, useFitHeight } from "./run-frame.js";
-import { notify } from "./store.js";
+import { notify, openSheet } from "./store.js";
 import { COLOR_LIMIT, copyText, html, setRichBlock } from "./ui.js";
 
 // ─── A page, previewed ──────────────────────────────────────────────────────────────
@@ -162,9 +162,11 @@ function SvgImage({ source }) {
 /**
  * A code block that shows more than code: what it draws (a page, an image, a diff) with its code a tab away. While
  * the reply is still being written it shows the code, as the page or diff is not whole yet. A page's scripts run only
- * on a tap of Run, in the artifacts' sandbox.
+ * on a tap of Run, in the artifacts' sandbox. `artifact` (`{ id, title, version }`) makes it an artifact's card in the
+ * reply (`InlineArtifact`): named by the artifact and its version, with a button for the viewer, and its page, once run,
+ * gets the artifact's saved state as the viewer gives it.
  */
-function RichBlock({ kind, lang, source, streaming }) {
+function RichBlock({ kind, lang, source, streaming, artifact = null }) {
     const [view, setView] = useState("shown");
     const [running, setRunning] = useState(false);
     const code = streaming || view === "code";
@@ -192,7 +194,11 @@ function RichBlock({ kind, lang, source, streaming }) {
                 : html`<pre><code dangerouslySetInnerHTML=${{ __html: colored }}></code></pre>`;
     } else if (kind === "html") {
         body = running
-            ? html`<${RunFrame} source=${source} />`
+            ? html`<${RunFrame}
+                  source=${source}
+                  artifact=${artifact?.id ?? null}
+                  from=${artifact ? `the artifact “${artifact.title}”` : undefined}
+              />`
             : html`<${HtmlPreview} source=${source} />`;
     } else if (kind === "svg") {
         body = html`<${SvgImage} source=${source} />`;
@@ -200,9 +206,11 @@ function RichBlock({ kind, lang, source, streaming }) {
         body = html`<${DiffBlock} text=${source} />`;
     }
 
-    return html`<div class=${`code rich ${kind}`}>
+    return html`<div class=${`code rich ${kind} ${artifact ? "inline-artifact" : ""}`}>
         <div class="code-head">
-            <span class="code-lang">${lang || kind}</span>
+            <span class="code-lang">
+                ${artifact ? `${artifact.title} · v${artifact.version}` : lang || kind}
+            </span>
             ${
                 !streaming &&
                 html`<span class="rich-tabs" role="tablist">
@@ -239,6 +247,17 @@ function RichBlock({ kind, lang, source, streaming }) {
                     ${running ? "■ Stop" : "▶ Run"}
                 </button>`
             }
+            ${
+                artifact &&
+                html`<button
+                    type="button"
+                    class="copy"
+                    title="Open it in the artifact viewer, at this version"
+                    onClick=${() => openSheet({ type: "viewer", id: artifact.id, version: artifact.version })}
+                >
+                    Open
+                </button>`
+            }
             <button type="button" class="copy" onClick=${copy}>Copy</button>
         </div>
         ${body}
@@ -246,6 +265,83 @@ function RichBlock({ kind, lang, source, streaming }) {
 }
 
 setRichBlock(RichBlock);
+
+// ─── An artifact in the reply ───────────────────────────────────────────────────────
+
+/** The pages fetched for cards, by address: a version never changes, so one is fetched once. The oldest go first. */
+const pages = new Map();
+const PAGES_KEPT = 20;
+
+function pageOf(conversationId, id, version) {
+    const address = `/a/${conversationId}/${encodeURIComponent(id)}/${version}`;
+    let page = pages.get(address);
+
+    if (page === undefined) {
+        page = fetch(address, { credentials: "same-origin" }).then((response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            return response.text();
+        });
+        pages.set(address, page);
+
+        if (pages.size > PAGES_KEPT) {
+            pages.delete(pages.keys().next().value);
+        }
+
+        // A page that did not come may on the next try.
+        page.catch(() => pages.delete(address));
+    }
+
+    return page;
+}
+
+/**
+ * What `artifact_inline` published, as a card in the reply: the version its call made, with Preview/Code, Run/Stop, and
+ * the viewer a tap away. The page comes from the artifact's own address, as the viewer's does, so whoever may see the
+ * session may see the card; later versions never change it. Until it comes the card says so.
+ */
+export function InlineArtifact({ conversationId, id, title, version }) {
+    const [page, setPage] = useState({ source: null, failed: false });
+
+    useEffect(() => {
+        let current = true;
+
+        setPage({ source: null, failed: false });
+        pageOf(conversationId, id, version).then(
+            (source) => current && setPage({ source, failed: false }),
+            () => current && setPage({ source: null, failed: true }),
+        );
+
+        return () => {
+            current = false;
+        };
+    }, [conversationId, id, version]);
+
+    const artifact = { id, title, version };
+
+    if (page.source !== null) {
+        return html`<${RichBlock} kind="html" source=${page.source} artifact=${artifact} />`;
+    }
+
+    return html`<div class="code rich html inline-artifact">
+        <div class="code-head">
+            <span class="code-lang">${title} · v${version}</span>
+            <span class="grow"></span>
+            <button
+                type="button"
+                class="copy"
+                onClick=${() => openSheet({ type: "viewer", id, version })}
+            >
+                Open
+            </button>
+        </div>
+        <p class="muted small rich-note">
+            ${page.failed ? "This version could not be loaded." : "Loading…"}
+        </p>
+    </div>`;
+}
 
 // ─── Code elsewhere ────────────────────────────────────────────────────────────────────
 

@@ -145,6 +145,7 @@ const DID = {
     ls: { verb: "listed", noun: "folder", by: "path" },
     browser: { verb: "used the browser" },
     artifact: { verb: "published", noun: "artifact", by: "id" },
+    artifact_inline: { verb: "published", noun: "artifact", by: "id" },
     // PiP's.
     sessions: { verb: "looked over sessions" },
     session_read: { verb: "read", noun: "session", by: "session" },
@@ -297,6 +298,9 @@ export function summarize(steps, thinking) {
     return line.charAt(0).toUpperCase() + line.slice(1);
 }
 
+/** The tool whose pages show as cards in the reply (`src/server/extensions/artifacts.ts`). */
+export const INLINE_TOOL = "artifact_inline";
+
 /** Words worth showing: a model can send an empty or blank text block between its calls. */
 export const says = (block) => block.type === "text" && block.text.trim() !== "";
 
@@ -339,7 +343,23 @@ export function itemsOf(rows, partial, { prefix = "", from = null, talk = false 
         entry.blocks.forEach((block, index) => {
             const growing = streaming && index === entry.blocks.length - 1;
 
-            if (block.type === "thinking" || block.type === "toolCall") {
+            // A page shown in the reply sits between the words around it, not folded into a group of steps.
+            if (block.type === "toolCall" && block.name === INLINE_TOOL) {
+                words = null;
+                close();
+                items.push({
+                    type: "inline",
+                    key: `${prefix}i${block.id || `${anchor}:${replies++}`}`,
+                    anchors: anchored || speaks ? [] : [entry.id],
+                    step: {
+                        block,
+                        entry: streaming ? undefined : entry,
+                        streaming: growing,
+                        canRun: streaming || entry === asking,
+                    },
+                });
+                anchored = true;
+            } else if (block.type === "thinking" || block.type === "toolCall") {
                 words = null;
 
                 if (group === null) {
