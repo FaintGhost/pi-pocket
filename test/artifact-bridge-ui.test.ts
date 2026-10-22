@@ -560,3 +560,36 @@ test("a viewer gets a notice, not a message", real, async () => {
         app.config.removeUser(viewer.user.id);
     }
 });
+
+test(
+    "a page that hides a script in an odd comment before the bridge still needs a real tap",
+    real,
+    async () => {
+        await closeSheet();
+        await setBox("");
+        // A browser ends the comment at "<!-->": the script after it runs, and tries to call the bridge's tap listener.
+        await publish(
+            "odd-comment",
+            `<!--><script>
+      const listen = window.addEventListener.bind(window);
+      window.addEventListener = (type, callback, ...rest) => {
+        if (type === "mousedown") { callback({ isTrusted: true }); }
+        return listen(type, callback, ...rest);
+      };
+    </script><!-- -->
+    <!doctype html><script>
+      setTimeout(() => parent.postMessage({ type: "pocket-follow-up", text: "NO_TAP" }, "*"), 300);
+    </script>`,
+        );
+        await until(
+            () =>
+                inPage<boolean>(
+                    "return (await import('/store.js')).store.state.view.artifacts.some((each) => each.id === 'odd-comment')",
+                ),
+            "the artifact listed",
+        );
+        await openViewer("odd-comment");
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        assert.equal(await boxText(), "", "nobody tapped the page");
+    },
+);

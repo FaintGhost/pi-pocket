@@ -146,11 +146,14 @@ const ARTIFACT_BRIDGE = `
 const BRIDGE_TAG = `<script>(() => {${ARTIFACT_BRIDGE}})();</script>`;
 
 /**
- * The artifact's HTML with `BRIDGE_TAG` first: after a byte order mark, comments, and the doctype, so the page keeps
- * its mode, and before anything of the page runs.
+ * The artifact's HTML with `BRIDGE_TAG` first, before anything of the page can run. Only a doctype at the very start
+ * (after a byte order mark and HTML's own white space) goes before it, so such a page keeps its mode: a doctype ends at
+ * its first `>` for the browser too, so nothing in it can run. Comments are not skipped: a browser reads odd ones
+ * (`<!-->`) otherwise than a pattern would, and a script that one hides would run before the bridge. A page with a
+ * comment before its doctype so loads in quirks mode.
  */
 export function withBridge(html: string): string {
-    const start = /^(?:\uFEFF?\s*(?:<!--[\s\S]*?-->\s*)*(?:<!doctype[^>]*>)?)/i.exec(html)![0];
+    const start = /^\uFEFF?[\t\n\f\r ]*(?:<!doctype[^>]*>)?/i.exec(html)![0];
 
     return start + BRIDGE_TAG + html.slice(start.length);
 }

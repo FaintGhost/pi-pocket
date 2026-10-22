@@ -23,6 +23,7 @@ import type { ConversationId } from "@earendil-works/pi-durable";
 import createArtifacts, { slugify } from "../src/server/extensions/artifacts.ts";
 import type { PocketHost } from "../src/server/host.ts";
 import { createHandler } from "../src/server/http.ts";
+import { withBridge } from "../src/server/http/artifacts.ts";
 
 const PAGE = `<!doctype html><html><body><h1>Loan</h1><input id="rate" value="4"></body></html>`;
 
@@ -218,6 +219,28 @@ test("a frame's page starts with the bridge's script, after the doctype; a tab's
         "the page follows, as written",
     );
     assert.match(framed, /structuredClone/);
+
+    // Before a doctype only white space and a byte order mark are skipped: the bridge comes before any comment, odd
+    // ones too, which a browser can end where a pattern would not (`<!-->` is a whole comment), and before any other
+    // white space (a no-break space is text to a browser).
+    const tag = framed.slice(
+        "<!doctype html>".length,
+        framed.indexOf("</script>") + "</script>".length,
+    );
+
+    for (const page of [
+        "<!--><script>early()</script><!-- -->",
+        "<!---><script>early()</script>-->",
+        "<!-- a --><!doctype html><script>early()</script>",
+        "\u00a0<!doctype html><script>early()</script>",
+    ]) {
+        assert.equal(withBridge(page), tag + page, JSON.stringify(page));
+    }
+
+    assert.equal(
+        withBridge("\uFEFF \n<!DOCTYPE html><p>"),
+        "\uFEFF \n<!DOCTYPE html>" + tag + "<p>",
+    );
 });
 
 test("a replayed call finds its version; another call of the same task makes the next one", async () => {

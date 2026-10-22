@@ -30,7 +30,7 @@ import {
 import { type ConversationId, InboxDoc, LiveDoc } from "@earendil-works/pi-durable";
 import type { Attachment } from "../src/server/commands.ts";
 import { TurnsDoc } from "../src/server/docs.ts";
-import { type Interrupt, InterruptTask } from "../src/server/resend.ts";
+import type { Interrupt } from "../src/server/resend.ts";
 import createArtifacts from "../src/server/extensions/artifacts.ts";
 import type { PocketHost } from "../src/server/host.ts";
 
@@ -1301,7 +1301,7 @@ test("an Interrupt task run again, or for a run that is gone, stops nothing and 
     const task = (input: Interrupt) =>
         app.harness.commit(
             (tx) =>
-                tx.createTask(InterruptTask, input, {
+                tx.createTask(app.commands.interruptTask, input, {
                     ownership: { kind: "conversation" },
                     background: true,
                     conversationId: id,
@@ -2378,4 +2378,53 @@ test("a last-seen time that cannot be saved does not stop the server", async () 
     // The app goes on as before.
     await say(id, "still here");
     assert.ok((await modelTexts(app, id)).some((text) => text.includes("echo: still here")));
+});
+
+test("an Interrupt stops the run it was made for, not one that started after that run ended", async () => {
+    const id = await newSession();
+    let replacement: Awaited<ReturnType<typeof app.commands.submit>> | undefined;
+
+    await app.commands.submit(id, owner(), { text: "stream a long answer", requestId: "race-old" });
+    await until(() => app.isBusy(id), "the first run");
+    const run = Number((await app.harness.snapshot(LiveDoc, id, context))?.run?.taskId);
+
+    // The task's step, with the first run ended and a second one started between its look and its stop.
+    await app.commands.interruptTask.definition.phases.send(
+        { input: { content: "moved", requestId: `u:${owner().id}:race-interrupt`, run } } as never,
+        {
+            conversationId: id,
+            commit: app.harness.commit.bind(app.harness),
+            conversation: async () => {
+                // The first run ends (awaited, so the next message starts a run of its own).
+                await (await app.harness.conversation(id, context))!.abort(context);
+                replacement = await app.commands.submit(id, owner(), {
+                    text: "stream a long answer",
+                    requestId: "race-new",
+                });
+                // Going, or already answered: either way, it started.
+                await until(
+                    async () =>
+                        app.isBusy(id) ||
+                        (
+                            await (await app.harness.submission(
+                                replacement!.submissionId!,
+                                context,
+                            ))!.status(context)
+                        ).status !== "queued",
+                    "the second run",
+                );
+
+                return app.harness.conversation(id, context);
+            },
+            report: (error: unknown) => assert.fail(String(error)),
+        } as never,
+        context,
+    );
+    const status = await (await app.harness.submission(
+        replacement!.submissionId!,
+        context,
+    ))!.status(context);
+
+    assert.notEqual(status.status, "unanswered", "the second run goes on");
+    await app.commands.abort(id, owner());
 });

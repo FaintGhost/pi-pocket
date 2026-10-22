@@ -30,6 +30,7 @@ import {
     type SettledSubmissionRecord,
     type SubmissionId,
     type Task,
+    type TaskId,
     type TaskRuntime,
     type UserInput,
 } from "@earendil-works/pi-durable";
@@ -64,7 +65,8 @@ import { globalModelSettings, projectModelDefault } from "./project-model.ts";
 import { expandPromptTemplate, expandSkillCommand, unwrapSkill } from "./prompts.ts";
 import { clientKey, ownRequest, requestFor } from "./requests.ts";
 import {
-    InterruptTask,
+    type Interrupt,
+    interruptTask,
     type Requeue,
     type Resend,
     resendContent,
@@ -315,9 +317,23 @@ export class Commands {
      * says who dealt with the failure. A message left in the queue by a run that failed ends it, settling nothing.
      */
     readonly followTask: Task<Followed, { phase: "wait" }, null, object>;
+    /** A queued message moved to Interrupt (`moveQueued`): it stops the run it was made for, by that run's id. */
+    readonly interruptTask: Task<Interrupt, { phase: "send" }, null, object>;
 
     constructor(app: PocketApp) {
         this.#app = app;
+        this.interruptTask = interruptTask(async (run, context) => {
+            const harness = this.#app.harness;
+            const task = run as unknown as TaskId;
+            const record = await harness.getTask(task, context);
+
+            if (record === undefined || record.state.status === "terminal") {
+                return;
+            }
+
+            await harness.abortTask(task, context);
+            await harness.waitForTask(task, context);
+        });
         this.followTask = defineTask<Followed, { phase: "wait" }, null>({
             name: "pocket.follow-failure",
             version: 1,
@@ -1335,7 +1351,7 @@ export class Commands {
                 }
 
                 await tx.createTask(
-                    InterruptTask,
+                    this.interruptTask,
                     {
                         content,
                         requestId: ownRequest(user.id, `interrupt-${submissionId}`),
