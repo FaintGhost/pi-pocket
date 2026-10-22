@@ -1164,6 +1164,8 @@ export const actions = {
     updateSession: (id, patch) => api(`sessions/${id}`, patch),
     upload: (file) => api(`c/${current()}/upload?name=${encodeURIComponent(file.name)}`, file),
     fullEntry: (entryId) => api(`c/${current()}/entry/${entryId}`),
+    /** Show a path in the server machine's file manager: the owner's only. */
+    reveal: (path) => api(`c/${current()}/reveal`, { path }),
     history: (before) => api(`c/${current()}/history?before=${before}`),
     context: (before, query) => api(`c/${current()}/context?before=${before}&${query}`),
 };

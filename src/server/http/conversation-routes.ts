@@ -8,6 +8,7 @@ import { readState, writeState } from "../artifact-state.ts";
 import type { Attachment, SubmitRequest } from "../commands.ts";
 import { HttpError } from "../errors.ts";
 import type { CommandRequest } from "../extension-commands.ts";
+import { reveal } from "../reveal.ts";
 import { serveImage, TYPES } from "./assets.ts";
 import { type ApiRequest, json, readJson, send } from "./io.ts";
 
@@ -373,6 +374,25 @@ export async function conversationRoutes(
         return send(response, 200, image.data, image.mimeType, {
             "cache-control": "private, max-age=31536000, immutable",
         });
+    }
+
+    // Show a path in the file manager of the machine the server runs on: the owner's, at that machine (`reveal.ts`).
+    if (third === "reveal" && method === "POST") {
+        app.requireSee(user, id);
+
+        if (user.role !== "owner") {
+            throw new HttpError(403, "Only the owner opens the server's file manager");
+        }
+
+        const body = await readJson<{ path?: unknown }>(request);
+
+        if (typeof body.path !== "string" || body.path.trim() === "") {
+            throw new HttpError(400, "path is required");
+        }
+
+        await reveal(app.workspace.conversationPath(id, body.path));
+
+        return json(response, 200, { ok: true });
     }
 
     if (third === "file" && method === "GET") {

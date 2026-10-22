@@ -2150,3 +2150,37 @@ test("an extension reads a session's messages a page at a time, as its person ma
         server.close();
     }
 });
+
+test("only the owner may show a path in the server's file manager, and only one that is there", async () => {
+    const { createServer } = await import("node:http");
+    const { createHandler } = await import("../src/server/http.ts");
+    const id = await newSession();
+    const server = createServer(
+        createHandler({ app, listen: { host: "127.0.0.1", port: 0 }, restart: () => {} }),
+    );
+
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    const guest = app.config.addUser("Gil", "guest");
+    const call = (token: string, body: unknown) =>
+        fetch(`http://127.0.0.1:${port}/api/c/${id}/reveal`, {
+            method: "POST",
+            headers: {
+                authorization: `Bearer ${token}`,
+                "x-pocket": "1",
+                "content-type": "application/json",
+            },
+            body: JSON.stringify(body),
+        });
+
+    try {
+        // A real path for the owner would open a window: these stop before any command runs.
+        assert.equal((await call(guest.token, { path: "." })).status, 403);
+        assert.equal((await call(app.config.ownerToken, { path: "" })).status, 400);
+        assert.equal((await call(app.config.ownerToken, { path: "no/such/file.txt" })).status, 404);
+    } finally {
+        app.config.removeUser(guest.user.id);
+        server.closeAllConnections();
+        server.close();
+    }
+});
