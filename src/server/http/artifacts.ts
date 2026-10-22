@@ -202,6 +202,8 @@ export async function artifactResponse(
     response: ServerResponse,
     found: { meta: { type: ArtifactType; title: string }; content: string },
     query = new URLSearchParams(),
+    /** False for a public link: it shows the page as it was written, and the app frames it nowhere. */
+    bridge = true,
 ): Promise<void> {
     const headers = {
         "content-security-policy": ARTIFACT_CSP,
@@ -220,12 +222,15 @@ export async function artifactResponse(
         return send(response, 200, html, "text/html; charset=utf-8", headers);
     }
 
-    // The bridge's script goes in only for a frame (the browser says so in `Sec-Fetch-Dest`, which a page cannot set):
-    // in a tab of its own, or as fetched, the page is as it was written.
+    // The bridge's script goes in unless the browser says (in `Sec-Fetch-Dest`, which a page cannot set) that this is a
+    // tab of its own or a script's fetch: those get the page as it was written. With no such header (an older browser,
+    // a proxy that drops it), it goes in too, or a page could say hello itself and send follow-ups with no tap. Outside
+    // a frame, it does nothing.
+    const dest = response.req?.headers["sec-fetch-dest"];
     const content =
-        response.req?.headers["sec-fetch-dest"] === "iframe"
-            ? withBridge(found.content)
-            : found.content;
+        !bridge || dest === "document" || dest === "empty"
+            ? found.content
+            : withBridge(found.content);
 
     return send(response, 200, content, "text/html; charset=utf-8", headers);
 }

@@ -1249,6 +1249,12 @@ export class Commands {
             throw new HttpError(403, "Only its sender can move a queued message.");
         }
 
+        // To the queue, it only waits longer. To Steer or Interrupt, it acts on the run now: that is the driver's turn,
+        // as sending is.
+        if (mode !== "followUp") {
+            await app.requireDriver(id, user);
+        }
+
         // Request ids of the queued messages, from Pi Durable's records: a commit cannot read a submission by its id.
         const requests = new Map<number, string | undefined>();
         let moved: boolean | "again" = "again";

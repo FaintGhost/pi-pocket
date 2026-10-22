@@ -96,10 +96,13 @@ async function results(id: ConversationId) {
     );
 }
 
-/** The page as a person with `token` gets it, or none. */
+/** The page as a person with `token` gets it in a tab of its own (with no bridge), or none. */
 async function page(token: string | undefined, id: ConversationId, path: string) {
     const response = await fetch(`http://127.0.0.1:${port}/a/${id}/${path}`, {
-        headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
+        headers: {
+            "sec-fetch-dest": "document",
+            ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+        },
     });
 
     return { status: response.status, text: await response.text() };
@@ -195,6 +198,7 @@ test("it shares the artifact tool's store: the page is served, and a Markdown ar
 });
 
 test("a frame's page starts with the bridge's script, after the doctype; a tab's or a fetch's is as written", async () => {
+    // With no Sec-Fetch-Dest (an older browser, a proxy that drops it), the bridge goes in too.
     const id = await newSession(app);
 
     await inlineCall(id, 850_000 + (calls += 1), "bridge")({ content: PAGE });
@@ -209,9 +213,11 @@ test("a frame's page starts with the bridge's script, after the doctype; a tab's
             })
         ).text();
 
-    assert.equal(await get(), PAGE);
     assert.equal(await get("document"), PAGE);
+    assert.equal(await get("empty"), PAGE);
     const framed = await get("iframe");
+
+    assert.equal(await get(), framed, "no header: the bridge too");
 
     assert.ok(framed.startsWith("<!doctype html><script>"), "after the doctype: no quirks mode");
     assert.ok(

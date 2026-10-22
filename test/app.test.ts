@@ -1343,7 +1343,7 @@ test("an Interrupt task run again, or for a run that is gone, stops nothing and 
     }
 });
 
-test("after a restart, a person still moves their own queued message, also when someone else drives", async () => {
+test("after a restart, a person still moves their own queued message; to Steer or Interrupt only while driving", async () => {
     const dataDir = join(root, "move-restart");
     let again = await openApp(faux, dataDir);
     let alex: Awaited<ReturnType<typeof again.config.addUser>>["user"] | undefined;
@@ -1358,7 +1358,7 @@ test("after a restart, a person still moves their own queued message, also when 
         await until(() => again.isBusy(id), "the run to start");
         const mine = await again.commands.submit(id, first, {
             text: "mine",
-            mode: "followUp",
+            mode: "steer",
             requestId: "rs-2",
         });
         const theirs = await again.commands.submit(id, alex, {
@@ -1370,7 +1370,8 @@ test("after a restart, a person still moves their own queued message, also when 
         await again.close();
         again = await openApp(faux, dataDir);
         alex = again.config.users.find((user) => user.name === "Alex")!;
-        // Take turns, and Alex drives: the owner moves their own message all the same, and not Alex's.
+        // Take turns, and Alex drives: the owner moves their own message to the queue all the same, and not Alex's.
+        // Steer and Interrupt act on the run now: Alex's turn.
         await again.harness.commit(async (tx) => {
             const turns = await tx.doc(TurnsDoc, id);
 
@@ -1381,13 +1382,22 @@ test("after a restart, a person still moves their own queued message, also when 
             again.commands.moveQueued(id, ownerOf(again), Number(theirs.submissionId), "steer"),
             /Only its sender/,
         );
-        await again.commands.moveQueued(id, ownerOf(again), Number(mine.submissionId), "steer");
+        await again.commands.moveQueued(id, ownerOf(again), Number(mine.submissionId), "followUp");
         assert.equal(
             (await again.harness.snapshot(InboxDoc, id, context))?.items.find(
                 (item) => Number(item.id) === Number(mine.submissionId),
             )?.mode,
-            "steer",
+            "followUp",
         );
+
+        for (const mode of ["steer", "interrupt"]) {
+            await assert.rejects(
+                again.commands.moveQueued(id, ownerOf(again), Number(mine.submissionId), mode),
+                /Alex is driving/,
+            );
+        }
+
+        assert.ok(again.isBusy(id), "the run Alex drives goes on");
         await again.commands.abort(id, ownerOf(again));
     } finally {
         await again.close();
