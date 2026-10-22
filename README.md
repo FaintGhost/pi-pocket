@@ -49,7 +49,7 @@ The owner sign-in link is in the log (`docker compose logs pi-pocket | grep '/lo
 
 - **Durable.** Every model call, tool call, and subagent is stored as it happens. Restart the server mid-run and the work continues; a cut-off tool call reruns only if that is safe.
 - **Multiplayer.** Share a live session: presence, a side chat Pi does not see, @mentions, pins, reactions, shared notes, and take turns.
-- **Steer or queue.** Redirect Pi while it works, queue follow-ups, or stop it.
+- **Steer or queue.** Redirect Pi while it works, queue follow-ups, or stop it. Move a waiting message to Steer or Queue, or send it now as an Interrupt.
 - **PiP, your assistant.** Alt+A opens "Pi in Pocket" over any screen: it lists, reads, starts, and messages your other sessions, follows their runs, and tells you what came of them. What sessions and GitHub say reaches it as data, never as instructions.
 - **Watches and webhooks.** Tell PiP to watch a GitHub repository ("when CI fails on main, fix it and tell me"), or watch a pull request from a session until it merges; webhooks bring other services' posts to Pi. Only the repository's own people count, unless you say anyone.
 - **Memory.** Lessons Pi keeps across sessions, per project or everywhere. Pi proposes them; the owner approves what it saw.
@@ -58,8 +58,8 @@ The owner sign-in link is in the log (`docker compose logs pi-pocket | grep '/lo
 - **Works while you're away.** Schedule messages to Pi (`/schedule every weekday 8:00 summarize CI`), and `/until npm test` keeps Pi going until the check passes.
 - **Plan mode.** Pi reads and proposes a plan; nothing changes until someone approves it.
 - **Any provider, any model.** Uses Pi's own model runtime and sign-ins, skills, and prompt templates, with the model and thinking level chosen per session.
-- **Themes.** Pocket, the app's own look, and Lantern, a calm, warm dark theme for long reading. Duplicate one and change it with Pi: each save shows at once. The owner picks the default for new browsers.
-- **Omarchy colors.** Every Omarchy theme's colors, or follow your desktop's live; tiled Hyprland-style windows, a Walker-style launcher (Ctrl/⌘+K) with live color previews, and Hyprland's motion.
+- **Themes.** Pocket, the app's own look, and Lantern, a calm, warm dark theme for long reading. Duplicate one and change it with Pi: each save shows at once. Themes can bring their own fonts, and the text size is yours to set. The owner picks the default for new browsers.
+- **Omarchy colors.** Every Omarchy theme's colors, or follow your desktop's live; tiled Hyprland-style windows, a Walker-style launcher (Ctrl/⌘+K) with live color previews, Hyprland's motion, and an optional Fluid motion with springs and morphs. Replies can show the time they came.
 - **Extension gallery.** Find drop-ins and themes other people wrote, read their source or ask Pi to review it, and install them: each file is checked against the index, an extension starts off, and an update shows its diff first. Share your own from Extensions.
 - **Agent Teams.** Off by default. Pi starts linked sessions that work beside the one that started them, and messages them both ways.
 - **Session tags.** Off by default. Shared labels on sessions, shown on their rows, found by search, and used to filter the session list.
@@ -69,7 +69,7 @@ The owner sign-in link is in the log (`docker compose logs pi-pocket | grep '/lo
 - **Files and review.** The Files tile (Alt+E) shows the session's folder beside the conversation, and Changes reviews every uncommitted change: word-level diffs, split or unified, and files you mark viewed. Code in Pi's replies is colored, and an HTML block previews inline, running on a tap in a sandbox.
 - **Branches.** The git branch shows in the top bar, under the session's title, and follows any switch; tap it to switch to another branch, follow a remote one, or make a new one.
 - **A built-in browser.** Pi opens, reads, clicks through, and screenshots pages in a real Chromium on the server, and you watch and use the same page in the Browser panel, from a phone too: your dev server on `localhost` included.
-- **Artifacts and subagents.** Sandboxed HTML, Markdown, and SVG artifacts, and background subagents you can open and talk to.
+- **Artifacts and subagents.** Sandboxed HTML, Markdown, and SVG artifacts, which you can share as a public link (`/pub/<token>`) that ends when you say, and background subagents you can open and talk to.
 - **Codemode.** On by default: Pi writes short scripts that call its tools, and every call still goes through the same checks.
 - **Lancet Guard.** Off by default; turn it on in Menu → Extensions. With the [specpi-lancet-guard](https://github.com/TannerMidd/SpecPi) Pi package installed and on, risky bash, write, and edit calls wait for someone in the session to approve. The owner downloads its model with one button in Extensions.
 - **Roles, invites, and limits.** Steer or view-only access, to every session or just one, through one-time links and QR codes, with spend limits per person and per session.
