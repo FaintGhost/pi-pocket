@@ -106,6 +106,7 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "edit",
     "bash",
     "artifact",
+    "artifact_inline",
     "browser",
     "subagent",
     "team",
