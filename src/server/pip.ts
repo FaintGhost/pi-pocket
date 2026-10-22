@@ -749,7 +749,7 @@ export class Pip {
 
         if (chosen.length > 0) {
             throw new Error(
-                `This names ${chosen.map((model) => `${model.provider}/${model.id}`).join(", ")}, which your person did not name. Which model to use is theirs to say: take it out (sessions and their subagents use their own model), or ask them first.`,
+                `This names ${chosen.map((model) => `${model.provider}/${model.id}`).join(", ")}, which your person did not name. Which model to use is theirs to say: take it out (a session uses its default model, and its subagents and linked sessions the owner's allowed ones), or ask them first.`,
             );
         }
     }
