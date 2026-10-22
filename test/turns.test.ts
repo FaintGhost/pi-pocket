@@ -133,3 +133,14 @@ test("a jump to an answer lands on its words, or on its card when it has none", 
     assert.equal(talking[2]!.anchor, true);
     assert.deepEqual(silent[1]!.anchors, [2]);
 });
+
+test("two inline calls with one id get keys of their own", () => {
+    const items = turns.itemsOf(
+        [user(1), answer(2, [call("same", INLINE), call("same", INLINE)])],
+        null,
+    );
+    const keys = items.filter((item) => item.type === "inline").map((item) => item.key);
+
+    assert.equal(keys.length, 2);
+    assert.equal(new Set(keys).size, 2);
+});

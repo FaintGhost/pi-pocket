@@ -349,9 +349,16 @@ export function itemsOf(rows, partial, { prefix = "", from = null, talk = false 
             if (block.type === "toolCall" && block.name === INLINE_TOOL) {
                 words = null;
                 close();
+                let key = `${prefix}i${block.id || `${anchor}:${inlines++}`}`;
+
+                // A provider can use an id twice: the second is named by its place, as a group's steps are.
+                if (items.some((item) => item.key === key)) {
+                    key = `${key}#${items.length}`;
+                }
+
                 items.push({
                     type: "inline",
-                    key: `${prefix}i${block.id || `${anchor}:${inlines++}`}`,
+                    key,
                     anchors: anchored || speaks ? [] : [entry.id],
                     step: {
                         block,

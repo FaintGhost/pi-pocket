@@ -268,44 +268,63 @@ setRichBlock(RichBlock);
 
 // ─── An artifact in the reply ───────────────────────────────────────────────────────
 
-/** The pages fetched for cards, by address: a version never changes, so one is fetched once. The oldest go first. */
+/**
+ * The pages fetched for cards, by address: a version never changes, so one is fetched once. Least recently used first
+ * out, so a long session does not hold every page: each is `{ page, text }`, the text once it came.
+ */
 const pages = new Map();
-/** The text of those that came, so a card drawn again (scrolled back to, stored after streaming) shows at once. */
-const known = new Map();
 const PAGES_KEPT = 20;
 const addressOf = (conversationId, id, version) =>
     `/a/${conversationId}/${encodeURIComponent(id)}/${version}`;
 
+/** The entry for an address, now the most recently used, or undefined. */
+function recent(address) {
+    const entry = pages.get(address);
+
+    if (entry !== undefined) {
+        pages.delete(address);
+        pages.set(address, entry);
+    }
+
+    return entry;
+}
+
 function pageOf(conversationId, id, version) {
     const address = addressOf(conversationId, id, version);
-    let page = pages.get(address);
+    let entry = recent(address);
 
-    if (page === undefined) {
-        page = fetch(address, { credentials: "same-origin" }).then((response) => {
+    if (entry === undefined) {
+        entry = { page: null, text: null };
+        entry.page = fetch(address, { credentials: "same-origin" }).then((response) => {
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
 
             return response.text();
         });
-        pages.set(address, page);
-        page.then(
-            (text) => known.set(address, text),
-            () => {},
+        pages.set(address, entry);
+
+        const mine = entry;
+
+        // Into the entry, which may be gone by then (evicted): nothing is put back in the map.
+        mine.page.then(
+            (text) => {
+                mine.text = text;
+            },
+            // A page that did not come may on the next try.
+            () => {
+                if (pages.get(address) === mine) {
+                    pages.delete(address);
+                }
+            },
         );
 
         if (pages.size > PAGES_KEPT) {
-            const oldest = pages.keys().next().value;
-
-            pages.delete(oldest);
-            known.delete(oldest);
+            pages.delete(pages.keys().next().value);
         }
-
-        // A page that did not come may on the next try.
-        page.catch(() => pages.delete(address));
     }
 
-    return page;
+    return entry.page;
 }
 
 /**
@@ -315,7 +334,7 @@ function pageOf(conversationId, id, version) {
  */
 export function InlineArtifact({ conversationId, id, title, version }) {
     const [page, setPage] = useState({
-        source: known.get(addressOf(conversationId, id, version)) ?? null,
+        source: recent(addressOf(conversationId, id, version))?.text ?? null,
         failed: false,
     });
 
@@ -323,7 +342,7 @@ export function InlineArtifact({ conversationId, id, title, version }) {
         let current = true;
 
         setPage({
-            source: known.get(addressOf(conversationId, id, version)) ?? null,
+            source: recent(addressOf(conversationId, id, version))?.text ?? null,
             failed: false,
         });
         pageOf(conversationId, id, version).then(
