@@ -4,7 +4,13 @@
  * request id per fork, it goes out once either way.
  */
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
-import { defineTask, type EntryId, type UserInput } from "@earendil-works/pi-durable";
+import {
+    defineTask,
+    type EntryId,
+    type InputEntry,
+    LiveDoc,
+    type UserInput,
+} from "@earendil-works/pi-durable";
 import { describe } from "./errors.ts";
 import { ownRequest } from "./requests.ts";
 
@@ -82,12 +88,30 @@ export const ResendTask = defineTask<Resend, { phase: "send" }, null>({
         runtime.commit(() => ({ status: "terminal", outcome: { status: "aborted" } }), context),
 });
 
-/** A queued message moved to Interrupt: what it says, and the request id it goes out with. */
-export type Interrupt = { content: UserInput; requestId: string };
+/** A queued message that stays queued across an Interrupt: sent again, in its place, under its own request id. */
+export type Requeue = {
+    content: UserInput;
+    mode: "steer" | "followUp";
+    requestId: string;
+    entry?: InputEntry;
+};
+
+/**
+ * A queued message moved to Interrupt: what it says, the request id it goes out with, the run it stops, and the other
+ * queued messages, in their order, which the stop would withdraw and which are queued again after it.
+ */
+export type Interrupt = {
+    content: UserInput;
+    requestId: string;
+    /** The run that was going when the message was moved: only that run is stopped, never one that came after. */
+    run?: number;
+    others?: Requeue[];
+};
 
 /**
  * Stops the run, then sends a queued message that the commit making this task took out of the queue, so a restart
- * in between cannot lose it. Background, so the stop does not stop this task too.
+ * in between cannot lose it, and puts the other messages that were queued back. Every message has a request id, so a
+ * restart at any point sends each once. Background, so the stop does not stop this task too.
  */
 export const InterruptTask = defineTask<Interrupt, { phase: "send" }, null>({
     name: "pocket.interrupt",
@@ -95,23 +119,30 @@ export const InterruptTask = defineTask<Interrupt, { phase: "send" }, null>({
     initial: () => ({ phase: "send" }),
     phases: {
         send: async (task, runtime, context) => {
-            const { content, requestId } = task.input;
+            const { content, requestId, run, others } = task.input;
             const id = runtime.conversationId;
             let sent = false;
+            let running = false;
 
-            // Run again after a restart that came after the send: the run it started must not be stopped.
+            // Run again after a restart: after the send, the run it started must not be stopped; after the stop, the
+            // run is gone (or another is going, which is not this task's to stop).
             await runtime.commit(async (tx) => {
                 sent = (await tx.submissionByRequest(id, requestId)) !== undefined;
+                running =
+                    run !== undefined && Number((await tx.doc(LiveDoc, id)).run?.taskId) === run;
 
                 return undefined;
             }, context);
 
+            const conversation = await runtime.conversation(id, context);
+
             if (!sent) {
                 // The message has left the queue: a failure here must say so, not fault the task without a word.
                 try {
-                    const conversation = await runtime.conversation(id, context);
+                    if (running) {
+                        await conversation?.abort(context);
+                    }
 
-                    await conversation?.abort(context);
                     await conversation?.submit({ type: "input", content, requestId }, context);
                 } catch (error) {
                     if (context.abortSignal?.aborted === true) {
@@ -120,6 +151,30 @@ export const InterruptTask = defineTask<Interrupt, { phase: "send" }, null>({
 
                     runtime.report(
                         new Error(`A message moved to Interrupt was not sent: ${describe(error)}`),
+                    );
+                }
+            }
+
+            // In their order, behind the message: a request id already known finds its submission.
+            for (const other of others ?? []) {
+                try {
+                    await conversation?.submit(
+                        {
+                            type: "input",
+                            content: other.content,
+                            whenBusy: other.mode,
+                            requestId: other.requestId,
+                            ...(other.entry === undefined ? {} : { entry: other.entry }),
+                        },
+                        context,
+                    );
+                } catch (error) {
+                    if (context.abortSignal?.aborted === true) {
+                        throw error;
+                    }
+
+                    runtime.report(
+                        new Error(`A queued message was not queued again: ${describe(error)}`),
                     );
                 }
             }

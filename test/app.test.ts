@@ -27,8 +27,10 @@ import {
     fauxThinking,
     fauxToolCall,
 } from "@earendil-works/pi-ai/providers/faux";
-import { type ConversationId, InboxDoc } from "@earendil-works/pi-durable";
+import { type ConversationId, InboxDoc, LiveDoc } from "@earendil-works/pi-durable";
 import type { Attachment } from "../src/server/commands.ts";
+import { TurnsDoc } from "../src/server/docs.ts";
+import { type Interrupt, InterruptTask } from "../src/server/resend.ts";
 import createArtifacts from "../src/server/extensions/artifacts.ts";
 import type { PocketHost } from "../src/server/host.ts";
 
@@ -234,7 +236,7 @@ test("the page that runs a reply's HTML is for people signed in, sandboxed, and 
         );
         assert.ok(body.includes('self.origin !== "null"'), "it runs nothing outside a sandbox");
         assert.ok(
-            body.includes("event.source !== window.parent"),
+            body.includes("event.source !== bridge.realParent"),
             "it takes HTML from its parent only",
         );
         assert.ok(
@@ -1193,7 +1195,7 @@ test("a queued message moves between Queue and Steer, by its sender only", async
     }
 });
 
-test("a queued message moved to Interrupt stops the run and withdraws the queue, then Pi answers it", async () => {
+test("a queued message moved to Interrupt goes now, as Pi answers it, and the other queued messages stay", async () => {
     const id = await newSession();
     const started = Date.now();
 
@@ -1212,11 +1214,184 @@ test("a queued message moved to Interrupt stops the run and withdraws the queue,
         "the answer to the moved message",
     );
     assert.ok(Date.now() - started < 4000, "it did not wait for the long answer");
-    assert.doesNotMatch((await modelTexts(app, id)).join("\n"), /a steer/);
+    // The steer stayed queued: Pi answers it as well.
+    await until(
+        async () => (await modelTexts(app, id)).some((text) => text.includes("echo: a steer")),
+        "the answer to the message that stayed",
+    );
     await assert.rejects(
         app.commands.moveQueued(id, owner(), Number(submissionId), "steer"),
         /already gone/,
     );
+});
+
+/** The queued messages of a conversation: the text each says, its mode, and who sent it. */
+async function queued(app: App, id: ConversationId) {
+    const items = (await app.harness.snapshot(InboxDoc, id, context))?.items ?? [];
+
+    return Promise.all(
+        items.map(async (item) => ({
+            text: item.mode === "write" ? "" : JSON.stringify(item.content),
+            mode: item.mode,
+            by: await app.attribution.submitter(Number(item.id)),
+        })),
+    );
+}
+
+test("an Interrupt of one queued message leaves the 3 others, from 2 people, queued in order", async () => {
+    const id = await newSession();
+    const guest = app.config.addUser("Alex", "guest").user;
+    const by = [owner().id, guest.id, guest.id];
+
+    try {
+        await app.commands.submit(id, owner(), { text: "stream a long answer", requestId: "st-1" });
+        await until(() => app.isBusy(id), "the run to start");
+        await app.commands.submit(id, owner(), {
+            text: "first of mine",
+            mode: "followUp",
+            requestId: "st-2",
+        });
+        await app.commands.submit(id, guest, {
+            text: "guest steer",
+            mode: "steer",
+            requestId: "st-3",
+        });
+        const { submissionId } = await app.commands.submit(id, owner(), {
+            text: "stream a long answer, moved",
+            mode: "followUp",
+            requestId: "st-4",
+        });
+
+        await app.commands.submit(id, guest, {
+            text: "guest queue",
+            mode: "followUp",
+            requestId: "st-5",
+        });
+        await app.commands.moveQueued(id, owner(), Number(submissionId), "interrupt");
+        // The moved message is the new run; the others wait behind it, in their order.
+        await until(
+            async () => (await queued(app, id)).length === 3,
+            "the other messages to be queued again",
+        );
+        await until(
+            async () => (await modelTexts(app, id)).some((text) => text.includes("moved")),
+            "the moved message to go",
+        );
+        const waiting = await queued(app, id);
+
+        assert.deepEqual(
+            waiting.map((each) => each.mode),
+            ["followUp", "steer", "followUp"],
+        );
+        assert.ok(waiting[0]!.text.includes("first of mine"));
+        assert.ok(waiting[1]!.text.includes("guest steer"));
+        assert.ok(waiting[2]!.text.includes("guest queue"));
+        assert.deepEqual(
+            waiting.map((each) => each.by),
+            by,
+        );
+    } finally {
+        await app.commands.abort(id, owner());
+        app.config.removeUser(guest.id);
+    }
+});
+
+test("an Interrupt task run again, or for a run that is gone, stops nothing and queues nothing twice", async () => {
+    const id = await newSession();
+    const task = (input: Interrupt) =>
+        app.harness.commit(
+            (tx) =>
+                tx.createTask(InterruptTask, input, {
+                    ownership: { kind: "conversation" },
+                    background: true,
+                    conversationId: id,
+                }),
+            context,
+        );
+
+    const finish = async (created: Awaited<ReturnType<typeof task>>) => {
+        await app.harness.waitForTask(created, context);
+    };
+
+    const kept = {
+        content: "kept",
+        mode: "steer" as const,
+        requestId: `u:${owner().id}:kept~1`,
+    };
+
+    try {
+        await app.commands.submit(id, owner(), { text: "stream a long answer", requestId: "re-1" });
+        await until(() => app.isBusy(id), "the run to start");
+        const run = Number((await app.harness.snapshot(LiveDoc, id, context))?.run?.taskId);
+        const input = { content: "after", requestId: `u:${owner().id}:int-1`, others: [kept] };
+
+        // Resumed after the stop: the run it meant is gone, and this one (any other) is not its to stop.
+        await finish(await task({ ...input, run: run + 1000 }));
+        assert.ok(app.isBusy(id), "another run is not stopped");
+        assert.equal((await queued(app, id)).length, 2);
+
+        // Resumed after the send: the message and the others are found by their request ids, and nothing is stopped.
+        await finish(await task({ ...input, run }));
+        assert.ok(app.isBusy(id), "a message that went is not sent again, nor the run stopped");
+        assert.equal((await queued(app, id)).length, 2);
+        assert.deepEqual(
+            (await queued(app, id)).map((each) => each.mode),
+            ["followUp", "steer"],
+        );
+    } finally {
+        await app.commands.abort(id, owner());
+    }
+});
+
+test("after a restart, a person still moves their own queued message, also when someone else drives", async () => {
+    const dataDir = join(root, "move-restart");
+    let again = await openApp(faux, dataDir);
+    let alex: Awaited<ReturnType<typeof again.config.addUser>>["user"] | undefined;
+
+    try {
+        const first = ownerOf(again);
+
+        alex = again.config.addUser("Alex", "guest").user;
+        const id = await startSession(again);
+
+        await again.commands.submit(id, first, { text: "stream a long answer", requestId: "rs-1" });
+        await until(() => again.isBusy(id), "the run to start");
+        const mine = await again.commands.submit(id, first, {
+            text: "mine",
+            mode: "followUp",
+            requestId: "rs-2",
+        });
+        const theirs = await again.commands.submit(id, alex, {
+            text: "theirs",
+            mode: "followUp",
+            requestId: "rs-3",
+        });
+
+        await again.close();
+        again = await openApp(faux, dataDir);
+        alex = again.config.users.find((user) => user.name === "Alex")!;
+        // Take turns, and Alex drives: the owner moves their own message all the same, and not Alex's.
+        await again.harness.commit(async (tx) => {
+            const turns = await tx.doc(TurnsDoc, id);
+
+            turns.on = true;
+            turns.driver = alex!.id;
+        }, context);
+        await assert.rejects(
+            again.commands.moveQueued(id, ownerOf(again), Number(theirs.submissionId), "steer"),
+            /Only its sender/,
+        );
+        await again.commands.moveQueued(id, ownerOf(again), Number(mine.submissionId), "steer");
+        assert.equal(
+            (await again.harness.snapshot(InboxDoc, id, context))?.items.find(
+                (item) => Number(item.id) === Number(mine.submissionId),
+            )?.mode,
+            "steer",
+        );
+        await again.commands.abort(id, ownerOf(again));
+    } finally {
+        await again.close();
+    }
 });
 
 test("an interrupt sent again with the same request id does not stop the run that it started", async () => {
@@ -2183,4 +2358,24 @@ test("only the owner may show a path in the server's file manager, and only one 
         server.closeAllConnections();
         server.close();
     }
+});
+
+test("a last-seen time that cannot be saved does not stop the server", async () => {
+    const id = await newSession();
+    const tab = fakeTab(id, owner());
+    const update = mock.method(app.config, "updateUser", () => {
+        throw new Error("ENOSPC: no space left on device, write");
+    });
+
+    try {
+        await app.attach(tab.client);
+        app.detach(tab.client);
+        assert.ok(update.mock.callCount() >= 1, "it tried to save");
+    } finally {
+        update.mock.restore();
+    }
+
+    // The app goes on as before.
+    await say(id, "still here");
+    assert.ok((await modelTexts(app, id)).some((text) => text.includes("echo: still here")));
 });

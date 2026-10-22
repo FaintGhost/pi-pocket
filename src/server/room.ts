@@ -122,10 +122,10 @@ export type PeekSummary = {
     }[];
 };
 
-/** One browser tab's event stream. */
 /** How much of a message's text `userMessages` sends: enough to show, and to cut where the browser wants. */
 const USER_MESSAGE_TEXT = 4000;
 
+/** One browser tab's event stream. */
 export interface Client {
     readonly id: string;
     readonly user: User;
