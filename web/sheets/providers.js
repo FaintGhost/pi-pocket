@@ -87,7 +87,7 @@ function SubagentModels({ names }) {
     return html`<div class="subagent-models">
         <div class="label">Models for subagents</div>
         <p class="muted small">
-            With none checked, subagents and linked sessions run on their session's model, and Pi cannot choose another. Check some, and they run only on those: on the session's model when it is checked, else on the first one checked. Pi cannot use any other.
+            With none checked, subagents and linked sessions run on their session's model, and Pi cannot choose another. Check some, and they run only on those: on the session's model when it is checked, otherwise on a checked model that Pi chooses to suit the work. Pi cannot use any other.
         </p>
         <p class="small subagent-models-chosen" title=${summary}>${summary}</p>
         ${

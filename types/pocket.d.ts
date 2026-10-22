@@ -114,9 +114,17 @@ export interface Host {
      * Local metadata for an exact provider/modelId, without network or sign-in information.
      * @since 0.16.0
      */
-    modelInfo(
-        spec: string,
-    ): { model: ModelRef; name: string; thinkingLevels: ModelThinkingLevel[] } | undefined;
+    modelInfo(spec: string):
+        | {
+              model: ModelRef;
+              name: string;
+              thinkingLevels: ModelThinkingLevel[];
+              /** @since 0.20.0, tokens; 0 when unknown */
+              contextWindow?: number;
+              /** @since 0.20.0, dollars per million tokens; left out when unknown or free */
+              cost?: { input: number; output: number };
+          }
+        | undefined;
     /**
      * Pi's own folder, usually `~/.pi/agent`.
      * @since 0.1.0

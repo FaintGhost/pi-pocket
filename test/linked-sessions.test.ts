@@ -306,7 +306,7 @@ test("an unavailable model creates no session", async (t) => {
     );
 });
 
-test("with a list, a linked session runs only on a listed model: the source's if listed, else the first", async () => {
+test("with a list, a linked session runs only on a listed model: the source's if listed, else one must be named", async () => {
     const id = await source();
     const modelOf = async (session: ConversationId) =>
         (await app.agentState(session))?.model?.modelId;
@@ -323,13 +323,20 @@ test("with a list, a linked session runs only on a listed model: the source's if
         assert.equal(await modelOf((await start(id)).session), "faux-1");
         assert.equal(await modelOf((await start(id, "named", "faux/faux-2")).session), "faux-2");
 
-        // Not listed: the first listed, and the source's own model is refused when named.
+        // Not listed: a model must be named, from the list; the source's own model is refused when named.
         await app.setSubagentModels(me, ["faux/faux-2"]);
         const count = app.sessions().length;
 
-        assert.equal(await modelOf((await start(id)).session), "faux-2");
-        await assert.rejects(start(id, "own", "faux/faux-1"), /not allowed[^]*Do not pick/);
-        assert.equal(app.sessions().length, count + 1, "the refused start made nothing");
+        await assert.rejects(start(id, "none"), /A model is required[^]*faux\/faux-2/);
+        await assert.rejects(start(id, "own", "faux/faux-1"), /not allowed[^]*never use another/);
+        // A blank name is none; a name that is no model is off the list, and the fix is to choose.
+        await assert.rejects(start(id, "blank", "  "), /A model is required[^]*faux\/faux-2/);
+        await assert.rejects(
+            start(id, "typo", "faux/nonesuch"),
+            /not allowed[^]*never use another/,
+        );
+        assert.equal(app.sessions().length, count, "the refused starts made nothing");
+        assert.equal(await modelOf((await start(id, "chosen", "faux/faux-2")).session), "faux-2");
     } finally {
         await app.setSubagentModels(me, []);
     }

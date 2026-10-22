@@ -22,7 +22,7 @@ import {
     SessionsDoc,
     TurnsDoc,
 } from "./docs.ts";
-import { HttpError } from "./errors.ts";
+import { ChooseModelError, HttpError } from "./errors.ts";
 import { defang, INVISIBLE_CLASS } from "./fence.ts";
 import { isThinkingLevel, levelAtMost, resolveModel, THINKING_LEVELS } from "./models.ts";
 import { requestFor } from "./requests.ts";
@@ -582,17 +582,41 @@ export class LinkedSessions implements LinkedSessionsApi {
         return this.#app.workspace.checkDirectory(cwd);
     }
 
+    /** Refuse a model the owner does not allow: with a list, the asker's fix is to choose from it. */
+    #notListed(model: string, listed: readonly string[]): never {
+        throw listed.length === 0
+            ? new HttpError(
+                  403,
+                  `The model ${model} is not allowed here: the owner allows no other model than the source's. Do not pick another model on your own.`,
+              )
+            : new ChooseModelError(
+                  403,
+                  `The model ${model} is not allowed here: the owner allows only ${listed.join(", ")}. Choose one of those that suits the work; never use another.`,
+              );
+    }
+
     /** Resolve exactly the requested policy, without network work. Human choices are never silently lowered. */
     #selection(agent: AgentState, request: { model?: string; thinking?: string }, strict: boolean) {
         const app = this.#app;
         const listed = app.config.subagentModels;
         const source = agent.model && `${agent.model.provider}/${agent.model.modelId}`;
-        // Left out: the source's model, or, when the owner keeps a list and it is not on it, the first one listed.
-        const fallback =
-            listed.length === 0 || (source !== undefined && listed.includes(source))
-                ? source
-                : listed[0];
-        const spec = request.model === undefined ? fallback : request.model.trim();
+
+        // Left out: the source's model, unless the owner keeps a list and it is not on it: then the choice is the
+        // asker's, from the list.
+        const named = request.model?.trim() || undefined;
+
+        if (
+            named === undefined &&
+            listed.length > 0 &&
+            (source === undefined || !listed.includes(source))
+        ) {
+            throw new ChooseModelError(
+                400,
+                `A model is required: this session's model is not on the owner's list for subagents and linked sessions. Choose one that suits the work: ${listed.join(", ")}.`,
+            );
+        }
+
+        const spec = named ?? source;
         const own = agent.thinkingLevel ?? "off";
         const asked = request.thinking ?? own;
 
@@ -607,16 +631,18 @@ export class LinkedSessions implements LinkedSessionsApi {
             throw new HttpError(400, `Thinking must be one of: ${THINKING_LEVELS.join(", ")}.`);
         }
 
+        // A full name off the list is refused as such, before its sign-in or its being known is asked.
+        if (listed.length > 0 && !listed.includes(spec) && named !== undefined) {
+            this.#notListed(spec, listed);
+        }
+
         const model = resolveModel(app.models, spec, app.signInNeeded);
         const chosen = `${model.provider}/${model.modelId}`;
 
         // The owner's list is the only choice while it has models; the source's own model counts only when it is on it.
         // With no list, the source's model alone.
         if (listed.length === 0 ? chosen !== source : !listed.includes(chosen)) {
-            throw new HttpError(
-                403,
-                `The model ${chosen} is not allowed here: ${listed.length === 0 ? "the owner allows no other model than the source's" : `the owner allows only ${listed.join(", ")}`}. Do not pick another model on your own.`,
-            );
+            this.#notListed(chosen, listed);
         }
 
         const selected = app.models.getModel(model.provider, model.modelId)!;

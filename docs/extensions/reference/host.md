@@ -81,12 +81,14 @@ modelInfo(spec: string): {
     model: ModelRef;
     name: string;
     thinkingLevels: ModelThinkingLevel[];
+    contextWindow?: number;
+    cost?: { input: number; output: number };
 } | undefined;
 ```
 
 Since 0.16.0 · Stable
 
-Local metadata for one exact `provider/modelId`, including a known model without configured auth. A bare id or unknown pair returns `undefined`. It does not contact a provider, report sign-in details, or list models. Use it to describe the source model or a model already chosen by the owner. It does not authorize its use; starts still check the current model policy and availability.
+Local metadata for one exact `provider/modelId`, including a known model without configured auth. Since 0.20.0 it can also give `contextWindow` (tokens) and `cost` (dollars per million input and output tokens); `cost` is left out when the catalog has no price (an unknown or free model), and `contextWindow` can be 0 when unknown, so check for both. A bare id or unknown pair returns `undefined`. It does not contact a provider, report sign-in details, or list models. Use it to describe the source model or a model already chosen by the owner. It does not authorize its use; starts still check the current model policy and availability.
 
 ### `subagentModels`
 
@@ -96,7 +98,7 @@ subagentModels(): readonly string[];
 
 Since 0.13.1 · Stable
 
-The models that the owner lets subagents use, as `provider/modelId`. While the list is empty (the default), a subagent runs on the model of its own session. Once it has models, subagents and linked sessions run only on those: the model of the session when it is listed, else the first listed. The owner sets it in Menu → Providers → Models for subagents.
+The models that the owner lets subagents use, as `provider/modelId`. While the list is empty (the default), a subagent runs on the model of its own session. Once it has models, subagents and linked sessions run only on those: the model of the session when it is listed and none is named; when it is not listed, the caller must name a listed model. The owner sets it in Menu → Providers → Models for subagents.
 
 ### `modelProblem`
 
@@ -262,7 +264,7 @@ Makes a session linked to `source` and sends it `message` as its first message. 
 
 - The new session works in `cwd` when supplied, otherwise the folder of `source`. `cwd` must name an existing folder and uses the normal folder-picker path rules. A blank `cwd` counts as no `cwd`. A relative `cwd` resolves against the folder of the server process, not the folder of the source. `cwd` is since 0.19.0: an older Pi Pocket ignores it and uses the folder of `source`, so a gallery entry that needs it sets `minPocket` to `0.19.0`. It gets a copy of the agent settings of `source`, but not its history.
 - Without `title`, the title is the first line of `message`.
-- `model` is `provider/modelId`. While the owner's list of models for subagents is empty, it must be the model of `source`. Once the list has models, it must be one of them. Without it, the session uses the model of `source` when the list is empty or has it, else the first listed model.
+- `model` is `provider/modelId`. While the owner's list of models for subagents is empty, it must be the model of `source`. Once the list has models, it must be one of them. Without it, the session uses the model of `source` when the list is empty or has it. Otherwise `start` is refused with an error that names the allowed models.
 - `thinking` is a level no higher than the level of `source`. Without it, the session uses the level of `source`. Pi Pocket lowers it to the highest level that the model has.
 - When Pi cannot use the model now, `start` makes nothing and throws an error.
 

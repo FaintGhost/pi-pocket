@@ -226,9 +226,15 @@ export interface PocketHost {
     /** The running server's Pi Pocket package version, not the extension API level. */
     readonly pocketVersion: string;
     /** Local metadata for an exact provider/modelId; no sign-in check or network request. */
-    modelInfo(
-        spec: string,
-    ): { model: ModelRef; name: string; thinkingLevels: ModelThinkingLevel[] } | undefined;
+    modelInfo(spec: string):
+        | {
+              model: ModelRef;
+              name: string;
+              thinkingLevels: ModelThinkingLevel[];
+              contextWindow?: number;
+              cost?: { input: number; output: number };
+          }
+        | undefined;
     /** Pi's configured extra skill paths, from its settings. */
     skillPaths(): string[];
     /** Pi's skills for a session working in `cwd`, from the places Pi looks (`skills.ts`). */
