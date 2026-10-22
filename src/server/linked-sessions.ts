@@ -814,8 +814,13 @@ export class LinkedSessions implements LinkedSessionsApi {
         // With a list, a linked session gets work only while it runs on a model on it: a person may have changed its
         // model, or the owner its list, since it started.
         // A replay of a send already taken (its record names this session) finds the first message, whatever the list
-        // is now.
-        if (listed.length > 0 && previous?.conversationId !== target) {
+        // is now. A message to the session that started this one is a reply, not work: it goes on any model, as the
+        // reply address in each linked message asks.
+        if (
+            listed.length > 0 &&
+            previous?.conversationId !== target &&
+            app.sessionMeta(source)?.linkedFrom?.id !== target
+        ) {
             if (runs === undefined) {
                 throw new HttpError(
                     403,

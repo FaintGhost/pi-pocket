@@ -366,6 +366,28 @@ test("with a list, a message goes only to a linked session that runs on a listed
     }
 });
 
+test("with a list, a linked session replies to the session that started it, whatever that one runs on", async () => {
+    const id = await source();
+    const me = owner(app);
+
+    try {
+        // The source runs on faux-1, which is not listed: it starts a worker on the listed faux-2.
+        await app.setSubagentModels(me, ["faux/faux-2"]);
+        const { session: worker, address } = await start(id, "worker", "faux/faux-2");
+
+        await until(async () => (await sent(worker)) === 1, "the worker's first message");
+        const [origin] = await app.linkedSessions.list(worker);
+
+        // The worker's report goes back to its source.
+        await send(worker, origin!.address);
+        await until(async () => (await sent(id)) === 1, "the reply at the source");
+        // Work still goes only to listed models: the source still sends to its worker.
+        await send(id, address);
+    } finally {
+        await app.setSubagentModels(me, []);
+    }
+});
+
 test("one session starts 12 linked sessions, and no count refuses one", async () => {
     const id = await source();
 

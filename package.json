@@ -46,7 +46,7 @@
         "undici": "8.12.3"
     },
     "overrides": {
-        "undici": "$undici"
+        "undici": "8.12.3"
     },
     "devDependencies": {
         "@stylistic/eslint-plugin": "5.10.0",
