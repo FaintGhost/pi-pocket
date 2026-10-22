@@ -16933,6 +16933,7 @@ pre.gallery-code {
  * no text stretches, and fades through: the old out quickly, then the new in. Notices keep their place above.
  */
 :root.layout-vt .layout > .sidebar {
+    transition: none;
     view-transition-name: fluid-sidebar;
 }
 

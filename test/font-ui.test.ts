@@ -328,6 +328,18 @@ test(
             `return JSON.stringify(getComputedStyle(document.querySelector(".font-preview code")).fontFamily.startsWith('"Pocket Iosevka"'))`,
             "the preview in the new code font",
         );
+        await page.evaluate(`document.querySelector('.font-tools [role="switch"]').click()`);
+        await see(
+            `return JSON.stringify(getComputedStyle(document.querySelector(".font-preview code")).fontVariantLigatures === "none")`,
+            "ligatures switched off",
+        );
+        await page.evaluate(
+            `[...document.querySelectorAll('.font-tools button')].find((button) => button.textContent.trim() === "Theme's own").click()`,
+        );
+        await see(
+            `return JSON.stringify(getComputedStyle(document.querySelector(".font-preview code")).fontVariantLigatures === "contextual")`,
+            "the theme's own ligatures restored",
+        );
         await page.evaluate(`(await import("/store.js")).closeSheet()`);
 
         const shown = await open();
@@ -341,6 +353,34 @@ test(
         );
     },
 );
+
+test("message jumps use the app's motion choice instead of the OS query", real, async () => {
+    await open();
+    const modes = await inPage<string[]>(`
+        const { setPrefs } = await import('/theme.js');
+        const { jumpToEntry } = await import('/chat.js');
+        const id = Number(document.querySelector('[id^="entry-"]').id.slice(6));
+        const scroll = Element.prototype.scrollIntoView;
+        const query = window.matchMedia;
+        const modes = [];
+        Element.prototype.scrollIntoView = (options) => modes.push(options.behavior);
+        try {
+            window.matchMedia = (text) => text === '(prefers-reduced-motion: reduce)' ? { matches: false } : query(text);
+            setPrefs({ motion: 'reduced' });
+            await jumpToEntry(id);
+            window.matchMedia = (text) => text === '(prefers-reduced-motion: reduce)' ? { matches: true } : query(text);
+            setPrefs({ motion: 'full' });
+            await jumpToEntry(id);
+        } finally {
+            Element.prototype.scrollIntoView = scroll;
+            window.matchMedia = query;
+            setPrefs({ motion: 'auto' });
+        }
+        return JSON.stringify(modes);
+    `);
+
+    assert.deepEqual(modes, ["auto", "smooth"]);
+});
 
 /** Wait until the sheet stops moving: it rises as it opens, and a click mid-rise misses. */
 const settled = () =>
@@ -361,6 +401,12 @@ test("any text size from 10 to 32 px can be typed, and stays", real, async () =>
     await see(
         `return JSON.stringify(document.querySelector(".text-size-field input") !== null)`,
         "the size field",
+    );
+    assert.equal(
+        await inPage<boolean>(
+            `return JSON.stringify(document.querySelector('[role="group"][aria-label="Text size"]')?.contains(document.querySelector('.text-size-field input')))`,
+        ),
+        true,
     );
     await page.scroll({ selector: ".text-size-field input" });
     await settled();

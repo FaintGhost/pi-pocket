@@ -33,7 +33,7 @@ const LABELS_JS = `export default (pocket) => {
 		id: "ids",
 		chips: (session) => [{ label: "id" + session.id, title: session.title, run: () => (globalThis.chipRan = session.id) }],
 	});
-	pocket.sessionSearch({ id: "words", words: (session) => ["word" + session.id] });
+	globalThis.labelsWords = pocket.sessionSearch({ id: "words", words: (session) => { globalThis.wordsRead = (globalThis.wordsRead ?? 0) + 1; return ["word" + session.id]; } });
 	globalThis.labelsFilter = pocket.sessionFilter({ id: "one", title: "Only one", icon: "grid", run: () => (globalThis.filterRan = true), started: (id) => (globalThis.started = id) });
 	pocket.sessionAction({ id: "note", label: "Note", icon: "pin", run: (ids) => (globalThis.noted = [...ids]) });
 };
@@ -141,6 +141,67 @@ test(
         );
     },
 );
+
+test("an actionable chip joins the keyboard focus order and Enter runs it", real, async () => {
+    await inPage(
+        `document.querySelector('.sidebar .session-row[data-id="${first}"] .session').focus(); return "null"`,
+    );
+    await page.press("Tab");
+    assert.equal(
+        await inPage<boolean>(
+            `return JSON.stringify(document.activeElement.matches('.session-chip'))`,
+        ),
+        true,
+    );
+    await page.press("Enter");
+    await until(
+        async () => (await value<number>("chipRan")) === first,
+        "the chip's keyboard action",
+    );
+});
+
+test("extension words are reused while typing and refreshed on update", real, async () => {
+    await search("word");
+    await until(async () => (await value<number>("wordsRead")) > 0, "the initial words");
+    const before = await value<number>("wordsRead");
+
+    for (const query of ["w", "wo", "wor", ""]) {
+        await search(query);
+    }
+
+    assert.equal(await value<number>("wordsRead"), before);
+    await inPage(`
+        const { sessionWords } = await import('/extension-ui.js');
+        const { store } = await import('/store.js');
+        const session = store.state.sessions[0];
+        sessionWords(session);
+        sessionWords({ ...session, updatedAt: session.updatedAt + 1 });
+        return "null";
+    `);
+    assert.equal(
+        await value<number>("wordsRead"),
+        before + 1,
+        "a new session version gets new words",
+    );
+    await inPage(
+        `globalThis.labelsWords.update({ words: (session) => ["newword" + session.id] }); return "null"`,
+    );
+    await search(`newword${second}`);
+    await until(async () => (await rows()).join() === String(second), "updated words");
+    await search("");
+    await inPage(
+        `globalThis.labelsWords.update({ words: (session) => ["word" + session.id] }); return "null"`,
+    );
+    await search(`word${second}`);
+    await until(
+        () =>
+            inPage<boolean>(
+                `return JSON.stringify(document.querySelector('.sidebar .session-hit')?.textContent.trim() === 'word${second}')`,
+            ),
+        "the original words restored",
+    );
+    await search("");
+});
 
 test("the search and the launcher find a session by an extension's words", real, async () => {
     await search(`word${second}`);
@@ -299,6 +360,40 @@ test(
         await until(async () => (await rows()).length === 3, "the three sessions");
     },
 );
+
+test("async session readers report a module error without hiding the list", real, async () => {
+    for (const [handle, field] of [
+        ["labelsChips", "chips"],
+        ["labelsFilter", "match"],
+        ["labelsWords", "words"],
+    ]) {
+        await inPage(
+            `globalThis.${handle}.update({ ${field}: async () => { throw new Error("async reader"); } }); return "null"`,
+        );
+
+        if (field === "words") {
+            await search("word");
+        }
+
+        await until(
+            () =>
+                inPage<boolean>(
+                    `return JSON.stringify((await import("/extension-ui.js")).browserModuleState("labels")?.status === "failed")`,
+                ),
+            "the async reader's module stopped",
+        );
+        await search("");
+        await until(async () => (await rows()).length === 3, "a bad reader does not hide sessions");
+        assert.equal(
+            await inPage<boolean>(
+                `return JSON.stringify(document.body.textContent.includes("must return its value directly, not a promise"))`,
+            ),
+            true,
+        );
+        await page.navigate(`${base}/`);
+        await until(async () => (await chipsOf(first)).length > 0, "the module loaded again");
+    }
+});
 
 test("chips that throw stop their module, and the list draws without them", real, async () => {
     await inPage(

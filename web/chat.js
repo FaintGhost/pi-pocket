@@ -191,7 +191,7 @@ function show(entryId, jump, quiet) {
 
             // A long one from its top, where it starts: centered, its middle would show, and what was found may be above.
             const tall = element.getBoundingClientRect().height > innerHeight / 2;
-            const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+            const still = document.documentElement.dataset.motion === "reduced";
 
             element.scrollIntoView({
                 block: tall ? "start" : "center",

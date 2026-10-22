@@ -476,7 +476,6 @@ function SessionRow({
                             class="session-chip"
                             data-part="session-chip"
                             title=${chip.title}
-                            tabindex="-1"
                             onClick=${chip.run}
                         >
                             ${chip.label}

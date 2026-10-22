@@ -177,7 +177,7 @@ function actionItems() {
         },
         {
             label: prefs().peeks ? "Hide peek tiles" : "Show peek tiles",
-            detail: "other sessions' live work beside this one",
+            detail: "Peeks: other sessions' live work beside this one",
             icon: "tiles",
             keys: "Alt P",
             run: togglePeeks,

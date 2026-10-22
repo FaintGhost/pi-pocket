@@ -1836,13 +1836,22 @@ function sessionInfo(session) {
  * Call a function a module gave the session list, as the list draws. One that throws stops its module, after this draw:
  * the list draws without it.
  */
-function drawCall(record, run, session, fallback) {
+function drawCall(record, run, session, fallback, name) {
     if (!liveRecord(record)) {
         return fallback;
     }
 
     try {
-        return run(sessionInfo(session));
+        const value = run(sessionInfo(session));
+
+        if (value && typeof value.then === "function") {
+            // These readers run during rendering. Consume a rejected promise too, before stopping the module.
+            Promise.resolve(value).catch(() => {});
+
+            throw new Error(`${name} must return its value directly, not a promise`);
+        }
+
+        return value;
     } catch (error) {
         queueMicrotask(() => liveRecord(record) && fail(record, error, "failed"));
 
@@ -1862,7 +1871,7 @@ function cutText(text, max) {
 /** The chips that extensions put on a session's row: `{ key, label, title, run }`, `run` only for one that does something. */
 export function sessionChips(session) {
     return added("sessionChips").flatMap(({ record, spec }) => {
-        const chips = drawCall(record, spec.chips, session, []);
+        const chips = drawCall(record, spec.chips, session, [], "sessionChips.chips");
 
         if (!Array.isArray(chips)) {
             return [];
@@ -1883,10 +1892,20 @@ export function sessionChips(session) {
     });
 }
 
+/** Words stay valid until the server replaces the session or an extension changes what it adds. */
+const cachedWords = new WeakMap();
+
 /** The words that extensions give a session for the session list's search and the launcher's, lowercased. */
 export function sessionWords(session) {
-    return added("sessionSearch").flatMap(({ record, spec }) => {
-        const words = drawCall(record, spec.words, session, []);
+    const revision = store.state.extensionsRev;
+    const cached = cachedWords.get(session);
+
+    if (cached?.revision === revision) {
+        return cached.words;
+    }
+
+    const words = added("sessionSearch").flatMap(({ record, spec }) => {
+        const words = drawCall(record, spec.words, session, [], "sessionSearch.words");
 
         return Array.isArray(words)
             ? words
@@ -1895,6 +1914,10 @@ export function sessionWords(session) {
                   .map((word) => word.trim().slice(0, WORD_TEXT).toLowerCase())
             : [];
     });
+
+    cachedWords.set(session, { revision, words });
+
+    return words;
 }
 
 /** The actions extensions offer on sessions: `run(ids)` does the action on those sessions. */
@@ -1958,7 +1981,10 @@ export function sessionFilterTest() {
     }
 
     return (session) =>
-        on.every(({ record, spec }) => drawCall(record, spec.match, session, true) === true);
+        on.every(
+            ({ record, spec }) =>
+                drawCall(record, spec.match, session, true, "sessionFilter.match") === true,
+        );
 }
 
 /** The longest a status item's text shows, in characters as a reader sees them: past it, cut with "…". */
