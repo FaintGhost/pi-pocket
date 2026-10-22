@@ -222,6 +222,15 @@ test(
         await say(app, session, "show a calculator");
         await waitFor(".inline-artifact .html-preview", "the card's preview");
 
+        await until(
+            async () =>
+                await inPage<boolean>(
+                    `return JSON.stringify(/Change the rate/.test(document.querySelector(".inline-row")?.nextElementSibling?.textContent ?? ""))`,
+                ),
+            "the words after the card",
+            SLOW,
+        );
+
         const around = await inPage<{ before: string; after: string }>(`
         const row = document.querySelector(".inline-row");
         return JSON.stringify({
