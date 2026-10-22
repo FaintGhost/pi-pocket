@@ -8,9 +8,10 @@
  * Everything survives a restart: anchors, reporters, and the courier that delivers reports are durable tasks, and
  * request IDs keep a restarted task from delivering a message or a report twice.
  *
- * Models are a person's to choose: a subagent runs on its session's model, thinking no harder than the session, unless
- * the owner allowed other models for subagents (`subagentModels`), and then only on one of those. A subagent its model
- * or provider failed is reported as such, and Pi is told to stop and tell the user, never to try another model.
+ * Models are a person's to choose: with no list of models for subagents (`subagentModels`), a subagent runs on its
+ * session's model. With a list, a subagent runs only on a model on it: its session's model when that is listed, else
+ * the first listed, and Pi may name only a listed one. Thinking is never harder than the session's. A subagent its
+ * model or provider failed is reported as such, and Pi is told to stop and tell the user, never to try another model.
  */
 import type { AssistantMessage, ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { clampThinkingLevel, Type } from "@earendil-works/pi-ai";
@@ -647,7 +648,7 @@ function courierFor(limits: Limits) {
 }
 
 const GUIDE = `You can delegate to background subagents with the subagent tool. A subagent is a separate agent with its own transcript that works while you keep talking to the user; its answer comes back to you at your next pause (after a tool call, or when you are done) as a message starting with "${REPORT_PREFIX}<name> answered". Answers that arrive together come in one message. Use them for independent, self-contained work (research, long builds, test runs, a second opinion). Give each message everything the subagent needs: it does not see this conversation. Do not poll: wait for the report. The user can open a subagent and talk to it directly. Write each message to a subagent in ASD-STE100 (Simplified Technical English), at about 80% adherence: short sentences, one idea in each, the main point first, active voice, simple tenses, one word for one thing, and every fact kept. Ask the subagent to write its report to you in ASD-STE100 too. This applies to that report only, not to answers to a person who talks to it.
-A subagent runs on your model, thinking as hard as you or less. Models are the user's to choose: never pick one on your own. If a subagent fails because of its model or provider (a sign-in, a missing model, a quota), stop and tell the user what failed; never start it again on another model.`;
+Subagents think as hard as you or less. Models are the user's to choose: never pick one on your own. If a subagent fails because of its model or provider (a sign-in, a missing model, a quota), stop and tell the user what failed; never start it again on another model.`;
 
 /** What the tool says when Pi names a model, and none but its own may be used. */
 const NO_CHOICE =
@@ -677,12 +678,22 @@ async function problemOf(host: PocketHost, ref: ModelRef, fresh: boolean) {
     return typeof host.modelProblem === "function" ? host.modelProblem(ref, fresh) : undefined;
 }
 
-/** The guide, and the models the owner also allows, each that cannot be used now saying why. */
-async function guide(host: PocketHost): Promise<string> {
+/**
+ * The model a subagent runs on when Pi names none: this session's own while the owner's list is empty or has it, else
+ * the first on the list. Undefined: this session's own, as it is.
+ */
+function defaultSpec(allowed: readonly string[], own: ModelRef | undefined): string | undefined {
+    return allowed.length === 0 || (own !== undefined && allowed.includes(keyOf(own)))
+        ? undefined
+        : allowed[0];
+}
+
+/** The guide, and the models the owner allows, each that cannot be used now saying why. */
+async function guide(host: PocketHost, own: ModelRef | undefined): Promise<string> {
     const allowed = allowedModels(host);
 
     if (allowed.length === 0) {
-        return GUIDE;
+        return `${GUIDE}\nA subagent runs on your model.`;
     }
 
     const listed = await Promise.all(
@@ -693,40 +704,54 @@ async function guide(host: PocketHost): Promise<string> {
             return problem === undefined ? spec : `${spec} (not now: ${problem})`;
         }),
     );
+    const fallback = defaultSpec(allowed, own);
+    const left =
+        fallback === undefined
+            ? "your model, which is on the list"
+            : `${fallback}, the first on the list, because your model is not on it`;
 
-    return `${GUIDE}\nThe user also allows subagents on these models, passed as model: ${listed.join(", ")}. Leave model out unless the work needs one of them; no others.`;
+    return `${GUIDE}\nSubagents run only on the models the user allows for them, passed as model: ${listed.join(", ")}. Left out, model is ${left}. Name another only when the work needs it; never one off the list.`;
 }
 
 /**
- * The model a subagent asked for may run on: undefined for this session's own (asked for, or left out), else one the
- * owner allows whose sign-in works now. Anything else is refused with a message that tells Pi to go to the user, never
- * to pick another model.
+ * The model a subagent may run on: undefined for this session's own, else a model on the owner's list whose sign-in
+ * works now. With no list, only this session's own. With a list, only a model on it: this session's own when it is
+ * there, and else the first listed when Pi names none. Anything else is refused with a message that tells Pi to go to the
+ * user, never to pick another model.
  */
 async function chosenModel(
     host: PocketHost,
     asked: unknown,
     own: ModelRef | undefined,
 ): Promise<ModelRef | undefined> {
-    if (asked === undefined) {
-        return undefined;
-    }
-
-    if (typeof asked !== "string") {
-        throw new Error(NO_CHOICE);
-    }
-
-    if (sameModel(asked, own)) {
-        return undefined;
-    }
-
     const allowed = allowedModels(host);
 
-    if (allowed.length === 0) {
+    if (asked !== undefined && typeof asked !== "string") {
         throw new Error(NO_CHOICE);
+    }
+
+    if (allowed.length === 0) {
+        if (asked === undefined || sameModel(asked, own)) {
+            return undefined;
+        }
+
+        throw new Error(NO_CHOICE);
+    }
+
+    const fallback = defaultSpec(allowed, own);
+    const wanted = asked ?? fallback;
+
+    // This session's own model, when it is on the list: left as it is.
+    if (
+        wanted === undefined ||
+        (own !== undefined && sameModel(wanted, own) && allowed.includes(keyOf(own)))
+    ) {
+        return undefined;
     }
 
     let ref: ModelRef;
-    const named = refOf(asked.trim());
+    const named = refOf(wanted.trim());
+    const instead = fallback === undefined ? "your model" : fallback;
 
     // Its sign-in asked afresh first, so a mark that is out of date neither refuses it nor lets it through.
     if (named !== undefined && allowed.includes(keyOf(named))) {
@@ -734,16 +759,16 @@ async function chosenModel(
     }
 
     try {
-        ref = host.resolveModel(asked);
+        ref = host.resolveModel(wanted);
     } catch (error) {
         throw new Error(
-            `${describe(error)} Do not pick another model: leave model out to use this session's model, or stop and tell the user.`,
+            `${describe(error)} Do not pick another model: leave model out to use ${instead}, or stop and tell the user.`,
         );
     }
 
     if (!allowed.includes(keyOf(ref))) {
         throw new Error(
-            `${keyOf(ref)} is not one of the models the user allows for subagents (${allowed.join(", ")}). Do not pick another model on your own: leave model out to use this session's model, or stop and ask the user.`,
+            `${keyOf(ref)} is not one of the models the user allows for subagents (${allowed.join(", ")}). Do not pick another model on your own: leave model out to use ${instead}, or stop and ask the user.`,
         );
     }
 
@@ -799,7 +824,7 @@ export default function createSubagents(host: PocketHost) {
         model: Type.Optional(
             Type.String({
                 description:
-                    "spawn only: one of the models the user allows for subagents, listed in your instructions, as provider/modelId. Leave it out to use your own model.",
+                    "spawn only: one of the models the user allows for subagents, listed in your instructions, as provider/modelId. Left out: your model when it is on that list, else the first listed.",
             }),
         ),
     });
@@ -811,7 +836,7 @@ export default function createSubagents(host: PocketHost) {
         description:
             "Manage persistent background subagents. Actions: spawn (name, message; optional " +
             (choosing
-                ? "model, only one the user allows (it runs on your model otherwise), "
+                ? "model, only one the user allows (left out: your model if it is on the user's list, else the first listed), "
                 : "") +
             "thinking level, yours or lower, and tools to allow" +
             (choosing ? "" : "; it runs on your model") +
@@ -887,9 +912,8 @@ export default function createSubagents(host: PocketHost) {
 
             const parent = await api.agent(context);
 
-            // Work goes to a subagent only on this session's model, or one the owner allows: one started on a model the
-            // owner no longer allows (or before there was a choice) gets none. A model a person set there is the
-            // owner's to allow too.
+            // Work goes to a subagent only on a model the owner's list holds, or, with no list, this session's own: one
+            // on a model the owner no longer allows (or that a person set there) gets none.
             // A subagent started before thinking was capped, or one a person raised, thinks no harder than the session
             // for this work: lowered (never raised) as the work is sent.
             let lowered: ModelThinkingLevel | undefined;
@@ -908,13 +932,24 @@ export default function createSubagents(host: PocketHost) {
                     lowered = (found === undefined ? undefined : levelAtMost(found, most)) ?? most;
                 }
 
-                if (runs !== undefined && !same(runs, parent.model)) {
-                    if (!allowedModels(host).includes(keyOf(runs))) {
-                        throw new Error(
-                            `${name} runs on ${keyOf(runs)}, which is neither this session's model nor one the user allows for subagents. Do not send it work: start a new subagent, which runs on this session's model, or ask the user.`,
-                        );
-                    }
+                const listed = allowedModels(host);
 
+                // With a list, work goes only to a subagent on a listed model, this session's own included; without
+                // one, only to a subagent on this session's own.
+                if (
+                    runs !== undefined &&
+                    (listed.length === 0
+                        ? !same(runs, parent.model)
+                        : !listed.includes(keyOf(runs)))
+                ) {
+                    throw new Error(
+                        listed.length === 0
+                            ? `${name} runs on ${keyOf(runs)}, which is neither this session's model nor one the user allows for subagents. Do not send it work: start a new subagent, which runs on this session's model, or ask the user.`
+                            : `${name} runs on ${keyOf(runs)}, which is not one of the models the user allows for subagents (${listed.join(", ")}). Do not send it work: start a new subagent, or ask the user.`,
+                    );
+                }
+
+                if (runs !== undefined && !same(runs, parent.model)) {
                     const problem = await problemOf(host, runs, true);
 
                     if (problem !== undefined) {
@@ -968,7 +1003,7 @@ export default function createSubagents(host: PocketHost) {
 
                 if (lower === undefined && model !== undefined) {
                     throw new Error(
-                        `${keyOf(model)} cannot think as little as this session (${most}). Leave model out, or ask the user.`,
+                        `${keyOf(model)} cannot think as little as this session (${most}). Do not pick another model on your own: ask the user.`,
                     );
                 }
 
@@ -1050,7 +1085,7 @@ export default function createSubagents(host: PocketHost) {
         name: "pocket-subagents",
         tasks: [Anchor, Reporter, Courier],
         tools: [subagent],
-        sections: [section("subagents", () => guide(host))],
+        sections: [section("subagents", ({ agent }) => guide(host, agent.model))],
     });
 
     return SubagentTools;
