@@ -11,6 +11,7 @@ import {
     constants,
     cpSync,
     type Dirent,
+    existsSync,
     fstatSync,
     lstatSync,
     mkdirSync,
@@ -28,7 +29,7 @@ import { describe, HttpError } from "./errors.ts";
 import { opened } from "./http/io.ts";
 import { desktopTheme } from "./omarchy.ts";
 import { watchTree } from "./reload.ts";
-import { cssReferences, themeFile } from "./themes/css.ts";
+import { cssReferences, themeFile, tokenize } from "./themes/css.ts";
 import { reservedThemeIds } from "./themes/reserved.ts";
 import { pocketVersion } from "./versions.ts";
 import {
@@ -64,6 +65,8 @@ export interface ThemeInfo {
     colorsLight?: Record<string, string>;
     /** The fonts its stylesheets load, to preload with them. */
     fonts: string[];
+    /** What Appearance's Fonts set in it (`fonts.css`): a family for words and for code, and ligatures. */
+    typography?: { sans?: string; mono?: string; ligatures: boolean };
     /** Changes when any of its files do. */
     rev?: string;
     /** Why it is not as its files are: it keeps its last good version, or, with none, it is not offered. */
@@ -94,6 +97,92 @@ interface Version {
     /** Its fonts and images, by their path in the folder. */
     assets: Map<string, FileStat & { type: string }>;
     rev: string;
+}
+
+/**
+ * The fonts that come with the app (`web/style.css`), which a theme names in `--sans` or `--mono`, and the upright file
+ * of each, for the page to preload with the theme. The Nerd Fonts symbols are left out: they load only for an icon.
+ */
+const APP_FONTS: Record<string, string> = {
+    "Pocket Inter": "/fonts/InterVariable.woff2",
+    "Pocket Fira Code": "/fonts/FiraCode-VF.woff2",
+    "Pocket IBM Plex Mono": "/fonts/IBMPlexMono-Variable.woff2",
+    "Pocket Iosevka": "/fonts/Iosevka-Regular.woff2",
+};
+
+/**
+ * The fonts Appearance offers a theme, for words and for code: the app's own two, APP_FONTS, and the device's own, by
+ * the CSS generic family each starts with (`system-ui`, `ui-monospace`), which is how a stylesheet names them.
+ */
+export const THEME_FONTS = {
+    sans: [
+        "Pocket Sans",
+        "Pocket Inter",
+        "system-ui",
+        "Pocket Mono",
+        "Pocket Fira Code",
+        "Pocket IBM Plex Mono",
+        "Pocket Iosevka",
+        "ui-monospace",
+    ],
+    mono: [
+        "Pocket Mono",
+        "Pocket Fira Code",
+        "Pocket IBM Plex Mono",
+        "Pocket Iosevka",
+        "ui-monospace",
+    ],
+};
+
+/** The whole list a font of THEME_FONTS is written as: each falls back to the device's own of its kind. */
+function fontStack(family: string, kind: "sans" | "mono"): string {
+    const monospace = family === "ui-monospace" || THEME_FONTS.mono.includes(family);
+    const named = family.startsWith("Pocket ") ? `"${family}"` : family;
+
+    if (!monospace) {
+        return `${named}, ${family === "system-ui" ? "" : "system-ui, "}ui-sans-serif, sans-serif`;
+    }
+
+    // Code keeps the Nerd Fonts icons after its font, for the ones prompts and tools print.
+    const icons = kind === "mono" ? `"Pocket Nerd Symbols", ` : "";
+
+    return family === "ui-monospace"
+        ? `ui-monospace, ${icons}SFMono-Regular, Menlo, Consolas, "DejaVu Sans Mono", monospace`
+        : `${named}, ${icons}ui-monospace, monospace`;
+}
+
+/** What a `fonts.css` that Appearance wrote sets: the first family of `--sans` and `--mono`, and ligatures. */
+function typography(sheets: Map<string, string>): {
+    sans?: string;
+    mono?: string;
+    ligatures: boolean;
+} {
+    // Appearance's `fonts.css` wins (its values are `!important`); else the last a stylesheet of the theme sets.
+    const css = [
+        ...[...sheets].filter(([path]) => path !== "fonts.css").map(([, text]) => text),
+        sheets.get("fonts.css") ?? "",
+    ]
+        .join("\n")
+        .replace(/\/\*[\s\S]*?\*\//g, "");
+
+    // The last value set, as its first family: a name in quotes, or a keyword (`system-ui`).
+    const first = (name: string) => {
+        const found = [
+            ...css.matchAll(new RegExp(`--${name}:\\s*(?:"([^"]+)"|([a-z-]+))`, "g")),
+        ].at(-1);
+
+        return found?.[1] ?? found?.[2];
+    };
+
+    const last = (pattern: RegExp) => [...css.matchAll(pattern)].at(-1)?.[1];
+    const sans = first("sans");
+    const mono = first("mono");
+
+    return {
+        ...(sans === undefined ? {} : { sans }),
+        ...(mono === undefined ? {} : { mono }),
+        ligatures: /^(contextual|normal)/.test(last(/--ligatures:\s*([a-z-]+)/g) ?? ""),
+    };
 }
 
 /** A theme's file's address: its path in the folder, each part escaped, under the theme's id and version. */
@@ -257,6 +346,9 @@ export class Themes {
                 ...(good?.colors === undefined ? {} : { colors: good.colors }),
                 ...(good?.colorsLight === undefined ? {} : { colorsLight: good.colorsLight }),
                 fonts: good === undefined || id === BASE_THEME ? [] : this.#fonts(good),
+                ...(good === undefined || id === BASE_THEME
+                    ? {}
+                    : { typography: typography(good.css) }),
                 ...(good === undefined ? {} : { rev: good.rev }),
                 // What is wrong can name the server's folders: the owner's to read, as extensions' load errors are.
                 ...(problem === undefined || !owner ? {} : { problem }),
@@ -412,6 +504,72 @@ export class Themes {
         return id;
     }
 
+    /**
+     * Set the fonts and ligatures of one of the owner's themes (Appearance): written to its `fonts.css`, which its
+     * `theme.css` imports. Each is a family of APP_FONTS (or the app's own two), or null for the app's default.
+     */
+    setFonts(id: string, fonts: { sans?: unknown; mono?: unknown; ligatures?: unknown }): void {
+        if (!this.#owned(id)) {
+            throw new HttpError(
+                404,
+                "Only your own themes can be changed: duplicate this one first",
+            );
+        }
+
+        const family = (value: unknown, which: "sans" | "mono") => {
+            if (value === null || value === undefined) {
+                return null;
+            }
+
+            if (typeof value !== "string" || !THEME_FONTS[which].includes(value)) {
+                throw new HttpError(
+                    400,
+                    `Not one of the app's fonts for ${which === "sans" ? "words" : "code"}`,
+                );
+            }
+
+            return value;
+        };
+
+        const sans = family(fonts.sans, "sans");
+        const mono = family(fonts.mono, "mono");
+        const rules = [
+            ...(sans === null ? [] : [`    --sans: ${fontStack(sans, "sans")} !important;`]),
+            ...(mono === null ? [] : [`    --mono: ${fontStack(mono, "mono")} !important;`]),
+            ...(typeof fonts.ligatures === "boolean"
+                ? [`    --ligatures: ${fonts.ligatures ? "contextual" : "none"} !important;`]
+                : []),
+        ];
+        const dir = join(this.dir, id);
+        const main = join(dir, "theme.css");
+        let css = "";
+
+        try {
+            css = readFileSync(main, "utf8");
+        } catch {
+            // A theme of colors alone gets a stylesheet now, which needs a theme.json: its name as it is listed.
+            const manifest = join(dir, "theme.json");
+
+            if (!existsSync(manifest)) {
+                const name = this.list().find((each) => each.id === id)?.name ?? id;
+
+                writeFileSync(manifest, `${JSON.stringify({ themeApi: 1, name }, null, 4)}\n`);
+            }
+        }
+
+        writeFileSync(
+            join(dir, "fonts.css"),
+            `/* Set in Appearance (Fonts), over the theme's own: changes here are overwritten there. */\n:root {\n${rules.join("\n")}\n}\n`,
+        );
+
+        // `@import` must come first in a stylesheet, so a theme that has none of it starts with it.
+        if (!/@import\s+(url\()?\s*["']?fonts\.css["']?/.test(css)) {
+            writeFileSync(main, `@import "fonts.css";\n${css}`);
+        }
+
+        this.#scan(true);
+    }
+
     /** Take one of the owner's themes away: into `themes/.removed/`, which is not listed, so nothing is lost. */
     remove(id: string): void {
         if (!this.#owned(id)) {
@@ -463,11 +621,23 @@ export class Themes {
         }
     }
 
-    /** The fonts a theme's stylesheets load. */
+    /** The fonts a theme's stylesheets load: its own, and the upright file of each of the app's that it names. */
     #fonts(version: Version): string[] {
-        return [...version.assets]
-            .filter(([, asset]) => asset.type === "font/woff2")
-            .map(([path]) => themeAddress(version.id, version.rev, path));
+        // Its strings, as CSS reads them (comments skipped, escapes resolved): a family it names is one of them.
+        const named = new Set(
+            [...version.css.values()].flatMap((text) =>
+                tokenize(text).flatMap((token) => (token.type === "string" ? [token.value] : [])),
+            ),
+        );
+
+        return [
+            ...[...version.assets]
+                .filter(([, asset]) => asset.type === "font/woff2")
+                .map(([path]) => themeAddress(version.id, version.rev, path)),
+            ...Object.entries(APP_FONTS)
+                .filter(([family]) => named.has(family))
+                .map(([, file]) => file),
+        ];
     }
 
     /** The stylesheet of a theme: its `theme.css`, which imports the rest; none for colors alone. */
