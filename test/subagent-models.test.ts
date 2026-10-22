@@ -140,6 +140,7 @@ test("with no models allowed, a subagent runs on its session's model, and Pi is 
     const started = await ask(id, "spawn plain");
 
     assert.match(started.answer, /Started plain on faux\/mine\./);
+    assert.match(started.answer, /carry on with your own part/);
     assert.equal(
         (await app.agentState(started.agents.plain!.conversationId))?.model?.modelId,
         "mine",
@@ -325,6 +326,8 @@ test("with a list, a subagent with no model runs on the session's model if liste
 
 test("a subagent has no subagent or team tool of its own, so none starts a nested one", async () => {
     const id = await session();
+
+    subagentTools.clear();
     const { agents } = await ask(id, "spawn leaf");
 
     await until(

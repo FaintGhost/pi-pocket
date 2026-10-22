@@ -423,7 +423,7 @@ export default function createCodemode(_host: PocketHost) {
                     return undefined;
                 }
 
-                return `Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, instead of making many separate calls. Scripts can call: ${names.join(", ")}.`;
+                return `Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, instead of making many separate calls${names.includes("subagent") ? ": starting several subagents at once, say" : ""}. Scripts can call: ${names.join(", ")}.`;
             }),
         ],
     });
