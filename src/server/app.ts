@@ -139,7 +139,7 @@ const BROWSER_EXTENSION = "pocket-browser";
 const PIP_FILE = "pip.ts";
 /** The extension module with the subagent tool, rebuilt when the models subagents may use change. */
 const SUBAGENTS_FILE = "subagents.ts";
-/** The most models the owner may allow subagents besides their session's own. */
+/** The most models the owner may allow subagents. */
 const MAX_SUBAGENT_MODELS = 50;
 
 /**
@@ -1882,7 +1882,7 @@ export class PocketApp {
                 defaultModel: this.config.defaultModel ?? null,
                 // The theme and colors of browsers that have not chosen their own, or null for the app's own.
                 themeDefault: this.config.themeDefault ?? null,
-                // The models Pi may start subagents on besides their session's own: the owner's to see and change.
+                // The models Pi may start subagents on: the owner's to see and change.
                 ...(user.role === "owner"
                     ? { subagentModels: [...this.config.subagentModels] }
                     : {}),
@@ -2845,7 +2845,7 @@ export class PocketApp {
         this.providers.needsSignIn(provider) !== undefined;
 
     /**
-     * The owner picks the models Pi may start subagents on besides their session's own (`provider/modelId`, models Pi
+     * The owner picks the models Pi may start subagents on (`provider/modelId`, models Pi
      * knows). Empty, the default: none, and the subagent tool offers Pi no choice of model at all. The tool is rebuilt
      * to match, so its description and parameters say what Pi may do. This replaces the whole list; the Providers sheet
      * changes one model at a time (`allowSubagentModel`).

@@ -600,7 +600,7 @@ export function createApi(options: HttpOptions, auth: Auth) {
                 throw new HttpError(400, "Change one setting at a time.");
             }
 
-            // The models subagents may run on besides their session's own: the owner's (checked in `app.ts`).
+            // The models subagents may run on: the owner's (checked in `app.ts`).
             if (body.subagentModels !== undefined) {
                 await app.setSubagentModels(user, body.subagentModels);
             }

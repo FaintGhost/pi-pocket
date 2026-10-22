@@ -1,4 +1,4 @@
-// Model providers: signing in and out, the models subagents may use besides their session's own, and the dialog a
+// Model providers: signing in and out, the models subagents may use, and the dialog a
 // sign-in uses to ask for a code or a key.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, attempt, closeSheet, closeSignIn, signInAnswered, store } from "../store.js";

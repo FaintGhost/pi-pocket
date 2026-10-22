@@ -239,7 +239,7 @@ export interface PocketHost {
      */
     resolveModel(spec: string): ModelRef;
     /**
-     * The models Pi may start subagents on besides their session's own, as the owner allowed them (`provider/modelId`).
+     * The models Pi may start subagents on, as the owner allowed them (`provider/modelId`).
      * Empty, the default: none.
      */
     subagentModels(): readonly string[];
