@@ -133,10 +133,20 @@ test("the module has both tools, and the guide says when to use each", async () 
         extension.tools!.map((tool) => tool.name),
         ["artifact", "artifact_inline"],
     );
-    assert.match(
-        String(await (section.render as (...args: never[]) => unknown)()),
-        /artifact_inline shows the page as a card in your reply/,
-    );
+    const render = (names: string[]) =>
+        (section.render as (input: unknown) => Promise<string>)({
+            agent: { tools: names.map((name) => ({ name })) },
+        });
+
+    const withBoth = await render(["artifact", "artifact_inline"]);
+
+    assert.match(withBoth, /artifact_inline shows the page as a card in your reply/);
+    assert.match(withBoth, /only a call you make directly shows a card/i);
+    // A session without the tool (PiP's) is not told about it.
+    const without = await render(["artifact"]);
+
+    assert.doesNotMatch(without, /artifact_inline/);
+    assert.match(without, /Use the artifact tool/);
 });
 
 test("a call creates an artifact and says which version it made; an update leaves the earlier result alone", async () => {
@@ -292,29 +302,51 @@ test("cards and versions survive closing and reopening the storage", async () =>
     }
 });
 
-test("a replay of an inline call still finds its version after the artifact became Markdown", async () => {
+test("an artifact with inline versions stays HTML, so an old card keeps showing its page", async () => {
     const id = await newSession(app);
-    const task = 850_000 + (calls += 1);
-    const first = await inlineCall(id, task, "same")({ content: PAGE });
+    const task = 860_000 + (calls += 1);
+    const me = app.config.ownerToken;
+    const first = await inlineCall(id, task, "card")({ content: PAGE });
     const artifact = createArtifacts({} as PocketHost).tools![0]!;
+    const direct = (taskId: number, args: Record<string, unknown>) =>
+        artifact.execute(
+            { id: "loan-calc", title: "Loan", ...args } as never,
+            {
+                conversationId: id,
+                taskId,
+                callId: "direct",
+                agent: async () => ({ cwd: work }),
+                snapshot: app.harness.snapshot.bind(app.harness),
+                commit: app.harness.commit.bind(app.harness),
+            } as never,
+            context,
+        );
 
+    assert.match(
+        (first.output as unknown as { text: string }[])[0]!.text,
+        /only a call made directly, not inside codemode/,
+    );
+    await assert.rejects(
+        direct(task + 1, { type: "markdown", content: "# no" }),
+        /stays HTML: publish the markdown under a new id/,
+    );
+    // The same type, and a later HTML version by the artifact tool, are fine.
+    await direct(task + 2, { content: "<p>two</p>" });
+    assert.equal((await page(me, id, "loan-calc/1")).text, PAGE);
+    assert.equal((await page(me, id, "loan-calc/2")).text, "<p>two</p>");
+    // An artifact made by the artifact tool alone may still change type, as before.
+    await direct(task + 3, { id: "other", type: "html", content: "<p>x</p>" });
     await artifact.execute(
-        { id: "loan-calc", title: "Loan", type: "markdown", content: "# now Markdown" } as never,
+        { id: "other", title: "Other", type: "markdown", content: "# md" } as never,
         {
             conversationId: id,
-            taskId: task + 1,
-            callId: "other",
+            taskId: task + 4,
+            callId: "direct",
             agent: async () => ({ cwd: work }),
             snapshot: app.harness.snapshot.bind(app.harness),
             commit: app.harness.commit.bind(app.harness),
         } as never,
         context,
     );
-    const replay = await inlineCall(id, task, "same")({ content: PAGE });
-
-    assert.deepEqual(replay.details, first.details);
-    await assert.rejects(
-        inlineCall(id, task + 2, "new")({ content: PAGE }),
-        /is markdown, not HTML/,
-    );
+    assert.equal((await app.artifactBody(id, "other", undefined)).meta.type, "markdown");
 });

@@ -14,7 +14,13 @@ import {
     section,
     type ToolRegistration,
 } from "@earendil-works/pi-durable";
-import { ArtifactBodyDoc, type ArtifactMeta, ArtifactsDoc, type ArtifactType } from "../docs.ts";
+import {
+    ArtifactBodyDoc,
+    type ArtifactMeta,
+    ArtifactsDoc,
+    type ArtifactType,
+    type ArtifactVersion,
+} from "../docs.ts";
 import type { PocketHost } from "../host.ts";
 import { expandHome } from "../paths.ts";
 
@@ -124,7 +130,13 @@ function applyEdits(
     return next;
 }
 
-const GUIDE = `Use the artifact tool for results the user should see rendered rather than read as text: interactive demos, games, visualizations, charts, diagrams, formatted reports. Do not use it for plain answers or for project files (write those with write).
+/** The bullet about the second tool, for sessions that have it. */
+const INLINE_GUIDE = `- Two tools publish HTML. artifact_inline shows the page as a card in your reply, between your paragraphs, with Preview/Code and Run/Stop, and a button that opens the viewer: use it for a small interactive piece that belongs to what you are explaining (a calculator, a chart, a form), when the person will use it right there. artifact opens it in the viewer only: use it for a whole page, a game, a Markdown document or SVG image, or anything that needs the whole screen. Both share one store: the same id adds a version, whichever tool made the earlier ones. artifact_inline takes HTML only (content or edits, no path), and says in its result which version it made; that card keeps showing that version, so an update never changes an earlier card: say what changed, and do not repeat the page in your reply. Only a call you make directly shows a card: one made inside codemode publishes a version with no card. A page made by artifact_inline stays HTML: the artifact tool cannot change its type, so use a new id for a Markdown or SVG one. Write the card's page to fit a narrow column, with no fixed height: the card grows to fit the page, up to 900 px once it runs (1200 px as a preview), then the page scrolls inside it. Its page gets the same follow-up and saved-state messages as the viewer's.
+`;
+
+const guide = (
+    inline: boolean,
+) => `Use the artifact tool for results the user should see rendered rather than read as text: interactive demos, games, visualizations, charts, diagrams, formatted reports. Do not use it for plain answers or for project files (write those with write).
 - HTML artifacts open in a sandboxed frame on the user's device (often a phone). They cannot reach this app, its cookies, or the parent page. Make them self-contained, responsive (include a viewport meta tag), and touch-friendly.
 - Load libraries from a CDN with full URLs, such as https://esm.sh or https://cdn.jsdelivr.net. For ES modules that import bare specifiers (three.js addons import "three"), add an import map, for example: <script type="importmap">{"imports":{"three":"https://esm.sh/three@0.170.0","three/addons/":"https://esm.sh/three@0.170.0/examples/jsm/"}}</script>
 - Show loading and error states inside the page (window.onerror, a visible message), so a broken artifact explains itself.
@@ -133,8 +145,7 @@ const GUIDE = `Use the artifact tool for results the user should see rendered ra
   - {type:"pocket-state-get", requestId, schema} and {type:"pocket-state-set", requestId, state, schema}: load and save up to 16 KB of JSON for the person using the artifact, so its controls survive a reload and follow them to other devices. requestId is 1 to 64 letters, digits, and _ . : - (others get no answer). The app answers {type:"pocket-state", requestId, ok, state, at, error}; state is null when nothing is saved. A set with state null clears it. Change schema when the state's shape changes: older state then reads as null. Save after changes settle (at most 20 saves in 10 seconds).
   - Only the artifact's own page is heard: once it navigates elsewhere, nothing is. Neither works in a published link or a tab of its own: the page must still work when no answer comes.
 - Reuse the id to publish a new version. For small fixes, send edits against the latest version instead of the whole content.
-- Two tools publish HTML. artifact_inline shows the page as a card in your reply, between your paragraphs, with Preview/Code and Run/Stop, and a button that opens the viewer: use it for a small interactive piece that belongs to what you are explaining (a calculator, a chart, a form), when the person will use it right there. artifact opens it in the viewer only: use it for a whole page, a game, a Markdown document or SVG image, or anything that needs the whole screen. Both share one store: the same id adds a version, whichever tool made the earlier ones. artifact_inline takes HTML only (content or edits, no path), and says in its result which version it made; that card keeps showing that version, so an update never changes an earlier card: say what changed, and do not repeat the page in your reply. Write the card's page to fit a narrow column, with no fixed height: the card grows to fit the page, up to 900 px once it runs (1200 px as a preview), then the page scrolls inside it. Its page gets the same follow-up and saved-state messages as the viewer's.
-- To publish an existing local HTML, Markdown, or SVG file without repeating its contents, give path instead of content or edits. This copies a UTF-8 snapshot (up to 2,000,000 bytes), not a live link or its neighboring assets. Everyone who can see the conversation can open the snapshot.`;
+${inline ? INLINE_GUIDE : ""}- To publish an existing local HTML, Markdown, or SVG file without repeating its contents, give path instead of content or edits. This copies a UTF-8 snapshot (up to 2,000,000 bytes), not a live link or its neighboring assets. Everyone who can see the conversation can open the snapshot.`;
 
 type Exec = ToolRegistration["execute"];
 
@@ -260,13 +271,25 @@ async function publish(
                 type = current.type;
             }
 
+            // A card in a reply names a version, and the page it gets is by the artifact's type: so it stays HTML.
+            if (
+                current !== undefined &&
+                current.type !== type &&
+                current.versions.some((each) => each.inline === true)
+            ) {
+                throw new Error(
+                    `Artifact ${id} has versions shown as cards in replies, so it stays HTML: publish the ${type} under a new id.`,
+                );
+            }
+
             const next = (current?.versions.at(-1)?.version ?? 0) + 1;
-            const record = {
+            const record: ArtifactVersion = {
                 version: next,
                 taskId: api.taskId,
                 callId: api.callId,
                 size: Buffer.byteLength(content),
                 createdAt: Date.now(),
+                ...(inline ? { inline: true as const } : {}),
             };
 
             if (current === undefined) {
@@ -294,7 +317,7 @@ async function publish(
             {
                 type: "text",
                 text: inline
-                    ? `Published "${args.title}" as artifact ${id}, version ${version}. It shows as a card in your reply, and keeps showing version ${version}.`
+                    ? `Published "${args.title}" as artifact ${id}, version ${version}. It shows as a card in your reply (only a call made directly, not inside codemode), and keeps showing version ${version}.`
                     : `Published "${args.title}" as artifact ${id}, version ${version}. The user opens it from the artifact card.`,
             },
         ],
@@ -378,6 +401,10 @@ export default function createArtifacts(_host: PocketHost) {
     return defineExtension({
         name: "pocket-artifacts",
         tools: [artifact, inline],
-        sections: [section("artifacts", () => GUIDE)],
+        sections: [
+            section("artifacts", (input) =>
+                guide(input.agent.tools.some((tool) => tool.name === "artifact_inline")),
+            ),
+        ],
     });
 }

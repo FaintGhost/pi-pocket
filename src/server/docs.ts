@@ -144,6 +144,11 @@ export type ArtifactVersion = {
     callId?: string;
     size: number;
     createdAt: number;
+    /**
+     * Made by `artifact_inline`: a card in a reply shows this version, so its artifact stays HTML (`type` is per
+     * artifact, and would change every version's page).
+     */
+    inline?: true;
 };
 
 export type ArtifactMeta = {
