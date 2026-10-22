@@ -181,14 +181,16 @@ let morphs = 0;
 /**
  * Make `change` a view transition in which the windows slide and resize into their new places (style.css,
  * `layout-vt`), and say whether it did: only with Fluid motion, in a browser that has view transitions, on a page in
- * view. The change itself comes a frame later, once the old layout is captured.
+ * view, with nothing over the windows. The change itself comes a frame later, once the old layout is captured.
  */
 function morph(change) {
     if (
         morphing ||
         motionLevel() !== "fluid" ||
         typeof document.startViewTransition !== "function" ||
-        document.visibilityState !== "visible"
+        document.visibilityState !== "visible" ||
+        // The windows would draw over a sheet or the launcher while they move: with one open, change at once.
+        document.querySelector(".overlay, .launcher-overlay")
     ) {
         return false;
     }

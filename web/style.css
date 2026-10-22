@@ -16928,9 +16928,9 @@ pre.gallery-code {
 }
 
 /*
- * Layout changes morph (theme.js, `morph`): folding the sidebar, Width, Density, and tiling. The windows slide and
- * resize as one; what they hold keeps its size and crossfades, held to its window's top left (the sidebar) or top
- * middle (the conversation), so no text stretches.
+ * Layout changes morph (theme.js, `morph`): folding the sidebar, Width, and tiling. The windows slide and resize as
+ * one; what they hold keeps its size, held to its window's top left (the sidebar) or top middle (the conversation), so
+ * no text stretches, and fades through: the old out quickly, then the new in. Notices keep their place above.
  */
 :root.layout-vt .layout > .sidebar {
     view-transition-name: fluid-sidebar;
@@ -16940,14 +16940,28 @@ pre.gallery-code {
     view-transition-name: fluid-pane;
 }
 
+:root.layout-vt .notices {
+    view-transition-name: fluid-notices;
+}
+
 :root.layout-vt::view-transition-group(*) {
     animation-duration: var(--t-glide);
     animation-timing-function: var(--ease-glide);
 }
 
-:root.layout-vt::view-transition-group(fluid-sidebar),
+/* Each window keeps its ground while what it holds fades through. */
+:root.layout-vt::view-transition-group(fluid-sidebar) {
+    overflow: clip;
+    background: var(--panel);
+}
+
 :root.layout-vt::view-transition-group(fluid-pane) {
     overflow: clip;
+    background: var(--bg);
+}
+
+:root.layout-vt[data-tiling="on"]::view-transition-group(fluid-sidebar),
+:root.layout-vt[data-tiling="on"]::view-transition-group(fluid-pane) {
     border-radius: var(--r-window);
 }
 
@@ -16969,4 +16983,14 @@ pre.gallery-code {
 :root.layout-vt::view-transition-new(*) {
     animation-duration: var(--t-fade);
     animation-timing-function: var(--ease-glide);
+}
+
+:root.layout-vt::view-transition-old(fluid-sidebar),
+:root.layout-vt::view-transition-old(fluid-pane) {
+    animation: fluid-fade-out 110ms var(--ease-exit) both;
+}
+
+:root.layout-vt::view-transition-new(fluid-sidebar),
+:root.layout-vt::view-transition-new(fluid-pane) {
+    animation: fluid-fade var(--t-glide) var(--ease-glide) 80ms both;
 }
