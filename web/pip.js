@@ -501,6 +501,14 @@ function Item({ item, last, busy, conversationId }) {
         return line && html`<div class="pip-event"><span>${line}</span></div>`;
     }
 
+    // A page it showed in a reply (`artifact_inline`): in this panel, a line like its other work.
+    if (item.type === "inline") {
+        return html`<div class="pip-steps">
+            <span class="pip-tick"><${Icon} name="check" size=${10} /></span>
+            <span>${summarize([item.step], false)}</span>
+        </div>`;
+    }
+
     if (item.type === "activity") {
         const thinking =
             item.steps.at(-1)?.streaming && item.steps.at(-1).block.type === "thinking";
