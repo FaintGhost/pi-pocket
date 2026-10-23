@@ -1674,6 +1674,71 @@ const strings: Record<string, string> = {
     "theme, built in": "主题，内置",
     unread: "未读",
     worktree: "工作树",
+    "Open it in the artifact viewer, at this version": "在产物查看器中打开这个版本",
+    "No sessions match the filters.": "没有符合筛选条件的会话。",
+    Fluid: "流式",
+    "Message box: from extensions": "输入框：来自扩展",
+    "Publish it to anyone with a link": "发布给任何持有链接的人",
+    Share: "分享",
+    "Peeks: other sessions' live work beside this one": "速览：其他会话的实时进展，就在本会话旁边",
+    "Auto follows your system's reduced-motion setting. Fluid adds springs, staggered entrances, and layout changes that morph":
+        "自动跟随系统的减少动效设置。流式会加上弹簧、错开的入场，以及形变的布局变化",
+    "Loading earlier messages": "正在加载更早的消息",
+    "With none checked, subagents and linked sessions run on their session's model, and Pi cannot choose another. Check some, and they run only on those: on the session's model when it is checked, otherwise on a checked model that Pi chooses to suit the work. Pi cannot use any other.":
+        "都不勾选时，子代理和关联会话跑在各自会话的模型上，Pi 不能另选。勾选之后，它们只会跑在这些模型上：会话自己的模型被勾选时就用它，否则由 Pi 挑一个适合当前工作的已勾选模型。其他模型一律不用。",
+    "Text size in pixels": "字号（像素）",
+    "Fonts for": "字体",
+    "Text font": "正文字体",
+    "Code font": "代码字体",
+    Ligatures: "连字",
+    Off: "已关闭",
+    "Theme's own": "主题自带",
+    "Font preview": "字体预览",
+    "The quick brown fox jumps over the lazy dog.": "敏捷的棕色狐狸跃过懒狗。",
+    "Emphasis.": "强调。",
+    "Duplicate to change": "复制后修改",
+    "Until I end it": "直到我结束",
+    "A day": "一天",
+    "A week": "一周",
+    "A month": "一个月",
+    "Link copied. Anyone with it can open the page.": "已复制链接。拿到链接的人都能打开页面。",
+    End: "结束",
+    "stays until you end it": "一直有效，直到你结束",
+    "follows the newest version": "跟随最新版本",
+    Shows: "显示内容",
+    Lasts: "有效期",
+    Newest: "最新",
+    "Stays at this version, whatever you publish after.": "固定在此版本，之后发布什么都不改变。",
+    "Follows the artifact: every new version shows here too.": "跟随产物：每个新版本也会显示在此。",
+    "Publishing…": "正在发布…",
+    "Publish link": "发布链接",
+    "Reading the links": "正在读取链接",
+    "No link yet. A published page stays out of the app, and out of everything an invite to this session gave.":
+        "还没有链接。已发布的页面既不在应用内，也不在本会话邀请所含的范围内。",
+    "A published page needs no sign-in: anyone with its address can open it. It is the artifact's own sandboxed page, which still cannot reach this app or its cookies.":
+        "已发布的页面无需登录：任何拿到地址的人都能打开。它是产物自身的沙箱页面，仍无法访问本应用及其 Cookie。",
+    "This version could not be loaded.": "无法加载此版本。",
+    "Show in the file manager": "在文件管理器中显示",
+    "On a file path: show it in the server machine's file manager (owner)":
+        "在文件路径上：在服务器所在机器的文件管理器中显示（所有者）",
+    "Continue a Pi session…": "继续 Pi 会话…",
+    or: "或",
+    "Message time": "消息时间",
+    "Move to queue": "移到队列",
+    "Steer now": "立即发送",
+    "Interrupt?": "打断？",
+    "Tap again to stop the run and send this now. The other queued messages stay queued":
+        "再点一次即停止本次运行并立即发送；队列中的其他消息仍留在队列",
+    "Stops the run right now (also its tool call), then sends this one. The other queued messages stay queued":
+        "立即停止本次运行（包括工具调用），然后发送这条消息；队列中的其他消息仍留在队列",
+    "Stops the run right now (also its tool call) and clears the queue, then sends it":
+        "立即停止本次运行（包括工具调用）并清空队列，然后发送",
+    "Shown in the file manager on the server's machine.": "已在服务器所在机器的文件管理器中显示。",
+    "messages, by words": "按关键词找消息",
+    "the project's own skills and model settings": "项目自身的技能与模型设置",
+    "lessons Pi keeps across sessions": "Pi 跨会话保留的经验",
+    "Close the subagents board": "关闭子代理面板",
+    "subagents in every session": "所有会话里的子代理",
 };
 
 const templates: Record<string, string> = {
@@ -2039,6 +2104,29 @@ const templates: Record<string, string> = {
     "Waiting for approval: {{call}}": "等待批准：{{call}}",
     "Working on: {{asked}}": "正在处理：{{asked}}",
     "{{name}}, {{state}}: {{doing}}": "{{name}}，{{state}}：{{doing}}",
+    "The conversation's, in pixels: any from {{min}} to {{max}}":
+        "会话的字号，单位像素：{{min}} 到 {{max}} 之间任意值",
+    "Fonts for {{name}}": "{{name}} 的字体",
+    "{{name}} comes with the app: its fonts stay as they are.":
+        "{{name}} 随应用提供：字体保持不变。",
+    "version {{version}}, pinned": "版本 {{version}}，已固定",
+    "ends {{when}}": "{{when}} 结束",
+    "Share {{title}}": "分享 {{title}}",
+    "Version {{version}}": "版本 {{version}}",
+    "End the link to {{title}}? Anyone who has it can no longer open it.":
+        "结束指向 {{title}} 的链接？持有链接的人将无法再打开。",
+    "Links start at {{origin}}, so whoever opens one must be able to reach it: a tunnel's address works for anyone.":
+        "链接以 {{origin}} 开头，打开链接的人必须能访问到它：隧道地址对任何人都有效。",
+    "the artifact “{{title}}”": "产物“{{title}}”",
+    "the file “{{name}}”": "文件“{{name}}”",
+    "{{source}} offered a message, but you can only view here.":
+        "{{source}} 想插入一条消息，但你在此只能查看。",
+    "{{source}} added a message to your box: read it, then send it.":
+        "{{source}} 已向输入框添加一条消息：先阅读，再发送。",
+    "Show in the file manager ({{key}}+click a path)": "在文件管理器中显示（{{key}}+点击路径）",
+    "From {{source}}:": "来自 {{source}}：",
+    "Show {{count}} earlier step": "显示更早的 {{count}} 步",
+    "Show {{count}} earlier steps": "显示更早的 {{count}} 步",
 };
 
 export default function zhCnUi() {

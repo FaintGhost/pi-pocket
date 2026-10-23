@@ -594,7 +594,11 @@ export function SubagentsBoard() {
             return;
         }
 
-        if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+        // Alt with an arrow stays the app's: Alt+↑/↓ switches sessions.
+        if (
+            event.altKey ||
+            !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+        ) {
             return;
         }
 
