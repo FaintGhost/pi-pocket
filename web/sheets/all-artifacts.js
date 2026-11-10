@@ -26,7 +26,7 @@ function bySession(entries) {
 /** One session's artifacts, in a frame of its own: a header with the session, then a row for each. */
 function Group({ group, open }) {
     const cwd = store.state.sessions.find((entry) => entry.id === group.session)?.cwd;
-    const title = group.title || `Session ${group.session}`;
+    const title = group.title || t("Session {{id}}", { id: group.session });
 
     return html`<div class="overview-group">
         <div class="overview-head">
@@ -49,7 +49,10 @@ function Group({ group, open }) {
                 </span>
                 <span
                     class="overview-version"
-                    title=${`Current version: ${entry.current}, of ${entry.versions}`}
+                    title=${t("Current version: {{current}}, of {{total}}", {
+                        current: entry.current,
+                        total: entry.versions,
+                    })}
                 >
                     v${entry.current}
                     ${entry.versions > 1 && html`<span class="muted"> / ${entry.versions}</span>`}
@@ -90,12 +93,12 @@ export function AllArtifactsSheet() {
     };
 
     return html`<${Sheet} title=${t("All artifacts")} onClose=${closeSheet} wide=${true}>
-        ${entries === null && failed === null && html`<${Loader} label="Looking" />`}
+        ${entries === null && failed === null && html`<${Loader} label=${t("Looking")} />`}
         ${failed !== null && html`<p class="warn">${failed}</p>`}
         ${
             entries?.length === 0 &&
             html`<p class="muted">
-                No artifacts yet. Ask Pi to build something you can look at: a chart, a demo, a game.
+                ${t("No artifacts yet. Ask Pi to build something you can look at: a chart, a demo, a game.")}
             </p>`
         }
         ${bySession(entries ?? []).map(
