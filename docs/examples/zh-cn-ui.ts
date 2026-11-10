@@ -2500,6 +2500,7 @@ const templates: Record<string, string> = {
     "in {{time}}": "{{time}}后",
     "sent {{when}}": "发出于 {{when}}",
     "{{amount}} spent": "已花费 {{amount}}",
+    "Current version: {{current}}, of {{total}}": "当前版本：第 {{current}} 版，共 {{total}} 版",
 };
 
 export default function zhCnUi() {
