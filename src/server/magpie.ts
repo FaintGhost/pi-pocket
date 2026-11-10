@@ -288,6 +288,8 @@ export class Magpie {
 
         const label = text(each.magpie_label);
         const name = text(each.display_name) ?? id;
+        // A routing group wears `magpie_label: "… · routing group"`; older gateways named them `group/<name>`.
+        const routing = /routing group/i.test(label ?? "") || id.startsWith("group/");
         const modalities = Array.isArray(each.modalities?.input)
             ? (each.modalities!.input as unknown[])
             : [];
@@ -297,8 +299,8 @@ export class Magpie {
             name,
             from:
                 label?.split("·").at(-1)?.trim() ??
-                (id.startsWith("group/") ? "routing group" : (id.split("/")[0] ?? "")),
-            group: id.startsWith("group/"),
+                (routing ? "routing group" : (id.split("/")[0] ?? "")),
+            group: routing,
             contextWindow: count(each.context_length, 128_000),
             maxTokens: count(each.max_output_tokens, 8_192),
             reasoning: each.reasoning === true,
