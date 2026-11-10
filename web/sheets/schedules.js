@@ -57,6 +57,12 @@ export function SchedulesSheet() {
                             <div class="muted small">
                                 ${schedule.repeat ? `${schedule.repeat} · ${t("next")} ${formatWhen(schedule.next)}` : formatWhen(schedule.next)} · ${t("set by")} ${setBy(schedule.by)}${archived ? ` · ${t("session archived")}` : ""}
                             </div>
+                            ${
+                                schedule.skipped > 0 &&
+                                html`<div class="muted small" data-part="schedule-skipped">
+                                    Skipped ${schedule.skipped === 1 ? "once" : `${schedule.skipped} times`}, last ${formatWhen(schedule.skippedAt)}: its last message still waits in the queue
+                                </div>`
+                            }
                         </div>
                         ${
                             steer &&

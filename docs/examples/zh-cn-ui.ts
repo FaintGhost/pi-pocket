@@ -1995,6 +1995,10 @@ const strings: Record<string, string> = {
     "Add a model ID by hand": "手动添加模型 ID",
     "Background commands": "后台命令",
     "Answer it where it waits": "在它等待的地方回答",
+    "Stop (Esc twice). Queued messages are held until someone sends them":
+        "停止（连按两次 Esc）。排队的消息会留到有人发送为止",
+    "Send them to Pi, in their order": "按顺序发给 Pi",
+    "Withdraw: Pi will not get it": "撤回：Pi 不会收到",
 };
 
 const templates: Record<string, string> = {
