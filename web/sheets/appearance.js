@@ -114,7 +114,7 @@ function LookCard({ id }) {
             ${look.builtIn && html`<small>${t("built in")}</small>`}
             ${look.colors && html`<small>${t("own colors")}</small>`}
         </span>
-        ${look.description && html`<span class="look-detail">${look.description}</span>`}
+        ${look.description && html`<span class="look-detail">${t(look.description)}</span>`}
         ${look.problem && html`<span class="look-problem">${look.problem}</span>`}
     </button>`;
 }

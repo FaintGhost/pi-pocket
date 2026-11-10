@@ -2045,6 +2045,12 @@ const strings: Record<string, string> = {
     "was stopped": "已被停止",
     "The answer could not be read. Send it again: it goes once.":
         "无法读取发送结果。请重发一次：它只会发送一次。",
+    "Send the other way: queue when Steer is chosen, steer when Queue is":
+        "反向发送：选了 Steer 时排队，选了 Queue 时改为插入引导",
+    "The app's own look: soft tiles over the colors you choose.":
+        "应用本来的外观：在你选的颜色上铺一层柔和的色块。",
+    "Calm and dark for long reading: warm brown-grey, warm off-white text, and a muted amber accent. One readable column and quiet tool calls.":
+        "适合长时间阅读的沉稳深色：暖棕灰底、暖白字，配一点低饱和的琥珀色。单列易读，工具调用安静显示。",
 };
 
 const templates: Record<string, string> = {
