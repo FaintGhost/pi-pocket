@@ -206,7 +206,11 @@ function tick(record) {
     const spent = record.spent;
     const now = performance.now();
     const stopped = () =>
-        new Error(`${record.title} was stopped in this browser: it redraws without end`);
+        new Error(
+            t("{{title}} was stopped in this browser: it redraws without end", {
+                title: record.title,
+            }),
+        );
 
     if (spent.held === turn) {
         throw stopped();
@@ -225,7 +229,7 @@ function tick(record) {
         spent.held = turn;
 
         if (liveRecord(record)) {
-            fail(record, new Error("it redraws without end"), "was stopped");
+            fail(record, new Error(t("it redraws without end")), "was stopped");
         }
 
         throw stopped();
@@ -257,7 +261,7 @@ function chargeOpen(record) {
         spent.inTurn > HELD_OPENS ||
         (spent.inTurn >= SLOW_OPENS && now - spent.turnSince > HELD_MS)
     ) {
-        fail(record, new Error("it redraws without end"), "was stopped");
+        fail(record, new Error(t("it redraws without end")), "was stopped");
 
         return false;
     }
@@ -350,7 +354,7 @@ function reason(error) {
         text = "";
     }
 
-    return text.trim() === "" ? "it gave no reason" : text;
+    return text.trim() === "" ? t("it gave no reason") : text;
 }
 
 /** Run a cleanup; one that fails says so in the console, and the rest still run. */
@@ -543,13 +547,19 @@ async function load(entry) {
         ) {
             throw new Error(
                 typeof needs === "number" && needs < OLDEST_POCKET_API
-                    ? `it was written for version ${needs} of the app's extension API, and this app loads ${OLDEST_POCKET_API} to ${POCKET_API}`
-                    : `it needs version ${needs} of the app's extension API, and this app has ${POCKET_API}`,
+                    ? t(
+                          "it was written for version {{needs}} of the app's extension API, and this app loads {{oldest}} to {{api}}",
+                          { needs, oldest: OLDEST_POCKET_API, api: POCKET_API },
+                      )
+                    : t(
+                          "it needs version {{needs}} of the app's extension API, and this app has {{api}}",
+                          { needs, api: POCKET_API },
+                      ),
             );
         }
 
         if (typeof loaded.default !== "function") {
-            throw new Error("it has no default export function");
+            throw new Error(t("it has no default export function"));
         }
 
         const dispose = await loaded.default(record.pocket);
@@ -588,7 +598,7 @@ function fail(record, error, how) {
     record.error = reason(error);
     record.how = how;
     console.error(`${record.title}'s browser module ${how}`, error);
-    notify("error", `${record.title} ${how} ${t("in this browser:")} ${record.error}`);
+    notify("error", `${record.title} ${t(how)} ${t("in this browser:")} ${record.error}`);
     redraw();
 }
 
@@ -2013,7 +2023,7 @@ function drawCall(record, run, session, fallback, name) {
             // These readers run during rendering. Consume a rejected promise too, before stopping the module.
             Promise.resolve(value).catch(() => {});
 
-            throw new Error(`${name} must return its value directly, not a promise`);
+            throw new Error(t("{{name}} must return its value directly, not a promise", { name }));
         }
 
         return value;
@@ -2496,7 +2506,7 @@ function throwsSomething(run) {
         try {
             return run.apply(this, args);
         } catch (error) {
-            throw error ?? new Error(NO_REASON);
+            throw error ?? new Error(t(NO_REASON));
         }
     };
 
@@ -2649,7 +2659,7 @@ options[RENDER_HOOK] = (vnode) => {
         try {
             beforeRender(vnode);
         } catch (error) {
-            throw error ?? new Error(NO_REASON);
+            throw error ?? new Error(t(NO_REASON));
         }
     }
 };
@@ -2666,7 +2676,7 @@ function framedFence(spec) {
     if (!framedFences.has(spec.component)) {
         const Framed = (props) =>
             html`<${Guard}
-                name=${`Fence ${spec.id}`}
+                name=${t("Fence {{id}}", { id: spec.id })}
                 reset=${props.source}
                 fallback=${html`<pre data-lang=${props.lang}><code>${props.source}</code></pre>`}
             >

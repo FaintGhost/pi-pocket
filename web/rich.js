@@ -81,7 +81,7 @@ export function previewDocument(source) {
  * HTML drawn as a page, with its scripts off: a frame of its own, without `allow-scripts`, so nothing in it runs, and
  * same-origin only so the app can measure it and fit the frame to it. Tap Run (`RunFrame`) for its scripts.
  */
-export function HtmlPreview({ source, title = "Preview" }) {
+export function HtmlPreview({ source, title = t("Preview") }) {
     const ref = useRef(null);
     const [height, fitHeight, resetFit] = useFitHeight(MIN_HEIGHT * 3, MIN_HEIGHT, MAX_HEIGHT);
     const page = useMemo(() => previewDocument(source), [source]);

@@ -67,7 +67,7 @@ export function AgentTile({ agent, folder, selected = false, onActivate, onOpen 
         class=${`agent-tile ${state} ${selected ? "on" : ""}`}
         data-peek=${agent.conversationId}
         data-peek-kind="agent"
-        title=${`${agent.name}: ${doing}`}
+        title=${t("{{name}}: {{doing}}", { name: agent.name, doing })}
         aria-label=${t("{{name}}, {{state}}: {{doing}}", {
             name: agent.name,
             state: stateLabel,

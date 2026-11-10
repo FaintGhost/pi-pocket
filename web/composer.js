@@ -461,15 +461,25 @@ function HeldBar({ blocked, onEdit }) {
         item.by === undefined
             ? ""
             : item.by === me?.id
-              ? " · you"
-              : ` · ${users.find((user) => user.id === item.by)?.name ?? "someone"}`;
+              ? t(" · you")
+              : t(" · {{name}}", {
+                    name: users.find((user) => user.id === item.by)?.name ?? t("someone"),
+                });
 
     return html`<div class="held-bar" data-part="held">
         <span class="grow">
-            <strong>${held.length === 1 ? "1 message held." : `${held.length} messages held.`}</strong> Stop kept ${held.length === 1 ? "it" : "them"} from Pi until sent.
+            <strong>${
+                held.length === 1
+                    ? t("1 message held.")
+                    : t("{{count}} messages held.", { count: held.length })
+            }</strong> ${
+                held.length === 1
+                    ? t("Stop kept it from Pi until sent.")
+                    : t("Stop kept them from Pi until sent.")
+            }
         </span>
         <button class="link small" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-            ${open ? "Hide" : "Show"}
+            ${t(open ? "Hide" : "Show")}
         </button>
         ${
             steer &&
@@ -479,7 +489,7 @@ function HeldBar({ blocked, onEdit }) {
                 title=${t("Send them to Pi, in their order")}
                 onClick=${() => attempt(actions.sendHeld)}
             >
-                Send
+                ${t("Send")}
             </button>`
         }
         ${
@@ -488,7 +498,7 @@ function HeldBar({ blocked, onEdit }) {
                 ${held.map(
                     (item) => html`<div class="queued" key=${item.key}>
                         <span class="queued-mode">
-                            ${item.mode === "steer" ? "Steer" : "Queue"}
+                            ${t(item.mode === "steer" ? "Steer" : "Queue")}
                             <span class="muted">${heldBy(item)}</span>
                         </span>
                         <span class="queued-text">${(item.text ?? "").replace(FROM, "")}</span>
@@ -502,7 +512,7 @@ function HeldBar({ blocked, onEdit }) {
                                 title=${t("Take it back into the message box to change it")}
                                 onClick=${() => onEdit(item)}
                             >
-                                Edit
+                                ${t("Edit")}
                             </button>`
                         }
                         ${
@@ -1093,7 +1103,10 @@ export function Composer() {
             store.state.replyQuote &&
             (parsed || shell || template || text.trimStart().startsWith("/skill:"))
         ) {
-            return notify("info", "A quote cannot go with a command. Remove the quote to run it.");
+            return notify(
+                "info",
+                t("A quote cannot go with a command. Remove the quote to run it."),
+            );
         }
 
         // What shows is what goes: words still coming would land in the emptied box.
@@ -2237,8 +2250,8 @@ function SpeedPart({ stats }) {
             rate !== undefined &&
             html`<span class="rate">
                 <span class="num">${rate < 9.95 ? rate.toFixed(1) : Math.round(rate)}</span>${" "}
-                <span class="long">tokens/s</span>
-                <span class="short">tok/s</span>
+                <span class="long">${t("tokens/s")}</span>
+                <span class="short">${t("tok/s")}</span>
             </span>`
         }
         ${

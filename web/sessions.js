@@ -244,12 +244,14 @@ const readClosed = () => {
 
 /** The fold's name for a screen reader: how many, and what its dot says (`aria-expanded` says whether they show). */
 function foldLabel(kids, trouble) {
-    const count = `${kids} linked ${kids === 1 ? "session" : "sessions"}`;
+    const count = t(kids === 1 ? "{{count}} linked session" : "{{count}} linked sessions", {
+        count: kids,
+    });
 
     return trouble === "waiting"
-        ? `${count}, one needs you`
+        ? t("{{count}}, one needs you", { count })
         : trouble === "failed"
-          ? `${count}, one failed`
+          ? t("{{count}}, one failed", { count })
           : count;
 }
 
@@ -891,11 +893,13 @@ function SessionRow({
         need === "ask"
             ? ask && `${ask.tool} · ${ask.subject}`
             : need === "failed"
-              ? `Run failed${session.failure ? `: ${session.failure}` : ""}`
+              ? session.failure
+                  ? t("Run failed: {{failure}}", { failure: session.failure })
+                  : t("Run failed")
               : need === "agents"
                 ? failed === 1 && names.length > 0
-                    ? `Subagent ${names[0]} failed`
-                    : `${failed} subagents failed`
+                    ? t("Subagent {{name}} failed", { name: names[0] })
+                    : t("{{count}} subagents failed", { count: failed })
                 : undefined;
     // A failed subagent is dealt with by someone who steers; a failed run is only seen, which anyone can do.
     const dismisses =
@@ -2135,7 +2139,12 @@ function AllSessions({ compact = false }) {
             return;
         }
 
-        notify("info", `${allow ? "Allowed" : "Denied"}: ${truncate(ask.subject, 60)}`);
+        notify(
+            "info",
+            t(allow ? "Allowed: {{what}}" : "Denied: {{what}}", {
+                what: truncate(ask.subject, 60),
+            }),
+        );
         setMoved(id);
         setTimeout(() => setMoved((now) => (now === id ? null : now)), 2500);
         setAsking(next);
@@ -2447,8 +2456,16 @@ function AllSessions({ compact = false }) {
                               html`<span
                                   class=${`group-trouble ${trouble}`}
                                   role="img"
-                                  aria-label=${trouble === "waiting" ? "A session needs you" : "A session failed"}
-                                  title=${trouble === "waiting" ? "A session here needs you" : "A session here failed"}
+                                  aria-label=${t(
+                                      trouble === "waiting"
+                                          ? "A session needs you"
+                                          : "A session failed",
+                                  )}
+                                  title=${t(
+                                      trouble === "waiting"
+                                          ? "A session here needs you"
+                                          : "A session here failed",
+                                  )}
                               ></span>`
                           }
                           <span class="group-count" data-part="session-group-count">
@@ -2490,7 +2507,9 @@ function AllSessions({ compact = false }) {
                                 data-part="session-more"
                                 onClick=${() => setAllNeeds(true)}
                             >
-                                Show ${group.rows.length - rows.length} more
+                                ${t("Show {{count}} more", {
+                                    count: group.rows.length - rows.length,
+                                })}
                             </button>`
                         }
                     </div>
@@ -2797,7 +2816,9 @@ function RailTiles() {
                 key=${session.id}
                 class=${`ws ${session.id === conversationId ? "active" : ""} ${session.busy ? "busy" : ""} ${session.waiting ? "waiting" : ""} ${session.background > 0 ? "has-background" : ""}`}
                 style=${`--i:${index}`}
-                title=${`${session.title ?? t("New session")}${index < 9 ? ` (Alt+${index + 1})` : ""}`}
+                title=${`${session.title ?? t("New session")}${
+                    index < 9 ? t(" (Alt+{{key}})", { key: `Alt+${index + 1}` }) : ""
+                }`}
                 aria-label=${`${session.title ?? t("New session")}${session.waiting ? `, ${t("needs you")}` : session.busy ? `, ${t("working")}` : session.background > 0 ? `, ${t("running commands in the background")}` : ""}`}
                 aria-current=${session.id === conversationId ? "page" : undefined}
                 onClick=${() => navigate(session.id)}

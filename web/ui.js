@@ -315,7 +315,7 @@ function codeBlock(pre, fold) {
     copy.className = "copy";
     copy.type = "button";
     copy.dataset.copy = "";
-    copy.textContent = "Copy";
+    copy.textContent = t("Copy");
     pre.replaceWith(wrap);
 
     if (kind) {
@@ -329,7 +329,7 @@ function codeBlock(pre, fold) {
     head.className = "code-head";
     head.dataset.part = "code-head";
     label.className = "code-lang";
-    label.textContent = name || "text";
+    label.textContent = name || t("text");
     head.append(label, copy);
     wrap.append(head, pre);
 
@@ -924,8 +924,8 @@ document.addEventListener("click", (event) => {
 
     copyText(pre?.innerText ?? "").then(
         () => {
-            button.textContent = "Copied";
-            setTimeout(() => (button.textContent = "Copy"), 1200);
+            button.textContent = t("Copied");
+            setTimeout(() => (button.textContent = t("Copy")), 1200);
         },
         () => notify("error", t("Could not copy.")),
     );
@@ -2119,7 +2119,7 @@ export function PlaceTile({ place }) {
         type="button"
         class=${`place ${place.on ? "on" : ""}`}
         data-place=${place.id}
-        aria-label=${place.count > 0 ? `${place.label}, ${place.count} ${place.counted ?? ""}`.trim() : place.badge ? `${place.label}, ${place.badge}` : place.dot ? `${place.label}, ${place.dotLabel ?? "a page open"}` : place.label}
+        aria-label=${place.count > 0 ? `${place.label}, ${place.count} ${place.counted ?? ""}`.trim() : place.badge ? `${place.label}, ${place.badge}` : place.dot ? `${place.label}, ${place.dotLabel ?? t("a page open")}` : place.label}
         aria-pressed=${place.on === undefined ? undefined : place.on ? "true" : "false"}
         onClick=${place.run}
     >

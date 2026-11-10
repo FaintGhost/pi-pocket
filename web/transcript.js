@@ -209,7 +209,7 @@ function MessageExtras({ entry, attachments }) {
                     (path) =>
                         html`<button
                             class="chip"
-                            title=${`Sent with the message: ${path}`}
+                            title=${t("Sent with the message: {{path}}", { path })}
                             onClick=${() => openFile(path)}
                         >
                             📄 ${path.split("/").pop()}
@@ -612,7 +612,7 @@ function LinkedMessage({ entry, view, address, text, attachments, fresh }) {
     const id = view.linkedPeers?.[address];
     const session =
         id === undefined ? undefined : store.state.sessions.find((each) => each.id === id);
-    const name = session ? (session.title ?? "New session") : undefined;
+    const name = session ? (session.title ?? t("New session")) : undefined;
     const lines = text.split("\n").length;
     const folds = lines > LINKED_FOLD_LINES || text.length > LINKED_FOLD_CHARS;
 
@@ -1322,7 +1322,7 @@ function ToolStep({
                 html`<${EntryImages}
                     entryId=${result.id}
                     count=${result.images}
-                    label=${`${call.name} image`}
+                    label=${t("{{tool}} image", { tool: call.name })}
                 />`,
             );
         }
@@ -3393,13 +3393,13 @@ function LiveLine({ live, approvals, start, entries, conversationId }) {
     } else if (limit) {
         state = t("Waiting for {{who}}", { who: limitWho(limit) });
     } else if (retry) {
-        state = "Retrying";
+        state = t("Retrying");
     } else if ((live.compactions ?? []).length > 0) {
-        state = "Compacting context";
+        state = t("Compacting context");
     } else if (working || (partial.length > 0 && partial.at(-1).type !== "thinking")) {
-        state = "Working";
+        state = t("Working");
     } else {
-        state = "Thinking";
+        state = t("Thinking");
     }
 
     const thoughtId = `live-thought-${conversationId}`;
@@ -4215,7 +4215,7 @@ export function Transcript() {
             ${
                 failure &&
                 html`<div class="error-box run-failure" data-part="run-failure" role="alert">
-                    Run failed: ${failure}
+                    ${t("Run failed: {{failure}}", { failure })}
                 </div>`
             }
             ${

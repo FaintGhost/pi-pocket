@@ -177,7 +177,7 @@ export function QuoteReplyButton() {
             at.shown.reply &&
             html`<button type="button" class="quote-reply-action" onClick=${reply}>
                 <${Icon} name="reply" size=${14} stroke=${2} />
-                <span>Reply</span>
+                <span>${t("Reply")}</span>
             </button>`
         }
         ${

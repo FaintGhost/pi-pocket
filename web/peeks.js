@@ -495,7 +495,10 @@ function PeekAsk({ approval, compact, who }) {
     return html`<div class="peek-ask" title=${`${approval.subject}\n\n${approval.reason}`}>
         <span class="peek-ask-tool mono">
             <${Icon} name="shield" size=${12} />${approval.tool}
-            ${who !== undefined && html`<span class="peek-ask-who">${who} asks</span>`}
+            ${
+                who !== undefined &&
+                html`<span class="peek-ask-who">${t("{{who}} asks", { who })}</span>`
+            }
         </span>
         <div class=${`peek-ask-what mono ${wholeOnTile(approval) ? "whole" : ""}`}>
             ${approval.subject}
@@ -527,14 +530,14 @@ function PeekApproval({ approval, me, rule, whole }) {
     if (approval.form) {
         return html`<span class="peek-actions">
             <button class="button small" disabled=${busy} onClick=${() => answer(false)}>
-                Decline
+                ${t("Decline")}
             </button>
             <button
                 class="button small primary"
                 title=${t("Answer it where it waits")}
                 onClick=${() => navigate(approval.conversationId)}
             >
-                Open
+                ${t("Open")}
             </button>
         </span>`;
     }
@@ -835,12 +838,12 @@ function tileProps(tiles, compact) {
                   : status === "working"
                     ? session.busy || compact
                         ? t("working")
-                        : `${someAgents(workingAgents)} working`
+                        : `${someAgents(workingAgents)} ${t("working")}`
                     : status === "done"
-                      ? "done · new"
+                      ? t("done · new")
                       : session.id === lastLeft
-                        ? "just left"
-                        : "pinned";
+                        ? t("just left")
+                        : t("pinned");
 
         return {
             key: session.id,

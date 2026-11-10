@@ -1450,7 +1450,12 @@ export function DiffReview({ active = true, autoFocus = false, covering = false 
             const next = nextLayout(diffPrefs.layout);
 
             setDiffPrefs({ layout: next });
-            notify("info", `${t("Diffs: ")}${next}.`);
+            notify(
+                "info",
+                t("Diffs: {{layout}}.", {
+                    layout: t(LAYOUTS.find(([value]) => value === next)?.[1] ?? next),
+                }),
+            );
         } else if (key === "w") {
             setDiffPrefs({ wrap: !diffPrefs.wrap });
         } else {

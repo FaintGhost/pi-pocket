@@ -33,7 +33,7 @@ function Tabs() {
         ${tabs.map((session) => {
             const open = session.id === conversationId;
             const state = tabState(session, open, isUnread(session.id));
-            const title = session.title ?? "New session";
+            const title = session.title ?? t("New session");
             const number = order.findIndex((each) => each.id === session.id) + 1;
 
             return html`<button
@@ -42,8 +42,8 @@ function Tabs() {
                 data-part="tabstrip-tab"
                 data-state=${state}
                 aria-current=${open ? "page" : undefined}
-                aria-label=${`${title}${STATE_WORDS[state]}`}
-                title=${`${title}${number <= TAB_MAX ? ` (Alt+${number})` : ""}`}
+                aria-label=${`${title}${t(STATE_WORDS[state])}`}
+                title=${`${title}${number <= TAB_MAX ? t(" (Alt+{{key}})", { key: `Alt+${number}` }) : ""}`}
                 style=${`--folder:${folderColor(session.cwd)}`}
                 onClick=${() => navigate(session.id)}
             >

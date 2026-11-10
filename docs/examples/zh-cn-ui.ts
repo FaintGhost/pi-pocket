@@ -1999,6 +1999,52 @@ const strings: Record<string, string> = {
         "停止（连按两次 Esc）。排队的消息会留到有人发送为止",
     "Send them to Pi, in their order": "按顺序发给 Pi",
     "Withdraw: Pi will not get it": "撤回：Pi 不会收到",
+    "LANCET model": "LANCET 模型",
+    "by you": "你",
+    "Change photo": "更换照片",
+    "Add photo": "添加照片",
+    "Remove photo": "移除照片",
+    "OpenAI Compatible": "OpenAI 兼容",
+    "Open in Design": "在设计画布中打开",
+    added: "新增",
+    same: "相同",
+    "Asking…": "正在询问…",
+    "Find models": "查找模型",
+    "Find again": "重新查找",
+    "Add an OpenAI-compatible endpoint": "添加 OpenAI 兼容接入点",
+    "OpenAI-compatible endpoint": "OpenAI 兼容接入点",
+    "Base URL": "基础 URL",
+    "(empty keeps the saved one)": "（留空则保留已保存的密钥）",
+    "No key": "无密钥",
+    "No key (a local server)": "无密钥（本地服务器）",
+    "The endpoint lists no models. Add model IDs by hand.":
+        "该接入点没有列出模型。请手动添加模型 ID。",
+    "It printed nothing yet.": "它还没有输出任何内容。",
+    "Jump to the end": "跳到末尾",
+    "it ends here": "到此结束",
+    "No command has run in the background in this session. Pi starts one with its background tool.":
+        "本会话还没有命令在后台运行过。Pi 会用它的后台工具启动一条。",
+    Answered: "已回答",
+    "Checking who is signed in…": "正在确认登录状态…",
+    Declined: "已婉拒",
+    "Run failed": "运行失败",
+    "The account changed. Reload Pi Pocket.": "账号已变更。请重新加载 Pi Pocket。",
+    "The server cannot be reached. Try again.": "无法连接服务器，请重试。",
+    "This browser cannot keep this draft after a reload. Save it before you reload.":
+        "此浏览器无法在重新加载后保留这份草稿，请先保存再重新加载。",
+    "This browser could not clear its kept notes draft. It may return after a reload.":
+        "此浏览器无法清除留存的笔记草稿，重新加载后它可能又会出现。",
+    "Waiting for a usage limit to clear": "正在等待用量限制解除",
+    "a page open": "有一个页面打开",
+    "it gave no reason": "未给出原因",
+    "it has no default export function": "它没有默认导出函数",
+    "it redraws without end": "它无休止地重绘",
+    text: "纯文本",
+    "tok/s": "令牌/秒",
+    "tokens/s": "令牌/秒",
+    "was stopped": "已被停止",
+    "The answer could not be read. Send it again: it goes once.":
+        "无法读取发送结果。请重发一次：它只会发送一次。",
 };
 
 const templates: Record<string, string> = {
@@ -2501,6 +2547,46 @@ const templates: Record<string, string> = {
     "sent {{when}}": "发出于 {{when}}",
     "{{amount}} spent": "已花费 {{amount}}",
     "Current version: {{current}}, of {{total}}": "当前版本：第 {{current}} 版，共 {{total}} 版",
+    "{{count}} bytes before this not shown: the log grew past what the sheet keeps, or its oldest part went.":
+        "此前的 {{count}} 字节未显示：日志超出了面板保留的量，或最早的部分已被丢弃。",
+    "{{name}}: {{count}} models saved.": "{{name}}：已保存 {{count}} 个模型。",
+    "Edit {{name}}": "编辑 {{name}}",
+    "Models · {{count}} chosen": "模型 · 已选 {{count}} 个",
+    "Remove {{name}}? Its models leave Pi's models.json, and its key leaves Pi's sign-ins.":
+        "移除 {{name}}？它的模型会从 Pi 的 models.json 中移除，密钥也会从 Pi 的登录信息中移除。",
+    "Skipped once, last {{when}}: its last message still waits in the queue":
+        "已跳过 1 次，最近一次 {{when}}：最后一条消息仍在队列中等待",
+    "Skipped {{count}} times, last {{when}}: its last message still waits in the queue":
+        "已跳过 {{count}} 次，最近一次 {{when}}：最后一条消息仍在队列中等待",
+    " (Alt+{{key}})": "（Alt+{{key}}）",
+    " · skipped {{count}}×": " · 已跳过 {{count}} 次",
+    " · you": " · 你",
+    " · {{name}}": " · {{name}}",
+    "1 message held.": "已暂缓 1 条消息。",
+    "Allowed: {{what}}": "已允许：{{what}}",
+    "Denied: {{what}}": "已拒绝：{{what}}",
+    "Diffs: {{layout}}.": "差异视图：{{layout}}。",
+    "Fence {{id}}": "围栏 {{id}}",
+    "Run failed: {{failure}}": "运行失败：{{failure}}",
+    "Stop kept it from Pi until sent.": "已按 Stop 暂缓，发送前 Pi 看不到。",
+    "Stop kept them from Pi until sent.": "已按 Stop 暂缓，发送前 Pi 看不到。",
+    "Subagent {{name}} failed": "子代理 {{name}} 失败",
+    "{{count}} linked session": "{{count}} 个关联会话",
+    "{{count}} linked sessions": "{{count}} 个关联会话",
+    "{{count}} messages held.": "已暂缓 {{count}} 条消息。",
+    "{{count}} subagents failed": "{{count}} 个子代理失败",
+    "{{count}}, one failed": "{{count}}，其中 1 个失败",
+    "{{count}}, one needs you": "{{count}}，其中 1 个需要你",
+    "{{name}} must return its value directly, not a promise":
+        "{{name}} 必须直接返回值，不能返回 Promise",
+    "{{name}}: {{doing}}": "{{name}}：{{doing}}",
+    "{{who}} asks": "{{who}} 询问",
+    "it needs version {{needs}} of the app's extension API, and this app has {{api}}":
+        "它需要扩展 API 版本 {{needs}}，而本应用为 {{api}}",
+    "it was written for version {{needs}} of the app's extension API, and this app loads {{oldest}} to {{api}}":
+        "它按扩展 API 版本 {{needs}} 编写，而本应用加载 {{oldest}} 到 {{api}} 版本",
+    "{{title}} was stopped in this browser: it redraws without end":
+        "{{title}} 已在此浏览器中停止：它无休止地重绘",
 };
 
 export default function zhCnUi() {

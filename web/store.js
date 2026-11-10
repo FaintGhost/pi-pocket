@@ -768,7 +768,7 @@ class ApiError extends Error {
 /** Call the server's API: a GET without `body`, a POST with one, or `options.method`; `options.signal` stops it. */
 export async function api(path, body, options = {}) {
     if (changingAccount) {
-        throw new ApiError(401, "The account changed. Reload Pi Pocket.");
+        throw new ApiError(401, t("The account changed. Reload Pi Pocket."));
     }
 
     const init = {
@@ -2118,8 +2118,8 @@ async function restoreAccount() {
             accountFailures++;
             accountCover.querySelector("p").textContent =
                 accountFailures >= 3
-                    ? "The server cannot be reached. Try again."
-                    : "Checking who is signed in…";
+                    ? t("The server cannot be reached. Try again.")
+                    : t("Checking who is signed in…");
             accountRetry = setTimeout(
                 restoreAccount,
                 Math.min(30_000, 1000 * 2 ** Math.min(accountFailures - 1, 5)),
@@ -2681,7 +2681,10 @@ const current = () => store.state.conversationId;
  */
 const answered = (key) => (answer) => {
     if (answer?.[key] === undefined) {
-        throw new ApiError(undefined, "The answer could not be read. Send it again: it goes once.");
+        throw new ApiError(
+            undefined,
+            t("The answer could not be read. Send it again: it goes once."),
+        );
     }
 
     return answer;
