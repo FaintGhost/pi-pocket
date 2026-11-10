@@ -40,6 +40,16 @@ Since 0.1.0 · Stable
 
 Pi's own folder, usually `~/.pi/agent`. Pi keeps its sign-ins, models, settings, skills, and prompt templates there.
 
+### `cwdOf`
+
+```ts
+cwdOf(conversationId: ConversationId): string;
+```
+
+Since 0.28.0 · Experimental
+
+The conversation's current working folder, or its canonical workspace URI for a remote session. It reads the current agent state, so a module must not cache it across folder changes.
+
 ## Skills
 
 ### `skillPaths`
@@ -98,7 +108,7 @@ subagentModels(): readonly string[];
 
 Since 0.13.1 · Stable
 
-The models that the owner lets subagents use, as `provider/modelId`. While the list is empty (the default), a subagent runs on the model of its own session. Once it has models, subagents and linked sessions run only on those: the model of the session when it is listed and none is named; when it is not listed, the caller must name a listed model. The owner sets it in Menu → Providers → Models for subagents.
+The models that the owner lets subagents use, as `provider/modelId`. While the list is empty (the default), a subagent runs on the model of its own session. Once it has models, subagents and linked sessions run only on those: the model of the session when it is listed and none is named; when it is not listed, the caller must name a listed model. The owner sets it in Menu → Providers → Subagent models.
 
 ### `modelProblem`
 
@@ -162,6 +172,18 @@ The thinking levels, lowest first. They have the names that models and sessions 
 
 ## People and limits
 
+### `registerWorkspaceProvider`
+
+```ts
+registerWorkspaceProvider(scheme: string, provider: WorkspaceProvider): () => void;
+```
+
+Since 0.28.0 · Experimental
+
+Registers the execution environment for a URI scheme such as `ssh`. `resolveCwd` returns the canonical address. It must keep the same scheme. Pi Pocket stores that address and refuses to use the local machine when no provider is active. The returned disposer removes only its own registration. See [Execution environments for workspaces](../workspaces.md).
+
+`WorkspaceProvider` has `env(cwd: string): ExecutionEnv` and `resolveCwd(cwd: string, signal?: AbortSignal): Promise<string>`. `env` returns promptly. It receives the canonical workspace address. `resolveCwd` can check and canonicalize the address. `signal` is optional: in 0.28, session creation and settings do not pass one yet.
+
 ### `requesterOf`
 
 ```ts
@@ -171,6 +193,16 @@ requesterOf(conversationId: ConversationId): string | undefined;
 Since 0.3.0 · Stable
 
 The id of the person that Pi works for in a session now. This is the person whose message started Pi's current work.
+
+### `roleOf`
+
+```ts
+roleOf(personId: string): Role | undefined;
+```
+
+Since 0.27.0 · Experimental
+
+The role of a person by id: `"owner"`, `"guest"`, or `"viewer"`. It is `undefined` for an id that is not a person here. It reads the role that core uses, so a module does not keep its own copy. Use it with `requesterOf` to know if Pi works for the owner. It can change in a minor release. Check that it is there first: `host.roleOf?.(id)`.
 
 ### `heldBack`
 
@@ -191,6 +223,85 @@ onLimitsChanged(listener: () => void): () => void;
 Since 0.12.0 · Stable
 
 Calls `listener` each time the owner changes a spend limit. It returns a function: call it to stop.
+
+## Events
+
+### `on`
+
+```ts
+on<E extends AppEventName>(event: E, listener: (data: AppEvents[E]) => unknown): () => void;
+```
+
+Since 0.22.0 · Experimental
+
+Calls `listener` each time something happens in the app: a session is made, renamed, or archived, a person sends Pi a message, or Pi starts or stops working. Each event comes after the change is stored. A listener runs after the work that caused it, never in its way: one that throws or rejects is logged, and the other listeners still run. Each one gets its own frozen copy of the data. It returns how to stop: pass that to `web.onDispose`. PiP's conversation is its person's alone, and sends no events. An unknown event name throws. See [`AppEvents`](#appevents).
+
+```typescript
+web.onDispose(
+    host.on("run.ended", ({ conversationId, session, outcome, failure }) => {
+        if (conversationId === session && outcome === "failed") {
+            log.push({ session, failure });
+        }
+    }),
+);
+```
+
+## Asking people, hiding values, and the browser
+
+These came in 0.22.0, and are experimental. [People's values and the browser](../people-values.md) tells how to use them together.
+
+### `ask`
+
+```ts
+ask(request: AskRequest, context: Context): Promise<AskAnswer>;
+```
+
+Since 0.22.0 · Experimental
+
+Asks the person Pi works for, on a card in the session, as an approval asks. The card shows the request's `title`, its `text`, a field for each of its `fields` (a hidden one for a `secret`), and a button. Only the person Pi works for can send it (the owner, when nobody is known); anyone who can steer can decline it. It notifies that person, as an approval does.
+
+What they type comes back in the answer's `values`, and nowhere else: not to Pi, into the transcript, or to the other people in the session. A plain Allow, such as from a notification, is refused: each field must be filled in. Do not keep the values in a memo or a document, where a restart would find them. Without a memo, a call that a restart cut off comes back as interrupted, and asks again when Pi tries again. See [`AskRequest`](#askrequest) and [`AskAnswer`](#askanswer).
+
+### `hide`
+
+```ts
+hide(value: HiddenValue): () => void;
+```
+
+Since 0.22.0 · Experimental
+
+Hides a value from what Pi and people read, until the returned function is called. Each one becomes `[label]`:
+
+- in the output of commands as it streams: bash's live output and its result, a `!` command's card, and a check's output. A value split across two chunks is held back until it can be told apart, so up to its length less one character comes later than the rest;
+- in every tool's result (what the model reads, what programs read, and its details, keys too), before it is stored;
+- in people's messages to Pi, the files a message brings along, and an edit sent again: a value pasted there is replaced before the message is stored, sent to the model, or made the session's title. A `!` command that holds one is refused, since it runs as stored.
+
+With `conversationId`, it is hidden in that session and its subagents. A guess that matches shows as `[label]`, so hide only a value that cannot be guessed, never a short code.
+
+It does not reach a file that a command writes (such as bash's spill file for long output), entries from before the value was hidden, or a value that a command changed (encoded, reversed). Hide each form that you expect, such as its base64, as a value of its own. It keeps values out of transcripts by accident: it is not a boundary against a command that leaks a value on purpose. Pass the returned function to `web.onDispose`. See [`HiddenValue`](#hiddenvalue).
+
+### `commandEnv`
+
+```ts
+commandEnv(provider: CommandEnvProvider): () => void;
+```
+
+Since 0.22.0 · Experimental
+
+Adds environment variables to the commands that run in sessions: Pi's bash, people's `!` commands, and Done when's checks. Before each command, each provider gets the command, its folder, and its session, and gives variables to add, or nothing. A later provider's variable wins over an earlier one's. A provider that throws, or takes more than 5 seconds, adds nothing, and the server's log says why; the command still runs. Use it to put a value into `$NAME` for the commands that name it, so the value does not go through Pi. Hide the value with `hide` too. Pass the returned function to `web.onDispose`. See [`CommandEnvProvider`](#commandenvprovider).
+
+### `browser`
+
+```ts
+browser(
+    conversationId: ConversationId,
+    options?: { open?: boolean },
+): Promise<BrowserPageHandle | undefined>;
+```
+
+Since 0.22.0 · Experimental
+
+A session's browser page: the one that Pi's `browser` tool and the people in the session use. With `open: true`, it opens the page when it is not open. It is `undefined` while the Browser module is off, and without `open`, when no page is open. See [`BrowserPageHandle`](#browserpagehandle).
 
 ## Notices and text
 
@@ -292,6 +403,41 @@ What `fetchPublic` takes besides the address.
 - `maxBytes`: the size of the body at most, after it is decoded.
 - `timeoutMs`: the time for the whole request at most, the body included.
 
+## Ordinary sessions
+
+### `sessions`
+
+```ts
+readonly sessions: Sessions;
+```
+
+Since 0.28.0 · Experimental
+
+Lets an extension start an ordinary session, the same kind a person gets from New session. [Starting an ordinary session](../sessions.md) tells you who it acts for, what it checks, and what the new session is.
+
+The call acts as the person that Pi works for in `source`, and that person's checks apply. Give it a `key` that stays the same when the call runs again. A second call with the same `key` returns the session the first call made, and sends its message once. It acts for the person of the first call, and it does not check the model, the folder, or the spend limit again. A `key` of `linkedSessions.start` never finds a session of this API.
+
+#### `sessions.start`
+
+```ts
+start(
+    source: ConversationId,
+    request: { title?: string; cwd?: string; model?: string; thinking?: string; message?: string },
+    key: string,
+): Promise<{ session: ConversationId }>;
+```
+
+Since 0.28.0 · Experimental
+
+Makes a top-level session and, when `message` is given, sends that text as its first message. It returns the new session's id.
+
+- The new session works in `cwd` when supplied, otherwise the server's default folder. `cwd` must name an existing folder and uses the normal folder-picker path rules. A missing folder is refused before a session is made.
+- `model` is `provider/modelId`. It must be a model known here whose provider can be used now. Without it, the session starts on the model a new session would get. The owner's list of models for subagents does not apply.
+- `thinking` is any level. Pi Pocket lowers it to the highest level the model has, or uses the model's lowest when it has none that low. Without it, the session keeps the thinking level it started with.
+- The new session has no `linkedFrom`. It is its own row in the session list, and it can start linked sessions of its own.
+- A source past its spend limit, a person invited to one session, and a PiP source are refused, and nothing is made.
+- A blank `message` is refused, and nothing is made. A `message` is also refused when the session gets no model: no `model` and no default model.
+
 ## Linked sessions
 
 ### `linkedSessions`
@@ -302,7 +448,7 @@ readonly linkedSessions: LinkedSessions;
 
 Since 0.14.0 · Experimental
 
-Lets a tool start sessions from the session that it runs in, and send messages between them, as Agent Teams does. A linked session is an ordinary session. [Starting and messaging sessions](../linked-sessions.md) tells you how they work, what they cannot do, and how to call them.
+Lets a tool start sessions from the session that it runs in, send messages between them, and stop or archive one, as Agent Teams does. A team or orchestration extension uses the same calls. A linked session is an ordinary session. [Starting and messaging sessions](../linked-sessions.md) tells you how they work, what they cannot do, and how to call them.
 
 Each call acts as the person that Pi works for in `source`, and that person's checks apply. Give each call a `key` that stays the same when the call runs again, such as `${api.taskId}:${api.callId}`. A second call with the same `key` does nothing again: it returns what the first call returned.
 
@@ -323,7 +469,7 @@ Makes a session linked to `source` and sends it `message` as its first message. 
 - The new session works in `cwd` when supplied, otherwise the folder of `source`. `cwd` must name an existing folder and uses the normal folder-picker path rules. A blank `cwd` counts as no `cwd`. A relative `cwd` resolves against the folder of the server process, not the folder of the source. `cwd` is since 0.19.0: an older Pi Pocket ignores it and uses the folder of `source`, so a gallery entry that needs it sets `minPocket` to `0.19.0`. It gets a copy of the agent settings of `source`, but not its history.
 - Without `title`, the title is the first line of `message`.
 - `model` is `provider/modelId`. While the owner's list of models for subagents is empty, it must be the model of `source`. Once the list has models, it must be one of them. Without it, the session uses the model of `source` when the list is empty or has it. Otherwise `start` is refused with an error that names the allowed models.
-- `thinking` is a level no higher than the level of `source`. Without it, the session uses the level of `source`. Pi Pocket lowers it to the highest level that the model has.
+- `thinking` can be any level, also one above the level of `source`. Without it, the session uses the level of `source`. Pi Pocket lowers it to the highest level that the model has, or uses the lowest level of the model when it has none that low.
 - When Pi cannot use the model now, `start` makes nothing and throws an error.
 
 #### `linkedSessions.send`
@@ -333,14 +479,42 @@ send(
     source: ConversationId,
     request: { to: string; message: string; steer?: boolean },
     key: string,
-): Promise<void>;
+): Promise<{ answers: boolean }>;
 ```
 
 Since 0.14.0 · Experimental
 
-Sends `message` to the linked session at the address `to`. Without `steer`, the message is a follow-up. With `steer: true`, the session gets it at its next pause. `send` returns when the session takes the message, not when it answers.
+Sends `message` to the linked session at the address `to`. The session gets it at its next pause (since 0.28.0; before, only with `steer: true`). With `steer: false`, it waits for the session's run to end. `send` returns when the session takes the message, not when it answers, with `{ answers }` (since 0.28.0): whether the session's final answer comes back to the source by itself, which it does only when the source started it.
 
-The session that gets the message reads it between tags. Words before it say that the agent of another session wrote it, and that it is a request, not a person's order. They also give the address to reply to.
+The session that gets the message reads it between tags. Words before it say that the agent of another session wrote it, and that it is a request, not a person's order. They also give the address to write to, and say that its final answer goes back by itself when its run ends ([linked-sessions.md](../linked-sessions.md#a-sessions-final-answer-comes-back-by-itself)).
+
+#### `linkedSessions.stop`
+
+```ts
+stop(
+    source: ConversationId,
+    request: { to: string },
+    key: string,
+): Promise<{ busy: boolean }>;
+```
+
+Since 0.28.0 · Experimental
+
+Stops the run of the linked session at the address `to`, and withdraws what waits in its queue. When the session is idle, it has no run to stop, and the call only withdraws what waits in its queue. `busy` is true when it was working. It needs the same access as `send`, and it reaches only a session of this team. An older Pi Pocket has no `stop`: check for it, and set `minPocket` to `0.28.0` when you need it.
+
+#### `linkedSessions.archive`
+
+```ts
+archive(
+    source: ConversationId,
+    request: { to: string; archived?: boolean },
+    key: string,
+): Promise<{ archived: boolean; repeating: number }>;
+```
+
+Since 0.28.0 · Experimental
+
+Archives the linked session at the address `to`. With `archived: false`, it brings the session back. Without `archived`, it archives. `archived` in the result says whether the session is archived now. `repeating` is how many of its repeating schedules keep running: an archive does not stop them. It needs the same access as `send`. An older Pi Pocket has no `archive`.
 
 #### `linkedSessions.list`
 
@@ -361,6 +535,7 @@ interface LinkedSession {
     cwd?: string;
     busy?: boolean;
     archived?: boolean;
+    failed?: string;
 }
 ```
 
@@ -369,7 +544,255 @@ Since 0.14.0 · Experimental
 A linked session, as `list` gives it.
 
 - `address`: the address that the asking session uses for it. It is never the session's id.
-- `title`, `cwd` (its folder), `busy` (Pi works in it now), and `archived`: these are there only when all the people who see the asking session see this session too.
+- `title`, `cwd` (its folder), `busy` (Pi works in it now), `archived`, and `failed`: these are there only when all the people who see the asking session see this session too.
+- `failed` (since 0.28.0): why its last run gave up, the same short line the session list shows. It is there only while that failure stands. A later run clears it, and a run that was stopped leaves none.
+
+## Types for events
+
+### `AppEvents`
+
+```ts
+interface AppEvents {
+    "session.created": {
+        conversationId: number;
+        cwd: string;
+        createdBy?: string;
+        forkedFrom?: number;
+        linkedFrom?: number;
+    };
+    "session.renamed": { conversationId: number; title: string };
+    "session.archived": { conversationId: number; archived: boolean };
+    "message.sent": {
+        conversationId: number;
+        by: string;
+        submissionId: string;
+        text: string;
+        via?: string;
+    };
+    "run.started": { conversationId: number; session: number };
+    "run.ended": {
+        conversationId: number;
+        session: number;
+        outcome: "done" | "failed" | "aborted";
+        failure?: string;
+    };
+}
+```
+
+Since 0.22.0 · Experimental
+
+What each event's listener gets.
+
+- `session.created`: a session in the list was made, by a person, a fork (`forkedFrom`), a linked start (`linkedFrom`), or a resend. `createdBy` is a person's id. Subagents are not sessions in the list, and send none.
+- `session.renamed`, `session.archived`: its new title, or whether it is archived now.
+- `message.sent`: a person's message to Pi, a steer or a queued one too. `by` is their id. `text` is the words as stored, with values that extensions hide already hidden and attachments left out. `via` names what sent it for them, such as PiP or a schedule.
+- `run.started`, `run.ended`: Pi started or stopped working in a conversation. `conversationId` is that conversation, a session's or a subagent's; `session` is the session it belongs to. Since 0.28.0, `run.ended` also says how the run stopped: `outcome` is `done` when it finished, `failed` when it gave up, or `aborted` when it was stopped. `failure` is why it gave up, the same short line the session list shows, and only when `outcome` is `failed`. A session's failure stands until a later run starts.
+
+### `AppEventName`
+
+```ts
+type AppEventName = keyof AppEvents;
+```
+
+Since 0.22.0 · Experimental
+
+The name of an event: `"session.created"`, `"session.renamed"`, `"session.archived"`, `"message.sent"`, `"run.started"`, or `"run.ended"`.
+
+## Types for asking, hiding, and the browser
+
+### `AskRequest`
+
+```ts
+interface AskRequest {
+    readonly conversationId: ConversationId;
+    readonly id: string;
+    readonly taskId: TaskId;
+    readonly callId?: string;
+    readonly title: string;
+    readonly text?: string;
+    readonly fields?: readonly AskField[];
+    readonly submit?: string;
+}
+```
+
+Since 0.22.0 · Experimental
+
+- `id`: unique while the card waits, and the same when the call asks again, such as `${api.taskId}:${api.callId}`. A new ask with the id of one that waits replaces it, and the one before is declined.
+- `taskId`, `callId`: the call that asks, so the card and its answer show with it.
+- `title`: one line, up to 120 characters. `text`: up to 2000.
+- `fields`: up to 6. None makes a question that the button alone answers, such as "Solve the CAPTCHA in the browser, then tap Done".
+- `submit`: the button's words, up to 30 characters. "Send" by default, "Done" with no fields.
+
+### `AskField`
+
+```ts
+interface AskField {
+    name: string;
+    label: string;
+    header?: string;
+    choices?: AskChoice[];
+    multiple?: boolean;
+    other?: boolean;
+    secret?: boolean;
+    placeholder?: string;
+    autocomplete?: string;
+}
+
+interface AskChoice {
+    label: string;
+    description?: string;
+}
+```
+
+Since 0.22.0 · Experimental. `header`, `choices`, `multiple`, `other`, and `AskChoice` since 0.27.0.
+
+- `name`: the value's key in the answer: letters, digits, and `_`, up to 40, starting with a letter. Each field's is its own.
+- `label`: what the card says above the field, one line of up to 80 characters. A field with `choices` has its question here, up to 300.
+- `header`: a short tag over the field, such as "Database", up to 12 characters.
+- `choices`: 2 to 4 answers to pick, shown as buttons, with different labels. A choice's `label` is one line of up to 60 characters, and its `description`, under it, of up to 160. The field's value is the label chosen.
+- `multiple`: with `choices`, the person can choose one or more. The value is their labels, one per line, in the order of `choices`.
+- `other`: with `choices`, the person can type an answer of their own instead, and the value is what they typed. Its `placeholder` is the words of that field while it is empty.
+- A value that is not one of the choices (and with no `other`) is refused, with an error that names the field, never the value.
+- `secret`: a hidden input, as for a password. Not for a field with `choices`.
+- `autocomplete`: a hint for the browser and the phone's keyboard, such as `username`, `current-password`, or `one-time-code`. Not for a field with `choices`.
+
+### `AskAnswer`
+
+```ts
+type AskAnswer =
+    | {
+          readonly answered: true;
+          readonly by: string;
+          readonly values: Readonly<Record<string, string>>;
+      }
+    | { readonly answered: false; readonly by: string };
+```
+
+Since 0.22.0 · Experimental
+
+What the person did. `by` is the name of who answered or declined. Each value is 1 to 4096 characters.
+
+### `HiddenValue`
+
+```ts
+interface HiddenValue {
+    value: string;
+    label: string;
+    conversationId?: number;
+}
+```
+
+Since 0.22.0 · Experimental
+
+- `value`: 4 to 4096 characters. A shorter one would turn up in ordinary output by chance. 2000 values at most are hidden at once.
+- `label`: what shows in its place, as `[label]`, such as `[secret GITHUB_TOKEN]`: 1 to 60 letters, digits, spaces, and `_ . : -`.
+- `conversationId`: only in this session. Without it, in every session.
+
+### `CommandRun`
+
+```ts
+interface CommandRun {
+    readonly conversationId: number;
+    readonly command: string | readonly string[];
+    readonly cwd: string;
+}
+```
+
+Since 0.22.0 · Experimental
+
+A command about to run: its session, the command as the shell gets it (or a program and its arguments), and its folder.
+
+### `CommandEnvProvider`
+
+```ts
+type CommandEnvProvider = (
+    run: CommandRun,
+) => Record<string, string> | undefined | Promise<Record<string, string> | undefined>;
+```
+
+Since 0.22.0 · Experimental
+
+Gives the variables to add to one command. A name is letters, digits, and `_`, not starting with a digit; a value has no NUL. A variable that breaks these is left out. The variables of all providers for one command are 256 KB at most.
+
+### `BrowserTarget`
+
+```ts
+interface BrowserTarget {
+    readonly ref?: string;
+    readonly selector?: string;
+    readonly label?: string;
+    readonly x?: number;
+    readonly y?: number;
+}
+```
+
+Since 0.22.0 · Experimental
+
+What to act on: a ref from the last snapshot (`e12`), a CSS selector, the visible text or label of an element, or a point in CSS pixels of the viewport.
+
+### `BrowserControl`
+
+```ts
+interface BrowserControl {
+    ref: string;
+    role: string;
+    name: string;
+    kind: string;
+    disabled: boolean;
+    inView: boolean;
+    value?: string;
+    placeholder?: string;
+    checked?: boolean;
+    options?: string[];
+    href?: string;
+}
+```
+
+Since 0.22.0 · Experimental
+
+One control of a snapshot, as data, up to 500 of them.
+
+- `role`: `button`, `link`, `textbox`, `checkbox`, `combobox`, and so on, or `clickable` for an element that only looks clickable.
+- `kind`: an input's type (`text`, `password`, `email`, and so on), `textarea`, `select`, or the element's tag.
+- `value`: a field's or a select's value. A password field's is `••••` when it holds one, and never its value.
+- `options`: a select's options, up to 50. `href`: a link's address.
+
+### `BrowserPageHandle`
+
+```ts
+interface BrowserPageHandle {
+    readonly url: string;
+    readonly title: string;
+    snapshot(): Promise<{
+        text: string;
+        controls: BrowserControl[];
+        truncated: boolean;
+        scroll: { y: number; viewport: number; height: number };
+    }>;
+    inspect(
+        target: BrowserTarget,
+    ): Promise<{ label: string; kind: string; editable: boolean; password: boolean }>;
+    navigate(url: string): Promise<void>;
+    click(target: BrowserTarget): Promise<{ label: string; navigated: boolean }>;
+    type(target: BrowserTarget, text: string, options?: { submit?: boolean }): Promise<string>;
+    fill(target: BrowserTarget, value: string): Promise<string>;
+    select(target: BrowserTarget, value: string): Promise<string>;
+    press(key: string): Promise<void>;
+    scroll(target?: BrowserTarget, dy?: number): Promise<string>;
+    waitFor(options: { text?: string; selector?: string; timeoutMs?: number }): Promise<boolean>;
+}
+```
+
+Since 0.22.0 · Experimental
+
+The page, with what Pi's `browser` tool does, but no script to run in it.
+
+- `snapshot`: the page as Pi reads it (`text`), and its controls as data. Refs last until the next snapshot, Pi's too.
+- `inspect`: what a target is, scrolled into view: its description, its `kind`, and whether it is a field (`editable`) or a password field.
+- `fill`: puts a person's value into a field (not a select), replacing what it holds. The target is a ref, a selector, or a label, not a point. It throws and fills nothing when something covers the field, or when the focus does not reach it. The value is not in what it returns, and the snapshot shows a password field's as `••••`. Pi can still read a field's value with its `evaluate`: hide the value with `hide` too.
+- `inspect` with a point (`x`, `y`) says what is at that point, without scrolling or acting on it.
+- `type`, `click`, `select`, `press`, `scroll`, `waitFor`, `navigate`: as the `browser` tool's actions. `navigate` takes an http(s) address, host:port, or a file path.
+- What they return: `type`, `select`, and `scroll` give the description of what they acted on; `click` gives it with whether the page went elsewhere (`navigated`); `waitFor` gives whether what it waited for showed; `navigate` and `press` give nothing.
 
 ## Internal members
 
@@ -377,7 +800,8 @@ The host has more members, for Pi Pocket's built-in modules only. They are not i
 
 - `approvals`: tool calls that wait for a person to allow them.
 - `guard`: Lancet Guard.
-- `schedules`: scheduled messages, for the schedule tool.
+- `schedules`: scheduled messages, for the schedule tool. `schedules.limits` holds the limits in force (`perSession`, `chars`, `repeatMinutes`, `aheadDays`); the schedules module copies the owner's settings into it, so a module should read it and not change it. A server from before 0.24.0 has no `limits`.
+- `background`: commands Pi runs in the background, for the background tool: `start`, `read`, `stop`, `list`, and `limits` (`running`, which the background module copies from the owner's setting). A server from before 0.24.0 has none.
 - `goals`: Done when, for the goals module.
 - `browsers`: the built-in browser, for the browser tool.
 - `memory`: the lessons that Pi keeps across sessions, for the memory tool.
@@ -386,3 +810,4 @@ The host has more members, for Pi Pocket's built-in modules only. They are not i
 - `pip`: what the tools of PiP, the owner's assistant, do.
 - `pipCompaction`: PiP's own summaries when its context is compacted.
 - `gallery`: the extension gallery, for its own routes.
+- `updates`: updates of Pi Pocket itself, for the Updates module's routes. Its status says how the copy was installed (`installKind`: `git`, `npm-global`, `npm-local`, `npx`, or `unknown`) and what stands in the way of an update from the app.

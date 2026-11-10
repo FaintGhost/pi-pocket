@@ -8,9 +8,17 @@ import { Component, createContext, h } from "preact";
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { useDragToClose } from "./gestures.js";
 import { highlight, langOf } from "./highlight.js";
+import { blockMath, inlineMath } from "./math.js";
+import { fenceFor, markdownRevision, mathOn, mountMath } from "./markdown-ext.js";
 import { actions, filesShown, notify, openSheet, store } from "./store.js";
 
-export const html = htm.bind(h);
+// `this[0] = 3` stops htm from keeping the elements a template makes: a kept element keeps the app's tree it was first
+// drawn in, and through the rows of the session list, every tree after it. Templates stay parsed once.
+export const html = htm.bind(function () {
+    this[0] = 3;
+
+    return h.apply(null, arguments);
+});
 
 // ─── Images ──────────────────────────────────────────────────────────────────────
 
@@ -23,6 +31,54 @@ export const fileUrl = (path, conversationId = currentConversation()) =>
 /** The `index`th image stored in a message: a pasted image or one a tool returned. */
 export const entryImageUrl = (entryId, index, conversationId = currentConversation()) =>
     `/api/c/${conversationId}/image/${entryId}/${index}`;
+
+/** Attached types that go to a model that takes images, up to this size (`model-images.ts`). */
+const MODEL_IMAGE_TYPES = new Set([
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "image/heic-sequence",
+]);
+const MAX_MODEL_IMAGE = 5 * 1024 * 1024;
+/** Photos a browser cannot show: the server sends them to the model as JPEG. */
+const HEIC_TYPES = new Set(["image/heic", "image/heif", "image/heic-sequence"]);
+
+/**
+ * A file named with `@` that can go to the model as an image, before the attached ones. It is not in the entry's `files`,
+ * which lists only the text files sent along.
+ */
+const MENTIONED_IMAGE = /(?:^|[\s([{])@(?:"[^"\n]*|[^\s"]*)\.(?:png|jpe?g|gif|webp|heic|heif)\b/i;
+
+/**
+ * Where a sent attachment's thumbnail loads from, or null when it shows as a file chip. `files` are the message's
+ * attachment lines (`{ path, mime, size, noted }`); `entry` the message, with its text and how many images it stores
+ * (`images`). A HEIC or HEIF photo shows the JPEG the model got, the stored image in its place among the attached ones.
+ * Only when that place is sure: its line says it was converted, no file sent by name can be an image, and every
+ * attached image is stored, so a failed one cannot shift another into its place.
+ */
+export function attachedPictureSrc(file, files, entry, conversationId) {
+    if (!file.path || !file.mime.startsWith("image/")) {
+        return null;
+    }
+
+    if (!HEIC_TYPES.has(file.mime)) {
+        return fileUrl(file.path, conversationId);
+    }
+
+    const sent = files.filter(
+        (each) => MODEL_IMAGE_TYPES.has(each.mime) && each.size <= MAX_MODEL_IMAGE,
+    );
+    const mentioned = MENTIONED_IMAGE.test(entry.text ?? "");
+
+    if (!file.noted || mentioned || (entry.images ?? 0) !== sent.length) {
+        return null;
+    }
+
+    return entryImageUrl(entry.id, sent.indexOf(file), conversationId);
+}
 
 /** Where the browser loads `![alt](src)` from. Web and data URLs stay; paths and file:// URLs point at the server. */
 function imageSource(src, conversationId) {
@@ -94,7 +150,47 @@ const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (char) => ESCAPES[
 /** A fence's language as it may be kept: a short name of safe characters, or nothing. */
 const FENCE_NAME = /^[\w+#.-]{1,24}$/;
 
+// Markers are unpredictable and exist only for one parse, so reply HTML cannot impersonate math.
+let mathMarkers = null;
+
+function mathMarker(text, display) {
+    const marker = `pocket-math-${[...crypto.getRandomValues(new Uint32Array(4))].join("-")}`;
+
+    mathMarkers?.set(marker, { text, display });
+
+    return `<code>${marker}</code>`;
+}
+
 marked.use({
+    extensions: [
+        {
+            name: "pocketBlockMath",
+            level: "block",
+            // Only `$$` at the start of a line: marked cuts the paragraph there, and joins its parts with a line break.
+            start: (src) => {
+                const found = mathOn() ? /\n {0,3}\$\$/.exec(src) : null;
+
+                return found === null ? undefined : found.index + 1;
+            },
+            tokenizer(src) {
+                const found = mathOn() && blockMath(src);
+
+                return found ? { type: "pocketBlockMath", ...found } : undefined;
+            },
+            renderer: (token) => `<p>${mathMarker(token.text, true)}</p>`,
+        },
+        {
+            name: "pocketInlineMath",
+            level: "inline",
+            start: (src) => (mathOn() ? src.indexOf("$") : undefined),
+            tokenizer(src) {
+                const found = mathOn() && inlineMath(src);
+
+                return found ? { type: "pocketInlineMath", ...found } : undefined;
+            },
+            renderer: (token) => mathMarker(token.text, token.display),
+        },
+    ],
     renderer: {
         // Task list boxes as characters: the sanitizer drops form controls.
         checkbox: ({ checked }) => (checked ? "☑ " : "☐ "),
@@ -145,12 +241,23 @@ const PURIFY = {
     RETURN_DOM_FRAGMENT: true,
 };
 
+/**
+ * The app's own sanitizer, with its settings read once (`setConfig`): given them on each call, it reads them again for
+ * each reply. Its own instance, so what it is set to and its hooks (below) change nothing for an extension's module that
+ * imports `dompurify` too.
+ */
+const purify = DOMPurify(window);
+
+purify.setConfig(PURIFY);
+
 /** Images the app serves for a conversation (files, stored images, artifacts), or inline data. Nothing else loads. */
 const localImage = (src) =>
     /^\/api\/c\/\d+\/(file\?|image\/)/.test(src) ||
     /^\/a\/\d+\//.test(src) ||
     /^data:image\//i.test(src);
 
+/** Model lists past this many get a box to find a model by. */
+export const MODEL_SEARCH_AT = 8;
 /** Code blocks past this size show without colors: coloring them would hold up the conversation. */
 export const COLOR_LIMIT = 200_000;
 /** Code blocks longer than this many lines fold to their first lines, once they are written whole. */
@@ -196,7 +303,7 @@ function codeBlock(pre, fold) {
     const code = pre.querySelector("code") ?? pre;
     const wrap = document.createElement("div");
     const copy = document.createElement("button");
-    const kind = richKind(name, source);
+    const kind = fenceFor(name) ? "extension" : richKind(name, source);
 
     // The highlighter's output is the source, escaped, in spans of its own: nothing from the reply becomes markup.
     if (lang && source.length <= COLOR_LIMIT) {
@@ -246,10 +353,19 @@ function codeBlock(pre, fold) {
  * it loads, and code blocks are drawn by `codeBlock` (folded when long, if `fold`). Returns the element holding it.
  */
 function sanitize(html, fold) {
-    const fragment = DOMPurify.sanitize(html, PURIFY);
+    const fragment = purify.sanitize(html);
 
     // `src/app.ts` in a reply opens the file: inline code that is a path, not code blocks.
     for (const code of fragment.querySelectorAll("code")) {
+        const math = mathMarkers?.get(code.textContent ?? "");
+
+        if (math !== undefined && !code.closest("pre")) {
+            code.textContent = math.text;
+            code.dataset.part = "inline-math";
+            code.dataset.lang = math.display ? "math-display" : "math-inline";
+            continue;
+        }
+
         // Code in a line of words, for themes; a code block is `code-block`.
         if (!code.closest("pre")) {
             code.dataset.part = "inline-code";
@@ -368,19 +484,35 @@ function fencePage(text) {
 /** The conversation whose markdown is being sanitized, for image paths relative to its folder. */
 let rendering = null;
 
-DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
-    // Before the URL check, so file:// and plain paths become app URLs instead of being dropped.
-    if (node.nodeName === "IMG" && data.attrName === "src") {
-        data.attrValue = imageSource(data.attrValue, rendering);
-    } else if (node.nodeName === "A" && data.attrName === "href") {
-        // `app.ts:42` looks like a URL scheme to the sanitizer; `./app.ts:42` is the same local file.
-        if (/^[a-z][a-z0-9+.-]*:/i.test(data.attrValue) && linkedPath(data.attrValue) !== null) {
-            data.attrValue = `./${data.attrValue}`;
+/**
+ * An element's attribute as the sanitizer reads it next. Before any of its checks (the URL check too), and before the
+ * attributes are read: a hook on each attribute would make it copy its lists of allowed names on each call.
+ */
+function rewrite(node, name, change) {
+    const value = node.getAttribute(name);
+
+    if (value !== null) {
+        const next = change(value.trim());
+
+        if (next !== value) {
+            node.setAttribute(name, next);
         }
+    }
+}
+
+purify.addHook("beforeSanitizeAttributes", (node) => {
+    // Before the URL check, so file:// and plain paths become app URLs instead of being dropped.
+    if (node.nodeName === "IMG") {
+        rewrite(node, "src", (src) => imageSource(src, rendering));
+    } else if (node.nodeName === "A") {
+        // `app.ts:42` looks like a URL scheme to the sanitizer; `./app.ts:42` is the same local file.
+        rewrite(node, "href", (href) =>
+            /^[a-z][a-z0-9+.-]*:/i.test(href) && linkedPath(href) !== null ? `./${href}` : href,
+        );
     }
 });
 
-DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+purify.addHook("afterSanitizeAttributes", (node) => {
     if (node.tagName === "A") {
         node.setAttribute("target", "_blank");
         node.setAttribute("rel", "noopener noreferrer");
@@ -407,7 +539,13 @@ function markdownParts(
     base = null,
     breaks = true,
 ) {
-    const key = `${conversationId ?? ""}\u0000${base ?? ""}\u0000${breaks ? "br" : ""}\u0000${text}`;
+    const key = [
+        markdownRevision(),
+        conversationId ?? "",
+        base ?? "",
+        breaks ? "br" : "",
+        text,
+    ].join("\u0000");
     let out = markdownCache.get(key);
 
     if (out !== undefined) {
@@ -435,9 +573,12 @@ function renderParts(text, conversationId, base, breaks, fold) {
     rendering = conversationId ?? null;
     linkBase = base;
 
+    mathMarkers = new Map();
+
     try {
         return partsOf(sanitize(marked.parse(text, { async: false, breaks }), fold));
     } finally {
+        mathMarkers = null;
         rendering = null;
         linkBase = null;
     }
@@ -497,10 +638,15 @@ export function Markdown({
     conversationId = currentConversation(),
 }) {
     const live = useRef(null);
+    const root = useRef(null);
+
+    useEffect(() => mountMath(root.current));
 
     // Growing text, block by block (`liveBlocks`); a whole page is fenced as one block (`fencePage`), as before.
     if (!cache && fencePage(text) === text) {
-        const settings = `${conversationId ?? ""}\u0000${base ?? ""}\u0000${breaks}`;
+        const settings = [markdownRevision(), conversationId ?? "", base ?? "", breaks].join(
+            "\u0000",
+        );
 
         if (live.current?.settings !== settings) {
             live.current = { settings, kept: new Map() };
@@ -508,7 +654,11 @@ export function Markdown({
 
         const blocks = liveBlocks(text, conversationId, base, breaks, live.current.kept);
 
-        return html`<div class=${`md ${className}`}>
+        return html`<div
+            key=${markdownRevision()}
+            ref=${root}
+            class=${`md ${className}`}
+        >
             ${blocks.flatMap(({ key, parts }) =>
                 parts
                     .filter((part) => part.kind !== undefined || part.html.trim() !== "")
@@ -522,25 +672,43 @@ export function Markdown({
 
     if (parts.length === 1 && parts[0].kind === undefined) {
         return html`<div
+            key=${markdownRevision()}
+            ref=${root}
             class=${`md ${className}`}
             dangerouslySetInnerHTML=${{ __html: parts[0].html }}
         ></div>`;
     }
 
-    return html`<div class=${`md ${className}`}>
+    return html`<div
+        key=${markdownRevision()}
+        ref=${root}
+        class=${`md ${className}`}
+    >
         ${parts.map((part, index) => drawPart(part, index, !cache))}
     </div>`;
 }
 
 /** One part of rendered markdown (`partsOf`): a run of HTML, or a code block that shows more than code. */
-const drawPart = (part, key, streaming) =>
-    part.kind === undefined || RichBlock === null
+const drawPart = (part, key, streaming) => {
+    const extension = part.kind === "extension" ? fenceFor(part.lang) : undefined;
+
+    if (extension !== undefined) {
+        return html`<${extension.component}
+            key=${key}
+            source=${part.source}
+            lang=${part.lang}
+            streaming=${streaming}
+        />`;
+    }
+
+    return part.kind === undefined || part.kind === "extension" || RichBlock === null
         ? html`<div
               key=${key}
               class="md-part"
               dangerouslySetInnerHTML=${{ __html: part.html }}
           ></div>`
         : html`<${RichBlock} key=${key} ...${part} streaming=${streaming} />`;
+};
 
 /** File types common enough that `name.ext` alone is surely a file, not code like `store.state`. */
 const FILE_TYPES = new Set(
@@ -622,6 +790,8 @@ function fromBase(path) {
     return parts.join("/");
 }
 
+let fileRequests = 0;
+
 /**
  * Open a file (or folder) of the session in the viewer: in the Files tile while it is open, otherwise in a sheet.
  * `path:42` opens it at line 42.
@@ -641,7 +811,8 @@ export function openFile(path) {
         return;
     }
 
-    openSheet({ type: "file", id: target.path, line: target.line });
+    // `n` differs for each request, so asking again for the open file reads it again (`FileView`'s `refresh`).
+    openSheet({ type: "file", id: target.path, line: target.line, n: ++fileRequests });
 }
 
 /**
@@ -840,42 +1011,93 @@ export function formatBytes(bytes) {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const currentUiLocale = () => (store.state.uiLocale === "en" ? undefined : store.state.uiLocale);
+// Times as this device writes them, each format made once: making one costs more than using it, and a transcript
+// writes a time for each message.
+const TIME = new Intl.DateTimeFormat([], { hour: "numeric", minute: "2-digit" });
+const DAY = new Intl.DateTimeFormat([], { month: "short", day: "numeric" });
+const WEEKDAY = new Intl.DateTimeFormat([], { weekday: "short" });
 
-export function formatLocaleDate(ms, options) {
-    return new Date(ms).toLocaleDateString(currentUiLocale(), options);
+/** Whether a date is today, on this device's clock. */
+function isToday(date) {
+    const now = new Date();
+
+    return (
+        date.getDate() === now.getDate() &&
+        date.getMonth() === now.getMonth() &&
+        date.getFullYear() === now.getFullYear()
+    );
 }
 
-export function formatLocaleTime(ms, options) {
-    return new Date(ms).toLocaleTimeString(currentUiLocale(), options);
-}
+/** When something happened, on this device's clock: "10:42" today, "Oct 3 10:42" before. */
+export function clockTime(date) {
+    const time = TIME.format(date);
 
-export function formatLocaleDateTime(ms) {
-    return new Date(ms).toLocaleString(currentUiLocale());
+    return isToday(date) ? time : `${DAY.format(date)} ${time}`;
 }
 
 /** A time ahead, on this device's clock: "14:30" today, "Mon 09:00" this week, "Oct 20 09:00" later. */
 export function formatWhen(ms) {
     const at = new Date(ms);
-    const time = formatLocaleTime(ms, { hour: "numeric", minute: "2-digit" });
+    const time = TIME.format(at);
 
-    if (at.toDateString() === new Date().toDateString()) {
+    if (isToday(at)) {
         return time;
     }
 
-    const day =
-        ms - Date.now() < 6 * 86_400_000
-            ? formatLocaleDate(ms, { weekday: "short" })
-            : formatLocaleDate(ms, { month: "short", day: "numeric" });
+    const day = ms - Date.now() < 6 * 86_400_000 ? WEEKDAY.format(at) : DAY.format(at);
 
     return `${day} ${time}`;
+}
+
+/** The minute now, for what shows a time ago: a memo that keys on it draws again as the minute turns (`useMinute`). */
+const minuteNow = () => Math.floor(Date.now() / 60_000);
+
+/** Listeners to the minute's turn, and its timer while any listen. */
+const minuteListeners = new Set();
+let minuteTimer = 0;
+
+function tickMinute() {
+    minuteTimer = setTimeout(tickMinute, 60_000 - (Date.now() % 60_000));
+
+    for (const listener of minuteListeners) {
+        listener(minuteNow());
+    }
+}
+
+/**
+ * The minute now, which draws the component again as it turns: memoized rows that show "5m" would otherwise keep it.
+ * One timer for every component that uses it.
+ */
+export function useMinute() {
+    const [minute, setMinute] = useState(minuteNow);
+
+    useEffect(() => {
+        minuteListeners.add(setMinute);
+
+        if (minuteListeners.size === 1) {
+            minuteTimer = setTimeout(tickMinute, 60_000 - (Date.now() % 60_000));
+        }
+
+        // A minute that turned before this effect ran.
+        setMinute(minuteNow());
+
+        return () => {
+            minuteListeners.delete(setMinute);
+
+            if (minuteListeners.size === 0) {
+                clearTimeout(minuteTimer);
+            }
+        };
+    }, []);
+
+    return minute;
 }
 
 export function timeAgo(ms) {
     const seconds = Math.max(0, (Date.now() - ms) / 1000);
 
     if (seconds < 45) {
-        return "now";
+        return t("now");
     }
 
     if (seconds < 3600) {
@@ -890,7 +1112,7 @@ export function timeAgo(ms) {
         return `${Math.round(seconds / 86400)}d`;
     }
 
-    return formatLocaleDate(ms);
+    return new Date(ms).toLocaleDateString();
 }
 
 /** Markdown as plain text, for one-line previews such as a quote: no emphasis, code ticks, or markers. */
@@ -946,6 +1168,7 @@ const ICONS = {
     pip: "M12 20a8 8 0 100-16 8 8 0 000 16zM8.5 11a3.5 3.5 0 013.5-3.5",
     more: "M5 12h.01M12 12h.01M19 12h.01",
     close: "M6 6l12 12M18 6L6 18",
+    reply: "M9 14L4 9l5-5M4 9h10a6 6 0 016 6v4",
     send: "M12 19V5M5 12l7-7 7 7",
     stop: "M7 7h10v10H7z",
     mic: "M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM19 11a7 7 0 01-14 0M12 18v3",
@@ -1154,12 +1377,18 @@ export function useEdge(name, measure) {
                 }
             };
 
+            // Its first measure too, once the page is laid out and before it paints: measured as it mounts, it would lay
+            // out the page in the middle of a draw.
             const observer = new ResizeObserver(update);
             // A pane popping in (`popin` scales it) moves the element without resizing it: measured again as an
-            // animation around it ends.
+            // animation around it ends. Not for the others (a row that rose in, a group that unrolled).
             let frame = 0;
 
-            const settled = () => {
+            const settled = (event) => {
+                if (!(event.target instanceof Node) || !event.target.contains(element)) {
+                    return;
+                }
+
                 cancelAnimationFrame(frame);
                 frame = requestAnimationFrame(update);
             };
@@ -1168,7 +1397,6 @@ export function useEdge(name, measure) {
             observer.observe(element);
             addEventListener("resize", update);
             document.addEventListener("animationend", settled);
-            update();
 
             return () => {
                 observer.disconnect();
@@ -1186,6 +1414,61 @@ export function useEdge(name, measure) {
         return (element) => {
             stop?.();
             stop = element ? publish(element) : null;
+        };
+    });
+
+    return ref;
+}
+
+/**
+ * Say where a scroller has more than it shows: `data-more` is "up", "down", or "both" while it can scroll that way, and
+ * gone while everything shows. The stylesheet fades that edge, so a list whose scrollbar is hidden still says it
+ * scrolls. It follows scrolling, the scroller's size, and what is added to it or taken away. Returns a ref callback:
+ * give it to the scroller as its `ref`.
+ */
+export function useScrollMore() {
+    const [ref] = useState(() => {
+        let stop = null;
+
+        const watch = (element) => {
+            let frame = 0;
+
+            const update = () => {
+                frame = 0;
+                const up = element.scrollTop > 1;
+                const down = element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+                const more = up && down ? "both" : up ? "up" : down ? "down" : null;
+
+                if (more === null) {
+                    element.removeAttribute("data-more");
+                } else if (element.dataset.more !== more) {
+                    element.dataset.more = more;
+                }
+            };
+
+            const later = () => {
+                frame ||= requestAnimationFrame(update);
+            };
+
+            const sizes = new ResizeObserver(later);
+            const content = new MutationObserver(later);
+
+            sizes.observe(element);
+            content.observe(element, { childList: true, subtree: true });
+            element.addEventListener("scroll", later, { passive: true });
+            later();
+
+            return () => {
+                cancelAnimationFrame(frame);
+                sizes.disconnect();
+                content.disconnect();
+                element.removeEventListener("scroll", later);
+            };
+        };
+
+        return (element) => {
+            stop?.();
+            stop = element ? watch(element) : null;
         };
     });
 
@@ -1229,11 +1512,13 @@ export function usePresence(value, ms = 200) {
 }
 
 /**
- * Where a sliding indicator goes: the offset and size of the element matching `selector` inside `ref`, measured after
- * every render. null when there is none, or it is in a folded group. `instant` is true the first time it shows, so it
- * appears in place instead of sliding in from the top.
+ * Where a sliding indicator goes: the offset and size of the element matching `selector` inside `ref`. null when there
+ * is none, or it is in a folded group. `instant` is true the first time it shows, so it appears in place instead of
+ * sliding in from the top. `key` says which element is selected: it is measured again when `key` changes, and when the
+ * list resizes or settles, not after every render. Measured after every render, each copy of the list laid the page out
+ * early, and Back to the list on a phone froze the longer for it.
  */
-export function useSlide(ref, selector, axis = "y") {
+export function useSlide(ref, selector, axis = "y", key = undefined) {
     const [box, setBox] = useState(null);
     const hidden = useRef(true);
 
@@ -1249,7 +1534,7 @@ export function useSlide(ref, selector, axis = "y") {
         setBox((box) => (next?.at === box?.at && next?.size === box?.size ? box : next));
     };
 
-    useLayoutEffect(measure);
+    useLayoutEffect(measure, [key]);
     // Rows move without a render while a group folds, or the window resizes: measure again when they settle.
     useEffect(() => {
         const host = ref.current;
@@ -1259,8 +1544,11 @@ export function useSlide(ref, selector, axis = "y") {
         }
 
         const settle = (event) => event.target !== host && measure();
+        // A theme's stylesheets can move the element without resizing the list.
+        const again = () => measure();
 
         host.addEventListener("transitionend", settle);
+        document.addEventListener("pocket:theme", again);
         const observer =
             typeof ResizeObserver === "function" ? new ResizeObserver(() => measure()) : null;
 
@@ -1268,6 +1556,7 @@ export function useSlide(ref, selector, axis = "y") {
 
         return () => {
             host.removeEventListener("transitionend", settle);
+            document.removeEventListener("pocket:theme", again);
             observer?.disconnect();
         };
     }, [ref.current]);
@@ -1355,6 +1644,71 @@ export function useSide(ref, of = (element) => element) {
     return side;
 }
 
+/** How far the pointer goes before a press on an edge is a drag: a double click on it stays a double click. */
+const DRAG_SLOP = 3;
+
+/**
+ * Drag an edge to resize a window (the sidebar, the Files tile, the Browser panel), from the edge's `pointerdown`. As the
+ * pointer moves, `widthAt(event)` gives the width, set as the window's own `property` (`width`, `flex-basis`) and nothing
+ * else: a variable on the page's root restyled every element at each move, the session list's hundreds of rows too. A
+ * layer over the page shows the cursor and keeps what is under the pointer from hovering or selecting. Once the pointer
+ * lets go, `done(width)` keeps the width, and the window's own value goes.
+ */
+export function dragWidth(event, { element, property, widthAt, done }) {
+    const { clientX: x, clientY: y, pointerId } = event;
+    let veil = null;
+    let width = null;
+
+    const move = (each) => {
+        if (each.pointerId !== pointerId) {
+            return;
+        }
+
+        // Let go where the page did not hear it (another window, outside the page): the drag ends.
+        if (each.buttons === 0) {
+            stop();
+
+            return;
+        }
+
+        if (veil === null) {
+            if (Math.hypot(each.clientX - x, each.clientY - y) < DRAG_SLOP) {
+                return;
+            }
+
+            veil = document.createElement("div");
+            veil.className = "resize-veil";
+            document.body.append(veil);
+            element.classList.add("resizing");
+            getSelection()?.removeAllRanges();
+        }
+
+        width = widthAt(each);
+        element.style.setProperty(property, `${width}px`);
+    };
+
+    const stop = () => {
+        removeEventListener("pointermove", move);
+        removeEventListener("pointerup", stop);
+        removeEventListener("pointercancel", stop);
+        removeEventListener("blur", stop);
+
+        if (veil === null) {
+            return;
+        }
+
+        veil.remove();
+        element.classList.remove("resizing");
+        done(width);
+        element.style.removeProperty(property);
+    };
+
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", stop);
+    addEventListener("pointercancel", stop);
+    addEventListener("blur", stop);
+}
+
 /**
  * A rail button's state for themes (`data-state`): `open` while what it opens shows, `busy` while it counts work that
  * goes on; both, or neither (undefined).
@@ -1395,38 +1749,45 @@ export class Boundary extends Component {
     }
 }
 
-/** The parts of the store a streaming answer changes several times a second: the open conversation's, and PiP's. */
-const VIEWS = new Set(["view", "pipView"]);
-
 /**
- * Whether the store changed between two states only in the views (`VIEWS`). Nothing changed at all is no: `store.set({})`
- * draws everything again.
+ * Whether the store changed in none of `keys` between two states. A change to nothing at all is a change:
+ * `store.set({})` draws everything again (a media query that changed, say).
  */
-function onlyViews(before, after) {
-    let views = false;
+function quietFor(keys, before, after) {
+    if (before === after) {
+        return false;
+    }
 
-    for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    let changed = false;
+
+    for (const key in after) {
         if (before[key] !== after[key]) {
-            if (!VIEWS.has(key)) {
+            if (keys.has(key)) {
                 return false;
             }
 
-            views = true;
+            changed = true;
         }
     }
 
-    return views;
+    for (const key in before) {
+        if (!(key in after)) {
+            return false;
+        }
+    }
+
+    return changed;
 }
 
 const sameProps = (a, b) =>
     Object.keys(a).length === Object.keys(b).length &&
     Object.keys(a).every((key) => Object.is(a[key], b[key]));
 
-class ApartFromViews extends Component {
+class DrawnFor extends Component {
     shouldComponentUpdate(next) {
         return !(
             next.component === this.props.component &&
-            onlyViews(this.props.state, next.state) &&
+            quietFor(next.keys, this.props.state, next.state) &&
             sameProps(this.props.props, next.props)
         );
     }
@@ -1437,20 +1798,75 @@ class ApartFromViews extends Component {
 }
 
 /**
- * `component`, drawn again on every change to the store but one that changes only the views (`VIEWS`), as an answer
- * streams: for big parts that read neither, such as the session list, which stays drawn off-screen on phones. Its own
- * state draws it again as usual.
+ * `component`, drawn again only when the store changes in one of `keys`, its props change, or `store.set({})` asks
+ * everything to draw again: for big parts that read little of the store, such as the session list. `keys` must name
+ * every key of the store it reads as it draws, and every key the functions it calls read (`prefs()` reads
+ * `appearance`, `canSteer()` reads `me`): a key left out shows stale data. What it reads only in an event handler
+ * does not count. Its own state draws it again as usual.
  */
-export function apartFromViews(component) {
-    const Wrapped = (props) => h(ApartFromViews, { component, props, state: store.state });
+export function drawnFor(keys, component) {
+    const set = new Set(keys);
+    const Wrapped = (props) => h(DrawnFor, { component, props, keys: set, state: store.state });
 
     Wrapped.displayName = component.name;
 
     return Wrapped;
 }
 
+/**
+ * `component`, drawn again only when its props change (each compared with `Object.is`) or its own state does. It must
+ * read nothing else as it draws, such as `store.state`: what it needs comes as props. `ignored` names props it reads
+ * only as it mounts, whose change alone does not draw it again. One component around it, not two: the session list
+ * makes one for each of its hundreds of rows.
+ */
+export function memo(component, ignored = []) {
+    class Memo extends Component {
+        // Without making arrays: the session list asks this of each of its rows at every draw.
+        shouldComponentUpdate(next) {
+            let count = 0;
+
+            for (const key in next) {
+                count++;
+
+                if (!Object.is(this.props[key], next[key]) && !ignored.includes(key)) {
+                    return true;
+                }
+            }
+
+            for (const key in this.props) {
+                count--;
+            }
+
+            return count !== 0;
+        }
+
+        render(props) {
+            return h(component, props);
+        }
+    }
+
+    Memo.displayName = component.name;
+
+    return Memo;
+}
+
 /** Phones: sheets from the bottom edge, which drag back down to close, and menus that a swipe closes. */
 export const BOTTOM_SHEETS = matchMedia("(max-width: 699px)");
+
+/**
+ * Wide screens, where the sidebar and the home screen's splash show (style.css's 960px). Narrower, the app does not
+ * draw them at all: hidden, they cost a phone the list's whole draw again.
+ */
+export const WIDE = matchMedia("(min-width: 960px)");
+
+/** No pointer that hovers (a touch screen): what only hovering shows, such as a row's buttons, is not drawn. */
+export const NO_HOVER = matchMedia("(hover: none)");
+
+// Each changing (a window resized, a phone turned, a mouse plugged in) draws the app again, with or without them: a sheet
+// open as the phone turns gets its drag to close, or lets go of it.
+for (const query of [WIDE, NO_HOVER, BOTTOM_SHEETS]) {
+    query.addEventListener("change", () => store.set({}));
+}
 
 /** The sheet host supplies a back action only when another sheet is under this one. */
 export const SheetBack = createContext(null);
@@ -1656,6 +2072,14 @@ export function modelLabel(agent) {
 
     return agent.modelName ?? agent.model.modelId.replace(/-\d{8}$/, "");
 }
+
+/** A model's name as the composer's chip says it: "opus 5.5" for "Anthropic: Claude Opus 5.5". */
+export const shortModelName = (name) =>
+    name
+        // A provider's own prefix ("Anthropic: Claude Opus 4.5"), then the family's name.
+        .replace(/^[^:]{1,24}:\s*/, "")
+        .replace(/^(?:anthropic\s+)?claude\s+/i, "")
+        .toLowerCase();
 
 /** An on and off switch, named for screen readers by `label`. */
 export function Switch({ on, disabled, label, onChange }) {

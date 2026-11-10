@@ -23,6 +23,7 @@ const Runs = defineDoc<{ count: number }>({
     scope: "conversation",
     history: "latest",
     fork: "current",
+    checkpointWhen: () => false,
     initial: () => ({ count: 0 }),
 });
 
@@ -31,6 +32,7 @@ const MODULE = `/** Counts. */
 import { defineDoc } from "@earendil-works/pi-durable";
 const Runs = defineDoc({
     kind: "x.counter.runs", version: 1, scope: "conversation", history: "latest", fork: "current",
+    checkpointWhen: () => false,
     initial: () => ({ count: 0 }),
 });
 const count = (ctx) => ctx.commit(async (tx) => { (await tx.doc(Runs, ctx.conversationId)).count++; });
@@ -108,6 +110,26 @@ test("a retried request runs its handler once, and a restart does not run it aga
     assert.equal(await runs(id), 2);
 });
 
+test("a run that ended with no result answers that it failed, and runs again", async () => {
+    const id = await newSession(app);
+    const wait = app.harness.waitForTask;
+
+    // Its task ended with no result, as a failure in Pi Durable leaves it.
+    app.harness.waitForTask = (async (...args: Parameters<typeof wait>) => {
+        app.harness.waitForTask = wait;
+        const done = await wait.apply(app.harness, args);
+
+        return { ...done, state: { ...done.state, outcome: { status: "failed" } } };
+    }) as typeof wait;
+    assert.equal(
+        (await app.extensionCommands.run(id, owner(app), request("count-here"))).status,
+        "failed",
+    );
+    // An answer: the browser sends the same command again as a new request, and it runs.
+    await app.extensionCommands.run(id, owner(app), request("count-here"));
+    assert.equal(await runs(id), 2);
+});
+
 test("a viewer runs no command, and a global command is the owner's alone", async () => {
     const id = await newSession(app);
     const viewer = app.config.addUser("Viewer", "viewer").user;
@@ -176,7 +198,11 @@ test("a failed reload keeps the commands, and turning the module off takes them 
 
     writeFileSync(join(app.dataDir, "extensions", FILE), MODULE);
     await app.setExtensionEnabled(owner(app), FILE, false);
-    assert.deepEqual(app.webs.commands(), []);
+    // The built-in Design module has a command of its own: what the drop-in had is gone.
+    assert.deepEqual(
+        app.webs.commands().filter((each) => each.name !== "design-open"),
+        [],
+    );
 
     const id = await newSession(app);
 

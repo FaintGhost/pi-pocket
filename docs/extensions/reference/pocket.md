@@ -276,7 +276,7 @@ messages(options?: MessagesOptions): Promise<MessagePage>;
 
 Since 0.20.0 · Experimental
 
-Reads a page of the people's messages in the session the tab shows, oldest first: Pi's answers, tool calls, and notes are not in it. With no `before`, it is the newest `limit` messages (50 by default, up to 200). The page's `before` is the cursor for the page before it, and null at the start. Read pages until `before` is null to have them all. The messages are those of the transcript: after a New context, the earlier ones are not in it.
+Reads a page of the people's messages in the session the tab shows, oldest first: Pi's answers, tool calls, and notes are not in it. Neither is an input a module stored as its own kind, even while it shows as a message ([`web.presentEntry`](web.md#presententry)). A user message that a module's `userPrefix` presents stays in: it is a message to Pi, as it was before. With no `before`, it is the newest `limit` messages (50 by default, up to 200). The page's `before` is the cursor for the page before it, and null at the start. Read pages until `before` is null to have them all. The messages are those of the transcript: after a New context, the earlier ones are not in it.
 
 The server checks the person's access to the session for each page. A page is from the session that the tab showed when it was asked for (`conversationId`): compare it with the one shown now before you use it. It rejects with an error whose `status` is 409 when its cursor is stale, as after a compaction: read again from the newest. Abort it with `signal`. With no session open, or from a version of the module that is gone, the page is empty. See [`MessagesOptions`](#messagesoptions), [`MessagePage`](#messagepage), and [`MessageInfo`](#messageinfo).
 
@@ -323,6 +323,27 @@ pocket.sheet({
 });
 ```
 
+### `entryPresentation`
+
+```ts
+entryPresentation(kind: string, mode: "open" | "folded" | "hidden"): void;
+entryPresentation(kind: string): "open" | "folded" | "hidden" | undefined;
+```
+
+Since 0.28.0 · Experimental
+
+How this browser shows one of this module's inputs (`web.presentEntry` on the server). `kind` is `x.<module>.<name>`. `open` shows the message. `folded` shows one line, which opens to the text: that is also how it shows when this browser has no choice. `hidden` keeps the turn and shows nothing until Find jumps to it. The model still reads the message in full.
+
+With a mode, it sets this browser's choice; the same mode again changes nothing. With the kind alone, it returns the choice, or undefined when there is none yet. A person can choose too: the message sheet of any of these rows has Show, Fold, and Hide for every input of its kind. So set a mode only when there is none, or from a command the person runs, and a person's choice stays theirs. The choice stays in this browser, and its other tabs follow it.
+
+A kind that is not this module's throws, and so does a mode that is not one of those three. This browser remembers a limited number of kinds; past it, the one chosen longest ago is forgotten ([limits](limits.md#presentations)). Where the browser cannot store it, the choice lasts until the tab reloads. On an older app, check for it first.
+
+```js
+if (typeof pocket.entryPresentation === "function" && !pocket.entryPresentation("x.notes.note")) {
+    pocket.entryPresentation("x.notes.note", "hidden");
+}
+```
+
 ## Routes and events
 
 ### `api`
@@ -355,6 +376,26 @@ Since 0.14.0 · Stable
 
 Calls `run` with the data of each `event` that the module sends with `web.send`. It returns a function: call it to stop. The app keeps no events for a page that is closed. Thus a page that opens must first get the data that is current, and then listen. [Events](../events.md) tells you more.
 
+### `settings`
+
+```ts
+settings(): Promise<{ fields: SettingField[]; values: Record<string, SettingValue | null>; set: string[] }>;
+```
+
+Since 0.22.0 · Experimental
+
+The module's settings ([`web.settings`](web.md#settings)) as the person in this tab may read them: the fields, each value (the owner's or the default), and which ones the owner set. A secret field's value is left out of `values`; `set` says whether it is set. It rejects with a 404 when the module declares no settings, or is off.
+
+### `onSettings`
+
+```ts
+onSettings(run: () => void): () => void;
+```
+
+Since 0.22.0 · Experimental
+
+Calls `run` after the owner changes the module's settings: read them again with `settings()`. It returns a function: call it to stop.
+
 ## Adding to the app
 
 Each thing that a module adds has an `id` of its own. To add one with the same `id` again replaces it. [Names](names.md#what-a-browser-module-adds) gives the rules for ids.
@@ -379,7 +420,7 @@ menu(spec: MenuSpec): Added<MenuSpec>;
 
 Since 0.14.0 · Stable
 
-Adds a row in the App group of the menu. See [`MenuSpec`](#menuspec).
+Adds a row in the menu's App group by default. `group: "session"` puts it in the Session group, shown only when a session is open. The `group` field is experimental since 0.21.0. See [`MenuSpec`](#menuspec).
 
 ### `launcher`
 
@@ -449,7 +490,7 @@ composerButton(spec: ComposerButtonSpec): Added<ComposerButtonSpec>;
 
 Since 0.19.0 · Experimental
 
-Adds a button on the left of the message box's row, after the app's own (Attach, the model, Plan). Send, Stop, the mic, and Steer, Queue and Interrupt stay on the right. See [`ComposerButtonSpec`](#composerbuttonspec).
+Adds a button on the left of the message box's row, after the app's own (Attach, the model, Plan). Send, Stop, the mic, and Steer, Queue and Interrupt stay on the right. In a narrow message box (a phone's), where they would push Send or Stop out of it, these buttons take a line of their own under the row: two or more up to 480 px wide, one up to 340 px. A single button in a box from 341 to 480 px wide stays in the row, and steps aside while Pi works, as the model chip does, so Stop stays in the row; it comes back when Pi stops. See [`ComposerButtonSpec`](#composerbuttonspec).
 
 ### `replyAction`
 
@@ -469,7 +510,7 @@ sessionChips(spec: SessionChipsSpec): Added<SessionChipsSpec>;
 
 Since 0.20.0 · Experimental
 
-Adds chips under the titles of rows in the session list, such as tags. The list calls `chips` for each row each time it draws. See [`SessionChipsSpec`](#sessionchipsspec) and [`SessionChip`](#sessionchip). A row with chips is taller. The space beside them opens the session, as the row does.
+Adds chips under the titles of rows in the session list, such as tags. Each row calls `chips` when it draws. Unchanged rows can skip a draw. See [`SessionChipsSpec`](#sessionchipsspec) and [`SessionChip`](#sessionchip). A row with chips is taller. The space beside them opens the session, as the row does.
 
 ### `sessionAction`
 
@@ -479,7 +520,7 @@ sessionAction(spec: SessionActionSpec): Added<SessionActionSpec>;
 
 Since 0.20.0 · Experimental
 
-Adds an action on sessions. It shows in the sheet that a finger held on a row opens, and in the bar under the list while sessions are selected (Ctrl/⌘+click, or Select). Its `run` gets the ids of the sessions, or its sheet gets them as the prop `sessions`. See [`SessionActionSpec`](#sessionactionspec).
+Adds an action on sessions. It shows in the sheet that a finger held on a row opens, in the menu that a right-click on a row opens, and in the bar under the list while sessions are selected (Ctrl/⌘+click, or Select). Its `run` gets the ids of the sessions, or its sheet gets them as the prop `sessions`. See [`SessionActionSpec`](#sessionactionspec).
 
 ### `sessionFilter`
 
@@ -528,6 +569,26 @@ pocket.composerKey({
 });
 ```
 
+### `fence`
+
+```ts
+fence(spec: FenceSpec): Added<FenceSpec>;
+```
+
+Since 0.28.0 · Experimental
+
+Registers a component for one or more fenced-code languages. The app renders it with exactly `{ source, lang, streaming }`: the code text, the language label from the fence, and whether the Markdown is still streaming. The component uses the app's Preact and can use the Preact functions in `pocket`. Language matching ignores case. When registrations match the same language, the first one in server module order, then registration order, wins. See [`FenceSpec`](#fencespec), [`FenceProps`](#fenceprops), and [`Added`](#added).
+
+### `mathInline`
+
+```ts
+mathInline(spec: MathInlineSpec): Added<MathInlineSpec>;
+```
+
+Since 0.28.0 · Experimental
+
+Registers the renderer for inline `$…$` and display `$$…$$` math. The app calls `mount(element, source, display)` for each math element: `element` is the code element, `source` is the formula without delimiters, and `display` is true for display math. Math parsing is on only while a registration is active. When multiple registrations exist, the first one in server module order, then registration order, wins. See [`MathInlineSpec`](#mathinlinespec) and [`Added`](#added).
+
 ### `insertText`
 
 ```ts
@@ -537,6 +598,16 @@ insertText(text: string, options?: { inline?: boolean }): void;
 Since 0.19.0 · Experimental
 
 Puts text into the message box of the session that the tab shows, after what is there: on a new paragraph, or with `inline: true`, after a space. The person sends it, or not: it never sends. A sheet that shows closes, so the box shows. With no session open, it does nothing. Text past 100,000 characters throws.
+
+### `pip`
+
+```ts
+readonly pip: PipApi;
+```
+
+Since 0.26.0 · Experimental
+
+The part of `pocket` that talks to the person's PiP, their assistant. It has one method, `pip.ask`. See [`PipApi`](#pipapi).
 
 ### `arrange`
 
@@ -710,16 +781,18 @@ type MenuSpec = Action & {
     id: string;
     label: string;
     hint?: string;
+    group?: "app" | "session";
 };
 ```
 
 Since 0.14.0 · Stable
 
-A row in the App group of the menu.
+A row in the menu. It goes in the App group by default.
 
 - `id`: the row's id in the module.
 - `label`: the row's words.
 - `hint`: short words on the right of the row.
+- `group` (since 0.21.0 · experimental): `"app"` (the default) shows the row in the App group, including without a session. `"session"` shows it in the Session group only when a session is open. Older apps ignore the field and use the App group.
 
 ### `LauncherSpec`
 
@@ -957,7 +1030,7 @@ interface SessionChipsSpec {
 Since 0.20.0 · Experimental
 
 - `id`: the chips' id in the module.
-- `chips`: the chips for a session. Up to 6 show for each module. The list calls it for each row each time it draws, so keep it fast, and do not call `pocket` in it. Read what it needs from the module's own state. When that state changes, give `update` a new function, so the list draws again: `added.update({ chips: (session) => chipsOf(session) })`.
+- `chips`: the chips for a session. Up to 6 show for each module. The row calls it when it draws, so keep it fast, and do not call `pocket` in it. Unchanged rows can skip a draw. Read what it needs from the module's own state. When that state changes, give `update` a new function, so the list draws again: `added.update({ chips: (session) => chipsOf(session) })`.
 
 A `chips` that throws stops its module in that browser, as a failed module stops.
 
@@ -1000,7 +1073,7 @@ Since 0.20.0 · Experimental
 
 A filter button. `title`, `icon`, `iconPath`, and `badge` are as for a rail button. It does one thing when tapped, as an [`Action`](#action) does.
 
-- `match`: whether the list keeps a session. Only `true` keeps it. While it is a function, the filter is on. Null or no `match` turns it off. The list calls it for each session each time it draws, so keep it fast, and do not call `pocket` in it. A `match` that throws stops its module in that browser, and the list then shows the sessions again.
+- `match`: whether the list keeps a session. Only `true` keeps it. While it is a function, the filter is on. Null or no `match` turns it off. The list can reuse the result until its sessions, grouping, search, or extensions change. Keep it fast, and do not call `pocket` in it. When the module's filter state changes, give `update` a new function: `added.update({ match: (session) => matches(session) })`. A `match` that throws stops its module in that browser, and the list then shows the sessions again.
 
 - `started`: runs when a person starts a session with **New** in the session list's head while the filter is on. It gets the new session's id, so the module can make the session meet the filter, as Session tags gives it the chosen tags. Other ways to start a session (the launcher, Alt+N, the rail) do not run it. When it throws or rejects, a notice says so.
 
@@ -1072,6 +1145,34 @@ Since 0.20.0 · Experimental
 - `by`: who wrote it: their id and name, when known. A message from before Pi Pocket kept authors has neither.
 - `at`: when it was sent, in milliseconds since 1970 on the server's clock, or null.
 
+### `PipApi`
+
+```ts
+interface PipApi {
+    ask(text: string, options?: { send?: boolean }): Promise<PipAskResult>;
+}
+```
+
+Since 0.26.0 · Experimental
+
+- `ask(text, options)`: gives PiP `text` as the person's own message. PiP sees it as it sees typed text.
+    - The text starts with a line that names the module (`From the extension “Usage”:`), as an artifact's follow-up starts with its source. So the message never reads as a command, and the person and PiP know where it came from.
+    - By default, it opens PiP and puts the text in PiP's message box, after what is there. The person reads it, edits it, and sends it, or not.
+    - With `send: true`, it sends the text at once, but only just after the person tapped or pressed a key (other than Escape) anywhere in the app, as a tap serves an artifact's follow-up; it need not be on the module's own controls. One tap serves for 5 seconds and for one send, so ask only from the person's own action. Without a tap, nothing is sent or drafted, and the answer says why. If PiP cannot take the message (it is not ready, or the send fails), a notice says so and the text waits in the box.
+    - It works for a person who has PiP. For anyone else, and while the app does not know yet, it does not throw: the answer is `{ ok: false, reason }`.
+    - Text that is empty or past 100,000 characters throws, as `insertText` does.
+
+### `PipAskResult`
+
+```ts
+type PipAskResult = { ok: true; sent: boolean } | { ok: false; reason: string };
+```
+
+Since 0.26.0 · Experimental
+
+- `ok: true`: the text went to PiP. `sent` is true when it was sent, and false when it waits in PiP's message box.
+- `ok: false`: nothing happened. `reason` says why, in words for a person: `"PiP is not available"`, `"Sending needs a click or a key press just before"`, or that the module's version is no longer loaded. Do not match on the words: they can change.
+
 ### `ComposerKeySpec`
 
 ```ts
@@ -1140,13 +1241,13 @@ A slot is a place in the app that is a list of named items: the app's own items 
 
 What shows comes in layers, the last one wins: each item's default place, then the `before` or `after` of a module's own item, then each module's `arrange`, then the person's own choices in Appearance → Layout. These are kept in the browser.
 
-| Slot       | Ids, in their default order                                                                                                       | Fixed                                                                          | Modules' items go           |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------- |
-| `topbar`   | `core:subagents`, `core:changes`, `core:peeks`, `core:files`, `core:browser`, `core:artifacts`, `core:people`, `core:menu`        | `core:menu`, last                                                              | after `core:browser`        |
-| `status`   | `core:connection`, `core:here`, `core:speed`, `core:context`, `core:cache`, `core:spend`, `core:guard`                            | `core:connection`, `core:guard`                                                | after `core:cache`          |
-| `places`   | `core:files`, `core:changes`, `core:browser`, `core:artifacts`, `core:chat`, `core:find`, `core:branch`, `core:pip`, `core:peeks` | none                                                                           | last: a tile for each panel |
-| `composer` | `core:places`, `core:attach`, `core:model`, `core:plan`                                                                           | none (Send, Stop, the mic, and Steer, Queue and Interrupt are not in the slot) | after `core:plan`           |
-| `reply`    | `core:time`, `core:react`, `core:discuss`, `core:pin`, `core:copy`, `core:more`                                                   | `core:more`, last                                                              | before `core:more`          |
+| Slot       | Ids, in their default order                                                                                                                                        | Fixed                                                                          | Modules' items go           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ | --------------------------- |
+| `topbar`   | `core:subagents`, `core:changes`, `core:peeks`, `core:files`, `core:browser`, `core:artifacts`, `core:people`, `core:menu`                                         | `core:menu`, last                                                              | after `core:browser`        |
+| `status`   | `core:connection`, `core:here`, `core:speed`, `core:context`, `core:cache`, `core:spend`, `core:background`, `core:guard`                                          | `core:connection`, `core:guard`                                                | after `core:cache`          |
+| `places`   | `core:files`, `core:changes`, `core:browser`, `core:artifacts`, `core:chat`, `core:find`, `core:launcher` (touch screens), `core:branch`, `core:pip`, `core:peeks` | none                                                                           | last: a tile for each panel |
+| `composer` | `core:places`, `core:attach`, `core:model`, `core:plan`                                                                                                            | none (Send, Stop, the mic, and Steer, Queue and Interrupt are not in the slot) | after `core:plan`           |
+| `reply`    | `core:time`, `core:react`, `core:discuss`, `core:pin`, `core:copy`, `core:more`                                                                                    | `core:more`, last                                                              | before `core:more`          |
 
 The `core:time` item shows a completed reply's stored message time. Appearance → Layout can hide or move it.
 
@@ -1177,6 +1278,33 @@ type SheetProps<P extends object = object> = P & PageProps;
 Since 0.14.0 · Stable
 
 What a sheet's component gets: the fields of the `props` that `openSheet` gave, and `pocket` and `close`.
+
+### `FenceSpec`
+
+```ts
+interface FenceSpec {
+    id: string;
+    langs: string[];
+    component: ComponentType<FenceProps>;
+}
+```
+
+Since 0.28.0 · Experimental
+
+The registration's id, the code fence languages it handles, and the Preact component the app renders. Language matching ignores case. See [`FenceProps`](#fenceprops).
+
+### `MathInlineSpec`
+
+```ts
+interface MathInlineSpec {
+    id: string;
+    mount(element: HTMLElement, source: string, display: boolean): void;
+}
+```
+
+Since 0.28.0 · Experimental
+
+The registration's id and its math mounter. The app calls the mounter with the rendered code element, formula text without delimiters, and whether the formula uses display math.
 
 ### `ToolCallSpec`
 
@@ -1228,7 +1356,7 @@ interface Added<S> {
 
 Since 0.14.0 · Stable
 
-What `rail`, `menu`, `launcher`, `page`, and `sheet` return.
+What `rail`, `menu`, `launcher`, `page`, `sheet`, `fence`, and `mathInline` return.
 
 - `update`: changes the fields in `patch`. An update that changes nothing draws nothing again. Values count as the same only when they are the very same value: a new array or function is a change.
 - `remove`: removes what was added.
@@ -1274,6 +1402,20 @@ interface MarkdownProps {
 Since 0.14.0 · Stable
 
 `text` is the Markdown to show.
+
+### `FenceProps`
+
+```ts
+interface FenceProps {
+    source: string;
+    lang: string;
+    streaming: boolean;
+}
+```
+
+Since 0.28.0 · Experimental
+
+The exact props the app passes to a `pocket.fence` component. `source` is the code text, `lang` is the language label from the fence, and `streaming` says whether the Markdown is still streaming.
 
 ### `SwitchProps`
 

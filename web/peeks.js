@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { AgentTile } from "./agent-tile.js";
 import { folderColor } from "./avatar.js";
 import { describeCall } from "./calls.js";
+import { onPageVisibility, pageVisible } from "./host.js";
 import { finishedUnseen, markSeen, seenSince } from "./seen.js";
 import {
     actions,
@@ -20,6 +21,7 @@ import {
     canSteer,
     navigate,
     notify,
+    openId,
     store,
     workspaceOrder,
 } from "./store.js";
@@ -43,7 +45,7 @@ const RETRY_MS = [1000, 3000, 10_000];
 
 PEEK_WIDE.addEventListener("change", () => store.set({}));
 
-const hidden = () => document.visibilityState === "hidden";
+const hidden = () => !pageVisible();
 
 store.set({ peeks: {} });
 
@@ -53,15 +55,18 @@ store.set({ peeks: {} });
 let slots = [];
 /** The session open before this one: it stays a tile, in the place of the one that was opened. */
 let lastLeft = null;
-let previous = store.state.conversationId;
+let previous = openId();
 
-// The session left stays a tile, in the place of the one opened. `seen.js` marks both seen.
+// The session left stays a tile, in the place of the one opened; one with a board opened over it (PiP's) is not left.
+// `seen.js` marks both seen.
 store.subscribe((state) => {
-    if (state.conversationId !== previous) {
-        const left = previous;
-        const at = slots.indexOf(state.conversationId);
+    const open = openId(state);
 
-        previous = state.conversationId;
+    if (open !== previous) {
+        const left = previous;
+        const at = slots.indexOf(open);
+
+        previous = open;
 
         if (left !== null) {
             lastLeft = left;
@@ -96,14 +101,8 @@ let chosen = { from: [], tiles: [] };
 
 /** The sessions shown as tiles now, in tile order. */
 export function peekTiles(state = store.state) {
-    const from = [
-        state.sessions,
-        state.conversationId,
-        state.pinned,
-        state.peekSeen,
-        lastLeft,
-        seenSince(),
-    ];
+    const open = openId(state);
+    const from = [state.sessions, open, state.pinned, state.peekSeen, lastLeft, seenSince()];
 
     if (from.every((value, index) => value === chosen.from[index])) {
         return chosen.tiles;
@@ -113,7 +112,7 @@ export function peekTiles(state = store.state) {
     const shown = state.sessions.filter(
         (session) =>
             !session.archived &&
-            session.id !== state.conversationId &&
+            session.id !== open &&
             (session.busy ||
                 session.waiting ||
                 busyAgents(session) > 0 ||
@@ -283,8 +282,8 @@ function sendScreen() {
     );
 }
 
-// Each connection to the server starts without tiles (a session switch reconnects, as does a restart): say again
-// which are on screen.
+// Each connection to the server starts without tiles (a reconnect or a restart; a session switch keeps the connection):
+// say again which are on screen.
 store.subscribe((state) => {
     if (state.streamId !== lastStream) {
         lastStream = state.streamId;
@@ -292,7 +291,7 @@ store.subscribe((state) => {
     }
 });
 
-document.addEventListener("visibilitychange", () => {
+onPageVisibility(() => {
     settle(hidden() ? 0 : SETTLE_MS);
 });
 
@@ -458,6 +457,14 @@ function PeekLine({ line }) {
                 <span class="peek-mark">${">_"}</span>
                 <span class="peek-text">${line.command}${" "}<${Status} status=${line.status} /></span>
             </div>`;
+        case "presented":
+            // An input an extension presents: its label and summary, as the transcript's folded line.
+            return html`<div class="peek-line presented">
+                <span class="peek-mark">›</span>
+                <span class="peek-text">
+                    <b>${line.label}</b>${line.summary && html` · ${line.summary}`}
+                </span>
+            </div>`;
         case "note":
             return html`<div class="peek-line faint">
                 <span class="peek-mark">⑂</span>
@@ -480,7 +487,7 @@ function PeekLine({ line }) {
  * Whether a call's command is short enough to show whole on its tile: only then may it be allowed from there. Shown
  * whole, it is never clamped; the tile also measures that it fits (`PeekTile`), as wide characters take more room.
  */
-const wholeOnTile = (approval) =>
+export const wholeOnTile = (approval) =>
     approval.subject.length <= ALLOW_LENGTH && !/[\r\n]/.test(approval.subject);
 
 /** The call a session waits on, in full when it is short, and why the guard asks. */
@@ -493,7 +500,12 @@ function PeekAsk({ approval, compact, who }) {
         <div class=${`peek-ask-what mono ${wholeOnTile(approval) ? "whole" : ""}`}>
             ${approval.subject}
         </div>
-        ${!compact && approval.reason && html`<div class="peek-ask-why">${approval.reason}</div>`}
+        ${
+            // A question (a form) is in its reason, its title alone says little: a compact tile shows it too.
+            (!compact || approval.form) &&
+            approval.reason &&
+            html`<div class="peek-ask-why">${approval.reason}</div>`
+        }
     </div>`;
 }
 
@@ -510,6 +522,22 @@ function PeekApproval({ approval, me, rule, whole }) {
     };
 
     const ownCall = rule === "others" && me?.role !== "owner" && approval.requestedBy === me?.id;
+
+    // An extension's question (`host.ask`) is answered on its card, where its fields are: from here, open it or decline.
+    if (approval.form) {
+        return html`<span class="peek-actions">
+            <button class="button small" disabled=${busy} onClick=${() => answer(false)}>
+                Decline
+            </button>
+            <button
+                class="button small primary"
+                title=${t("Answer it where it waits")}
+                onClick=${() => navigate(approval.conversationId)}
+            >
+                Open
+            </button>
+        </span>`;
+    }
 
     return html`<span class="peek-actions">
         <button class="button small" disabled=${busy} onClick=${() => answer(false)}>${t("Deny")}</button>
@@ -613,7 +641,7 @@ function AgentRows({ agents, compact }) {
                 title=${t("See them all on the subagents board")}
                 onClick=${() =>
                     store.set({
-                        board: true,
+                        board: "subagents",
                         drawer: false,
                         page: null,
                         boardFocus: more[0].conversationId,
@@ -631,7 +659,13 @@ function AgentRows({ agents, compact }) {
 /**
  * A tile's square, in the shape the session list gives the same state: its folder's color.
  */
-const SHAPES = { waiting: "waiting", working: "working", done: "fresh", idle: "seen" };
+const SHAPES = {
+    waiting: "waiting",
+    limited: "limited",
+    working: "working",
+    done: "fresh",
+    idle: "seen",
+};
 
 /**
  * One tile. The whole app renders on every update while a session streams; a tile renders again only when what it
@@ -770,11 +804,13 @@ function tileProps(tiles, compact) {
         const status =
             session.waiting || (session.subagents?.waiting ?? 0) > 0
                 ? "waiting"
-                : session.busy || (session.subagents?.working ?? 0) > 0
-                  ? "working"
-                  : finishedUnseen(session, state)
-                    ? "done"
-                    : "idle";
+                : session.limited !== undefined
+                  ? "limited"
+                  : session.busy || (session.subagents?.working ?? 0) > 0
+                    ? "working"
+                    : finishedUnseen(session, state)
+                      ? "done"
+                      : "idle";
         // Where only its subagents keep a session waiting or working, the column's label says so. A session waits
         // while one of its subagents does too: its peek says whose calls wait.
         const waitingAgents = session.subagents?.waiting ?? 0;
@@ -794,15 +830,17 @@ function tileProps(tiles, compact) {
                     : steer
                       ? `${someAgents(waitingAgents)} ${t(waitingAgents === 1 ? "needs you" : "need you")}`
                       : `${someAgents(waitingAgents)} ${t("waiting")}`
-                : status === "working"
-                  ? session.busy || compact
-                      ? t("working")
-                      : `${someAgents(workingAgents)} ${t("working")}`
-                  : status === "done"
-                    ? t("done · new")
-                    : session.id === lastLeft
-                      ? t("just left")
-                      : t("pinned");
+                : status === "limited"
+                  ? t("waiting for a limit")
+                  : status === "working"
+                    ? session.busy || compact
+                        ? t("working")
+                        : `${someAgents(workingAgents)} working`
+                    : status === "done"
+                      ? "done · new"
+                      : session.id === lastLeft
+                        ? "just left"
+                        : "pinned";
 
         return {
             key: session.id,

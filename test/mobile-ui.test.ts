@@ -1,8 +1,11 @@
 import {
     type App,
     cleanUp,
+    lastText,
+    modelTexts,
     newSession,
     openApp,
+    owner,
     root,
     say,
     scriptedModel,
@@ -10,12 +13,15 @@ import {
     work,
 } from "./helpers.ts";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
 import { after, before, test } from "node:test";
+import type { FauxResponseStep } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxText, fauxToolCall } from "@earendil-works/pi-ai/providers/faux";
 import type { ConversationId } from "@earendil-works/pi-durable";
 import { Browsers } from "../src/server/browser.ts";
+import { BrowserError, Chromium } from "../src/server/browser/cdp.ts";
 import { findBrowser } from "../src/server/browser/discovery.ts";
 import type { BrowserPage } from "../src/server/browser/page.ts";
 import { VIEWPORTS } from "../src/server/browser/viewport.ts";
@@ -25,6 +31,29 @@ const chromium = findBrowser();
 const real = {
     skip: chromium === undefined ? "no Chromium-based browser on this machine" : false,
 } as const;
+
+/** "risky please" calls a tool, which Lancet Guard asks about; everything else is echoed. */
+const route: FauxResponseStep = (request) => {
+    const { text } = lastText(request as never);
+
+    if (text === "ask me") {
+        const options = [
+            { label: "Postgres", description: "One server" },
+            { label: "SQLite", description: "A file" },
+        ];
+        const questions = [{ header: "Database", question: "Which database?", options }];
+
+        return fauxAssistantMessage([fauxToolCall("ask", { questions })], {
+            stopReason: "toolUse",
+        });
+    }
+
+    return text === "risky please"
+        ? fauxAssistantMessage([fauxToolCall("bash", { command: "true" })], {
+              stopReason: "toolUse",
+          })
+        : fauxAssistantMessage([fauxText(`echo: ${text}`)]);
+};
 
 let app: App;
 let server: Server;
@@ -132,7 +161,7 @@ before(async () => {
 
     writeFileSync(join(work, "README.md"), "# Hello\n\nA file to read.\n");
     writeFileSync(join(work, "web.env"), "PORT=3000\nHOST=127.0.0.1\n");
-    app = await openApp(scriptedModel());
+    app = await openApp(scriptedModel(route));
     server = createServer(
         createHandler({ app, listen: { host: "127.0.0.1", port: 0 }, restart: () => {} }),
     );
@@ -163,6 +192,53 @@ after(async () => {
     server?.close();
     await app?.close();
     cleanUp();
+});
+
+/** How far the transcript is from its bottom, in pixels. */
+const gap = () =>
+    inPage<number>(`
+        const scroller = document.querySelector(".pane > .scroller");
+
+        return JSON.stringify(Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight));
+    `);
+
+/** Open the first session, with `count` rows of messages and answers, as the server would send them. */
+async function openWithRows(count: number): Promise<void> {
+    await fresh();
+    await goTo(first);
+    await until(
+        () =>
+            inPage<boolean>(
+                `return JSON.stringify((await import("/store.js")).store.state.view.conversation?.id === ${Number(first)})`,
+            ),
+        "the session's view",
+    );
+    await page.evaluate(`
+        const { store } = await import("/store.js");
+        const entries = Array.from({ length: ${count} }, (_, n) => ({ id: 920000 + n, kind: "assistant",
+            stopReason: "stop", at: Date.now(),
+            blocks: [{ type: "text", text: "Answer " + n + "\\n\\n" + "Words. ".repeat(40) }] }));
+
+        store.set((state) => ({
+            transcriptFrom: null,
+            view: { ...state.view, entries: new Map(entries.map((entry) => [entry.id, entry])),
+                order: entries.map((entry) => entry.id), live: { busy: false } },
+        }));
+        "shown";
+    `);
+}
+
+test("the served SVG icon decodes as an image", real, async () => {
+    const [width, height] = await inPage<[number, number]>(`
+        const image = new Image();
+
+        image.src = "/icon.svg";
+        await image.decode();
+
+        return JSON.stringify([image.naturalWidth, image.naturalHeight]);
+    `);
+
+    assert.ok(width > 0 && height > 0, "the icon has image dimensions");
 });
 
 test("back closes the open file, then the Files tile, then leaves the session", real, async () => {
@@ -526,6 +602,93 @@ test("a long open group draws its newest steps, and shows the rest when asked", 
     assert.equal((await timeline()).earlier, null);
 });
 
+test("Keep activity folded opens and folds groups already on screen", real, async () => {
+    await fresh();
+    await goTo(first);
+    await until(
+        async () =>
+            await inPage<boolean>(`
+                return JSON.stringify((await import("/store.js")).store.state.view.conversation?.id === ${first});
+            `),
+        "the session view",
+    );
+    // The newest turn: a person's message, then one call of Pi's and its result.
+    await page.evaluate(`
+        const { store } = await import("/store.js");
+        const entries = [
+            { id: 920000, kind: "user", text: "go", images: 0, at: Date.now() },
+            { id: 920001, kind: "assistant", stopReason: "toolUse", at: Date.now(),
+                blocks: [{ type: "toolCall", id: "fold1", name: "bash", args: { command: "echo 1" } }] },
+            { id: 920002, kind: "toolResult", callId: "fold1", text: "1", at: Date.now() },
+        ];
+
+        store.set({ view: { ...store.state.view,
+            entries: new Map(entries.map((entry) => [entry.id, entry])),
+            order: entries.map((entry) => entry.id),
+        } });
+    `);
+    const groupOpen = () =>
+        inPage<boolean | null>(`
+            const group = document.querySelector(".transcript .activity");
+
+            return JSON.stringify(group === null ? null : group.classList.contains("open"));
+        `);
+    const fold = (on: boolean) =>
+        page.evaluate(`(async () => {
+            (await import("/theme.js")).setPrefs({ foldActivity: ${on} });
+        })()`);
+
+    await until(async () => (await groupOpen()) === true, "the group, open by default");
+
+    try {
+        // Without a redraw, the group keeps the state it was drawn with until a reload.
+        await fold(true);
+        await until(
+            async () => (await groupOpen()) === false,
+            "the group folds with the switch on",
+        );
+        await fold(false);
+        await until(
+            async () => (await groupOpen()) === true,
+            "the group opens with the switch off",
+        );
+    } finally {
+        await fold(false);
+    }
+});
+
+test("an open activity group draws a thought step", real, async () => {
+    await fresh();
+    await goTo(first);
+    await until(
+        async () =>
+            await inPage<boolean>(`
+                return JSON.stringify((await import("/store.js")).store.state.view.conversation?.id === ${first});
+            `),
+        "the session view",
+    );
+    await page.evaluate(`
+        const { store } = await import("/store.js");
+        const blocks = [{ type: "thinking", text: "Hmm." },
+            { type: "toolCall", id: "think1", name: "bash", args: { command: "echo 1" } }];
+        const entries = [{ id: 930000, kind: "user", text: "go", images: 0, at: Date.now() },
+            { id: 930001, kind: "assistant", stopReason: "toolUse", at: Date.now(), blocks },
+            { id: 930002, kind: "toolResult", callId: "think1", text: "1", at: Date.now() }];
+
+        store.set({ view: { ...store.state.view,
+            entries: new Map(entries.map((entry) => [entry.id, entry])),
+            order: entries.map((entry) => entry.id),
+        } });
+    `);
+    await until(
+        async () =>
+            await inPage<boolean>(
+                `return JSON.stringify(!!document.querySelector('.activity.open [data-part="thinking"]'))`,
+            ),
+        "the thought step in the open group",
+    );
+});
+
 test("earlier history does not repeat a message kept after compaction", real, async () => {
     await compactedView();
     await page.evaluate(`
@@ -575,7 +738,7 @@ async function noPip(): Promise<void> {
     await page.evaluate(`
         (await import("/pip.js")).closePip();
         sessionStorage.removeItem("pocket.pip");
-        localStorage.removeItem("pocket.pip.draft");
+        (await import("/person-storage.js")).personStorage.set("pip.draft", null);
     `);
     await until(
         async () =>
@@ -593,11 +756,12 @@ test(
         await fresh();
         await page.setViewport(VIEWPORTS.desktop);
         await page.evaluate(`
-        localStorage.setItem("pocket.pip.draft", "a draft");
+        (await import("/person-storage.js")).personStorage.set("pip.draft", "a draft");
         const fetched = window.fetch;
         window.fetch = (url, init) =>
             String(url).endsWith("/submit") ? Promise.reject(new TypeError("offline")) : fetched(url, init);
-        (await import("/pip.js")).askPip("hello pip");
+        // Awaited: a promise the script leaves behind can be collected before it settles, which fails the call.
+        await (await import("/pip.js")).askPip("hello pip");
     `);
         await until(
             async () =>
@@ -615,6 +779,8 @@ test(
     real,
     async () => {
         await fresh();
+        // Wide, where the sidebar's list shows beside the session: a phone in a session draws no list at all.
+        await page.setViewport(VIEWPORTS.desktop);
         await goTo(first);
         await reach({ path: `/s/${first}` }, "the session");
         await until(
@@ -628,7 +794,8 @@ test(
             kept: boolean;
             text: string;
             quiet: number;
-            listed: number;
+            same: number;
+            listed: string[];
             image: string | null;
         }>(`
         const { h, options, render } = await import("preact");
@@ -641,33 +808,1159 @@ test(
         const first = box.querySelector("p");
 
         render(h(Markdown, { text: "First block.\\n\\n![x](a.png)\\n\\nSecond, longer", cache: false }), box);
-        let rows = 0;
+        let rows = [];
         const diffed = options.diffed;
 
         let quiet;
+        let same;
 
         options.diffed = (vnode) => {
-            rows += vnode.type?.name === "SessionRow" ? 1 : 0;
+            if (vnode.type?.name === "SessionRow") {
+                rows.push(vnode.props.session.title ?? "");
+            }
+
             diffed?.(vnode);
         };
 
         try {
             store.set((state) => ({ view: { ...state.view } }));
             await settle();
-            quiet = rows;
+            quiet = rows.length;
+            // The same sessions in a new list: no row has anything new to show.
             store.set((state) => ({ sessions: [...state.sessions] }));
+            await settle();
+            same = rows.length - quiet;
+            rows = [];
+            // One session renamed: its row, and no other.
+            store.set((state) => ({
+                sessions: state.sessions.map((session) =>
+                    session.id === ${Number(first)} ? { ...session, title: "Renamed here" } : session,
+                ),
+            }));
             await settle();
         } finally {
             options.diffed = diffed;
         }
 
-        return JSON.stringify({ kept: box.querySelector("p") === first, text: box.textContent, quiet, listed: rows, image: box.querySelector("img")?.getAttribute("src") ?? null });
+        return JSON.stringify({ kept: box.querySelector("p") === first, text: box.textContent, quiet, same, listed: rows, image: box.querySelector("img")?.getAttribute("src") ?? null });
     `);
 
         assert.ok(drawn.kept, "the first block stays as it was drawn");
         assert.match(drawn.text, /Second, longer/, "the last block grows");
         assert.match(drawn.image ?? "", /^\/api\//, "an image path points at the server");
         assert.equal(drawn.quiet, 0, "a new view leaves the session list alone");
-        assert.ok(drawn.listed > 0, "a new session list draws it");
+        assert.equal(drawn.same, 0, "the same sessions again draw no row");
+        assert.deepEqual(drawn.listed, ["Renamed here"], "a changed session draws its row alone");
     },
 );
+
+test("a reconnect that brings the same data keeps it, and draws no session row", real, async () => {
+    await fresh();
+
+    const after = await inPage<{ same: string[]; rows: number }>(`
+        const { options } = await import("preact");
+        const { connect, store } = await import("/store.js");
+        const settle = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+        const { browserModuleState } = await import("/extension-ui.js");
+        // Extensions' browser modules load after the list shows, and each one that finishes draws every row again
+        // (extensionsRev). A module goes on after that too: the Updates module asks the server for its status and
+        // updates its menu entry whenever the answer comes, which under load is any time. That is theirs, not the
+        // reconnect's, so the count below ignores a draw whose only new prop is extensionsRev.
+        const loading = () => store.state.server.ui.some((each) => {
+            const status = browserModuleState(each.module)?.status;
+
+            return status !== "ready" && status !== "failed";
+        });
+
+        while (loading()) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+
+        await settle();
+        await settle();
+
+        // Every row's props as they are now: draw them all once with a new extensionsRev, and keep what each row got.
+        const baseline = new Map();
+        const early = options.diffed;
+
+        options.diffed = (vnode) => {
+            if (vnode.type?.name === "SessionRow") {
+                baseline.set(vnode.props.session.id, { ...vnode.props });
+            }
+
+            early?.(vnode);
+        };
+        store.set((state) => ({ extensionsRev: state.extensionsRev + 1 }));
+        await settle();
+        await settle();
+        options.diffed = early;
+
+        if (baseline.size === 0) {
+            throw new Error("no session row drew for the baseline");
+        }
+
+        const keys = ["me", "models", "guard", "server", "themeList", "folderFavorites", "sessions"];
+        const before = Object.fromEntries(keys.map((key) => [key, store.state[key]]));
+        const stream = store.state.streamId;
+        const Source = window.EventSource;
+        let rows = 0;
+        let received;
+        const listed = new Promise((resolve) => (received = resolve));
+        const diffed = options.diffed;
+
+        options.diffed = (vnode) => {
+            if (vnode.type?.name === "SessionRow") {
+                const was = baseline.get(vnode.props.session.id);
+                const props = Object.keys(vnode.props);
+
+                // A draw counts unless extensionsRev is new and every other prop is the one it had.
+                rows +=
+                    was !== undefined &&
+                    vnode.props.extensionsRev !== was.extensionsRev &&
+                    props.every((key) => key === "extensionsRev" || vnode.props[key] === was[key])
+                        ? 0
+                        : 1;
+            }
+
+            diffed?.(vnode);
+        };
+        // The reconnect's own list must arrive before identity and draws are checked.
+        window.EventSource = class extends Source {
+            constructor(url) {
+                super(url);
+                this.addEventListener("sessions", received, { once: true });
+            }
+        };
+
+        try {
+            connect();
+            await listed;
+            await settle();
+        } finally {
+            window.EventSource = Source;
+            options.diffed = diffed;
+        }
+
+        if (store.state.streamId === stream) {
+            throw new Error("the reconnect did not receive a new stream");
+        }
+
+        return JSON.stringify({ same: keys.filter((key) => store.state[key] !== before[key]), rows });
+    `);
+
+    assert.deepEqual(after.same, [], "every equal value keeps its identity");
+    assert.equal(after.rows, 0, "no session row draws again");
+});
+
+test("back to the list slides it in whole, and its rows do not rise in again", real, async () => {
+    await fresh();
+    await tap(row(first));
+    await reach({ path: `/s/${first}` }, "the session");
+    await page.evaluate(`
+        window.listRoutes = [];
+        window.listRouteObserver = new MutationObserver((records) => {
+            window.listRoutes.push(...records.flatMap((record) =>
+                [record.target.dataset.route, record.oldValue]));
+        });
+        window.listRouteObserver.observe(document.documentElement, {
+            attributes: true, subtree: true, attributeFilter: ["data-route"], attributeOldValue: true,
+        });
+    `);
+    await back();
+    await reach({ path: "/" }, "back to the list");
+
+    const shown = await inPage<{ rows: number; animating: number; slide: boolean }>(`
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const rows = [...document.querySelectorAll(".home-list .session-row")];
+
+        window.listRouteObserver.disconnect();
+
+        return JSON.stringify({
+            rows: rows.length,
+            animating: rows.filter((each) => each.classList.contains("arriving") || each.getAnimations().length).length,
+            slide: window.listRoutes.includes("back"),
+        });
+    `);
+
+    assert.ok(shown.rows > 0, "the list shows its rows");
+    assert.equal(shown.animating, 0, "no row rises in again");
+    assert.ok(shown.slide, "the list slides in from the left");
+});
+
+test(
+    "a session opened before shows again at once, and the server sends only what is new",
+    real,
+    async () => {
+        const other = await newSession(app);
+
+        await say(app, first, "kept here");
+        await fresh();
+        await tap(row(first));
+        await reach({ path: `/s/${first}` }, "the session");
+        const shownFirst = async () =>
+            (await inPage<boolean>(
+                `return JSON.stringify((document.querySelector('[data-part="transcript"]')?.textContent ?? "").includes("kept here"))`,
+            )) === true;
+
+        await until(shownFirst, "its message");
+        // Whole, as a tab keeps it: its light entries came whole after the first view.
+        await until(
+            async () =>
+                (await inPage<boolean>(`
+                const { store } = await import("/store.js");
+
+                return JSON.stringify(store.state.connection === "open" && ![...store.state.view.entries.values()].some((each) => each.partial));
+            `)) === true,
+            "its whole entries",
+        );
+        await goTo(other);
+        await reach({ path: `/s/${other}` }, "another session");
+        await say(app, first, "new while away");
+
+        // The tab's connection, watched: it opens again, on the session shown, and stays open for the switch back.
+        await inPage<boolean>(`
+        const { connect, store } = await import("/store.js");
+        const Source = window.EventSource;
+
+        window.__views = [];
+        window.__sources = 0;
+        window.EventSource = class extends Source {
+            constructor(url) {
+                super(url);
+                window.__sources++;
+                this.addEventListener("view", (event) => {
+                    const data = JSON.parse(event.data);
+
+                    window.__views.push({ id: data.conversation.id, order: data.order?.length ?? -1,
+                        orderFrom: data.orderFrom ?? null, entries: data.entries.map((each) => each.text ?? each.kind) });
+                });
+            }
+        };
+        connect();
+        window.EventSource = Source;
+
+        return "true";
+    `);
+        await until(
+            async () =>
+                (await inPage<boolean>(`
+                const { store } = await import("/store.js");
+
+                return JSON.stringify(store.state.connection === "open" && window.__views.length > 0);
+            `)) === true,
+            "connected again",
+        );
+
+        // Back: the kept session shows in the same frame as the switch, before the server is asked; then what came while
+        // away arrives, and nothing else of the session, on the connection the tab has.
+        const back = await inPage<{
+            drawn: boolean;
+            sources: number;
+            switches: string[];
+            views: { order: number; orderFrom: number | null; entries: string[] }[];
+        }>(`
+        const { navigate, store } = await import("/store.js");
+        const send = window.fetch;
+        const switches = [];
+
+        window.__views.length = 0;
+        window.fetch = (url, init) => {
+            if (String(url).endsWith("/api/switch")) {
+                switches.push(String(init.body));
+            }
+
+            return send(url, init);
+        };
+
+        try {
+            navigate(${Number(first)});
+            // What the switch put in the store, before any event came: the kept session, or none yet.
+            const drawn = window.__views.length === 0 && store.state.view.conversation?.id === ${Number(first)} &&
+                [...store.state.view.entries.values()].some((each) => each.text === "kept here");
+            const until = Date.now() + 5000;
+            const views = () => window.__views.filter((each) => each.id === ${Number(first)});
+
+            while (!views().some((each) => each.entries.includes("new while away")) && Date.now() < until) {
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+
+            return JSON.stringify({ drawn, sources: window.__sources, switches, views: views() });
+        } finally {
+            window.fetch = send;
+        }
+    `);
+
+        assert.ok(back.drawn, "the kept session shows before the server answers");
+        assert.equal(back.sources, 1, "no new connection");
+        assert.equal(back.switches.length, 1, "one switch");
+        assert.match(
+            JSON.parse(back.switches[0]!).have,
+            /^\d+\.\d+\.[0-9a-z]+\.[0-9a-f]{16}$/,
+            "the tab says what it kept",
+        );
+        assert.ok(back.views[0]!.orderFrom! > 0, "the view goes on from what the tab kept");
+        assert.deepEqual(
+            back.views.flatMap((each) => each.entries),
+            ["new while away", "assistant"],
+            "only what came while away",
+        );
+        await until(
+            async () =>
+                (await inPage<boolean>(
+                    `return JSON.stringify((document.querySelector('[data-part="transcript"]')?.textContent ?? "").includes("new while away"))`,
+                )) === true,
+            "the new message, shown",
+        );
+    },
+);
+
+test("a switch sent while the polling session starts again goes to the new one", real, async () => {
+    // A name that is not local, so the tab polls (`pollHere`); Chromium sends it to this computer.
+    const host = base.replace("127.0.0.1", "pocket.localhost");
+    const polling = await browsers.open(2);
+    const inPolling = async <T>(script: string): Promise<T> =>
+        JSON.parse(await polling.evaluate(script)) as T;
+
+    try {
+        await polling.navigate(`${host}/login?token=${encodeURIComponent(app.config.ownerToken)}`);
+        await until(
+            async () =>
+                (await inPolling<boolean>(`
+                const { store } = await import("/store.js");
+
+                return JSON.stringify(store.state.sessionsLoaded === true);
+            `)) === true,
+            "the signed-in page",
+            20_000,
+        );
+        await polling.evaluate(`localStorage.setItem("pocket.transport", "poll:" + Date.now())`);
+        await polling.navigate(`${host}/s/${first}`);
+        await until(
+            async () =>
+                (await inPolling<boolean>(`
+                const { store } = await import("/store.js");
+
+                const polled = performance.getEntriesByType("resource")
+                    .some((each) => each.name.includes("/api/poll?"));
+
+                return JSON.stringify(store.state.connection === "open" && polled &&
+                    store.state.view.conversation?.id === ${Number(first)});
+            `)) === true,
+            "the session, polled",
+            20_000,
+        );
+        // The next poll finds its session gone, and its answer waits until the tab has switched. That switch fails.
+        await polling.evaluate(`
+            const send = window.fetch;
+
+            window.__switches = [];
+            window.__release = {};
+            window.__asked = new Promise((resolve) => { window.__release.asked = resolve; });
+            window.fetch = async (url, init) => {
+                const path = String(url);
+
+                const again = path.startsWith("/api/poll?") && path.includes("&session=");
+
+                if (again && window.__release.poll === undefined) {
+                    const answer = send(path.replace(/&session=[^&]*&ack=\\d+/, ""), init);
+
+                    await new Promise((resolve) => {
+                        window.__release.poll = resolve;
+                        window.__release.asked();
+                    });
+
+                    return answer;
+                }
+
+                const switches = path.endsWith("/api/switch") &&
+                    window.__switches.push(JSON.parse(init.body).c);
+
+                if (switches === 1) {
+                    await new Promise((resolve) => { window.__release.switch = resolve; });
+
+                    return new Response("{}", { status: 409 });
+                }
+
+                return send(url, init);
+            };
+            "armed";
+        `);
+        // A new session in the list ends the poll on its way, so the next one goes out.
+        const other = await newSession(app);
+        const shown = await inPolling<{ id: number | null; switches: number[] }>(`
+            const { navigate, store } = await import("/store.js");
+            const streamId = store.state.streamId;
+
+            await window.__asked;
+            navigate(${Number(other)});
+
+            while (window.__release.switch === undefined) {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+
+            window.__release.poll();
+
+            while (store.state.streamId === streamId) {
+                await new Promise((resolve) => setTimeout(resolve, 20));
+            }
+
+            window.__release.switch();
+            const until = Date.now() + 3000;
+
+            while (store.state.view.conversation?.id !== ${Number(other)} && Date.now() < until) {
+                await new Promise((resolve) => setTimeout(resolve, 50));
+            }
+
+            return JSON.stringify({
+                id: store.state.view.conversation?.id ?? null,
+                switches: window.__switches,
+            });
+        `);
+
+        assert.equal(shown.id, Number(other), "the session switched to shows");
+        assert.deepEqual(
+            shown.switches,
+            [other, other],
+            "the switch goes again, on the new session",
+        );
+    } finally {
+        await browsers.close(2);
+    }
+});
+
+test(
+    "a session kept on the device shows after a reload, and the server sends only what is new; another person's, or none when the server says so",
+    real,
+    async () => {
+        const session = await newSession(app);
+        const attach = app.attach.bind(app);
+        const attached: { id: number | null; have: string | null }[] = [];
+        const onDevice = () =>
+            inPage<number[]>(`
+            const { list } = await import("/session-cache.js");
+
+            return JSON.stringify((await list()).map((each) => each.id));
+        `);
+        const shown = (text: string) =>
+            until(
+                async () =>
+                    (await inPage<boolean>(
+                        `return JSON.stringify((document.querySelector('[data-part="transcript"]')?.textContent ?? "").includes(${JSON.stringify(text)}))`,
+                    )) === true,
+                text,
+            );
+
+        /** Reload the page on the session, and what its first connection said it had, once a view came. */
+        const reload = async () => {
+            attached.length = 0;
+            await page.reload();
+            await until(() => attached.length > 0, "a connection after the reload");
+
+            return attached[0]!;
+        };
+
+        app.attach = (client) => {
+            attached.push({
+                id: client.conversationId === undefined ? null : Number(client.conversationId),
+                have:
+                    client.have === undefined
+                        ? null
+                        : `${client.have.from}.${client.have.count}.${client.have.key}.${client.have.build}`,
+            });
+
+            return attach(client);
+        };
+
+        try {
+            await say(app, session, "kept on the device");
+            await fresh();
+            await goTo(session);
+            await reach({ path: `/s/${session}` }, "the session");
+            await shown("kept on the device");
+            // Saved a few seconds after it settles.
+            await until(
+                async () => (await onDevice()).includes(Number(session)),
+                "saved on the device",
+                15_000,
+            );
+            await say(app, session, "new since the reload");
+
+            // A reload: the tab's memory is gone, so what it says it has came from the device.
+            const again = await reload();
+
+            assert.equal(again.id, Number(session), "the connection names the session");
+            assert.match(
+                again.have ?? "",
+                new RegExp(`\\.${app.build}$`),
+                "the tab says what the device kept",
+            );
+            await shown("new since the reload");
+
+            // Another person's (here: the record says so): not shown, and not named to the server.
+            await inPage<boolean>(`
+            const disk = await import("/session-cache.js");
+            const found = await disk.read(${Number(session)});
+
+            await disk.save(${Number(session)}, found.record, { ...found.info, owner: "someone else" }, 1e9);
+
+            return "true";
+        `);
+            assert.equal((await reload()).have, null, "another person's is not used");
+
+            // The server keeps sessions out of devices: what was kept goes, and nothing is saved.
+            process.env.PI_POCKET_SESSION_CACHE = "off";
+            await reload();
+            await shown("new since the reload");
+            await until(async () => (await onDevice()).length === 0, "nothing on the device");
+            await new Promise((resolve) => setTimeout(resolve, 4000));
+            assert.deepEqual(await onDevice(), [], "nothing saved");
+            assert.equal((await reload()).have, null, "nothing named");
+        } finally {
+            delete process.env.PI_POCKET_SESSION_CACHE;
+            app.attach = attach;
+        }
+    },
+);
+
+test(
+    "what came while away slides in: at the bottom it glides up, scrolled up the reader stays put, and Wait for updates holds the session until it comes",
+    real,
+    async () => {
+        const session = await newSession(app);
+        const other = await newSession(app);
+        const long = (n: number) => `${"words to make the row a few lines long ".repeat(6)}${n}`;
+
+        for (let n = 1; n <= 8; n++) {
+            await say(app, session, long(n));
+        }
+
+        await fresh();
+        await goTo(session);
+
+        /** The session shown, whole, connected, and settled where `place` puts the reader. */
+        const settle = async (place: "bottom" | "up") => {
+            await until(
+                async () =>
+                    (await inPage<boolean>(`
+                    const { store } = await import("/store.js");
+
+                    return JSON.stringify(store.state.connection === "open" && store.state.view.conversation?.id === ${Number(session)} &&
+                        ![...store.state.view.entries.values()].some((each) => each.partial));
+                `)) === true,
+                "the session, whole",
+            );
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            await page.evaluate(`
+                const scroller = document.querySelector(".pane > .scroller");
+
+                scroller.scrollTop = ${place === "bottom" ? "scroller.scrollHeight" : "scroller.scrollHeight - scroller.clientHeight - 600"};
+                scroller.dispatchEvent(new Event("scroll"));
+            `);
+            await new Promise((resolve) => setTimeout(resolve, 300));
+        };
+
+        /** Away to `other` while 2 messages come to the session, then back, watched frame by frame for 1.2 s. */
+        const awayAndBack = async (n: number) => {
+            const listed = () =>
+                inPage<string>(`
+                const { store } = await import("/store.js");
+                const each = store.state.sessions.find((one) => one.id === ${Number(session)});
+
+                return JSON.stringify(JSON.stringify([each?.updatedAt, each?.endedAt, each?.busy]));
+            `);
+            const before = await listed();
+
+            await goTo(other);
+            await reach({ path: `/s/${other}` }, "the other session");
+            await say(app, session, long(n));
+            await say(app, session, long(n + 1));
+            // The list the tab has says it changed, and that Pi is done there.
+            await until(async () => {
+                const now = await listed();
+
+                return now !== before && JSON.parse(now)[2] !== true;
+            }, "the list, changed");
+
+            return inPage<{
+                frames: { gap: number; first: number | null; boot: boolean; shift: number }[];
+                enter: number;
+                came: boolean;
+                held: boolean;
+            }>(`
+                const { navigate, store } = await import("/store.js");
+                const frames = [];
+                let watched = null;
+
+                navigate(${Number(session)});
+                // As the switch drew: held behind the loading screen, or the kept session shown.
+                const held = store.state.holding === ${Number(session)};
+
+                // Long enough for the glide (at most 1 s) after what came arrives.
+                const end = performance.now() + 2200;
+
+                while (performance.now() < end) {
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                    const scroller = document.querySelector(".pane > .scroller");
+                    const column = scroller?.querySelector('[data-part="transcript"]');
+                    const rows = column ? [...column.querySelectorAll(".user-row")] : [];
+                    // The first row in view, as the reader sees it: its place on screen, frame to frame.
+                    watched ??= rows.find((row) => row.getBoundingClientRect().bottom > scroller.getBoundingClientRect().top + 2) ?? null;
+                    const transform = column ? getComputedStyle(column).transform : "none";
+
+                    frames.push({
+                        gap: scroller ? Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight) : -1,
+                        first: watched?.isConnected ? Math.round(watched.getBoundingClientRect().top) : null,
+                        boot: document.querySelector('[data-part="boot"]') !== null,
+                        shift: transform === "none" ? 0 : Math.round(new DOMMatrixReadOnly(transform).m42),
+                    });
+                }
+
+                const text = document.querySelector('[data-part="transcript"]')?.textContent ?? "";
+
+                return JSON.stringify({
+                    frames,
+                    enter: document.querySelectorAll('[data-part="transcript"] .user-row.enter').length,
+                    came: text.includes(${JSON.stringify(long(n + 1))}),
+                    held,
+                });
+            `);
+        };
+
+        // At the bottom: the new rows rise in, and the column glides up to them, ending at the bottom.
+        await settle("bottom");
+        const atBottom = await awayAndBack(9);
+
+        assert.ok(atBottom.came, "what came while away shows");
+        assert.ok(atBottom.enter >= 2, `the new rows animate in (${atBottom.enter})`);
+        assert.ok(
+            atBottom.frames.some((frame) => frame.shift > 0),
+            "the column glides up into place",
+        );
+        assert.ok(!atBottom.frames.some((frame) => frame.boot), "no loading screen");
+        assert.ok(Math.abs(atBottom.frames.at(-1)!.gap) < 2, "at the bottom once it has glided");
+
+        // Scrolled up: the new rows animate in below, the row in view does not move, and there is no glide.
+        await settle("up");
+        const scrolledUp = await awayAndBack(11);
+        const tops = scrolledUp.frames.map((frame) => frame.first).filter((top) => top !== null);
+
+        assert.ok(scrolledUp.came, "what came while away is there");
+        assert.ok(scrolledUp.enter >= 2, `the new rows animate in (${scrolledUp.enter})`);
+        assert.ok(
+            !scrolledUp.frames.some((frame) => frame.shift !== 0),
+            "no glide when scrolled up",
+        );
+        assert.ok(
+            Math.max(...tops) - Math.min(...tops) < 2,
+            `the row in view stays put (${Math.min(...tops)}..${Math.max(...tops)})`,
+        );
+        assert.ok(
+            scrolledUp.frames.at(-1)!.gap > 300,
+            "still where the reader was, not at the bottom",
+        );
+
+        // Wait for updates: the loading screen until what came arrives, then the session, whole, with nothing gliding.
+        await page.evaluate(`(await import("/theme.js")).setPrefs({ waitForUpdates: true })`);
+
+        try {
+            await settle("bottom");
+            const waited = await awayAndBack(13);
+
+            // The server here answers within a frame, so the loading screen may not be drawn at all.
+            assert.ok(waited.held, "held for its updates as the switch drew");
+            assert.ok(!atBottom.held && !scrolledUp.held, "not held without the setting");
+            assert.ok(
+                waited.frames.every((frame) => !frame.boot) || waited.frames.at(-1)!.boot === false,
+                "then the session",
+            );
+            assert.ok(waited.came, "with what came while away");
+            assert.ok(
+                !waited.frames.some((frame) => frame.shift !== 0),
+                "nothing glides: it shows whole",
+            );
+        } finally {
+            await page.evaluate(`(await import("/theme.js")).setPrefs({ waitForUpdates: false })`);
+        }
+    },
+);
+
+test("a session no longer shared is not kept, whatever the tab hears first", real, async () => {
+    const other = await newSession(app);
+    const theirs = await newSession(app);
+    const guest = app.config.addUser("Ivy", "guest", [String(theirs), String(other)]);
+    // The guest's own browser: the owner's would ask before it switched accounts.
+    const owners = page;
+    const guests = new Browsers({
+        dataDir: mkdtempSync(join(root, "mobile-ui-guest-")),
+        load: async () => undefined,
+        save: () => {},
+    });
+
+    await say(app, theirs, "shared for now");
+
+    try {
+        page = await guests.open(1);
+        await page.setViewport(VIEWPORTS.mobile);
+        await page.navigate(`${base}/login?token=${encodeURIComponent(guest.token)}`);
+        await until(
+            async () =>
+                (await inPage<boolean>(`
+                    const { store } = await import("/store.js");
+
+                    return JSON.stringify(store.state.me?.id === ${JSON.stringify(guest.user.id)} &&
+                        store.state.sessions.some((each) => each.id === ${Number(theirs)}));
+                `)) === true,
+            "the guest's list",
+            20_000,
+        );
+        // Open the shared session until its entries are whole (a tab keeps only such a view), then leave it.
+        await goTo(theirs);
+        await until(
+            async () =>
+                (await inPage<boolean>(`
+                    const { store } = await import("/store.js");
+                    const { view, connection } = store.state;
+
+                    return JSON.stringify(connection === "open" && view.conversation?.id === ${Number(theirs)} &&
+                        view.entries.size > 0 && ![...view.entries.values()].some((each) => each.partial));
+                `)) === true,
+            "the shared session, whole",
+        );
+        await goTo(other);
+        await reach({ path: `/s/${other}` }, "another session");
+
+        // Its connection loses the word that the session is missing, as one does when the tab leaves first (a reconnect
+        // sends the new hello and list before that word).
+        await inPage<boolean>(`
+            const { connect } = await import("/store.js");
+            const Source = window.EventSource;
+
+            window.__lost = 0;
+            window.EventSource = class extends Source {
+                constructor(url) {
+                    super(url);
+                    this.addEventListener("missing", (event) => {
+                        window.__lost++;
+                        event.stopImmediatePropagation();
+                    });
+                }
+            };
+            connect();
+            window.EventSource = Source;
+
+            return "true";
+        `);
+        await until(
+            async () =>
+                (await inPage<boolean>(`
+                    const { store } = await import("/store.js");
+
+                    return JSON.stringify(store.state.connection === "open" && store.state.view.conversation?.id === ${Number(other)});
+                `)) === true,
+            "connected again",
+        );
+
+        // Back to it: kept, it shows at once.
+        const shownAgain = await inPage<boolean>(`
+            const { navigate, store } = await import("/store.js");
+
+            navigate(${Number(theirs)});
+
+            return JSON.stringify(store.state.view.conversation?.id === ${Number(theirs)});
+        `);
+
+        assert.ok(shownAgain, "kept while it is shared");
+        await until(
+            async () =>
+                (await inPage<boolean>(`
+                    const { store } = await import("/store.js");
+
+                    return JSON.stringify(store.state.view.conversation?.id === ${Number(theirs)} &&
+                        ![...store.state.view.entries.values()].some((each) => each.partial));
+                `)) === true,
+            "the session, from the server",
+        );
+
+        // The owner stops sharing it: the tab hears its new rights and list, not that the session is missing. Wherever
+        // it goes then, nothing of the session is kept.
+        app.setAccess(owner(app), guest.user.id, { sessions: [String(other)] });
+        await until(
+            async () =>
+                (await inPage<boolean>(`
+                    const { store } = await import("/store.js");
+
+                    return JSON.stringify(window.__lost > 0 && !store.state.sessions.some((each) => each.id === ${Number(theirs)}));
+                `)) === true,
+            "the list without it",
+        );
+        const keptAfter = await inPage<boolean>(`
+            const { navigate, store } = await import("/store.js");
+
+            navigate(${Number(other)});
+            navigate(${Number(theirs)});
+
+            return JSON.stringify(store.state.view.entries.size > 0);
+        `);
+
+        assert.ok(!keptAfter, "not kept once it is no longer shared");
+    } finally {
+        await guests.closeAll({ final: true });
+        page = owners;
+        app.config.removeUser(guest.user.id);
+    }
+});
+
+test(
+    "the transcript stays at the bottom as an answer streams, and as a row grows",
+    real,
+    async () => {
+        const frames = () => new Promise((resolve) => setTimeout(resolve, 300));
+
+        await openWithRows(30);
+        await until(async () => (await gap()) < 2, "the bottom, once the rows show");
+
+        // Pi writes: the answer grows with no new entry, update after update.
+        for (let n = 1; n <= 3; n++) {
+            await page.evaluate(`
+            const { store } = await import("/store.js");
+            const text = "Streaming. ".repeat(${n * 60});
+
+            store.set((state) => ({ view: { ...state.view, live: { busy: true,
+                generation: { attempt: 0, message: { blocks: [{ type: "text", text }] } } } } }));
+            "written";
+        `);
+            await frames();
+            assert.ok((await gap()) < 2, `at the bottom after streamed update ${n}`);
+        }
+
+        // A row grows by itself, with no draw of the app (an image, a card that draws late).
+        await page.evaluate(`
+        const tall = document.createElement("div");
+
+        tall.style.height = "400px";
+        [...document.querySelectorAll(".transcript > *")].at(-1).append(tall);
+    `);
+        await frames();
+        assert.ok((await gap()) < 2, "at the bottom after a row grew by itself");
+    },
+);
+
+test("the sanitizer still takes out what is unsafe, every time", real, async () => {
+    await openWithRows(2);
+
+    const unsafe = [
+        "<script>window.hit = 1</script>",
+        '<img src="x" onerror="window.hit = 2">',
+        '<a href=" JaVaScRiPt:window.hit = 3">a</a>',
+        '<div data-part="approval" class="sheet" style="position:fixed" id="app">b</div>',
+        "![shot](file:///tmp/shot.png)",
+    ].join("\n\n");
+    const drawn = await inPage<{ first: string; second: string }>(`
+        const { h, render } = await import("preact");
+        const { Markdown } = await import("/ui.js");
+        const draw = () => {
+            const box = document.createElement("div");
+
+            render(h(Markdown, { text: ${JSON.stringify(unsafe)}, cache: false }), box);
+
+            return box.innerHTML;
+        };
+        // Twice: the settings kept from the first draw give the same result.
+        return JSON.stringify({ first: draw(), second: draw() });
+    `);
+
+    assert.equal(drawn.second, drawn.first, "the same result each time");
+
+    for (const gone of ["<script", "onerror", "JaVaScRiPt", "data-part=", "position:fixed"]) {
+        assert.ok(!drawn.first.includes(gone), `${gone} is taken out`);
+    }
+
+    assert.match(drawn.first, /<img[^>]+src="\/api\/c\/\d+\/file\?path=%2Ftmp%2Fshot\.png"/);
+    assert.equal(await inPage<unknown>(`return JSON.stringify(window.hit ?? null)`), null);
+});
+
+// Issue #140: the circle that says how a call went keeps its own size while it waits for an approval.
+test("a call's mark keeps its circle while it waits for an approval", real, async () => {
+    // Lancet Guard is off by default; turn it on, asking about every call.
+    await app.setExtensionEnabled(owner(app), "guard.ts", true);
+    app.guard.judge = async (_tool, args) =>
+        ({
+            subject: String(args.command),
+            decision: { action: "ask", reason: "risky", source: "test", terminate: false },
+        }) as never;
+
+    const one = await newSession(app);
+
+    await fresh();
+    await goTo(one);
+    await app.commands.submit(one, owner(app), { text: "risky please", requestId: "mark-140" });
+
+    const mark = () =>
+        inPage<Record<string, string> | null>(`
+            const mark = document.querySelector('[data-part~="tool-call"][data-state="waiting"] [data-part~="step-mark"]');
+            const shape = mark && getComputedStyle(mark);
+
+            return JSON.stringify(shape && { width: shape.width, height: shape.height,
+                padding: shape.paddingTop, border: shape.borderTopWidth });
+        `);
+
+    await until(async () => (await mark()) !== null, "the call waiting", 20_000);
+    assert.deepEqual(await mark(), {
+        width: "19px",
+        height: "19px",
+        padding: "0px",
+        border: "0px",
+    });
+});
+
+test("Pi's question shows its answers as buttons a thumb can tap", real, async () => {
+    // The test before fakes a guard that asks about every call.
+    await app.setExtensionEnabled(owner(app), "guard.ts", false);
+    const id = await newSession(app);
+    const heights = `return JSON.stringify([...document.querySelectorAll("button.ask-option")].map((b) => b.offsetHeight))`;
+
+    await fresh();
+    await goTo(id);
+    await app.commands.submit(id, owner(app), { text: "ask me", requestId: "ask-ui" });
+    await until(async () => (await inPage<number[]>(heights)).length === 2, "the answers", 20_000);
+    assert.ok((await inPage<number[]>(heights)).every((height) => height >= 44));
+    await page.evaluate(`document.querySelectorAll("button.ask-option")[1].click()`);
+    await page.evaluate(`document.querySelector(".approval.ask button[type=submit]").click()`);
+    await until(
+        async () => (await modelTexts(app, id)).join().includes("Database: SQLite"),
+        "the answer",
+    );
+});
+
+// Issue #131: a phone on its side with a notch. Another Chromium fakes the safe-area insets on its own page.
+test(
+    "with a notch, the rail, the top bar, and the message box clear it; with none, nothing moves",
+    real,
+    async (t) => {
+        const WIDTH = 844;
+        const NOTCH = 47;
+        const chrome = await Chromium.launch(chromium!, mkdtempSync(join(root, "insets-")), []);
+
+        t.after(() => chrome.kill());
+
+        /** A signed-in page on its side with `inset` pixels at each side; `run` evaluates a function body in it. */
+        async function visit(inset: number) {
+            const { connection } = chrome;
+            const { targetId } = await connection.send("Target.createTarget", {
+                url: "about:blank",
+            });
+            const { sessionId } = await connection.send("Target.attachToTarget", {
+                targetId,
+                flatten: true,
+            });
+            const send = (method: string, params: Record<string, unknown> = {}) =>
+                connection.send(method, params, sessionId);
+
+            const run = async <T>(body: string): Promise<T> => {
+                const answer = await send("Runtime.evaluate", {
+                    expression: `(async () => { ${body} })().then((value) => JSON.stringify(value ?? null))`,
+                    awaitPromise: true,
+                    returnByValue: true,
+                });
+
+                return JSON.parse(answer.result.value as string) as T;
+            };
+
+            await send("Emulation.setDeviceMetricsOverride", {
+                width: WIDTH,
+                height: 390,
+                deviceScaleFactor: 2,
+                mobile: true,
+            });
+            await send("Emulation.setSafeAreaInsetsOverride", {
+                insets: { top: 0, left: inset, bottom: 0, right: inset },
+            });
+            await send("Page.navigate", {
+                url: `${base}/login?token=${encodeURIComponent(app.config.ownerToken)}`,
+            });
+            await until(
+                () =>
+                    run<boolean>(`return !!document.querySelector(".home-list > .rail")`).catch(
+                        () => false,
+                    ),
+                "the session list",
+                20_000,
+            );
+
+            return run;
+        }
+
+        /** Where the visible elements that match `selector` start and end across the screen. */
+        const edges = (run: Awaited<ReturnType<typeof visit>>, selector: string) =>
+            run<{ left: number; right: number }[]>(`
+            return [...document.querySelectorAll(${JSON.stringify(selector)})]
+                .map((element) => element.getBoundingClientRect())
+                .filter((box) => box.width > 0 && box.height > 0)
+                .map((box) => ({ left: Math.round(box.left), right: Math.round(box.right) }));
+        `);
+
+        /** Open the session from the list, and wait for its bar, thread, and message box to rest. */
+        const enter = async (run: Awaited<ReturnType<typeof visit>>) => {
+            await run(`(await import("/store.js")).navigate(${Number(first)})`);
+            await until(
+                () =>
+                    run<boolean>(`
+                    return [".topbar", ".pane > .scroller", ".composer-wrap .composer"].every((each) => document.querySelector(each))
+                        && document.getAnimations().every((each) => each.effect?.getComputedTiming().iterations === Infinity);
+                `),
+                "the conversation",
+            );
+        };
+
+        try {
+            const notched = await visit(NOTCH);
+
+            /** Every element that matches is past the notch on both sides, and there is at least one. */
+            const clear = async (selector: string) => {
+                const found = await edges(notched, selector);
+
+                assert.ok(found.length > 0, `${selector} shows`);
+                assert.ok(
+                    found.every((edge) => edge.left >= NOTCH && edge.right <= WIDTH - NOTCH),
+                    `${selector} is in the notch: ${JSON.stringify(found)}`,
+                );
+            };
+
+            await clear(".home-list > .rail button, .home-list > .rail .avatar");
+            await enter(notched);
+            await clear(".topbar button");
+            await clear(".composer-wrap .composer");
+
+            const plain = await visit(0);
+
+            assert.deepEqual(await edges(plain, ".home-list > .rail"), [{ left: 0, right: 56 }]);
+            await enter(plain);
+            assert.deepEqual(
+                await plain<string[]>(`
+                const pad = (selector) => getComputedStyle(document.querySelector(selector)).paddingLeft;
+
+                return [pad(".topbar"), pad(".pane > .scroller")];
+            `),
+                ["0px", "0px"],
+            );
+        } catch (error) {
+            if (error instanceof BrowserError) {
+                t.skip("this Chromium cannot fake safe-area insets");
+
+                return;
+            }
+
+            throw error;
+        }
+    },
+);
+
+test(
+    "Refresh in Changes reads the diffs on screen again, even when the file list is the same",
+    real,
+    async () => {
+        await fresh();
+
+        const requests = await inPage<{ before: number; after: number }>(`
+        const { store } = await import("/store.js");
+        const { DiffReview } = await import("/diff.js");
+        const { h, render } = await import("preact");
+        const box = document.createElement("div");
+        const fetched = window.fetch;
+        let diffs = 0;
+
+        window.fetch = async (url, ...args) => {
+            if (String(url).endsWith("/changes")) {
+                return new Response(JSON.stringify({ repo: { root: "/tmp", head: "abc" }, more: 0, piOnly: [],
+                    files: [{ path: "a.txt", kind: "modified", version: "5:1", added: 1, removed: 1 }] }));
+            }
+
+            if (String(url).includes("/changes/diff?")) {
+                diffs++;
+
+                return new Response("diff --git a/a.txt b/a.txt\\n--- a/a.txt\\n+++ b/a.txt\\n@@ -1 +1 @@\\n-old\\n+new\\n");
+            }
+
+            return fetched(url, ...args);
+        };
+        document.body.append(box);
+        store.set({ conversationId: ${Number(first)} });
+        render(h(DiffReview, { active: false }), box);
+        store.subscribe(() => render(h(DiffReview, { active: false }), box));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        const before = diffs;
+
+        box.querySelector('[aria-label="Refresh"]').click();
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        window.fetch = fetched;
+
+        return JSON.stringify({ before, after: diffs });
+    `);
+
+        assert.equal(requests.before, 1);
+        assert.equal(requests.after, 2, "Refresh asks for the diff again");
+    },
+);
+
+test("a sent HEIC photo shows the JPEG the model got", real, async () => {
+    const id = await newSession(app);
+
+    await app.commands.configure(id, owner(app), {
+        model: { provider: "faux", modelId: "faux-vision" },
+    });
+    const photo = readFileSync(new URL("./fixtures/photo.heic", import.meta.url));
+    const path = join(app.workspace.uploadDirectory(id), "photo.heic");
+
+    writeFileSync(path, photo);
+    await say(app, id, "look at this", [
+        { path, name: "photo.heic", mime: "image/heic", size: photo.length },
+    ]);
+
+    await fresh();
+    await goTo(id);
+    await until(
+        async () =>
+            (await inPage<string>(
+                `return JSON.stringify(document.querySelector(".thumbs .thumb img")?.alt ?? "")`,
+            )) === "photo.heic",
+        "the HEIC photo's thumbnail",
+    );
+    const thumbnail = await inPage<{ path: string; width: number }>(`
+        const image = document.querySelector(".thumbs .thumb img");
+
+        await image.decode();
+
+        return JSON.stringify({ path: new URL(image.src).pathname, width: image.naturalWidth });
+    `);
+
+    assert.match(thumbnail.path, /\/image\/\d+\/0$/, "the image stored in the message");
+    assert.ok(thumbnail.width > 0);
+});
+
+test("a HEIC photo shows a stored image only where its place is sure", real, async () => {
+    const sources = await inPage<(string | null)[]>(`
+        const { attachedPictureSrc } = await import("/ui.js");
+        const heic = { path: "/u/a.heic", mime: "image/heic", size: 1000, noted: true };
+        const png = { path: "/u/b.png", mime: "image/png", size: 1000, noted: false };
+        const entry = (images, text) => ({ id: 7, images, text });
+
+        return JSON.stringify([
+            attachedPictureSrc(heic, [png, heic], entry(2), 1),
+            attachedPictureSrc({ ...heic, noted: false }, [heic], entry(1), 1),
+            attachedPictureSrc(heic, [png, heic], entry(1), 1),
+            attachedPictureSrc(heic, [heic, png], entry(2, "see @shot.png"), 1),
+            attachedPictureSrc(heic, [heic], entry(1, "see @notes.md"), 1),
+            attachedPictureSrc(png, [png], entry(0), 1),
+        ]);
+    `);
+
+    assert.deepEqual(sources, [
+        "/api/c/1/image/7/1",
+        null,
+        null,
+        null,
+        "/api/c/1/image/7/0",
+        "/api/c/1/file?path=%2Fu%2Fb.png",
+    ]);
+});

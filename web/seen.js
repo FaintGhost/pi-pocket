@@ -5,7 +5,8 @@
 // Kept per browser, in localStorage, like pins and marks. To share it between someone's devices, the server would keep
 // each person's marks (a per-user document beside `SessionsDoc`), `markSeen` would send them, and the session list
 // would carry them back; `finishedUnseen` would not change.
-import { store } from "./store.js";
+import { onPageVisibility, pageVisible } from "./host.js";
+import { serverClockOffset, store } from "./store.js";
 
 /** Each session's seen mark is a key of its own, so tabs that mark different sessions at once keep both. */
 const SEEN_PREFIX = "pocket.peekSeen.";
@@ -13,14 +14,13 @@ const SEEN_PREFIX = "pocket.peekSeen.";
 const SEEN_KEEP_MS = 30 * 24 * 60 * 60_000;
 const SINCE_KEY = "pocket.peekSince";
 
-const hidden = () => document.visibilityState === "hidden";
+const hidden = () => !pageVisible();
 
-/** How far the server's clock is ahead of this browser's, from its last hello: runs end by the server's clock. */
-let clockOffset = 0;
-const serverNow = () => Date.now() + clockOffset;
+/** The server's time now: runs end by the server's clock, which each hello gives (`serverClockOffset`). */
+const serverNow = () => Date.now() + serverClockOffset();
 
 /** A time the server took (its clock), on this device's clock: a phone set a few minutes off still counts right. */
-export const fromServer = (ms) => ms - clockOffset;
+export const fromServer = (ms) => ms - serverClockOffset();
 
 function readSeen() {
     const seen = {};
@@ -55,15 +55,61 @@ addEventListener("storage", (event) => {
     }
 });
 
-/** Remember that this browser looked at a session now: a run that ended before is no longer new. */
-export function markSeen(id) {
-    const key = SEEN_PREFIX + id;
-    const ended = store.state.sessions.find((session) => session.id === id)?.endedAt ?? 0;
-    // The latest look counts, whichever tab made it; the run's own end counts too, in case the clocks disagree.
-    const at = Math.max(Number(localStorage.getItem(key)) || 0, serverNow(), ended);
+/**
+ * Remember that this browser looked at sessions now: a run that ended before is no longer new. One change to the store
+ * for all of them, and none when their marks are as they were (each change draws the whole app).
+ */
+export function markSeen(...ids) {
+    const changed = {};
 
-    localStorage.setItem(key, String(at));
-    store.set({ peekSeen: { ...store.state.peekSeen, [id]: at } });
+    for (const id of ids) {
+        const key = SEEN_PREFIX + id;
+        const ended = store.state.sessions.find((session) => session.id === id)?.endedAt ?? 0;
+        // The latest look counts, whichever tab made it; the run's own end counts too, in case the clocks disagree.
+        const at = Math.max(Number(localStorage.getItem(key)) || 0, serverNow(), ended);
+
+        localStorage.setItem(key, String(at));
+
+        if (store.state.peekSeen?.[id] !== at) {
+            changed[id] = at;
+        }
+    }
+
+    if (Object.keys(changed).length > 0) {
+        store.set({ peekSeen: { ...store.state.peekSeen, ...changed } });
+    }
+}
+
+export function seenSnapshot(ids) {
+    return Object.fromEntries(ids.map((id) => [id, store.state.peekSeen?.[id] ?? 0]));
+}
+
+/** With `expected`, only looks still as the marking left them go back: a session looked at since stays seen. */
+export function restoreSeen(snapshot, expected) {
+    const peekSeen = { ...store.state.peekSeen };
+    const back = new Set();
+
+    for (const [id, at] of Object.entries(snapshot)) {
+        const now = Number(localStorage.getItem(SEEN_PREFIX + id)) || 0;
+
+        if (expected !== undefined && now !== (expected[id] ?? 0)) {
+            continue;
+        }
+
+        back.add(Number(id));
+
+        if (at > 0) {
+            localStorage.setItem(SEEN_PREFIX + id, String(at));
+            peekSeen[id] = at;
+        } else {
+            localStorage.removeItem(SEEN_PREFIX + id);
+            delete peekSeen[id];
+        }
+    }
+
+    store.set({ peekSeen });
+
+    return back;
 }
 
 /**
@@ -103,13 +149,9 @@ store.subscribe((state) => {
     if (state.server !== lastServer) {
         lastServer = state.server;
 
-        if (typeof state.server?.now === "number") {
-            clockOffset = state.server.now - Date.now();
-
-            if (since === null) {
-                since = state.server.now;
-                localStorage.setItem(SINCE_KEY, String(since));
-            }
+        if (typeof state.server?.now === "number" && since === null) {
+            since = state.server.now;
+            localStorage.setItem(SINCE_KEY, String(since));
         }
     }
 
@@ -119,17 +161,10 @@ store.subscribe((state) => {
 
         previous = state.conversationId;
         openEnded = undefined;
-
-        if (left !== null) {
-            markSeen(left);
-        }
-
-        if (state.conversationId !== null) {
-            markSeen(state.conversationId);
-        }
+        markSeen(...[left, state.conversationId].filter((id) => id !== null));
     }
 
     seeOpen(store.state);
 });
 
-document.addEventListener("visibilitychange", () => seeOpen(store.state));
+onPageVisibility(() => seeOpen(store.state));

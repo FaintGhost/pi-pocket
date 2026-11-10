@@ -9,6 +9,9 @@ export function SchedulesSheet() {
     const { view, users, me } = store.state;
     const [when, setWhen] = useState("");
     const steer = canSteer();
+    const archived = store.state.sessions.some(
+        (session) => session.id === store.state.conversationId && session.archived,
+    );
     const setBy = (id) =>
         id === undefined
             ? t("Pi")
@@ -52,7 +55,7 @@ export function SchedulesSheet() {
                         <div class="grow">
                             <div>${schedule.text}</div>
                             <div class="muted small">
-                                ${schedule.repeat ? `${schedule.repeat} · ${t("next")} ${formatWhen(schedule.next)}` : formatWhen(schedule.next)} · ${t("set by")} ${setBy(schedule.by)}
+                                ${schedule.repeat ? `${schedule.repeat} · ${t("next")} ${formatWhen(schedule.next)}` : formatWhen(schedule.next)} · ${t("set by")} ${setBy(schedule.by)}${archived ? ` · ${t("session archived")}` : ""}
                             </div>
                         </div>
                         ${

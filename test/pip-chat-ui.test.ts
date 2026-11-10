@@ -117,7 +117,7 @@ async function fresh(viewport: Viewport = VIEWPORTS.desktop): Promise<void> {
     await page.evaluate(`
         (await import('/store.js')).closeSheet();
         (await import('/pip.js')).closePip();
-        localStorage.removeItem('pocket.pip.draft');
+        (await import('/person-storage.js')).personStorage.set('pip.draft', null);
     `);
     await settle();
     await page.setViewport(viewport);
@@ -450,5 +450,39 @@ test("a typed PiP text draft survives reload while open and while closed", real,
         draft,
         "a closed-panel reload keeps the saved text until the owner reopens PiP",
     );
+    await close();
+});
+
+test("your messages that wait while PiP works show at once, as waiting", real, async () => {
+    await fresh(VIEWPORTS.mobile);
+    const me = owner(app).id;
+
+    // What the server sends while PiP works: your steer, a note of someone else's, and a command's card.
+    await page.evaluate(`
+        const { store } = await import('/store.js');
+        store.set((state) => ({
+            pipView: {
+                ...state.pipView,
+                inbox: [
+                    { id: 9001, mode: "steer", by: ${JSON.stringify(me)}, text: "[from: Owner] Also check the PR" },
+                    { id: 9002, mode: "steer", by: "someone-else", text: "not mine" },
+                    { id: 9003, mode: "write", text: "/compact" },
+                ],
+            },
+        }));
+    `);
+    await see(`document.querySelector('.pip-you.pending') !== null`, "the waiting message");
+    assert.deepEqual(
+        await inPage<string[]>(
+            `return JSON.stringify([...document.querySelectorAll('.pip-you.pending > div:first-child')].map((each) => each.textContent))`,
+        ),
+        ["Also check the PR"],
+    );
+
+    await page.evaluate(`
+        const { store } = await import('/store.js');
+        store.set((state) => ({ pipView: { ...state.pipView, inbox: [] } }));
+    `);
+    await see(`document.querySelector('.pip-you.pending') === null`, "taken by PiP");
     await close();
 });

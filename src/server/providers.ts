@@ -92,6 +92,11 @@ export class Providers {
         this.modelRefresh = new ModelRefresh(app);
     }
 
+    /** How many sign-ins and sign-outs here a provider has had: a limit that one account hit is not the next one's. */
+    signInEpoch(providerId: string): number {
+        return this.#signIns.get(providerId) ?? 0;
+    }
+
     /** Why a provider's sign-in needs a person to sign in again, as last asked; undefined when it does not. */
     needsSignIn(providerId: string): string | undefined {
         return this.#expired.get(providerId);
@@ -223,6 +228,8 @@ export class Providers {
     #signedInOrOut(providerId: string): void {
         this.#signIns.set(providerId, (this.#signIns.get(providerId) ?? 0) + 1);
         this.#expired.delete(providerId);
+        // What a gate knew of a limit was about the account that is gone.
+        this.#app.limits.reset(providerId);
     }
 
     /** A mark came or went: tabs get the models marked again, and sessions' views their model's state. */
@@ -267,6 +274,13 @@ export class Providers {
 
     startLogin(user: User, providerId: string, type: "api_key" | "oauth"): string {
         const app = this.#app;
+
+        // An endpoint's key goes in its form, which keeps it to its address. A sign-in open here would
+        // also hold Pi's queue of the endpoint's sign-ins, and with it every endpoint save.
+        if (app.customProviders.list().some((each) => each.id === providerId)) {
+            throw new HttpError(400, "Change an endpoint's key with its Edit button.");
+        }
+
         const flow: AuthFlow = {
             id: randomUUID(),
             userId: user.id,
@@ -313,18 +327,9 @@ export class Providers {
             notify: (event: unknown) => send({ step: "event", event }),
         };
 
-        void app.models
-            // Sign-ins that identify the installation (ChatGPT) get the ID Pi keeps for it, the same as Pi's own login.
-            .login(providerId, type, interaction, {
-                getDeviceId: () => app.settings.getOrCreateDeviceId(),
-            })
+        void this.#signIn(providerId, type, interaction)
             .then(
-                async () => {
-                    await app.models.getAvailable().catch(() => []);
-                    this.#signedInOrOut(providerId);
-                    send({ step: "done", ok: true });
-                    this.#changed();
-                },
+                () => send({ step: "done", ok: true }),
                 (error: unknown) =>
                     send({
                         step: "done",
@@ -383,6 +388,59 @@ export class Providers {
 
         flow.prompts.clear();
         flow.abort.abort();
+    }
+
+    /** Keep `key` as the provider's API-key sign-in, as the API key button does: an endpoint's key, say. */
+    storeApiKey(providerId: string, key: string): Promise<void> {
+        return this.#signIn(providerId, "api_key", {
+            prompt: () => Promise.resolve(key),
+            notify: () => {},
+        });
+    }
+
+    /**
+     * Put back the API key that a refused save took at sign-in count `epoch`, unless a sign-in or
+     * sign-out came since or auth.json has a key again (Pi in a terminal). Checked in Pi's own queue
+     * of sign-ins, after those that came first.
+     */
+    async restoreApiKey(providerId: string, key: string, epoch: number): Promise<void> {
+        let newer = false;
+
+        await this.#signIn(providerId, "api_key", {
+            prompt: async () => {
+                newer =
+                    this.signInEpoch(providerId) !== epoch ||
+                    (await this.#app.models.listCredentials()).some(
+                        (each) => each.providerId === providerId,
+                    );
+
+                if (newer) {
+                    throw new Error("A newer sign-in came meanwhile.");
+                }
+
+                return key;
+            },
+            notify: () => {},
+        }).catch((error: unknown) => {
+            if (!newer) {
+                throw error;
+            }
+        });
+    }
+
+    /** Pi's sign-in, then what each sign-in here does: no mark or limit of the account before stays, and tabs know. */
+    async #signIn(
+        providerId: string,
+        type: "api_key" | "oauth",
+        interaction: Parameters<PocketApp["models"]["login"]>[2],
+    ): Promise<void> {
+        // Sign-ins that identify the installation (ChatGPT) get the ID Pi keeps for it, the same as Pi's own login.
+        await this.#app.models.login(providerId, type, interaction, {
+            getDeviceId: () => this.#app.settings.getOrCreateDeviceId(),
+        });
+        await this.#app.models.getAvailable().catch(() => []);
+        this.#signedInOrOut(providerId);
+        this.#changed();
     }
 
     async logout(providerId: string): Promise<void> {

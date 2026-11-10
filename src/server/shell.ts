@@ -20,7 +20,7 @@ import type { PocketApp } from "./app.ts";
 import type { User } from "./config.ts";
 import { ShellRequestsDoc } from "./docs.ts";
 import { SHELL_ENTRY, type ShellData } from "./entry-format.ts";
-import { HttpError } from "./errors.ts";
+import { describe, HttpError } from "./errors.ts";
 import { ownRequest } from "./requests.ts";
 
 const TASK = "pocket.shell";
@@ -93,12 +93,16 @@ export class Shell {
                         data = { ...task.input, output: "", status: "interrupted", taskId };
                     } else {
                         await runtime.memo("started", Date.now(), context);
-                        data = await this.#run(
-                            task.input,
-                            taskId,
-                            await runtime.env(context),
-                            context,
+                        // A workspace URI whose provider is off has no environment: the command fails, as Pi's do.
+                        const env = await runtime.env(context).then(
+                            (found) => ({ found }),
+                            (error: unknown) => ({ error: describe(error) }),
                         );
+
+                        data =
+                            "error" in env
+                                ? { ...task.input, output: env.error, status: "failed", taskId }
+                                : await this.#run(task.input, taskId, env.found, context);
                     }
 
                     await this.#record(runtime.conversationId, data, context);
@@ -249,6 +253,15 @@ export class Shell {
 
         if (command.length > MAX_COMMAND) {
             throw new HttpError(413, `Commands are limited to ${MAX_COMMAND} characters.`);
+        }
+
+        // A command is stored and shown as typed, and runs from what is stored: one that holds a value an extension hides
+        // (`host.hide`) would keep it in the transcript. The extension's variable carries the value instead.
+        if (app.hidden.replace(command, id) !== command) {
+            throw new HttpError(
+                400,
+                "This command holds a hidden value, which would be stored and shown. Use the variable that carries it instead, such as $NAME.",
+            );
         }
 
         if (user.role !== "owner" && app.guardOn()) {

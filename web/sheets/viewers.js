@@ -1,6 +1,7 @@
 // Artifacts and images, each in a viewer of its own; and sharing an artifact to anyone with a link.
 import { useEffect, useRef, useState } from "preact/hooks";
 import { useArtifactBridge } from "../artifact-bridge.js";
+import { browserModuleState, openExtPanel } from "../extension-ui.js";
 import { t } from "../i18n.js";
 import { api, attempt, closeSheet, notify, openSheet, store } from "../store.js";
 import { modeOf, paletteOf, themeVars } from "../theme.js";
@@ -82,6 +83,18 @@ export function ArtifactViewer({ id, version }) {
     const src = `/a/${view.conversation.id}/${encodeURIComponent(id)}/${shown ?? "latest"}${theme}`;
     // A published page is out of the reach of an invite to one session, so only those who see every session publish.
     const shareable = me?.role !== "viewer" && me?.sessions === undefined && me?.role !== undefined;
+    // The Design canvas (a built-in module) shows an HTML page with its versions, comments, and tweaks.
+    const designable =
+        artifact?.type === "html" && browserModuleState("design")?.status === "ready";
+
+    const openInDesign = () => {
+        dispatchEvent(
+            new CustomEvent("pocket:design-open", {
+                detail: { artifact: id, version: shown === latest ? null : shown },
+            }),
+        );
+        openExtPanel("design", "design");
+    };
 
     return html`<div class="viewer">
         <header class="viewer-head">
@@ -110,6 +123,16 @@ export function ArtifactViewer({ id, version }) {
             <button class="icon-button" title=${t("Reload")} onClick=${() => setNonce(nonce + 1)}>
                 ↻
             </button>
+            ${
+                designable &&
+                html`<button
+                    class="button small"
+                    title=${t("Open it in the Design canvas")}
+                    onClick=${openInDesign}
+                >
+                    Open in Design
+                </button>`
+            }
             ${
                 shareable &&
                 artifact &&
@@ -193,6 +216,8 @@ function ShareRow({ share, base, fresh, canEnd, onRevoke }) {
 export function ArtifactShareSheet({ id, version }) {
     const { view, me } = store.state;
     const artifact = view.artifacts.find((each) => each.id === id);
+    // Opened from the Design canvas, closing it goes back there, not to the viewer.
+    const fromDesign = store.state.sheet?.back === "design";
     const [list, setList] = useState(null);
     const [base, setBase] = useState(null);
     const [life, setLife] = useState(0);
@@ -255,8 +280,7 @@ export function ArtifactShareSheet({ id, version }) {
 
     return html`<${Sheet}
         title=${t("Share {{title}}", { title: artifact?.title ?? id })}
-        onClose=${() => openSheet({ type: "viewer", id, version })}
-        wide=${true}
+        onClose=${() => (fromDesign ? closeSheet() : openSheet({ type: "viewer", id, version }))}        wide=${true}
     >
         <p class="muted small">
             ${t("A published page needs no sign-in: anyone with its address can open it. It is the artifact's own sandboxed page, which still cannot reach this app or its cookies.")}

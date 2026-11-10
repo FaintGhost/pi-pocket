@@ -1,13 +1,13 @@
 import { t } from "./i18n.js";
 // Pi Pocket web app. No build step: edit a file under web/ and every open browser reloads.
 import { render } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import { folderColor } from "./avatar.js";
 import { canGoBack, goBack, replaceAddress, startHistory, useBack } from "./back.js";
 import { BrowserButton, BrowserPanel } from "./browser-panel.js";
 import { browserAvailable, setBrowserOpen, toggleBrowser } from "./browser.js";
 import { PeopleButton, PeoplePanel } from "./chat.js";
-import { Composer, openingByAlt } from "./composer.js";
+import { Composer, openingByAlt, shortModel, StatusLine } from "./composer.js";
 import { useChanges } from "./diff.js";
 import {
     FilesButton,
@@ -20,6 +20,8 @@ import { ExtensionPage, ExtensionPanel, extPanelShown } from "./extension-ui.js"
 import { startEdgeBack, startSwipes, useDragToClose } from "./gestures.js";
 import { Splash } from "./home.js";
 import { Launcher } from "./launcher.js";
+import "./embedder.js";
+import "./window-controls.js";
 import { registerWorker, updateBadge } from "./notify.js";
 import {
     PEEK_WIDE,
@@ -30,16 +32,27 @@ import {
     peeksWanted,
     togglePeeks,
 } from "./peeks.js";
-import { closePip, openPip, PipHost, pipAvailable, togglePip } from "./pip.js";
+import {
+    closePip,
+    openPip,
+    PipBoardBox,
+    PipHost,
+    pipAvailable,
+    pipBoard,
+    togglePip,
+} from "./pip.js";
 import { Drawer, RailNav, ResizeHandle, SessionList, toSessions } from "./sessions.js";
+import { SessionTabs } from "./session-tabs.js";
 // Loaded for what it does: it gives replies' Markdown the component for pages, images, and diffs in code blocks.
 import "./rich.js";
 import { takeShare } from "./share.js";
+import { QuoteReplyButton } from "./quote-reply.js";
 import { Sheets } from "./sheets.js";
 import { defineItem, slotItems } from "./slots.js";
 import { branchAvailable, headLabel } from "./sheets/branch.js";
 import { SignIn } from "./signin.js";
 import { openSubagents } from "./subagents.js";
+import { RunningBoard } from "./running-board.js";
 import { SubagentsBoard } from "./subagents-board.js";
 import {
     actions,
@@ -50,6 +63,7 @@ import {
     holdNotice,
     navigate,
     notify,
+    openId,
     openSheet,
     panelsBeside,
     peopleDocked,
@@ -67,9 +81,11 @@ import {
     html,
     Icon,
     iconPath,
+    modelLabel,
     shortPath,
     useEdge,
     usePresence,
+    WIDE,
 } from "./ui.js";
 import { toggleDictation } from "./voice.js";
 
@@ -208,6 +224,26 @@ defineItem("topbar", {
         </button>`,
 });
 
+// PiP opened as a board (Appearance → PiP → Board): its × closes it, back to what was in the session's place.
+defineItem("topbar", {
+    id: "core:pip-close",
+    get label() {
+        return t("Close PiP");
+    },
+    order: 1100,
+    fixed: true,
+    render: () =>
+        pipBoard() &&
+        html`<button
+            class="icon-button"
+            aria-label=${t("Close PiP")}
+            title=${t("Close PiP")}
+            onClick=${closePip}
+        >
+            <${Icon} name="close" />
+        </button>`,
+});
+
 function Topbar() {
     const { view, server } = store.state;
     const conversation = view.conversation;
@@ -217,15 +253,21 @@ function Topbar() {
         .split("/")
         .pop();
     const branch = headLabel(view.branch) || conversation?.worktree?.branch;
+    const { sessions, conversationId } = store.state;
+    // The top bar draws with each update of the conversation, as an answer streams: the session list is looked
+    // through again only when it changes.
+    const { listed, waiting } = useMemo(
+        () => ({
+            listed: sessions.find((session) => session.id === conversationId)?.title,
+            // Other sessions waiting for an approval, counted on the way back to them.
+            waiting: sessions.filter(
+                (session) => session.waiting && !session.archived && session.id !== conversationId,
+            ).length,
+        }),
+        [sessions, conversationId],
+    );
     const title =
-        conversation?.title ??
-        store.state.sessions.find((session) => session.id === store.state.conversationId)?.title ??
-        (store.state.missing ? t("Not found") : t("Loading…"));
-    // Other sessions waiting for an approval, counted on the way back to them.
-    const waiting = store.state.sessions.filter(
-        (session) =>
-            session.waiting && !session.archived && session.id !== store.state.conversationId,
-    ).length;
+        conversation?.title ?? listed ?? (store.state.missing ? t("Not found") : t("Loading…"));
     // How far down it reaches: PiP's window on a short wide screen stops below its buttons.
     const edge = useEdge("--topbar-h", (rect) => rect.bottom);
 
@@ -265,7 +307,15 @@ function Topbar() {
                     conversation?.kind === "subagent"
                         ? html`<span class="title-folder title-parent">
                               ${t("subagent of {{title}}", { title: conversation.parent?.title ?? "?" })}
-                          </span>`
+                          </span>
+                          <button
+                              class="title-model"
+                              aria-label=${t("Model: {{model}}: change it", { model: modelLabel(view.agent) })}
+                              title=${t("Model: {{model}}", { model: modelLabel(view.agent) })}
+                              onClick=${() => openSheet({ type: "model" })}
+                          >
+                              <span class="title-model-name">${shortModel(view.agent)}</span>
+                          </button>`
                         : html`${
                               folder &&
                               html`<span class="title-folder" aria-hidden="true">${folder}</span>`
@@ -504,6 +554,9 @@ function App() {
 
     const inConversation = state.conversationId !== null;
     const rail = prefs().sidebar === "rail";
+    // The sidebar and the splash show only on wide screens (style.css): narrower, they are not drawn at all. A phone
+    // drew the sidebar's session list beside its own, hidden, on each change and each Back.
+    const sidebar = WIDE.matches;
     // The subagents board, or an extension's page, takes the conversation's place, and the panels beside it give it
     // their room.
     const board = state.board;
@@ -526,20 +579,25 @@ function App() {
         data-part="app"
     >
         <aside class="sidebar window" data-part="sidebar">
-            <div class="sidebar-clip">
-                <${RailNav} foldable=${true} folded=${rail} />
-                ${!rail && html`<${SessionList} />`}
-            </div>
-            ${!rail && html`<${ResizeHandle} />`}
+            ${
+                sidebar &&
+                html`<div class="sidebar-clip">
+                        <${RailNav} foldable=${true} folded=${rail} />
+                        ${!rail && html`<${SessionList} />`}
+                    </div>
+                    ${!rail && html`<${ResizeHandle} />`}`
+            }
         </aside>
         <div class=${`pane window ${placed ? "boarded" : ""}`} data-part="pane">
             ${
-                board
-                    ? html`<${SubagentsBoard} />`
-                    : page
-                      ? html`<${ExtensionPage} key=${`${state.page.module}:${state.page.id}`} />`
-                      : inConversation
-                        ? html`<${Topbar} />
+                board === "running"
+                    ? html`<${RunningBoard} />`
+                    : board
+                      ? html`<${SubagentsBoard} />`
+                      : page
+                        ? html`<${ExtensionPage} key=${`${state.page.module}:${state.page.id}`} />`
+                        : inConversation
+                          ? html`${prefs().sessionTabs && html`<${SessionTabs} />`}<${Topbar} />
                     ${
                         peeking &&
                         tiles.length > 0 &&
@@ -550,13 +608,16 @@ function App() {
                     ${
                         state.view.conversation &&
                         !state.missing &&
-                        html`<${Composer} key=${state.conversationId} />`
+                        // PiP's conversation as a board has PiP's own box, the one its panel has.
+                        (pipBoard()
+                            ? html`<${PipBoardBox}><${StatusLine} /><//>`
+                            : html`<${Composer} key=${state.conversationId} />`)
                     }`
-                        : html`<div class="home-list" data-part="home-list">
+                          : html`<div class="home-list" data-part="home-list">
                           <${RailNav} />
                           <${SessionList} />
                       </div>
-                      <${Splash} />`
+                      ${sidebar && html`<${Splash} />`}`
             }
         </div>
         ${
@@ -585,6 +646,7 @@ function App() {
         <${Drawer} />
         <${PipHost} />
         <${Sheets} />
+        <${QuoteReplyButton} />
         <${LauncherHost} />
         <${Notices} />
     </div>`;
@@ -630,7 +692,7 @@ document.addEventListener("focusin", focusWindow, true);
 const typingIn = (target) =>
     target instanceof HTMLElement &&
     (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
-const wide = () => matchMedia("(min-width: 960px)").matches;
+const wide = () => WIDE.matches;
 
 /** Go to the session `by` places away in workspace order, wrapping around. */
 function step(by) {
@@ -640,7 +702,7 @@ function step(by) {
         return;
     }
 
-    const at = order.findIndex((session) => session.id === store.state.conversationId);
+    const at = order.findIndex((session) => session.id === openId());
 
     const next = order[(at + by + order.length) % order.length].id;
 

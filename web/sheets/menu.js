@@ -5,6 +5,7 @@ import { browserAvailable, displayUrl, setBrowserOpen } from "../browser.js";
 import { chatUnread } from "../chat.js";
 import { schedulesAvailable, triggersOn, watchAvailable, watchPr } from "../commands.js";
 import { extensionMenuItems, safeMode } from "../extension-ui.js";
+import { hostMenu } from "../embedder.js";
 import { useChanges } from "../diff.js";
 import { filesAvailable, setFilesOpen } from "../files-panel.js";
 import { peeksOn, togglePeeks } from "../peeks.js";
@@ -22,6 +23,7 @@ import {
     collab,
     navigate,
     notify,
+    openRunning,
     openSheet,
     scoped,
     setUnread,
@@ -163,6 +165,21 @@ const PLACES = [
             return t("Find");
         },
         place: () => ({ icon: "search", run: () => openSheet({ type: "find" }) }),
+    },
+    {
+        // Ctrl K's launcher, for touch screens that have no keyboard to open it.
+        id: "core:launcher",
+        get label() {
+            return t("Launcher");
+        },
+        place: () =>
+            touch && {
+                icon: "command",
+                run: () => {
+                    closeSheet();
+                    store.set({ launcher: true });
+                },
+            },
     },
     {
         id: "core:branch",
@@ -415,6 +432,9 @@ export function MenuSheet({ places = true }) {
     const instructions = view.agent?.instructions;
     const memory = useMemory();
 
+    // The embedder this page runs in adds its own group at the end, below App, under its own title (`embedder.js`).
+    const embedder = hostMenu();
+
     return html`<${MenuFrame} title=${conversation?.title ?? t("Menu")}>
         ${places && html`<${Places} />`}
         <div class="menu-session">
@@ -491,6 +511,7 @@ export function MenuSheet({ places = true }) {
                 )
             }
             ${conversation && trustAvailable() && item(t("Project trust"), () => openSheet({ type: "trust" }), trustHint())}
+            ${session && extensionMenuItems("session").map((each) => item(each.label, each.run, each.hint))}
             ${session && steer && driving && item(t("Instructions for Pi"), () => openSheet({ type: "instructions" }), t(instructions ? "on" : "none"))}
             ${conversation && steer && driving && item(t("Compact context"), () => openSheet({ type: "compact" }), t("summarize older messages"))}
             ${conversation && steer && driving && item(t("New context"), () => openSheet({ type: "reset" }), t("Pi starts fresh; history stays"))}
@@ -566,7 +587,8 @@ export function MenuSheet({ places = true }) {
             ${item(t("Your name"), () => openSheet({ type: "name" }), me?.name)}
             ${collab() ? item(t("People"), () => openSheet({ type: "people" }), me?.role === "viewer" ? t("you can view") : "") : item(t("Sign in another device"), () => openSheet({ type: "invite" }))}
             ${collab() && item(t("Notifications"), () => openSheet({ type: "notifications" }), t("Pi finished, approvals, chat"))}
-            ${item(t("Running now"), () => openSheet({ type: "running" }), t("everything Pi is doing"))}
+            ${item(t("Running now"), openRunning, t("everything Pi is doing"))}
+            ${view.conversation && item(t("Background"), () => openSheet({ type: "background" }), t("what commands print as they run"))}
             ${item(t("Spend"), () => openSheet({ type: "spend" }), me?.role === "owner" ? t("by person and session, limits") : t("yours"))}
             ${triggersOn() && me?.role !== "viewer" && item(t("Webhooks and watches"), () => openSheet({ type: "hooks" }), t("GitHub, other services"))}
             ${me?.role === "owner" && item(t("Providers"), () => openSheet({ type: "providers" }))}
@@ -592,5 +614,12 @@ export function MenuSheet({ places = true }) {
             }
             ${item(html`<span class="menu-signout">${t("Sign out")}</span>`, signOut)}
         </div>
+        ${
+            embedder.items.length > 0 &&
+            html`<div class="group">
+                ${embedder.title && html`<div class="group-title">${embedder.title}</div>`}
+                ${embedder.items.map((each) => item(each.label, each.run, each.hint))}
+            </div>`
+        }
     <//>`;
 }

@@ -84,7 +84,8 @@ export const LinkedSessionPeersDoc = defineDoc<{ peers: Record<string, number> }
 
 /**
  * Messages between the linked sessions of one team since a person last wrote in any of them, kept on the team's top
- * session (`linked-sessions.ts`). Since 0.19.0 no count stops them: before, sessions stopped past 20 until a person wrote.
+ * session. Before 0.19.0 sessions stopped past 20 until a person wrote; since 0.28.0 nothing counts them, and this is
+ * no longer written. Kept so the copies older versions stored keep their definition.
  */
 export const LinkedSessionRelayDoc = defineDoc<{ sent: number }>({
     kind: "pocket.linked-session-relay",
@@ -102,7 +103,20 @@ export const LinkedSessionRelayDoc = defineDoc<{ sent: number }>({
  * 30 days, and the newest 1000, as `shell.ts` keeps its requests. (Not a document family: those cannot be pruned.)
  */
 export const LinkedSessionCallsDoc = defineDoc<{
-    items: Record<string, { conversationId?: number; by?: string; at: number }>;
+    items: Record<
+        string,
+        {
+            conversationId?: number;
+            by?: string;
+            at: number;
+            /**
+             * What a stop or an archive returned, so a repeat gives that and changes nothing again. `stopping`: the stop
+             * has not finished.
+             */
+            result?:
+                { busy: boolean; stopping?: boolean } | { archived: boolean; repeating: number };
+        }
+    >;
 }>({
     kind: "pocket.linked-session-calls",
     version: 1,
@@ -133,6 +147,8 @@ export const AuthorsDoc = defineDoc<{
 
 export type ArtifactType = "html" | "markdown" | "svg";
 
+export type ArtifactAsset = { hash: string; size: number; type: string };
+
 export type ArtifactVersion = {
     version: number;
     /** The tool task that wrote it; a replayed call finds its version instead of writing another. */
@@ -149,11 +165,15 @@ export type ArtifactVersion = {
      * artifact, and would change every version's page).
      */
     inline?: true;
+    /** Bundle paths map to immutable, content-addressed bytes. */
+    assets?: Record<string, ArtifactAsset>;
 };
 
 export type ArtifactMeta = {
     title: string;
     type: ArtifactType;
+    group?: string;
+    kind?: "page" | "deck";
     versions: ArtifactVersion[];
 };
 
@@ -178,6 +198,16 @@ export const ArtifactBodyDoc = defineDocFamily<{ content: string }, { content: s
     history: "latest",
     fork: "current",
     initial: (seed) => ({ content: seed.content }),
+});
+
+/** Immutable asset bytes, shared across conversations and keyed by their SHA-256 hash. */
+export const ArtifactAssetDoc = defineDocFamily<{ base64: string }, { base64: string }>({
+    kind: "pocket.artifact-asset",
+    version: 1,
+    ...rebased,
+    family: true,
+    scope: "session",
+    initial: (seed) => ({ base64: seed.base64 }),
 });
 
 /** What one person saved for one artifact (`artifact-state.ts`): a JSON value, the page's schema label, and when. */
@@ -218,6 +248,36 @@ export type ArtifactShare = {
 /** The artifact shares of the whole app, by their token. */
 export const ArtifactSharesDoc = defineDoc<{ items: Record<string, ArtifactShare> }>({
     kind: "pocket.artifact-shares",
+    version: 1,
+    ...rebased,
+    scope: "session",
+    initial: () => ({ items: {} }),
+});
+
+/**
+ * A page that an extension module shows to anyone with its address (`/l/<token>`, `public-links.ts`), under a token
+ * that is the whole of the access: no sign-in. The module's own page handler draws it.
+ */
+export type PublicLink = {
+    /** The module that made it, and whose page handler answers it. */
+    module: string;
+    createdAt: number;
+    /** When it closes. A link always closes: at most `MAX_LINK_HOURS` after it was made. */
+    expiresAt: number;
+    /** How many answered posts it takes still; absent: any number until it closes. 0: it has closed. */
+    uses?: number;
+    /** When its last use was claimed: kept a while after, so a page that refuses the post can give the use back. */
+    usedAt?: number;
+    /** Who it was made for (a person's id), and the session it is about, when the module says. */
+    by?: string;
+    conversation?: number;
+    /** The module's own small JSON value. */
+    data?: JsonValue;
+};
+
+/** The public links of the whole app, by their token. */
+export const PublicLinksDoc = defineDoc<{ items: Record<string, PublicLink> }>({
+    kind: "pocket.public-links",
     version: 1,
     ...rebased,
     scope: "session",
@@ -388,7 +448,8 @@ export const TurnsDoc = defineDoc<Turns>({
     initial: () => ({ on: false, asks: [] }),
 });
 
-export type Decision = { allow: boolean; by: string; userId: string; at: number };
+/** `ask`: an extension's question (`host.ask`), answered or declined rather than allowed or denied. Since 0.22.0. */
+export type Decision = { allow: boolean; by: string; userId: string; at: number; ask?: true };
 
 /** Who allowed or denied each tool call Lancet Guard asked about, by tool call id. */
 export const DecisionsDoc = defineDoc<{ calls: Record<string, Decision> }>({
@@ -446,6 +507,64 @@ export type Schedule = {
 /** Messages that go to Pi later, or on repeat. A fork starts without them: they belong to who set them up. */
 export const ScheduleDoc = defineDoc<{ items: Record<string, Schedule> }>({
     kind: "pocket.schedules",
+    version: 1,
+    ...rebased,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({ items: {} }),
+});
+
+/** A command Pi started in the background (`background.ts`), and how it ended. */
+export type BackgroundTask = {
+    /** Short and stable: what Pi uses to read, stop, or name it. */
+    id: string;
+    command: string;
+    cwd: string;
+    /** Its process, the leader of its own process group; 0 while it is starting. */
+    pid: number;
+    /** When its process started, in the kernel's clock ticks since boot: with `pid`, what says it is still the same. */
+    startTicks?: number;
+    startedAt: number;
+    /** `starting` from when it is reserved until its process is known; `running` while any process of its group runs. */
+    status: "starting" | "running" | "exited" | "stopped" | "lost";
+    /** Its exit code, once it exited by itself. */
+    code?: number;
+    /** `split`'s exit code, when writing its log failed (a full disk): its output may stop short. */
+    logFailed?: number;
+    /** Why Pi Pocket stopped it, when it did of itself (its output came too fast to keep). */
+    why?: string;
+    /** Processes it started that left its group and still ran when it ended (a daemon): a stop ends them. */
+    left?: number[];
+    /** The machine's boot it started in: a task of another boot has no process left. */
+    boot?: string;
+    endedAt?: number;
+    /** When Pi was told that it ended, if it was: a task told once is not told again. */
+    toldAt?: number;
+    /**
+     * Pi is still to be told that it ended. Set when it ends, so a task that ended before 0.28 (told then, with no
+     * `toldAt`) is not told again.
+     */
+    untold?: true;
+    /** The request id of the message that tells it, saved before that message is sent, until it is told. */
+    batch?: string;
+    /** Whether Pi gets a message when it ends: false for one Pi stopped itself, which needs no message. */
+    notify: boolean;
+    /** Whom Pi worked for when it started the command: its message goes out as their work. */
+    requestedBy?: string;
+    /** The durable task that watches it. */
+    taskId: TaskId;
+    /** Set by the same call already, when a tool call is replayed: its `taskId:callId`. */
+    key?: string;
+    /** The size of its log's segments, in bytes: a segment's place in the output follows from its number. */
+    segment?: number;
+    /** How much of its output Pi has read, in bytes from its very start (counting what a sweep removed). */
+    read: number;
+};
+
+/** Commands Pi runs in the background. A fork starts without them: their processes belong to the session they were started in. */
+export const BackgroundDoc = defineDoc<{ items: Record<string, BackgroundTask> }>({
+    kind: "pocket.background",
     version: 1,
     ...rebased,
     scope: "conversation",
@@ -578,6 +697,20 @@ export const ShellRequestsDoc = defineDoc<{ items: Record<string, number> }>({
     history: "latest",
     fork: "initial",
     initial: () => ({ items: {} }),
+});
+
+/**
+ * Why a session's last run failed, in the same short line the session list shows. A later run clears it when that run
+ * starts, so a process that starts again still knows a run that gave up. A stop is not a failure and writes nothing.
+ */
+export const RunFailureDoc = defineDoc<{ text?: string }>({
+    kind: "pocket.run-failure",
+    version: 1,
+    ...rebased,
+    scope: "conversation",
+    history: "latest",
+    fork: "initial",
+    initial: () => ({}),
 });
 
 /**
@@ -783,5 +916,48 @@ export const RepoWatchesDoc = defineDoc<{ items: Record<string, RepoWatch> }>({
     version: 1,
     ...rebased,
     scope: "session",
+    initial: () => ({ items: {} }),
+});
+
+/** One comment on a design, pinned to an element of one version (`extensions/design.ts`). */
+export type DesignComment = {
+    id: string;
+    /** The artifact version it was made on. */
+    version: number;
+    /** The element it points at, as the page's inspector described it: shape-checked and cut to size by the server. */
+    target: JsonValue;
+    text: string;
+    /** Who wrote it, by id and by name when they did (the name is kept if the person is removed). */
+    by: string;
+    byName: string;
+    at: number;
+    /** Set when someone marked it done. */
+    resolved?: { by: string; at: number };
+};
+
+/** What a conversation keeps for one design artifact. */
+export type DesignItem = {
+    comments: DesignComment[];
+    /** Each person's tweak values for it, by person id: the knobs of the page's manifest and what was set. */
+    tweaks?: Record<string, { values: Record<string, string | number | boolean>; at: number }>;
+    /** Versions that "Go back to this one" made, by version: the version whose content they copy. */
+    restores?: Record<string, number>;
+    accepted?: Record<
+        string,
+        { by: string; byName: string; at: number; rule: string; message: string }
+    >;
+};
+
+/**
+ * The Design workspace's own data (`extensions/design.ts`), by artifact id: shared comments, each person's tweaks, and
+ * which versions were restored from which. A fork starts with the current values, as its artifacts do.
+ */
+export const DesignCommentsDoc = defineDoc<{ items: Record<string, DesignItem> }>({
+    kind: "pocket.design-comments",
+    version: 1,
+    ...rebased,
+    scope: "conversation",
+    history: "latest",
+    fork: "current",
     initial: () => ({ items: {} }),
 });

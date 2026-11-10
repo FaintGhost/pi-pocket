@@ -20,7 +20,45 @@ function copy(text, what) {
  * One hook: where it sends, what Pi is told to do, how it has been used; its address (and a signed one's secret), a new
  * secret, and removing it.
  */
-function HookRow({ hook, base, fresh, onRemove, onRotate }) {
+function HookRow({ hook, base, fresh, editable, onSaved, onRemove, onRotate }) {
+    const [draft, setDraft] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const savingNow = useRef(false);
+    const field = useRef(null);
+    const change = useRef(null);
+    const edited = useRef(false);
+    const editing = draft !== null;
+
+    useEffect(() => {
+        if (editing) {
+            field.current?.focus();
+        } else if (edited.current) {
+            change.current?.focus();
+        }
+
+        edited.current = editing;
+    }, [editing]);
+
+    const save = () => {
+        if (savingNow.current) {
+            return;
+        }
+
+        savingNow.current = true;
+        setSaving(true);
+        attempt(async () => {
+            const updated = await api(`hooks/${encodeURIComponent(hook.id)}`, {
+                instructions: draft,
+            });
+
+            onSaved(updated);
+            setDraft(null);
+        }).finally(() => {
+            savingNow.current = false;
+            setSaving(false);
+        });
+    };
+
     const open = (event) => {
         event.preventDefault();
         closeSheet();
@@ -36,6 +74,11 @@ function HookRow({ hook, base, fresh, onRemove, onRotate }) {
                       : "{{count}} posts, last {{when}}",
                   { count: hook.count, when: formatWhen(hook.lastAt) },
               );
+    const status = [
+        t(hook.signed ? "GitHub, signed" : "secret in the address"),
+        ...(hook.anyone ? [t("from anyone")] : []),
+        used,
+    ].join(" · ");
 
     return html`<div class=${`hook ${fresh ? "fresh" : ""}`}>
         <div class="hook-head">
@@ -44,14 +87,55 @@ function HookRow({ hook, base, fresh, onRemove, onRotate }) {
                 ${t("to")} ${hook.pip ? "PiP" : html`<a href=${`/s/${hook.target}`} onClick=${open}>${hook.targetTitle}</a>`}
             </span>
         </div>
-        ${hook.instructions && html`<div class="hook-text">${hook.instructions}</div>`}
+        ${
+            editing
+                ? html`<div class="field">
+                    <div class="label">${t("What Pi should do with each post")}</div>
+                    <textarea
+                        aria-label=${t("Edit the prompt of {{name}}", { name: hook.name })}
+                        rows="4"
+                        maxlength="2000"
+                        ref=${field}
+                        disabled=${saving}
+                        value=${draft}
+                        onInput=${(event) => setDraft(event.currentTarget.value)}
+                        onKeyDown=${(event) => {
+                            // Esc cancels the edit, as Cancel does; the sheet closes on the next Esc.
+                            if (
+                                event.key === "Escape" &&
+                                !event.isComposing &&
+                                event.keyCode !== 229
+                            ) {
+                                event.stopPropagation();
+                                setDraft(null);
+                            }
+                        }}
+                    ></textarea>
+                    <div class="muted small">
+                        ${t("Applies to future posts. Leave empty for the default instructions.")}
+                    </div>
+                    <div class="hook-actions">
+                        <button
+                            class="button small ghost"
+                            disabled=${saving}
+                            onClick=${() => setDraft(null)}
+                        >
+                            ${t("Cancel")}
+                        </button>
+                        <button class="button small primary" disabled=${saving} onClick=${save}>
+                            ${saving ? t("Saving…") : t("Save")}
+                        </button>
+                    </div>
+                </div>`
+                : hook.instructions && html`<div class="hook-text">${hook.instructions}</div>`
+        }
         ${
             fresh &&
             html`<div class="mono small hook-address">${addressOf(base, hook)}</div>
                 ${hook.signed && html`<div class="mono small hook-address">${t("Secret:")} ${hook.secret}</div>`}`
         }
         <div class="hook-actions">
-            <span class="muted small grow">${t(hook.signed ? "GitHub, signed" : "secret in the address")}${hook.anyone ? ` · ${t("from anyone")}` : ""} · ${used}</span>
+            <span class="muted small grow hook-status">${status}</span>
             <button
                 class="button small"
                 onClick=${() => copy(addressOf(base, hook), t(hook.signed ? "Address copied: GitHub's Payload URL." : "Address copied. Keep it secret: anyone with it can message Pi."))}
@@ -67,8 +151,23 @@ function HookRow({ hook, base, fresh, onRemove, onRotate }) {
                     ${t("Copy secret")}
                 </button>`
             }
-            <button class="button small ghost" onClick=${onRotate}>${t("New secret")}</button>
-            <button class="button small ghost" onClick=${onRemove}>${t("Remove")}</button>
+            ${
+                editable &&
+                draft === null &&
+                html`<button
+                    class="button small ghost"
+                    ref=${change}
+                    onClick=${() => setDraft(hook.instructions)}
+                >
+                    ${t("Edit prompt")}
+                </button>`
+            }
+            <button class="button small ghost" disabled=${saving} onClick=${onRotate}>
+                ${t("New secret")}
+            </button>
+            <button class="button small ghost" disabled=${saving} onClick=${onRemove}>
+                ${t("Remove")}
+            </button>
         </div>
     </div>`;
 }
@@ -351,6 +450,14 @@ export function HooksSheet() {
                 hook=${hook}
                 base=${list.base}
                 fresh=${hook.id === fresh}
+                editable=${steer}
+                onSaved=${(updated) =>
+                    setList((current) => ({
+                        ...current,
+                        hooks: current.hooks.map((each) =>
+                            each.id === updated.id ? { ...each, ...updated } : each,
+                        ),
+                    }))}
                 onRemove=${() => remove(hook)}
                 onRotate=${() => rotate(hook)}
             />`,

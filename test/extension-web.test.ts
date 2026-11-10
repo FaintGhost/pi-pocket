@@ -25,7 +25,8 @@ import {
 } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { connect } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import type {
     ConversationWebRequest,
@@ -39,6 +40,7 @@ import { ExtensionWebs } from "../src/server/extension-web.ts";
 import { PlanDoc, TurnsDoc } from "../src/server/docs.ts";
 import { createHandler } from "../src/server/http.ts";
 import { opened } from "../src/server/http/io.ts";
+import { BUILT_IN_MODULES } from "../src/server/reload.ts";
 
 const dataDir = join(root, "data");
 const dropIns = join(dataDir, "extensions");
@@ -55,6 +57,7 @@ const Catalog = defineDoc({
     kind: "x.workspace.catalog",
     version: 1,
     scope: "session",
+    checkpointWhen: () => false,
     initial: () => ({ saved: 0 }),
 });
 
@@ -105,7 +108,7 @@ before(async () => {
         join(dropIns, "workspace.ts"),
         `/** Workspace: request-bound test routes. */
 import { defineDoc } from "@earendil-works/pi-durable";
-const Catalog = defineDoc({ kind: "x.workspace.catalog", version: 1, scope: "session", initial: () => ({ saved: 0 }) });
+const Catalog = defineDoc({ kind: "x.workspace.catalog", version: 1, scope: "session", checkpointWhen: () => false, initial: () => ({ saved: 0 }) });
 export default function(host, web) {
     globalThis.workspaceHost = host;
     web.route("GET", "catalog", async req => {
@@ -257,13 +260,23 @@ test("a browser module loads for the people it is for, and its folder serves onl
     const ownerUi = await uiFor("owner");
     const panelUrl = ownerUi.find((each) => each.module === "panel")!.url;
     const soloUrl = ownerUi.find((each) => each.module === "solo")!.url;
+    const diagramsUrl = ownerUi.find((each) => each.module === "diagrams")!.url;
 
     // Panel's is for everyone with every session; Solo's for the owner alone.
+    // Built-in modules with browser modules of their own may be on by default: only the drop-ins count.
     assert.deepEqual(
-        (await uiFor("Vic")).map((each) => each.module),
+        (await uiFor("Vic"))
+            .map((each) => each.module)
+            .filter((module) => !BUILT_IN_MODULES.has(module)),
         ["panel"],
     );
-    assert.deepEqual(await uiFor("Sid"), []);
+    const sidUi = await uiFor("Sid");
+
+    assert.deepEqual(
+        sidUi.map((each) => each.module),
+        ["diagrams"],
+    );
+    assert.equal(sidUi[0]!.url, diagramsUrl);
 
     const folder = panelUrl.replace(/index\.js$/, "");
 
@@ -280,13 +293,83 @@ test("a browser module loads for the people it is for, and its folder serves onl
         assert.equal((await call("owner", `${folder}${path}`)).status, 404, path);
     }
 
-    // Nobody signed in, and someone it is not for, learn nothing.
+    // A session invitation grants the built-in diagrams file, but not another module.
     assert.equal((await call(null, panelUrl)).status, 401);
     assert.equal((await call("Sid", panelUrl)).status, 404);
+    assert.equal((await call("Sid", diagramsUrl)).status, 200);
     assert.equal((await call("Gale", soloUrl)).status, 404);
     // One file is all a file serves.
     assert.equal((await call("owner", soloUrl)).status, 200);
     assert.equal((await call("owner", soloUrl.replace(/solo\.js$/, "other.js"))).status, 404);
+});
+
+test("a same-name drop-in cannot use the session-only diagrams exception", async () => {
+    const diagramsFile = fileURLToPath(
+        new URL("../src/server/extensions/diagrams.ts", import.meta.url),
+    );
+    const builtInDirectory = dirname(diagramsFile);
+    const sessionUsers = [
+        { role: "guest" as const, sessions: ["1"] },
+        { role: "viewer" as const, sessions: ["1"] },
+    ];
+    const builtInChanges: unknown[] = [];
+    const builtIn = new ExtensionWebs({ changed: (access) => builtInChanges.push(access) });
+
+    try {
+        const { part, web } = builtIn.stage("diagrams.ts", builtInDirectory, "Diagrams");
+
+        web.route("GET", "private", () => ({ ok: true }), { access: "view" });
+        web.client("diagrams", { access: "view" });
+        builtIn.commit(part);
+
+        for (const user of sessionUsers) {
+            assert.deepEqual(
+                builtIn.clients(user).map((each) => each.module),
+                ["diagrams"],
+            );
+            assert.equal(
+                builtIn.file("diagrams", ["index.js"], user)?.file,
+                join(builtInDirectory, "diagrams", "index.js"),
+            );
+            assert.equal(builtIn.match("diagrams", "GET", ["private"], user), undefined);
+        }
+
+        assert.deepEqual(builtInChanges, ["all"]);
+
+        builtIn.remove("diagrams.ts");
+        assert.deepEqual(builtIn.clients(sessionUsers[0]!), []);
+        assert.equal(builtIn.file("diagrams", ["index.js"], sessionUsers[0]!), undefined);
+        assert.deepEqual(builtInChanges, ["all", "all"]);
+    } finally {
+        await builtIn.close();
+    }
+
+    const dropInDirectory = join(root, "same-name-diagrams-drop-in");
+
+    mkdirSync(join(dropInDirectory, "diagrams"), { recursive: true });
+    writeFileSync(join(dropInDirectory, "diagrams.ts"), "export default () => {};\n");
+    writeFileSync(join(dropInDirectory, "diagrams", "index.js"), "export {};\n");
+
+    const dropInChanges: unknown[] = [];
+    const dropIn = new ExtensionWebs({ changed: (access) => dropInChanges.push(access) });
+
+    try {
+        const { part, web } = dropIn.stage("diagrams.ts", dropInDirectory, "Diagrams drop-in");
+
+        web.route("GET", "private", () => ({ ok: true }), { access: "view" });
+        web.client("diagrams", { access: "view" });
+        dropIn.commit(part);
+
+        for (const user of sessionUsers) {
+            assert.deepEqual(dropIn.clients(user), []);
+            assert.equal(dropIn.file("diagrams", ["index.js"], user), undefined);
+            assert.equal(dropIn.match("diagrams", "GET", ["private"], user), undefined);
+        }
+
+        assert.deepEqual(dropInChanges, [["view"]]);
+    } finally {
+        await dropIn.close();
+    }
 });
 
 test("events reach the tabs that load the browser module, or one person's, and what is not JSON never throws", async () => {
@@ -584,6 +667,7 @@ test("bound routes use the clicking actor, keep receipts private, and expose aut
     );
     const count = app.sessions().length;
 
+    // The model has no "high", and an explicit level is never silently lowered.
     assert.equal(
         (
             await call("owner", `/api/x/workspace/start/${id}`, {

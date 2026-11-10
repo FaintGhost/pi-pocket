@@ -129,7 +129,8 @@ export function useDictation(box, onText, { top = false } = {}) {
                 const element = box.current;
                 const Recognition = Recognizer();
 
-                if (!element || typeof Recognition !== "function") {
+                // A read-only box's words are not to change (a send on its way holds them).
+                if (!element || element.readOnly || typeof Recognition !== "function") {
                     return;
                 }
 
@@ -331,7 +332,7 @@ export function useDictation(box, onText, { top = false } = {}) {
 }
 
 /** The mic: starts dictation, and while it listens, stops it. None where the browser cannot recognise speech. */
-export function MicButton({ dictation, class: className = "", size = 17, part }) {
+export function MicButton({ dictation, class: className = "", size = 17, part, disabled = false }) {
     if (!voiceAvailable()) {
         return null;
     }
@@ -345,6 +346,7 @@ export function MicButton({ dictation, class: className = "", size = 17, part })
         aria-label=${t("Dictate")}
         aria-pressed=${listening ? "true" : "false"}
         title=${t(listening ? "Listening: tap to stop (Alt+V)" : "Dictate (Alt+V)")}
+        disabled=${disabled}
         onMouseDown=${(event) => event.preventDefault()}
         onClick=${toggle}
     >

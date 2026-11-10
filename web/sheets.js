@@ -6,6 +6,8 @@ import { ExtensionSheet, onExtensionsGone } from "./extension-ui.js";
 import { NotificationsSheet } from "./notify.js";
 import { ShareSheet } from "./share.js";
 import { AppearanceSheet } from "./sheets/appearance.js";
+import { AllArtifactsSheet } from "./sheets/all-artifacts.js";
+import { BackgroundSheet } from "./sheets/background.js";
 import { BranchPicker } from "./sheets/branch.js";
 import { ExtensionsContent, ExtensionsSheet } from "./sheets/extensions.js";
 import { MagpieSheet } from "./sheets/magpie.js";
@@ -23,9 +25,8 @@ import { MemorySheet } from "./sheets/memory.js";
 import { MenuSheet, PlacesSheet } from "./sheets/menu.js";
 import { MessageSheet } from "./sheets/message.js";
 import { ModelPicker } from "./sheets/model.js";
-import { InviteSheet, PeopleSheet } from "./sheets/people.js";
+import { InviteSheet, MyPhoto, PeopleSheet } from "./sheets/people.js";
 import { AuthDialog, ProvidersSheet } from "./sheets/providers.js";
-import { RunningSheet } from "./sheets/running.js";
 import { HooksSheet } from "./sheets/hooks.js";
 import { SchedulesSheet } from "./sheets/schedules.js";
 import { SessionSheet } from "./sheets/session.js";
@@ -205,6 +206,9 @@ function sheetBody(sheet) {
         case "artifacts":
             body = html`<${ArtifactsSheet} />`;
             break;
+        case "all-artifacts":
+            body = html`<${AllArtifactsSheet} />`;
+            break;
         case "viewer":
             body = view.conversation
                 ? html`<${ArtifactViewer} id=${sheet.id} version=${sheet.version} />`
@@ -275,7 +279,7 @@ function sheetBody(sheet) {
             break;
         case "session":
             body = store.state.sessions.some((each) => each.id === sheet.id)
-                ? html`<${SessionSheet} id=${sheet.id} />`
+                ? html`<${SessionSheet} id=${sheet.id} at=${sheet.at ?? null} />`
                 : null;
             break;
         case "places":
@@ -284,14 +288,22 @@ function sheetBody(sheet) {
         case "chat":
             body = view.conversation ? html`<${ChatSheet} />` : null;
             break;
-        case "rename":
-            body = html`<${TextSheet}
+
+        case "rename": {
+            const renamed = sheet.id
+                ? store.state.sessions.find((each) => each.id === sheet.id)
+                : view.conversation;
+
+            body =
+                renamed &&
+                html`<${TextSheet}
                 title=${t("Rename")}
                 label=${t("Session title")}
-                initial=${view.conversation?.title ?? ""}
-                submit=${(value) => actions.updateSession(view.conversation.id, { title: value })}
-            />`;
+                initial=${renamed.title ?? ""}
+                submit=${(value) => actions.updateSession(renamed.id, { title: value })}            />`;
             break;
+        }
+
         case "worktree":
             body = html`<${WorktreeSheet} />`;
             break;
@@ -308,7 +320,12 @@ function sheetBody(sheet) {
             break;
         case "file":
             body = view.conversation
-                ? html`<${FileSheet} key=${sheet.id} path=${sheet.id} line=${sheet.line} />`
+                ? html`<${FileSheet}
+                      key=${sheet.id}
+                      path=${sheet.id}
+                      line=${sheet.line}
+                      refresh=${sheet.n}
+                  />`
                 : null;
             break;
         case "find":
@@ -319,8 +336,10 @@ function sheetBody(sheet) {
         case "spend":
             body = html`<${SpendSheet} />`;
             break;
-        case "running":
-            body = html`<${RunningSheet} />`;
+        case "background":
+            body = view.conversation
+                ? html`<${BackgroundSheet} key=${sheet.task ?? ""} task=${sheet.task} />`
+                : null;
             break;
         case "schedules":
             body = view.conversation ? html`<${SchedulesSheet} />` : null;
@@ -383,6 +402,7 @@ function sheetBody(sheet) {
                 title=${t("Your name")}
                 label=${t("Shown on your messages to others")}
                 initial=${me?.name ?? ""}
+                header=${html`<${MyPhoto} />`}
                 footer=${html`<button class="button ghost wide sheet-footer signout" onClick=${signOut}>
                     <${Icon} name="logout" size=${16} /> ${t("Sign out")}
                 </button>`}

@@ -35,6 +35,8 @@ const seen = globalThis as unknown as { meterWeb?: ExtensionWeb };
 
 /** `Pocket`'s members in the public types: `npm run check` holds this to them, and the first test holds `pocket` to it. */
 const POCKET_MEMBERS: Record<keyof Pocket, true> = {
+    settings: true,
+    onSettings: true,
     version: true,
     pocketVersion: true,
     module: true,
@@ -75,10 +77,14 @@ const POCKET_MEMBERS: Record<keyof Pocket, true> = {
     sessionFilter: true,
     sessionSearch: true,
     composerKey: true,
+    fence: true,
+    mathInline: true,
     onConversation: true,
     messages: true,
     reveal: true,
+    entryPresentation: true,
     insertText: true,
+    pip: true,
     arrange: true,
     toolCall: true,
     openPage: true,
@@ -222,6 +228,7 @@ before(async () => {
         join(dropIns, "shared", "index.js"),
         `export default (pocket) => {
 	pocket.rail({ id: "hi", title: "Shared", run: () => pocket.notify("info", "hi from shared") });
+	globalThis.sharedPocket = pocket;
 };
 `,
     );
@@ -357,6 +364,76 @@ test(
         await inPage(`(await import("/files-panel.js")).setFilesOpen(true); return "null";`);
         await until(async () => !(await has(".ext-panel")), "the Files panel in its place");
         await inPage(`(await import("/files-panel.js")).setFilesOpen(false); return "null";`);
+    },
+);
+
+test(
+    "menu rows use App and Session groups, update and remove, and reject invalid groups",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(".composer"), "the session");
+        const invalid = await withMeter<string>(
+            `try { pocket.menu({ id: "invalid-group", label: "Invalid", group: "other", run() {} }); return JSON.stringify("accepted"); } catch (error) { return JSON.stringify(error.message); }`,
+        );
+
+        assert.match(invalid, /group is "app" or "session"/);
+        await withMeter(
+            `globalThis.appMenu = pocket.menu({ id: "app-row", label: "App row", hint: "default", run: () => { globalThis.menuRan = "app"; } }); globalThis.sessionMenu = pocket.menu({ id: "session-row", label: "Session row", group: "session", run: () => { globalThis.menuRan = "session"; } }); return "null";`,
+        );
+
+        const openMenu = () =>
+            inPage(`(await import("/store.js")).openSheet({ type: "menu" }); return "null";`);
+        const menuLabels = () =>
+            inPage<string[]>(
+                `return JSON.stringify([...document.querySelectorAll(".sheet .list-item")].map((each) => each.textContent.trim()))`,
+            );
+        const hasLabel = async (label: string) =>
+            (await menuLabels()).some((each) => each.startsWith(label));
+
+        await inPage(`(await import("/store.js")).navigate(null); return "null";`);
+        await until(async () => !(await has(".composer")), "the session closes");
+        await openMenu();
+        await until(() => hasLabel("App row"), "the default App row without a session");
+        assert.equal(await hasLabel("Session row"), false, "a Session row needs a session");
+        await inPage(`(await import("/store.js")).closeSheet(); return "null";`);
+        // A closing sheet takes its history entry off a moment later: a route written before then is undone.
+        await until(
+            async () =>
+                (await inPage<number>(
+                    `return JSON.stringify(history.state?.pocket?.layers ?? 0)`,
+                )) === 0,
+            "the sheet's history entry to go",
+            30_000,
+        );
+
+        await inPage(`(await import("/store.js")).navigate(${session}); return "null";`);
+        await until(() => has(".composer"), "the session opens");
+        await openMenu();
+        await until(
+            async () => (await hasLabel("App row")) && (await hasLabel("Session row")),
+            "both menu groups",
+        );
+        await inPage(
+            `[...document.querySelectorAll(".sheet .list-item")].find((each) => each.textContent.trim().startsWith("Session row")).click(); return "null";`,
+        );
+        await until(
+            async () =>
+                (await inPage<string>(`return JSON.stringify(globalThis.menuRan ?? "")`)) ===
+                "session",
+            "the Session row action",
+        );
+
+        await withMeter(
+            `globalThis.sessionMenu.update({ label: "Session updated", hint: "changed" }); return "null";`,
+        );
+        await openMenu();
+        await until(() => hasLabel("Session updated"), "the updated Session row");
+        assert.equal(await hasLabel("Session row"), false);
+        await withMeter(`globalThis.sessionMenu.remove(); return "null";`);
+        await until(async () => !(await hasLabel("Session updated")), "the removed Session row");
+        assert.equal(await hasLabel("App row"), true, "the App row remains");
+        await withMeter(`globalThis.appMenu.remove(); return "null";`);
     },
 );
 
@@ -592,6 +669,13 @@ test("Lancet Guard stays on until its inline confirmation is accepted", real, as
         `(await import("/store.js")).openSheet({ type: "extensions", tab: "installed" }); return "null";`,
     );
     await until(() => has('.switch[aria-label="Lancet Guard: on"]'), "the guard switch");
+    // Built in is the first section, open: its switches show without a tap.
+    assert.equal(
+        await inPage<boolean>(
+            `return JSON.stringify(document.querySelector(".extension-management.hub > .ext-section")?.matches("section.ext-builtins") === true)`,
+        ),
+        true,
+    );
     await settled();
     await inPage(
         `document.querySelector('.switch[aria-label="Lancet Guard: on"]').focus(); return "null";`,
@@ -612,9 +696,586 @@ test("Lancet Guard stays on until its inline confirmation is accepted", real, as
     );
 });
 
+test(
+    "Send, and while Pi works Stop, stay inside the message box on every phone width, with extension buttons and with more",
+    real,
+    async () => {
+        const busy = (on: boolean) =>
+            page.evaluate(`
+                const { store } = await import("/store.js");
+                store.set((state) => ({ view: { ...state.view, live: { ...state.view.live, busy: ${on} } } }));
+                for (let frame = 0; frame < 3; frame++) {
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                }
+            `);
+        const fit = () =>
+            inPage<{
+                scroll: number;
+                client: number;
+                stop: number;
+                send: number;
+                right: number;
+                shown: number;
+                below: boolean;
+            }>(`
+                const row = document.querySelector(".composer-row");
+                const stop = row.querySelector(".stop-button")?.getBoundingClientRect();
+                const send = row.querySelector(".send-button")?.getBoundingClientRect();
+                const shown = [...row.querySelectorAll(".ext-composer-button")].filter((each) => each.offsetWidth > 0);
+                const end = (stop ?? send).bottom;
+
+                return JSON.stringify({
+                    scroll: row.scrollWidth,
+                    client: row.clientWidth,
+                    stop: stop?.right ?? 0,
+                    send: send?.right ?? 0,
+                    right: row.getBoundingClientRect().right,
+                    shown: shown.length,
+                    below: shown.every((each) => each.getBoundingClientRect().top >= end),
+                });
+            `);
+
+        const inside = (width: number, what: string, f: Awaited<ReturnType<typeof fit>>) => {
+            assert.ok(
+                f.scroll <= f.client,
+                `${what}: the row overflows at ${width} px: ${JSON.stringify(f)}`,
+            );
+            assert.ok(
+                f.stop > 0 && f.stop <= f.right,
+                `${what}: Stop is out of the row at ${width} px: ${JSON.stringify(f)}`,
+            );
+        };
+
+        try {
+            for (const width of [320, 360, 375, 390, 412, 430]) {
+                await page.setViewport({ width, height: 700, scale: 2, mobile: true });
+                await page.navigate(`${base}/s/${session}`);
+                await until(() => has(".composer-row"), "the message box");
+                await withMeter(`
+                    for (const id of ["a", "b", "c"]) {
+                        pocket.composerButton({ id, title: "Tool " + id, icon: "pulse", run: () => {} });
+                    }
+
+                    return "null";
+                `);
+                await until(() => has(".ext-composer-button"), "the extension's buttons");
+
+                // Idle: three buttons would push Send out of a phone's box: they take a line under it.
+                const idle = await fit();
+
+                assert.ok(
+                    idle.scroll <= idle.client && idle.send > 0 && idle.send <= idle.right,
+                    `Send is out of the row at ${width} px: ${JSON.stringify(idle)}`,
+                );
+                assert.equal(idle.shown, 3, `the buttons show at ${width} px`);
+                assert.ok(idle.below, `the buttons are on a line under Send at ${width} px`);
+
+                await busy(true);
+                const working = await fit();
+
+                inside(width, "with three extension buttons", working);
+                assert.equal(working.shown, 3, "the extension's buttons stay, on their own line");
+                assert.ok(working.below, `the buttons are on a line under Stop at ${width} px`);
+
+                // A touch screen's taller tap layer on each mode still takes a tap above and below it: the cut that
+                // keeps Stop in is sideways only.
+                const taps = await inPage<{ above: boolean; below: boolean }[]>(`
+                    const touch = new CSSStyleSheet();
+
+                    touch.replaceSync(".mode-switch button { position: relative } .mode-switch button::before { content: ''; position: absolute; inset: -6px 0 }");
+                    document.adoptedStyleSheets = [...document.adoptedStyleSheets, touch];
+                    const hits = [...document.querySelectorAll(".composer .mode-switch button")].map((each) => {
+                        const box = each.getBoundingClientRect();
+                        const x = box.left + box.width / 2;
+
+                        return {
+                            above: document.elementFromPoint(x, box.top - 4) === each,
+                            below: document.elementFromPoint(x, box.bottom + 4) === each,
+                        };
+                    });
+
+                    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((each) => each !== touch);
+
+                    return JSON.stringify(hits);
+                `);
+
+                assert.ok(
+                    taps.length === 3 && taps.every((each) => each.above && each.below),
+                    `the modes' tap layer is cut at ${width} px: ${JSON.stringify(taps)}`,
+                );
+
+                // Text that the browser's own font-size setting makes bigger (Firefox on a phone does): the labels of the
+                // three modes grow, and Stop still stays in.
+                await page.evaluate(`
+                    const sheet = new CSSStyleSheet();
+                    sheet.replaceSync(".composer .mode-switch button { font-size: 18px !important; }");
+                    window.__bigText = sheet;
+                    document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+                `);
+                inside(width, "with the mode labels at 18 px", await fit());
+                await page.evaluate(
+                    `document.adoptedStyleSheets = document.adoptedStyleSheets.filter((each) => each !== window.__bigText)`,
+                );
+
+                // Something that nothing planned for: the row still keeps Stop.
+                await page.evaluate(`
+                    const spacer = document.createElement("span");
+                    spacer.id = "stress";
+                    spacer.style.cssText = "flex: none; width: 140px; height: 10px";
+                    document.querySelector(".composer-row > .grow").before(spacer);
+                `);
+                inside(width, "with 140 px more in the row", await fit());
+                await page.evaluate(`document.getElementById("stress")?.remove()`);
+                await busy(false);
+                assert.equal((await fit()).shown, 3, "and the buttons are back when Pi stops");
+            }
+        } finally {
+            await busy(false);
+            await page.setViewport(DESKTOP);
+        }
+    },
+);
+
+test(
+    "many rail buttons: the rail scrolls as a whole, and fades the edge where more is",
+    real,
+    async () => {
+        const measure = () =>
+            inPage<{
+                more: string | null;
+                scroll: number;
+                client: number;
+                groupScrolls: boolean;
+                lastIn: boolean;
+            }>(`
+                const rail = document.querySelector(".sidebar .rail");
+                const group = rail.querySelector(".rail-exts");
+                const last = [...rail.querySelectorAll(".rail-ext")].at(-1).getBoundingClientRect();
+                const box = rail.getBoundingClientRect();
+
+                return JSON.stringify({
+                    more: rail.dataset.more ?? null,
+                    scroll: rail.scrollHeight,
+                    client: rail.clientHeight,
+                    groupScrolls: group.scrollHeight > group.clientHeight,
+                    lastIn: last.top >= box.top && last.bottom <= box.bottom,
+                });
+            `);
+        const frames = () =>
+            page.evaluate(`
+                for (let frame = 0; frame < 3; frame++) {
+                    await new Promise((resolve) => requestAnimationFrame(resolve));
+                }
+            `);
+
+        try {
+            await page.setViewport({ ...DESKTOP, height: 560 });
+            await page.navigate(`${base}/s/${session}`);
+            await until(() => has(rail("Meter")), "the meter's rail button");
+            await withMeter(`
+                globalThis.manyRail = [];
+
+                for (let at = 0; at < 8; at++) {
+                    globalThis.manyRail.push(
+                        pocket.rail({ id: "many-" + at, title: "Many " + at, icon: "grid", run: () => {} }),
+                    );
+                }
+
+                return "null";
+            `);
+            await until(() => has(rail("Many 7")), "the eight buttons");
+            await frames();
+            const top = await measure();
+
+            // One scroller: the extensions' group shows all its buttons, and the rail says that more is below.
+            assert.equal(
+                top.groupScrolls,
+                false,
+                "the extensions' buttons do not scroll on their own",
+            );
+            assert.ok(
+                top.scroll > top.client,
+                `the rail is taller than the window: ${JSON.stringify(top)}`,
+            );
+            assert.equal(top.more, "down");
+            assert.equal(top.lastIn, false);
+
+            await page.evaluate(`document.querySelector(".sidebar .rail").scrollTop = 1e6`);
+            await frames();
+            const end = await measure();
+
+            assert.equal(end.more, "up");
+            assert.equal(end.lastIn, true, "the last button scrolls into view");
+
+            // Room for all: no fade.
+            await page.setViewport({ ...DESKTOP, height: 1400 });
+            await frames();
+            await until(
+                async () => (await measure()).more === null,
+                "no fade once everything shows",
+            );
+        } finally {
+            await withMeter(`
+                for (let at = 0; at < 8; at++) {
+                    globalThis.manyRail?.[at]?.remove();
+                }
+
+                return "null";
+            `);
+            await page.setViewport(DESKTOP);
+        }
+    },
+);
+
+test(
+    "pocket.pip.ask drafts into PiP's box, sends only right after a tap, and tells a guest PiP is not there",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's rail button");
+        await until(
+            () => inPage<boolean>(`return JSON.stringify(Boolean(globalThis.meterPocket))`),
+            "the meter's pocket",
+        );
+        // The submit goes nowhere: the test is about what the app sends, not about PiP's answer.
+        await page.evaluate(`
+            (await import("/person-storage.js")).personStorage.set("pip.draft", null);
+            globalThis.submitted = [];
+            const fetched = window.fetch;
+            window.fetch = (url, init) => {
+                if (String(url).endsWith("/submit")) {
+                    globalThis.submitted.push(JSON.parse(init.body).text);
+
+                    return Promise.resolve(new Response("{}", { headers: { "content-type": "application/json" } }));
+                }
+
+                return fetched(url, init);
+            };
+            document.body.insertAdjacentHTML("beforeend", '<button id="ask-pip" style="position:fixed;top:0;left:0;z-index:99999">Ask</button>');
+            document.querySelector("#ask-pip").onclick = async () => {
+                globalThis.asked = await globalThis.meterPocket.pip.ask("Look at this", { send: true });
+            };
+        `);
+
+        // Draft only, by default: PiP opens with the words, from the extension, and nothing is sent.
+        assert.deepEqual(
+            await withMeter(`return JSON.stringify(await pocket.pip.ask("Look at this"))`),
+            { ok: true, sent: false },
+        );
+        await until(
+            async () =>
+                (await inPage<string>(
+                    `return JSON.stringify(document.querySelector(".pip-composer textarea")?.value ?? "")`,
+                )) === "From the extension “meter”:\nLook at this",
+            "the draft in PiP's box",
+        );
+        assert.deepEqual(await inPage(`return JSON.stringify(globalThis.submitted)`), []);
+
+        // A send with no tap is refused, and drafts nothing more. A tap from before does not count.
+        await page.evaluate(`(await import("/taps.js")).spendTap()`);
+        assert.deepEqual(
+            await withMeter(
+                `return JSON.stringify(await pocket.pip.ask("Look at this", { send: true }))`,
+            ),
+            { ok: false, reason: "Sending needs a click or a key press just before" },
+        );
+        assert.deepEqual(await inPage(`return JSON.stringify(globalThis.submitted)`), []);
+
+        // A real click on the module's button sends, once.
+        await page.click({ selector: "#ask-pip" });
+        await until(
+            () => inPage<boolean>(`return JSON.stringify(globalThis.asked !== undefined)`),
+            "the answer",
+        );
+        assert.deepEqual(await inPage(`return JSON.stringify(globalThis.asked)`), {
+            ok: true,
+            sent: true,
+        });
+        assert.deepEqual(await inPage(`return JSON.stringify(globalThis.submitted)`), [
+            "From the extension “meter”:\nLook at this",
+        ]);
+        assert.deepEqual(
+            await withMeter(`return JSON.stringify(await pocket.pip.ask("Again", { send: true }))`),
+            { ok: false, reason: "Sending needs a click or a key press just before" },
+            "the click served one send",
+        );
+
+        // A guest has no PiP: a result, not an error.
+        const guest = app.config.addUser("Guest", "guest");
+        const other = await browsers.open(2);
+
+        try {
+            await other.navigate(`${base}/login?token=${encodeURIComponent(guest.token)}`);
+            await until(
+                async () =>
+                    JSON.parse(
+                        await other.evaluate(
+                            `return JSON.stringify(Boolean(globalThis.sharedPocket) && (await import("/store.js")).store.state.server !== undefined)`,
+                        ),
+                    ) as boolean,
+                "the guest's tab",
+            );
+            assert.deepEqual(
+                JSON.parse(
+                    await other.evaluate(
+                        `return JSON.stringify(await globalThis.sharedPocket.pip.ask("Look", { send: true }))`,
+                    ),
+                ),
+                { ok: false, reason: "PiP is not available" },
+            );
+        } finally {
+            app.config.removeUser(guest.user.id);
+        }
+    },
+);
+
+test(
+    "Markdown extension points render, update, and remove their registrations",
+    real,
+    async (t) => {
+        t.after(() => app.setExtensionEnabled(owner(app), "diagrams.ts", true));
+        // Exercise the test renderer, not the built-in renderer that normally takes precedence.
+        await app.setExtensionEnabled(owner(app), "diagrams.ts", false);
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's browser module");
+
+        const before = await inPage<{ revision: number; math: boolean }>(`
+        const markdown = await import("/markdown-ext.js");
+        return JSON.stringify({ revision: markdown.markdownRevision(), math: markdown.mathOn() });
+    `);
+        const invalid = await withMeter<string>(`
+        try {
+            pocket.fence({ id: "bad-fence", langs: [], component: () => null });
+            return JSON.stringify("accepted");
+        } catch (error) {
+            return JSON.stringify(error.message);
+        }
+    `);
+
+        assert.match(invalid, /langs is a non-empty list/);
+        await withMeter(`
+        globalThis.fenceHandle = pocket.fence({
+            id: "test-fence",
+            langs: ["PI-TEST"],
+            component: ({ source, lang, streaming }) =>
+                pocket.h("output", {
+                    class: "fence-probe",
+                    "data-source": source.trim(),
+                    "data-lang": lang,
+                    "data-streaming": String(streaming),
+                }),
+        });
+        globalThis.mathHandle = pocket.mathInline({
+            id: "test-math",
+            mount(element, source, display) {
+                element.classList.add("math-probe");
+                element.dataset.source = source;
+                element.dataset.display = String(display);
+                element.textContent = "mounted";
+            },
+        });
+        return "null";
+    `);
+
+        const afterAdd = await inPage<number>(`
+        return JSON.stringify((await import("/markdown-ext.js")).markdownRevision());
+    `);
+
+        assert.ok(
+            afterAdd > before.revision,
+            "adding Markdown renderers changes the Markdown revision",
+        );
+
+        const rendered = await withMeter<{
+            source: string | undefined;
+            lang: string | undefined;
+            streaming: string | undefined;
+            mathParsed: boolean;
+            mathMounted: boolean;
+            mathCustom: boolean;
+        }>(`
+        const { render } = await import("preact");
+        const host = globalThis.markdownTestHost ??= document.createElement("div");
+        const fence = String.fromCharCode(96).repeat(3);
+        const newline = String.fromCharCode(10);
+        const text = [fence + "Pi-Test", "fence-body", fence, "", "$x+y$"].join(newline);
+        document.body.append(host);
+        render(pocket.h(pocket.Markdown, { text }), host);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const block = host.querySelector("output.fence-probe");
+        const math = host.querySelector('code[data-part="inline-math"]');
+
+        return JSON.stringify({
+            source: block?.dataset.source,
+            lang: block?.dataset.lang,
+            streaming: block?.dataset.streaming,
+            mathParsed: math !== null,
+            mathMounted: math?.hasAttribute("data-mounted") ?? false,
+            mathCustom: math?.classList.contains("math-probe") ?? false,
+        });
+    `);
+
+        assert.deepEqual(rendered, {
+            source: "fence-body",
+            lang: "Pi-Test",
+            streaming: "false",
+            mathParsed: true,
+            mathMounted: true,
+            mathCustom: true,
+        });
+
+        const updated = await withMeter<string>(`
+        globalThis.mathHandle.update({
+            mount(element, source) {
+                element.classList.add("math-updated");
+                element.dataset.source = source;
+            },
+        });
+        const { render } = await import("preact");
+        const fence = String.fromCharCode(96).repeat(3);
+        const newline = String.fromCharCode(10);
+        const text = [fence + "Pi-Test", "fence-body", fence, "", "$x+y$"].join(newline);
+        render(pocket.h(pocket.Markdown, { text }), globalThis.markdownTestHost);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const updated = globalThis.markdownTestHost.querySelector(".math-updated");
+
+        return JSON.stringify(updated?.dataset.source ?? null);
+    `);
+
+        assert.equal(updated, "x+y", "an updated math renderer remounts existing Markdown");
+
+        await withMeter(`
+        globalThis.fenceHandle.remove();
+        globalThis.mathHandle.remove();
+        return "null";
+    `);
+        const afterRemove = await inPage<number>(`
+        return JSON.stringify((await import("/markdown-ext.js")).markdownRevision());
+    `);
+
+        assert.ok(
+            afterRemove > afterAdd,
+            "removing Markdown renderers changes the Markdown revision",
+        );
+
+        const fallback = await withMeter<{
+            customFence: boolean;
+            defaultFence: string | undefined;
+            math: boolean;
+            mathMounted: boolean;
+        }>(`
+        const { render } = await import("preact");
+        const host = globalThis.markdownTestHost;
+        const fence = String.fromCharCode(96).repeat(3);
+        const newline = String.fromCharCode(10);
+        const text = [fence + "Pi-Test", "fence-body", fence, "", "$x+y$"].join(newline);
+        render(pocket.h(pocket.Markdown, { text }), host);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const math = host.querySelector('code[data-part="inline-math"]');
+
+        return JSON.stringify({
+            customFence: host.querySelector("output.fence-probe") !== null,
+            defaultFence: host.querySelector('pre[data-lang="Pi-Test"] code')?.textContent,
+            math: (await import("/markdown-ext.js")).mathOn(),
+            mathMounted: math?.hasAttribute("data-mounted") ?? false,
+        });
+    `);
+
+        assert.deepEqual(fallback, {
+            customFence: false,
+            defaultFence: "fence-body",
+            math: before.math,
+            mathMounted: before.math,
+        });
+        await withMeter(`
+        globalThis.markdownTestHost.remove();
+        delete globalThis.markdownTestHost;
+        return "null";
+    `);
+    },
+);
+
+test(
+    "a fence renderer that throws shows its source, and the rest of the reply renders",
+    real,
+    async () => {
+        await page.navigate(`${base}/s/${session}`);
+        await until(() => has(rail("Meter")), "the meter's browser module");
+
+        const shown = await withMeter<{
+            error: boolean;
+            source: string | undefined;
+            after: boolean;
+        }>(`
+        const handle = pocket.fence({
+            id: "throwing-fence",
+            langs: ["throw-test"],
+            component: () => {
+                throw new Error("bad source");
+            },
+        });
+        const { render } = await import("preact");
+        const host = document.createElement("div");
+        const fence = String.fromCharCode(96).repeat(3);
+        const text = [fence + "throw-test", "the source", fence, "", "after the fence"].join(
+            String.fromCharCode(10),
+        );
+        document.body.append(host);
+        render(pocket.h(pocket.Markdown, { text }), host);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const result = {
+            error: /bad source/.test(host.querySelector(".error-box")?.textContent ?? ""),
+            source: host.querySelector("pre code")?.textContent,
+            after: (host.textContent ?? "").includes("after the fence"),
+        };
+        render(null, host);
+        host.remove();
+        handle.remove();
+
+        return JSON.stringify(result);
+    `);
+
+        assert.deepEqual(shown, { error: true, source: "the source", after: true });
+    },
+);
+
 test("turning the module off takes away its button and closes its page", real, async () => {
     await page.navigate(`${base}/s/${session}`);
     await until(() => has(rail("Meter")), "the meter's rail button");
+
+    const mathBefore = await inPage<boolean>(`
+        return JSON.stringify((await import("/markdown-ext.js")).mathOn());
+    `);
+
+    await withMeter(`
+        pocket.fence({
+            id: "unload-fence",
+            langs: ["unload-test"],
+            component: () => pocket.h("output", { class: "unload-fence" }),
+        });
+        pocket.mathInline({
+            id: "unload-math",
+            mount(element) {
+                element.classList.add("unload-math");
+            },
+        });
+        return "null";
+    `);
+    const rendered = await withMeter<{ registered: boolean; custom: boolean }>(`
+        const { render } = await import("preact");
+        const host = globalThis.markdownUnloadHost ??= document.createElement("div");
+        const fence = String.fromCharCode(96).repeat(3);
+        const text = [fence + "unload-test", "value", fence].join(String.fromCharCode(10));
+        document.body.append(host);
+        render(pocket.h(pocket.Markdown, { text }), host);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return JSON.stringify({
+            registered: (await import("/markdown-ext.js")).fenceFor("unload-test") !== undefined,
+            custom: host.querySelector("output.unload-fence") !== null,
+        });
+    `);
+
+    assert.deepEqual(rendered, { registered: true, custom: true });
     await settled();
     await page.click({ selector: rail("Meter") });
     await until(() => has(".ext-page .meter"), "the page");
@@ -623,5 +1284,39 @@ test("turning the module off takes away its button and closes its page", real, a
         async () => !(await has(".ext-page")) && !(await has(rail("Meter"))),
         "the page and button gone",
     );
+    const removed = await inPage<{
+        registered: boolean;
+        custom: boolean;
+        fallback: string | undefined;
+        math: boolean;
+    }>(`
+        const { h, render } = await import("preact");
+        const { Markdown } = await import("/ui.js");
+        const host = globalThis.markdownUnloadHost;
+        const fence = String.fromCharCode(96).repeat(3);
+        const text = [fence + "unload-test", "value", fence].join(String.fromCharCode(10));
+        render(h(Markdown, { text }), host);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const markdown = await import("/markdown-ext.js");
+
+        return JSON.stringify({
+            registered: markdown.fenceFor("unload-test") !== undefined,
+            custom: host.querySelector("output.unload-fence") !== null,
+            fallback: host.querySelector('pre[data-lang="unload-test"] code')?.textContent,
+            math: markdown.mathOn(),
+        });
+    `);
+
+    assert.deepEqual(removed, {
+        registered: false,
+        custom: false,
+        fallback: "value",
+        math: mathBefore,
+    });
     assert.equal(await has(rail("Shared")), true);
+    await inPage(`
+        globalThis.markdownUnloadHost.remove();
+        delete globalThis.markdownUnloadHost;
+        return "null";
+    `);
 });

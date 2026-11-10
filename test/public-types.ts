@@ -11,7 +11,23 @@ import type {
     ExtensionModule,
     ExtensionWeb,
     LinkedSession as RealLinkedSession,
+    LinkedSessionsApi as RealLinkedSessions,
+    SessionsApi as RealSessions,
     PocketHost,
+    AppEvents as RealAppEvents,
+    SettingField as RealSettingField,
+    AskRequest as RealAskRequest,
+    AskAnswer as RealAskAnswer,
+    AskField as RealAskField,
+    HiddenValue as RealHiddenValue,
+    CommandRun as RealCommandRun,
+    BrowserPageHandle as RealBrowserPageHandle,
+    BrowserControl as RealBrowserControl,
+    BrowserTarget as RealBrowserTarget,
+    PublicLinkInfo as RealPublicLinkInfo,
+    PublicLinkRequest as RealPublicLinkRequest,
+    PublicLinks as RealPublicLinks,
+    PublicPageRequest as RealPublicPageRequest,
     WebRequest as RealWebRequest,
 } from "../src/server/host.ts";
 import type {
@@ -23,7 +39,23 @@ import type {
     HumanLinkedSessions,
     Host,
     LinkedSession,
+    LinkedSessions,
+    Sessions,
     Module,
+    AppEvents,
+    SettingField,
+    AskRequest,
+    AskAnswer,
+    AskField,
+    HiddenValue,
+    CommandRun,
+    BrowserPageHandle,
+    BrowserControl,
+    BrowserTarget,
+    PublicLinkInfo,
+    PublicLinkRequest,
+    PublicLinks,
+    PublicPageRequest,
     Web,
     WebRequest,
 } from "../types/pocket.d.ts";
@@ -36,14 +68,17 @@ type Internal =
     | "pip"
     | "pipCompaction"
     | "gallery"
+    | "updates"
     | "watches"
     | "repoWatches"
     | "approvals"
     | "guard"
     | "schedules"
+    | "background"
     | "goals"
     | "browsers"
-    | "memory";
+    | "memory"
+    | "toolNames";
 
 type PublicHost = Pick<PocketHost, keyof Host>;
 
@@ -79,8 +114,40 @@ export const command = (real: ExtensionCommand): Command => real;
 export const commandBack = (types: Command): ExtensionCommand => types;
 export const result = (real: RealCommandResult): CommandResult => real;
 export const resultBack = (types: CommandResult): RealCommandResult => types;
+export const publicLinks = (real: RealPublicLinks): PublicLinks => real;
+export const publicLinksBack = (types: PublicLinks): RealPublicLinks => types;
+export const publicLinkInfo = (real: RealPublicLinkInfo): PublicLinkInfo => real;
+export const publicLinkInfoBack = (types: PublicLinkInfo): RealPublicLinkInfo => types;
+export const publicLinkRequest = (real: RealPublicLinkRequest): PublicLinkRequest => real;
+export const publicLinkRequestBack = (types: PublicLinkRequest): RealPublicLinkRequest => types;
+export const publicPageRequest = (real: RealPublicPageRequest): PublicPageRequest => real;
+export const publicPageRequestBack = (types: PublicPageRequest): RealPublicPageRequest => types;
+export const askRequest = (real: RealAskRequest): AskRequest => real;
+export const askRequestBack = (types: AskRequest): RealAskRequest => types;
+export const askAnswer = (real: RealAskAnswer): AskAnswer => real;
+export const askAnswerBack = (types: AskAnswer): RealAskAnswer => types;
+export const askField = (real: RealAskField): AskField => real;
+export const askFieldBack = (types: AskField): RealAskField => types;
+export const hiddenValue = (real: RealHiddenValue): HiddenValue => real;
+export const hiddenValueBack = (types: HiddenValue): RealHiddenValue => types;
+export const commandRun = (real: RealCommandRun): CommandRun => real;
+export const commandRunBack = (types: CommandRun): RealCommandRun => types;
+export const browserPageHandle = (real: RealBrowserPageHandle): BrowserPageHandle => real;
+export const browserPageHandleBack = (types: BrowserPageHandle): RealBrowserPageHandle => types;
+export const browserControl = (real: RealBrowserControl): BrowserControl => real;
+export const browserControlBack = (types: BrowserControl): RealBrowserControl => types;
+export const browserTarget = (real: RealBrowserTarget): BrowserTarget => real;
+export const browserTargetBack = (types: BrowserTarget): RealBrowserTarget => types;
+export const appEvents = (real: RealAppEvents): AppEvents => real;
+export const appEventsBack = (types: AppEvents): RealAppEvents => types;
+export const settingField = (real: RealSettingField): SettingField => real;
+export const settingFieldBack = (types: SettingField): RealSettingField => types;
 export const linked = (real: RealLinkedSession): LinkedSession => real;
 export const linkedBack = (types: LinkedSession): RealLinkedSession => types;
+export const links = (real: RealLinkedSessions): LinkedSessions => real;
+export const linksBack = (types: LinkedSessions): RealLinkedSessions => types;
+export const sessions = (real: RealSessions): Sessions => real;
+export const sessionsBack = (types: Sessions): RealSessions => types;
 
 /** A module written against the public types is one the loader takes. */
 export const module = (types: Module): ExtensionModule => types;

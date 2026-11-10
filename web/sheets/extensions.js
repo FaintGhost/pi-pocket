@@ -29,7 +29,7 @@ function guardNote(module, guard) {
         return {
             warn: true,
             text: t(
-                "Off in Pi Pocket: bash, write, and edit calls run unchecked here. Pi itself still uses it.",
+                "Off in Pi Pocket: bash, background, write, and edit calls run unchecked here. Pi itself still uses it.",
             ),
         };
     }
@@ -37,7 +37,7 @@ function guardNote(module, guard) {
     return {
         warn: false,
         text: t(
-            "Checks bash, write, and edit calls. Risky ones wait for someone in the session to allow them.",
+            "Checks bash, background, write, and edit calls. Risky ones wait for someone in the session to allow them.",
         ),
     };
 }
@@ -96,7 +96,177 @@ function ApprovalRule({ owner }) {
     </div>`;
 }
 
-/** What a module adds to the app: its routes, commands, and browser module with how it stands in this browser. */
+/**
+ * A module's settings (`web.settings`), for the owner: each field as the module declared it, saved together. A secret
+ * shows only whether it is set; typing a new one replaces it, and Clear puts its default back.
+ */
+function ModuleSettings({ module }) {
+    const [shown, setShown] = useState(null);
+    const [draft, setDraft] = useState({});
+    const [error, setError] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const path = `extension-settings/${encodeURIComponent(module)}`;
+
+    useEffect(() => {
+        // Only the answer for the module shown now: a slower one for another module never takes its place.
+        let live = true;
+
+        setShown(null);
+        setDraft({});
+        setError(null);
+        api(path).then(
+            (answer) => live && setShown(answer),
+            (failure) => live && setError(failure.message),
+        );
+
+        return () => {
+            live = false;
+        };
+    }, [module]);
+
+    if (error && !shown) {
+        return html`<div class="error-box small">${error}</div>`;
+    }
+
+    if (!shown) {
+        return html`<${Loader} label=${t("Settings")} />`;
+    }
+
+    // What a field shows: the owner's change, the default when they asked for it back (null), or the value now.
+    const value = (field) => {
+        if (!Object.hasOwn(draft, field.name)) {
+            return shown.values[field.name] ?? "";
+        }
+
+        return draft[field.name] === null ? (field.default ?? "") : draft[field.name];
+    };
+
+    const set = (name, next) => setDraft({ ...draft, [name]: next });
+
+    const save = async () => {
+        setError(null);
+
+        // A number is typed as text ("-", "1."), and becomes a number only now; an empty one puts the default back.
+        const unreadable = shown.fields.find(
+            (field) =>
+                field.type === "number" &&
+                typeof draft[field.name] === "string" &&
+                draft[field.name].trim() !== "" &&
+                !Number.isFinite(Number(draft[field.name])),
+        );
+
+        if (unreadable !== undefined) {
+            setError(t("{{label}} must be a number.", { label: unreadable.label }));
+
+            return;
+        }
+
+        setBusy(true);
+
+        const change = Object.fromEntries(
+            Object.entries(draft).map(([name, next]) => {
+                const field = shown.fields.find((each) => each.name === name);
+
+                if (field?.type !== "number" || typeof next !== "string") {
+                    return [name, next];
+                }
+
+                return [name, next.trim() === "" ? null : Number(next)];
+            }),
+        );
+
+        try {
+            setShown(await api(path, change, { method: "PUT" }));
+            setDraft({});
+        } catch (failure) {
+            setError(failure.message);
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    return html`<div class="ext-settings">
+        <div class="small"><b>${t("Settings")}</b></div>
+        ${shown.fields.map((field) => {
+            const secret = field.type === "text" && field.secret;
+            const id = `ext-setting-${module}-${field.name}`;
+            const range =
+                field.type === "number" && (field.min !== undefined || field.max !== undefined)
+                    ? t("From {{min}} to {{max}}", {
+                          min: field.min ?? t("any"),
+                          max: field.max ?? t("any"),
+                      })
+                    : undefined;
+            const hint =
+                secret && shown.set.includes(field.name)
+                    ? t("Set: type to replace")
+                    : (field.placeholder ?? "");
+
+            return html`<div class="setting wrap" key=${field.name}>
+                <div class="grow">
+                    <label class="small" for=${id}>${field.label}</label>
+                    ${field.description && html`<div class="muted small">${field.description}</div>`}
+                </div>
+                ${
+                    field.type === "boolean"
+                        ? html`<${Switch}
+                              on=${value(field) === true}
+                              label=${field.label}
+                              onChange=${() => set(field.name, value(field) !== true)}
+                          />`
+                        : field.type === "choice"
+                          ? html`<select
+                                id=${id}
+                                value=${value(field)}
+                                onChange=${(event) => set(field.name, event.currentTarget.value)}
+                            >
+                                ${field.choices.map(
+                                    (choice) =>
+                                        html`<option value=${choice.value}>${choice.label}</option>`,
+                                )}
+                            </select>`
+                          : html`<input
+                                id=${id}
+                                class="ext-setting-input"
+                                type=${secret ? "password" : "text"}
+                                inputmode=${field.type === "number" ? "decimal" : undefined}
+                                autocomplete="off"
+                                placeholder=${hint}
+                                value=${secret ? (draft[field.name] ?? "") : value(field)}
+                                title=${range}
+                                onInput=${(event) => set(field.name, event.currentTarget.value)}
+                            />`
+                }
+                ${
+                    shown.set.includes(field.name) &&
+                    html`<button
+                        class="button small"
+                        title=${t("Put its default back")}
+                        disabled=${busy}
+                        onClick=${() => set(field.name, null)}
+                    >
+                        ${secret ? t("Clear") : t("Default")}
+                    </button>`
+                }
+            </div>`;
+        })}
+        ${error && html`<div class="error-box small">${error}</div>`}
+        <div class="ext-step-actions">
+            <button
+                class="button small primary"
+                disabled=${busy || Object.keys(draft).length === 0}
+                onClick=${save}
+            >
+                ${busy ? t("Saving…") : t("Save settings")}
+            </button>
+        </div>
+    </div>`;
+}
+
+/**
+ * What a module adds to the app: its routes, commands, public pages, and browser module with how it stands in this
+ * browser.
+ */
 function WebPart({ module }) {
     const web = module.web;
 
@@ -106,10 +276,12 @@ function WebPart({ module }) {
 
     const here = browserModuleState(module.file.replace(/\.ts$/, ""));
     const parts = [
-        web.routes.length > 0 && `routes: ${web.routes.join(", ")}`,
-        web.commands?.length > 0 && `commands: ${web.commands.join(", ")}`,
+        web.routes.length > 0 && t("routes: {{names}}", { names: web.routes.join(", ") }),
+        web.commands?.length > 0 && t("commands: {{names}}", { names: web.commands.join(", ") }),
         web.client &&
             t("browser module for {{who}}", { who: t(ACCESS_WORDS[web.client] ?? web.client) }),
+        web.publicPage && t("pages for anyone with a link, no sign-in"),
+        web.service && t("a service for other modules"),
         here?.status === "loading" && t("loading here"),
         here?.status === "off" && t("off in this tab"),
     ].filter(Boolean);
@@ -197,21 +369,23 @@ function GalleryPart({ module, installed, busy, turnOff }) {
 
 /** When PiP compacts its own context: once idle above so many tokens (`pip-compact.ts`), or only as sessions do. */
 const PIP_COMPACT = [
+    [0, "As sessions do"],
     [40000, "Above 40k tokens"],
     [60000, "Above 60k tokens"],
     [100000, "Above 100k tokens"],
-    [0, "As sessions do"],
 ];
 
 function PipCompactAt({ owner }) {
-    const at = store.state.server?.pipCompactAt ?? 60000;
+    const at = store.state.server?.pipCompactAt ?? 0;
     const change = (value) => attempt(() => api("settings", { pipCompactAt: value }));
 
     return html`<div class="setting wrap">
         <div class="grow">
             <div class="small">${t("Compact PiP's context")}</div>
             <div class="muted small">
-                ${t("Once PiP is idle above this, older messages become a short summary.")}
+                ${t(
+                    "When PiP's older messages become a short summary: as a session's do, or sooner, once PiP is idle above a limit, which keeps each reply cheaper.",
+                )}
             </div>
         </div>
         <div class="segmented" role="group" aria-label=${t("Compact PiP's context")}>
@@ -234,6 +408,13 @@ export function ExtensionsSheet() {
         <${ExtensionsContent} />
     <//>`;
 }
+
+/** Claude subscription billing: what the owner must know before it is on, and a line while it is. */
+const CLAUDE_BILLING = "anthropic-subscription.ts";
+const CLAUDE_RISK =
+    "Anthropic's terms forbid using Claude through scripts or other automated means, except with an API key or where Anthropic explicitly allows it. Its help pages say third-party apps can use your subscription limits, but its servers often bill such requests as extra usage. This makes Pi Pocket's requests look like Claude Code's. Anthropic could refuse them, bill them, or act on your account. Turn it on only if you accept that risk.";
+const CLAUDE_ON =
+    "On at your own risk: Anthropic's terms and its help pages disagree on using a subscription in third-party apps.";
 
 /** Built-in modules' marks, by file; drop-ins show their first letter. */
 const ICONS = {
@@ -263,7 +444,15 @@ function summaryOf(module) {
 }
 
 /** The same management controls standalone or in the hub's Installed tab. */
-export function ExtensionsContent({ galleryInstalled, query = "", onChanged = () => {} }) {
+export function ExtensionsContent({
+    galleryInstalled,
+    query = "",
+    onChanged = () => {},
+    hub = false,
+    before = null,
+    beforeCount = 0,
+    between = null,
+}) {
     const { me } = store.state;
     const owner = me?.role === "owner";
     const [data, setData] = useState(null);
@@ -347,8 +536,9 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
             return;
         }
 
-        // A drop-in runs with the owner's rights: it asks first, in its own row, not in a dialog over the app.
-        if (module.source === "drop-in" && !module.enabled) {
+        // A drop-in runs with the owner's rights, and Claude subscription billing has risks of its own: each asks first,
+        // in its own row, not in a dialog over the app.
+        if ((module.source === "drop-in" || module.file === CLAUDE_BILLING) && !module.enabled) {
             setConfirmOn(confirmOn === module.file ? null : module.file);
 
             return;
@@ -379,9 +569,11 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
         (module) =>
             (galleryInstalled === undefined ||
                 !installedByFile.has(module.file) ||
-                // Keep failed gallery modules here too: their loader/browser errors are management data.
-                module.error ||
-                browserModuleState(module.file.replace(/\.ts$/, ""))?.status === "failed") &&
+                // Failed gallery modules stay here: the hub's own rows show their errors.
+                (!hub &&
+                    (module.error ||
+                        browserModuleState(module.file.replace(/\.ts$/, ""))?.status ===
+                            "failed"))) &&
             (!needle ||
                 [
                     module.title,
@@ -409,25 +601,16 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
                 aria-controls=${id}
                 onClick=${() => flip(module.file)}
             >
-                <${Tile} name=${module.file} title=${module.title} icon=${ICONS[module.file] ?? null} />
-                <span class="ext-row-text">
-                    <span class="ext-row-title">
-                        ${module.title}
-                        <${Icon} name="down" size=${14} class="ext-row-chevron" />
-                    </span>
-                    ${module.summary && html`<span class="ext-row-desc">${summaryOf(module)}</span>`}
-                    ${module.error && html`<span class="ext-row-meta warn">${t("Did not load")}</span>`}
-                    ${
-                        installed?.revoked &&
-                        html`<span class="ext-row-meta warn"
-                        >${t("The gallery revoked this version")}</span
-                    >`
-                    }
-                    ${
-                        installed?.update &&
-                        html`<span class="ext-row-meta accent">${t("An update is ready")}</span>`
-                    }
+                <span class="ext-row-line">
+                    <${Tile} name=${module.file} title=${module.title} icon=${ICONS[module.file] ?? null} />
+                    <span class="ext-row-title">${module.title}</span>
+                    ${module.source === "drop-in" && html`<span class="ext-row-by mono">${module.file}</span>`}
+                    <${Icon} name="down" size=${14} class="ext-row-chevron" />
                 </span>
+                ${module.summary && html`<span class="ext-row-desc" title=${summaryOf(module)}>${summaryOf(module)}</span>`}
+                ${module.error && html`<span class="ext-row-meta warn">${t("Did not load")}</span>`}
+                ${installed?.revoked && html`<span class="ext-row-meta warn">${t("The gallery revoked this version")}</span>`}
+                ${installed?.update && html`<span class="ext-row-meta accent">${t("An update is ready")}</span>`}
             </button>
             <div class="ext-row-end">
                 ${
@@ -445,6 +628,11 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
                 }
             </div>
             ${note?.warn && html`<div class="ext-row-under small warn">${note.text}</div>`}
+            ${
+                module.file === CLAUDE_BILLING &&
+                module.enabled &&
+                html`<div class="ext-row-under small warn">${t(CLAUDE_ON)}</div>`
+            }
             ${
                 guard &&
                 html`<div class="ext-row-under">
@@ -474,7 +662,7 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
                 >
                     <span id="guard-confirm-warning"
                         >${t(
-                            "bash, write, and edit calls will run without checks in every session here. Pi's own setting stays as it is.",
+                            "bash, background, write, and edit calls will run without checks in every session here. Pi's own setting stays as it is.",
                         )}</span
                     >
                     <div class="sheet-actions">
@@ -506,11 +694,15 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
                     role="group"
                     aria-label=${t("Turn on {{title}}?", { title: module.title })}
                 >
-                    <span
-                        >${t(
-                            "It runs inside the server with your rights, in every session. Turn it on only if you trust its code.",
-                        )}</span
-                    >
+                    <span>
+                        ${
+                            module.file === CLAUDE_BILLING
+                                ? t(CLAUDE_RISK)
+                                : t(
+                                      "It runs inside the server with your rights, in every session. Turn it on only if you trust its code.",
+                                  )
+                        }
+                    </span>
                     <div class="sheet-actions">
                         <button class="button small" onClick=${() => setConfirmOn(null)}>
                             ${t("Not now")}
@@ -536,6 +728,12 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
                     ${guard && module.enabled && html`<${ApprovalRule} owner=${owner} />`}
                     ${module.file === "pip.ts" && module.enabled && html`<${PipCompactAt} owner=${owner} />`}
                     <${WebPart} module=${module} />
+                    ${
+                        owner &&
+                        module.enabled &&
+                        module.web?.settings &&
+                        html`<${ModuleSettings} module=${module.file.replace(/\.ts$/, "")} />`
+                    }
                     <${GalleryPart}
                         module=${module}
                         installed=${installed}
@@ -571,6 +769,67 @@ export function ExtensionsContent({ galleryInstalled, query = "", onChanged = ()
             }
         </div>`;
     };
+
+    if (hub) {
+        const yours = managed.filter((module) => module.source === "drop-in");
+        const builtIn = managed.filter((module) => module.source !== "drop-in");
+        const on = builtIn.filter((module) => module.enabled).length;
+
+        return html`<div class="extension-management hub">
+            <${SafeMode} />
+            ${problem && html`<div class="error-box">${problem}</div>`}
+            ${!data && !problem && html`<${Loader} label=${t("Loading extensions")} />`}
+            ${
+                builtIn.length > 0 &&
+                html`<section class="ext-section ext-builtins">
+                    <div class="ext-section-head">
+                        <h3 class="ext-section-title">
+                            ${t("Built in")} <span>${builtIn.length}</span>
+                        </h3>
+                        <span class="muted small"
+                            >${t("{{on}} on, {{off}} off", { on, off: builtIn.length - on })}</span
+                        >
+                    </div>
+                    <div class="ext-list">${builtIn.map(row)}</div>
+                </section>`
+            }
+            ${
+                (beforeCount > 0 || yours.length > 0) &&
+                html`<section class="ext-section">
+                    <h3 class="ext-section-title">
+                        ${t("Extensions")} <span>${beforeCount + yours.length}</span>
+                    </h3>
+                    ${before}
+                    ${yours.length > 0 && html`<div class="ext-list">${yours.map(row)}</div>`}
+                </section>`
+            }
+            ${between}
+            ${
+                data &&
+                needle &&
+                managed.length === 0 &&
+                beforeCount === 0 &&
+                html`<p class="muted small">${t("Nothing installed matches.")}</p>`
+            }
+            ${
+                owner &&
+                html`<footer class="ext-footer">
+                    ${
+                        data?.dropIns &&
+                        html`<span>
+                            ${t("Make your own: a {{ext}} module in", { ext: ".ts" })}
+                            <span class="mono"
+                                >${shortPath(data.dropIns, store.state.server?.home)}</span
+                            >${t(". It stays off until you turn it on.")}
+                        </span>`
+                    }
+                    <a class="link small" href=${GUIDE} target="_blank" rel="noopener noreferrer">
+                        ${t("How to write one")} <${Icon} name="external" size=${13} />
+                    </a>
+                </footer>`
+            }
+        </div>`;
+    }
 
     return html`<div class="extension-management">
         <p class="ext-intro">

@@ -35,6 +35,7 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **Sessions that one session starts:** no limit, since 0.19.0. Before 0.19.0, 10 at most. A linked session cannot start sessions.
 - **Messages between the sessions of a team:** no limit, since 0.19.0. Before 0.19.0, 20 at most since a person last wrote in one of them. The spend limit of the session that started the team still applies.
 - **A message:** 20,000 characters at most.
+- **A final answer's report** to the session that started it: the first 6,000 characters, and how much more is in the session. Since 0.28.0.
 - **A title:** one line of 120 characters at most.
 - **A call's key:** Pi Pocket keeps the record of a `key` for 30 days, and the records of the last 1,000 calls of each session.
 
@@ -51,7 +52,8 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **Pages and sheets that a module opens or closes:** past 300 in 1 s, the module stops. With no task between them, it stops past 1000, or at 5 or more over more than 1 s.
 - **Redraws in a hidden tab:** by a timer of 100 ms, which the browser can make slower.
 - **Notices from `pocket.notify`:** 5 every 5 s for a module, for all its versions together. The app drops the rest.
-- **Rail buttons of modules:** together, the height of 4 buttons. Past that, they scroll.
+- **The text of `pocket.pip.ask`:** 1 to 100,000 characters. Others throw. A send needs a tap just before it: it serves for 5 s and for one send.
+- **Rail buttons of modules:** no limit of their own. A rail with more buttons than room scrolls as a whole, and fades the edge where more is. The folded rail keeps up to a third of the window for its sessions first.
 - **A count on a rail button:** a count past 99, and `Infinity`, shows "99+".
 - **Text on a rail button:** past 24 characters, it is cut to 23 characters and "…". A panel's badge is the same.
 - **Text of a status item:** past 40 characters, `text` and `short` are cut to 39 characters and "…".
@@ -78,6 +80,9 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **Saved state of an artifact (`pocket-state-set`):** 16 KB of JSON at most for one value. A schema is 1 to 64 letters, digits, and `. _ : -`.
 - **Saves:** 20 in 10 s for one person and one artifact. Past that, the save fails.
 - **Saved values of a session:** 300 at most, for all its artifacts and people together.
+- **Assets of a version (since 0.26.0):** 200 files at most, 5 MB for one, 20 MB for all. A name is a relative path of 200 characters at most, with no `.` or `..` segment. A group is a lowercase kebab-case slug of 64 characters at most.
+- **A private asset address:** it is valid for 12 hours.
+- **Design:** a tweaks manifest has 40 knobs at most; a page sends 60 messages a second at most; 2 renders run at once and each takes 90 s at most; a design system file is 16 KB at most.
 - **Shares of a session:** 100 at most at once. A share lasts 1 day, 7 days, or 30 days, or until it is ended (`hours` left out).
 
 ## Tool calls
@@ -96,6 +101,39 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **Events that a version of a module sends:** 100 each second at most, and 1 MB of them. The rest of that second's events are dropped.
 - **A tab that falls behind:** Pi Pocket cuts it off when it is more than 8 MB behind and takes nothing for 30 s. It also cuts off a tab that is more than 128 MB behind. The tab then connects again, with no old events.
 
+## Events, services, and settings
+
+[Events, services, and settings](../services-settings.md)
+
+- **Settings of one module:** 30 at most. A name is up to 40 characters, a label up to 80, a description up to 300, and a text value up to 4096. A choice setting has 1 to 50 choices.
+- **Services:** one for each module.
+- **Events:** each listener gets each event once, after the change is stored; nothing is kept for a listener added later.
+
+## Asking people and hidden values
+
+[People's values and the browser](../people-values.md)
+
+- **An ask's card:** a title of 120 characters, words of 2000, up to 6 fields, and a button of 30 characters. A field's name is up to 40 characters, its label up to 80.
+- **A value typed on a card:** 1 to 4096 characters.
+- **A hidden value:** 4 to 4096 characters, and 2000 values hidden at once in all.
+- **What streams late:** command output holds back up to the longest hidden value's length less one character, until the command ends.
+- **Variables for one command:** 256 KB in all; a name is up to 128 characters. A provider has 5 seconds for one command; past that, it adds nothing.
+- **A snapshot's controls as data:** 500 at most; a select's options, 50.
+
+## Public links
+
+[Public pages](../public-pages.md)
+
+- **How long a link stays open:** more than 0 hours, and 720 hours (30 days) at most.
+- **Uses of one link:** 1 to 1000, or any number until it closes.
+- **Open links of one module:** 200 at most. Links that closed do not count.
+- **A link's `data`:** 4 KB of JSON at most.
+- **A posted form:** 64 KB and 50 fields at most. Its body must arrive in 15 s.
+- **Forms read at the same time:** 16 in all, and 2 to one link. More get "Busy: try again in a moment".
+- **A page that a handler answers with:** 1 MB at most.
+- **Page handlers running at the same time:** 32 in all, and 4 for one link. More get "Busy". A handler has 30 s: after that, its reads and writes are refused, and the page says it could not be shown.
+- **A link that took its last use:** kept 10 minutes, so that a page that refuses the post can give the use back. It answers nothing meanwhile.
+
 ## Commands
 
 [Slash commands](../commands.md)
@@ -106,7 +144,7 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **A toast's message:** cut to 500 characters.
 - **A card:** Pi Pocket keeps the last 30,000 characters.
 - **Runs of one person:** 4 at the same time, in all sessions together. Pi Pocket refuses a fifth run until one ends.
-- **Kept requests:** Pi Pocket keeps the request ids of the last 100 finished runs of each person in each session. The same text sent again from the same tab finds the first run only while its id is kept.
+- **Kept requests:** Pi Pocket keeps the request ids of the last 100 finished runs of each person in each session. The same text sent again from the same browser finds the first run only while its id is kept.
 
 ## Cleanups
 
@@ -133,6 +171,17 @@ All the numbers that limit a module, in one place. Each group links to the guide
 - **Each list in `declares`:** 100 names at most. An extension, tool, hook, or section name is 64 characters at most. A route's path is 200 characters at most. A command, with its scope, is 80 characters at most.
 - **`revoked`:** 50 commits at most, each with a reason of 300 characters at most.
 - **Looks for revoked versions:** two times a day, while extensions from the index are installed.
+
+## Presentations
+
+[Adding to the app](../app.md)
+
+- **Presentations of one module:** 32 at most.
+- **A kind:** `x.<module>.<name>`. `<name>` is 1 to 64 characters: a letter or a digit, then letters, digits, `_`, and `-`.
+- **A label:** one line of 80 characters at most, with no control characters.
+- **A `userPrefix`:** up to 200 characters, at least 3 of them not spaces, and not starting with `[` (the app's own inputs nobody typed do). It cannot start another module's `userPrefix`, or start with one, nor another of the same module's.
+- **`entry.data.summary`:** whitespace collapsed to one line, and past 200 characters cut to 199 and "…".
+- **Modes this browser remembers:** 256 kinds; past that, the one chosen longest ago is forgotten. Each is `open`, `folded`, or `hidden`.
 
 ## Themes
 

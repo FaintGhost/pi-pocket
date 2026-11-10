@@ -5,8 +5,8 @@
  * command checks who may do it, and changes others should know about become activity lines in the session's chat.
  */
 import { randomUUID } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
-import { basename, extname, join } from "node:path";
+import { statSync } from "node:fs";
+import { basename, extname, join, sep } from "node:path";
 import { type Context, copyJson } from "@earendil-works/chord";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import {
@@ -15,12 +15,12 @@ import {
     type ModelThinkingLevel,
     type TextContent,
 } from "@earendil-works/pi-ai";
-import { resizeImage } from "@earendil-works/pi-coding-agent";
 import {
     type AgentChange,
     AgentDoc,
     type ConversationCreateOptions,
     type ConversationId,
+    type Cursor,
     defineTask,
     type EntryId,
     type InputEntry,
@@ -32,6 +32,7 @@ import {
     type Task,
     type TaskId,
     type TaskRuntime,
+    type Tx,
     type UserInput,
 } from "@earendil-works/pi-durable";
 import type { PocketApp } from "./app.ts";
@@ -50,13 +51,16 @@ import {
 } from "./docs.ts";
 import {
     ATTACHMENTS_HEADING,
+    CONTEXT_BLOCK,
     FILE_BLOCK,
     FROM_PREFIX,
     NOTE_ENTRY,
     splitAttachments,
 } from "./entry-format.ts";
 import { describe, HttpError, optionalText } from "./errors.ts";
+import { attribute } from "./fence.ts";
 import { homePath } from "./paths.ts";
+import { forModel, MAX_INLINE_IMAGE, modelImage } from "./model-images.ts";
 import { mentionedPaths, viewFile } from "./files.ts";
 import { isThinkingLevel, THINKING_LEVELS } from "./models.ts";
 import { writePiSession } from "./pi-sessions.ts";
@@ -90,6 +94,30 @@ const context = BACKGROUND_CONTEXT;
 
 export type Attachment = { path: string; name: string; mime: string; size: number };
 
+// A name can hold " (", so the path is the part that ends with "-name".
+function attachedFile(line: string, uploads: string): Attachment[] {
+    const tail = /, ([^,]+), (\d+) bytes\)(?: \[Image: .*)?$/.exec(line);
+
+    if (!line.startsWith("- ") || tail === null) {
+        return [];
+    }
+
+    const head = line.slice(2, tail.index);
+
+    for (let at = head.indexOf(" ("); at !== -1; at = head.indexOf(" (", at + 1)) {
+        const path = head.slice(0, at);
+        const name = head.slice(at + 2);
+
+        if (path.startsWith(uploads + sep) && path.endsWith(`-${name}`)) {
+            const mime = tail[1] === "unknown type" ? "" : tail[1]!;
+
+            return [{ path, name, mime, size: Number(tail[2]) }];
+        }
+    }
+
+    return [];
+}
+
 export interface SubmitRequest {
     text: string;
     attachments?: Attachment[];
@@ -102,11 +130,13 @@ export interface SubmitRequest {
     requestId: string;
     /** Send the files the message mentions with `@` along with it, so Pi need not read them first. */
     inlineFiles?: boolean;
+    /**
+     * PiP only: the session a passage quoted in the message came from (Ask PiP by a selection). PiP gets which session
+     * it is, unseen by people (`CONTEXT_BLOCK`).
+     */
+    about?: { session: number };
 }
 
-/** Attached images that also go to the model itself, when it takes images. */
-const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-const MAX_INLINE_IMAGE = 5 * 1024 * 1024;
 /** How many `@` mentioned files go along with a message, and how much of them. */
 const MAX_MENTIONED = 10;
 const MAX_MENTIONED_FILE = 100_000;
@@ -117,6 +147,8 @@ const IMAGE_MIME: Record<string, string> = {
     ".jpeg": "image/jpeg",
     ".gif": "image/gif",
     ".webp": "image/webp",
+    ".heic": "image/heic",
+    ".heif": "image/heif",
 };
 const MAX_TITLE = 120;
 /** A title as stored: one line, so it cannot pass for more lines where it is quoted (PiP's lists, reports). */
@@ -165,20 +197,6 @@ function entryIdOf(value: unknown): number {
     }
 
     return id;
-}
-
-/**
- * An image file for the model, at most 2000 pixels a side as Pi's read tool sends images: models refuse bigger ones once
- * a conversation holds many, and then every request fails until they leave its context.
- */
-async function modelImage(path: string, mimeType: string): Promise<ImageContent> {
-    const image = await resizeImage(readFileSync(path), mimeType);
-
-    if (image === null) {
-        throw new Error("it could not be made small enough for the model");
-    }
-
-    return { type: "image", mimeType: image.mimeType, data: image.data };
 }
 
 /** A request's model, when it names one, must name a provider and a model id. */
@@ -297,7 +315,7 @@ async function followed(
         if (watch !== undefined) {
             // A listener is never called inline, so the value it started on is this one's to look at.
             await look(watch.value);
-            watch.start(look);
+            watch.start((call) => (call.kind === "value" ? look(call.value) : looking));
         }
 
         return await Promise.race([submission.wait(context), left]);
@@ -380,7 +398,19 @@ export class Commands {
     async createSession(
         user: User,
         request: { cwd?: string; title?: string; worktree?: unknown },
-        { projectDefaults = true }: { projectDefaults?: boolean } = {},
+        {
+            projectDefaults = true,
+            model,
+            thinkingLevel,
+            init,
+        }: {
+            projectDefaults?: boolean;
+            /** A model the caller already checked: it replaces the default, in the commit that makes the session. */
+            model?: ModelRef;
+            thinkingLevel?: ModelThinkingLevel;
+            /** Runs in the commit that makes the session, after its entry is written. */
+            init?: (tx: Tx, id: ConversationId) => Promise<void>;
+        } = {},
     ): Promise<{ id: ConversationId }> {
         const app = this.#app;
 
@@ -392,9 +422,16 @@ export class Commands {
 
         const given = optionalText(request.title, "title");
         const title = (given === undefined ? undefined : oneLine(given)) || undefined;
-        const folder = app.workspace.checkDirectory(
-            optionalText(request.cwd, "cwd") ?? app.defaultCwd,
-        );
+        const requested = optionalText(request.cwd, "cwd") ?? app.defaultCwd;
+
+        app.requireWorkspaceOwner(user, requested);
+        const remote = app.workspaceScheme(requested) !== undefined;
+
+        if (remote && request.worktree === true) {
+            throw new HttpError(400, "Remote workspaces do not support worktrees.");
+        }
+
+        const folder = await app.resolveCwd(requested);
         const now = Date.now();
 
         return this.#inPlace(
@@ -403,16 +440,25 @@ export class Commands {
             title ?? basename(folder),
             async ({ cwd, worktree }) => {
                 // An internal caller about to apply a person's explicit model keeps its previous starting pair.
-                const initial = this.#defaultModel(undefined, projectDefaults ? cwd : undefined);
+                const initial = this.#defaultModel(
+                    undefined,
+                    projectDefaults && model === undefined && !remote ? cwd : undefined,
+                );
                 const conversation = await app.harness.createConversation(
                     {
                         ownership: { kind: "ownerless" },
                         agent: {
                             cwd,
-                            ...(initial.model === undefined ? {} : { model: initial.model }),
-                            ...(initial.thinkingLevel === undefined
-                                ? {}
-                                : { thinkingLevel: initial.thinkingLevel }),
+                            ...(model !== undefined
+                                ? { model }
+                                : initial.model === undefined
+                                  ? {}
+                                  : { model: initial.model }),
+                            ...(thinkingLevel !== undefined
+                                ? { thinkingLevel }
+                                : initial.thinkingLevel === undefined
+                                  ? {}
+                                  : { thinkingLevel: initial.thinkingLevel }),
                         },
                         init: async (tx, id) => {
                             const sessions = await tx.doc(SessionsDoc);
@@ -425,6 +471,7 @@ export class Commands {
                                 ...(title === undefined ? {} : { title }),
                                 ...(worktree === undefined ? {} : { worktree }),
                             };
+                            await init?.(tx, id);
                         },
                     },
                     context,
@@ -522,6 +569,10 @@ export class Commands {
         app.requireSee(user, id);
         await app.requireDriver(id, user);
         const worktree = app.sessionMeta(id)?.worktree;
+
+        if (app.workspaceScheme(app.cwdOf(id)) !== undefined) {
+            throw new HttpError(400, "Remote workspaces do not support worktrees.");
+        }
 
         if (worktree === undefined) {
             throw new HttpError(404, "This session has no worktree");
@@ -664,7 +715,7 @@ export class Commands {
         id: ConversationId,
         user: User,
         patch: { title?: string; archived?: boolean },
-    ): Promise<void> {
+    ): Promise<{ repeating: number }> {
         const app = this.#app;
 
         app.requireSee(user, id);
@@ -710,6 +761,14 @@ export class Commands {
                     : "brought the session back from the archive",
             );
         }
+
+        // Archiving leaves its repeating schedules running: the person is told how many.
+        const repeating =
+            patch.archived === true
+                ? (await app.schedules.list(id)).filter((item) => item.every !== undefined).length
+                : 0;
+
+        return { repeating };
     }
 
     /**
@@ -740,11 +799,13 @@ export class Commands {
         const conversation = await app.conversation(id);
         const typed = request.text.trim();
         // `/skill:name request` sends the skill with the request; `/name arguments`, Pi's prompt template of that name.
-        const text = typed.startsWith("/skill:")
+        const expanded = typed.startsWith("/skill:")
             ? (expandSkillCommand(typed, app.skillCommands(id)) ?? typed)
             : typed.startsWith("/")
               ? (expandPromptTemplate(typed, app.promptTemplates(id)) ?? typed)
               : typed;
+        // A value an extension hides (`host.hide`), pasted into the message, is never stored nor sent to the model.
+        const text = app.hidden.replace(expanded, id);
         const attachments = request.attachments ?? [];
 
         if (text === "" && attachments.length === 0) {
@@ -763,10 +824,29 @@ export class Commands {
 
         app.spend.check(user, id);
 
-        const lines = attachments.map(
-            (file) =>
-                `- ${file.path} (${file.name}, ${file.mime || "unknown type"}, ${file.size} bytes)`,
+        // Most were made ready as they were uploaded (`model-images.ts`); the rest are made side by
+        // side, in their order.
+        const images = model.input.includes("image")
+            ? attachments.filter((file) => forModel(file.mime, file.size))
+            : [];
+        const made = await Promise.allSettled(
+            images.map((file) => modelImage(file.path, file.mime)),
         );
+        // What differs between a file and the image the model gets goes on the file's line.
+        const notes = new Map<Attachment, string>();
+
+        made.forEach((result, index) => {
+            if (result.status === "fulfilled" && result.value.note !== undefined) {
+                notes.set(images[index]!, result.value.note);
+            }
+        });
+
+        const lines = attachments.map((file) => {
+            const note = notes.get(file);
+            const line = `- ${file.path} (${file.name}, ${file.mime || "unknown type"}, ${file.size} bytes)`;
+
+            return note === undefined ? line : `${line} ${note}`;
+        });
         // The heading whole, with files alone too: what reads the message splits it there.
         const written =
             lines.length === 0 ? text : `${text}${ATTACHMENTS_HEADING}${lines.join("\n")}`;
@@ -774,30 +854,35 @@ export class Commands {
             user,
             via === undefined ? written : `[via ${via}] ${written}`,
         );
+        const about = this.#aboutSession(id, user, request.about);
         const mentioned =
             request.inlineFiles === true
                 ? await this.#mentionedFiles(id, user, typed, model.input.includes("image"))
                 : [];
-        const parts: (TextContent | ImageContent)[] = [{ type: "text", text: body }, ...mentioned];
+        // A file's text that a message brings along hides what extensions hide (`host.hide`), as the message does.
+        const parts: (TextContent | ImageContent)[] = [
+            { type: "text", text: body },
+            ...mentioned.map((part) =>
+                part.type === "text" ? { ...part, text: app.hidden.replace(part.text, id) } : part,
+            ),
+            ...(about === undefined ? [] : [{ type: "text" as const, text: about }]),
+        ];
 
-        for (const file of attachments) {
-            if (
-                !model.input.includes("image") ||
-                !IMAGE_TYPES.has(file.mime) ||
-                file.size > MAX_INLINE_IMAGE
-            ) {
-                continue;
+        made.forEach((result, index) => {
+            if (result.status === "fulfilled") {
+                parts.push(result.value.image);
+            } else {
+                app.notice(
+                    "warning",
+                    `Could not attach ${images[index]!.name}: ${describe(result.reason)}`,
+                    id,
+                    {
+                        key: "Could not attach {{name}}: {{error}}",
+                        params: { name: images[index]!.name, error: describe(result.reason) },
+                    },
+                );
             }
-
-            try {
-                parts.push(await modelImage(file.path, file.mime));
-            } catch (error) {
-                app.notice("warning", `Could not attach ${file.name}: ${describe(error)}`, id, {
-                    key: "Could not attach {{name}}: {{error}}",
-                    params: { name: file.name, error: describe(error) },
-                });
-            }
-        }
+        });
 
         const content = parts.length === 1 ? body : parts;
         const requestId =
@@ -835,6 +920,11 @@ export class Commands {
             await app.collab.activity(id, user, "interrupted the run");
         }
 
+        // A retry of a request finds its first submission: it is no new message, and no event goes out for it again.
+        const known =
+            app.pip.ownerOf(id) === undefined &&
+            (await app.harness.commit((tx) => tx.submissionByRequest(id, requestId), context)) !==
+                undefined;
         const submission = await conversation
             .submit(
                 {
@@ -848,20 +938,50 @@ export class Commands {
             .finally(() => admission?.afterSubmit());
 
         app.collab.setTyping(id, user, null);
-        await this.#touched(id, typed, text === typed ? undefined : text);
+        // The title comes from the message as it was stored: without hidden values.
+        const titled = app.hidden.replace(typed, id);
 
-        // A person's own words: linked sessions may message each other again (`linked-sessions.ts`).
-        if (via === undefined) {
-            await app.linkedSessions.personWrote(id);
-        }
-
+        await this.#touched(id, titled, text === titled ? undefined : text);
         this.#reportUnanswered(id, submission.wait(context));
 
         if (failure !== undefined) {
             await this.#followFailure(id, user, failure, requestId);
         }
 
+        // For extensions (`host.on`): once for each message (two retries at once, too), never for PiP's conversation,
+        // which is its person's alone.
+        if (app.pip.ownerOf(id) === undefined && !known && this.#announce(submission.id)) {
+            app.events.emit("message.sent", {
+                conversationId: Number(id),
+                by: user.id,
+                submissionId: String(submission.id),
+                text,
+                ...(via === undefined ? {} : { via }),
+            });
+        }
+
         return { submissionId: submission.id, requestId };
+    }
+
+    /** Submissions `message.sent` went out for lately: a retry that raced its first try finds its id here. */
+    readonly #announced = new Set<string>();
+
+    /** Whether to send `message.sent` for a submission: once only, as far as this process knows. */
+    #announce(submissionId: unknown): boolean {
+        const key = String(submissionId);
+
+        if (this.#announced.has(key)) {
+            return false;
+        }
+
+        this.#announced.add(key);
+
+        // The newest few hundred are enough: a retry comes within seconds.
+        if (this.#announced.size > 500) {
+            this.#announced.delete(this.#announced.values().next().value!);
+        }
+
+        return true;
     }
 
     /** When a subagent (`id`, its conversation) failed, if it is failed now (not stopped); undefined otherwise. */
@@ -983,6 +1103,54 @@ export class Commands {
     }
 
     /**
+     * For a message to PiP that asks about a passage: which session it came from, for PiP alone (`CONTEXT_BLOCK`). Only
+     * a session its person may see, and never another PiP; nothing for a message to anyone else.
+     */
+    #aboutSession(
+        id: ConversationId,
+        user: User,
+        about: SubmitRequest["about"],
+    ): string | undefined {
+        const app = this.#app;
+
+        if (about === undefined) {
+            return undefined;
+        }
+
+        const session = typeof about === "object" && about !== null ? about.session : undefined;
+
+        if (app.pip.ownerOf(id) === undefined) {
+            throw new HttpError(400, "Only a message to PiP says which session it is about");
+        }
+
+        if (typeof session !== "number" || !Number.isSafeInteger(session) || session <= 0) {
+            throw new HttpError(400, "about.session must be a session's number");
+        }
+
+        const target = session as unknown as ConversationId;
+        const meta = app.sessionMeta(target);
+
+        if (meta === undefined || meta.pip !== undefined) {
+            throw new HttpError(404, "There is no such session.");
+        }
+
+        app.requireSee(user, target);
+
+        // Anyone in that session can name it: no invisible characters carry words past people to PiP.
+        const plain = (text: string, max: number) =>
+            attribute(snippet(text.replace(/\p{Cf}/gu, "").replace(/\p{Cc}/gu, " "), max));
+        const title = plain(app.hidden.replace(meta.title ?? "untitled", target), 120);
+        const folder = plain(meta.cwd, 300);
+
+        return [
+            `${CONTEXT_BLOCK} session="${session}" title="${title}" folder="${folder}">`,
+            `The quoted passage at the start of this message comes from Pi's reply in session ${session}.`,
+            "Read that session with session_read for more context when the question needs it.",
+            "</pocket-context>",
+        ].join("\n");
+    }
+
+    /**
      * The files a message mentions with `@`, for Pi: text files as `<file>` blocks, as Pi's terminal app sends files
      * given on its command line, and images as images when the model takes them. Only files this person may load
      * through the session; anything else stays a mention, which Pi can read itself.
@@ -1022,7 +1190,7 @@ export class Commands {
 
                 if (mime !== undefined) {
                     if (images && statSync(file).size <= MAX_INLINE_IMAGE) {
-                        parts.push(await modelImage(file, mime));
+                        parts.push((await modelImage(file, mime)).image);
                     }
 
                     continue;
@@ -1149,6 +1317,32 @@ export class Commands {
         );
     }
 
+    /**
+     * Send the request of a run that waits for a provider's limit now, rather than at its time (`limit-gate.ts`): of
+     * this conversation, or of its subagents. The request goes whether or not the limit has cleared: the provider
+     * rejects it at no cost, or answers. Who may see and steer the session may. False: nothing there waits.
+     */
+    async retryLimit(id: ConversationId, user: User): Promise<boolean> {
+        const app = this.#app;
+
+        app.requireSee(user, id);
+        app.requireSteer(user);
+
+        let sent = app.limits.retryNow(Number(id));
+
+        for (const wait of app.limits.waits()) {
+            if (app.rootOf(wait.conversationId as unknown as ConversationId) === id) {
+                sent = app.limits.retryNow(wait.conversationId) || sent;
+            }
+        }
+
+        if (sent) {
+            await app.collab.activity(id, user, "tried again without waiting for the limit");
+        }
+
+        return sent;
+    }
+
     /** Stop the run. Anyone who can steer may, even while someone else drives: stopping is the safe direction. */
     async abort(id: ConversationId, user: User): Promise<void> {
         const app = this.#app;
@@ -1221,6 +1415,52 @@ export class Commands {
         }
 
         return result;
+    }
+
+    async editQueued(
+        id: ConversationId,
+        user: User,
+        submissionId: number,
+    ): Promise<{ text: string; attachments: Attachment[] }> {
+        const app = this.#app;
+
+        app.requireSee(user, id);
+        app.requireSteer(user);
+
+        if (!Number.isInteger(submissionId) || submissionId <= 0) {
+            throw new HttpError(400, "Say which queued message to edit.");
+        }
+
+        if ((await app.attribution.submitter(submissionId)) !== user.id) {
+            throw new HttpError(403, "Only its sender can edit a queued message.");
+        }
+
+        const item = (await app.harness.snapshot(InboxDoc, id, context))?.items.find(
+            (entry) => Number(entry.id) === submissionId,
+        );
+        const result =
+            item === undefined || item.mode === "write"
+                ? "not_found"
+                : await app.harness.abortSubmission(
+                      submissionId as unknown as SubmissionId,
+                      context,
+                      id,
+                  );
+
+        if (item === undefined || item.mode === "write" || result !== "aborted") {
+            throw new HttpError(409, "That message has already gone to Pi.");
+        }
+
+        // A `/skill:` or prompt template message comes back as it was sent: expanded.
+        const [written, files] = splitAttachments(
+            userContent({ content: item.content }).text.replace(FROM_PREFIX, ""),
+        );
+        const uploads = app.workspace.uploadDirectory(id);
+
+        return {
+            text: written,
+            attachments: (files ?? "").split("\n").flatMap((line) => attachedFile(line, uploads)),
+        };
     }
 
     /**
@@ -1426,6 +1666,10 @@ export class Commands {
             );
         }
 
+        if (request.cwd !== undefined) {
+            app.requireWorkspaceOwner(user, request.cwd);
+        }
+
         const conversation = await app.conversation(id);
         const current = await app.agentState(id);
         const ref = request.model ?? current?.model;
@@ -1443,8 +1687,7 @@ export class Commands {
             current?.thinkingLevel ??
             "off") as ModelThinkingLevel;
         const thinkingLevel = model === undefined ? wanted : clampThinkingLevel(model, wanted);
-        const cwd =
-            request.cwd === undefined ? undefined : app.workspace.checkDirectory(request.cwd);
+        const cwd = request.cwd === undefined ? undefined : await app.resolveCwd(request.cwd);
 
         const change = {
             ...(request.model === undefined
@@ -1871,13 +2114,23 @@ export class Commands {
         }
     }
 
-    /** A new session with this session's history through `entryId`, which then goes its own way. */
     async fork(
         id: ConversationId,
         user: User,
         request: { entryId?: unknown; worktree?: unknown },
     ): Promise<{ id: ConversationId }> {
         this.#requireForkable(id, user);
+
+        if (request.entryId === undefined) {
+            return {
+                id: await this.#branch(id, user, {
+                    at: await this.#latestReply(id),
+                    label: "fork",
+                    worktree: request.worktree === true,
+                }),
+            };
+        }
+
         const entryId = entryIdOf(request.entryId);
         const entry = await this.#app.transcripts.visibleEntry(id, entryId);
 
@@ -1950,7 +2203,10 @@ export class Commands {
         // Who sent it comes first, then the heading, whole or (from before 0.14.0) without its blank line.
         const [written, files] = splitAttachments(original.text.replace(FROM_PREFIX, ""));
         // An edit that changes nothing is the same as sending the message again.
-        const edit = edited !== undefined && edited !== written.trim() ? edited : undefined;
+        const edit =
+            edited !== undefined && edited !== written.trim()
+                ? app.hidden.replace(edited, id)
+                : undefined;
 
         if (edit === "" && files === undefined) {
             throw new HttpError(400, "Nothing to send");
@@ -2020,6 +2276,31 @@ export class Commands {
         return { id: forked };
     }
 
+    /** A reply that called tools is not finished: a fork from it would wait for their results. */
+    async #latestReply(id: ConversationId): Promise<number | undefined> {
+        const conversation = await this.#app.conversation(id);
+        let cursor: Cursor | undefined;
+
+        do {
+            const page = await conversation.entries({}, 64, cursor, context);
+
+            for (const entry of page.items) {
+                const reply = entry.model?.[0];
+
+                if (
+                    entry.kind === "pi.assistant" &&
+                    !(reply?.role === "assistant" && reply.stopReason === "toolUse")
+                ) {
+                    return Number(entry.id);
+                }
+            }
+
+            cursor = page.next;
+        } while (cursor !== undefined);
+
+        return undefined;
+    }
+
     /** Forks are new sessions: who may start one may fork, from a session they can see. */
     #requireForkable(id: ConversationId, user: User): void {
         const app = this.#app;
@@ -2034,6 +2315,9 @@ export class Commands {
         if (app.sessionMeta(id) === undefined) {
             throw new HttpError(400, "Only sessions can be forked");
         }
+
+        // The fork works in this session's folder: a remote one is the owner's to start sessions in.
+        app.requireWorkspaceOwner(user, app.cwdOf(id));
 
         // A fork would carry PiP's tools and none of PiP: they act as PiP's person, which a fork is not.
         if (app.sessionMeta(id)?.pip !== undefined) {

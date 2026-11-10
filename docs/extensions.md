@@ -15,28 +15,33 @@ Extensions come from Pi Durable. Its README tells about the parts in depth: `nod
 
 This page is the map. Read all of it, then only the pages that your task needs.
 
-| To                                                             | Read                                                                                                            |
-| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Make a first extension, step by step                           | [Your first extension](extensions/first-extension.md)                                                           |
-| Know what the file must be, and how it loads and fails         | [Modules, loading, and errors](extensions/modules.md)                                                           |
-| Give Pi a tool                                                 | [Tools](extensions/tools.md)                                                                                    |
-| Add a rule to Pi's system prompt                               | [Prompt sections](extensions/prompt-sections.md)                                                                |
-| Check or change Pi's tool calls and answers                    | [Hooks](extensions/hooks.md)                                                                                    |
-| Use the app's services, and work with older servers            | [Using the host](extensions/host.md)                                                                            |
-| Start sessions, and send messages between them                 | [Starting and messaging sessions](extensions/linked-sessions.md)                                                |
-| Add to the app: routes, a browser module, commands             | [Adding to the app](extensions/app.md)                                                                          |
-| Answer requests on the server, and say who may use them        | [Routes](extensions/routes.md)                                                                                  |
-| Add rail buttons, pages, sheets, panels, status items, menus   | [Browser modules](extensions/browser-modules.md)                                                                |
-| Run something from the message box, without Pi                 | [Slash commands](extensions/commands.md)                                                                        |
-| Show your tool's calls in words                                | [How tool calls show](extensions/tool-calls.md)                                                                 |
-| Send live updates to the browser                               | [Events](extensions/events.md)                                                                                  |
-| Stop timers and close connections when a module loads again    | [Cleanups](extensions/cleanups.md)                                                                              |
-| Test a module                                                  | [Testing](extensions/testing.md)                                                                                |
-| Share a module, or install one that other people wrote         | [Publishing to the gallery](extensions/publishing.md)                                                           |
-| Move a module into Pi Pocket itself                            | [Making it built in](extensions/built-in.md)                                                                    |
-| Find a member of `host`, `web`, `pocket`, or a command's `ctx` | [The reference](extensions/reference/host.md), and the exact types in [types/pocket.d.ts](../types/pocket.d.ts) |
-| Find a limit, or what a word means                             | [Limits](extensions/reference/limits.md), [Glossary](extensions/reference/glossary.md)                          |
-| Know the rules: core or extension, the API, security, gallery  | [The policies](extensions/policies/index.md)                                                                    |
+| To                                                              | Read                                                                                                            |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Make a first extension, step by step                            | [Your first extension](extensions/first-extension.md)                                                           |
+| Know what the file must be, and how it loads and fails          | [Modules, loading, and errors](extensions/modules.md)                                                           |
+| Give Pi a tool                                                  | [Tools](extensions/tools.md)                                                                                    |
+| Add a rule to Pi's system prompt                                | [Prompt sections](extensions/prompt-sections.md)                                                                |
+| Check or change Pi's tool calls and answers                     | [Hooks](extensions/hooks.md)                                                                                    |
+| Use the app's services, and work with older servers             | [Using the host](extensions/host.md)                                                                            |
+| Start sessions, and send messages between them                  | [Starting and messaging sessions](extensions/linked-sessions.md)                                                |
+| Start an ordinary session, like New session                     | [Starting an ordinary session](extensions/sessions.md)                                                          |
+| Add to the app: routes, a browser module, commands              | [Adding to the app](extensions/app.md)                                                                          |
+| Name how an input this module sends shows in the transcript     | [Adding to the app](extensions/app.md), [`web.presentEntry`](extensions/reference/web.md#presententry)          |
+| Answer requests on the server, and say who may use them         | [Routes](extensions/routes.md)                                                                                  |
+| Show a page to anyone with a link, with no sign-in              | [Public pages](extensions/public-pages.md)                                                                      |
+| Ask for a password or a key, hide it, or drive the browser page | [People's values and the browser](extensions/people-values.md)                                                  |
+| React to sessions and runs, use other modules, add settings     | [Events, services, and settings](extensions/services-settings.md)                                               |
+| Add rail buttons, pages, sheets, panels, status items, menus    | [Browser modules](extensions/browser-modules.md)                                                                |
+| Run something from the message box, without Pi                  | [Slash commands](extensions/commands.md)                                                                        |
+| Show your tool's calls in words                                 | [How tool calls show](extensions/tool-calls.md)                                                                 |
+| Send live updates to the browser                                | [Events](extensions/events.md)                                                                                  |
+| Stop timers and close connections when a module loads again     | [Cleanups](extensions/cleanups.md)                                                                              |
+| Test a module                                                   | [Testing](extensions/testing.md)                                                                                |
+| Share a module, or install one that other people wrote          | [Publishing to the gallery](extensions/publishing.md)                                                           |
+| Move a module into Pi Pocket itself                             | [Making it built in](extensions/built-in.md)                                                                    |
+| Find a member of `host`, `web`, `pocket`, or a command's `ctx`  | [The reference](extensions/reference/host.md), and the exact types in [types/pocket.d.ts](../types/pocket.d.ts) |
+| Find a limit, or what a word means                              | [Limits](extensions/reference/limits.md), [Glossary](extensions/reference/glossary.md)                          |
+| Know the rules: core or extension, the API, security, gallery   | [The policies](extensions/policies/index.md)                                                                    |
 
 ## Drop-in or built-in
 
@@ -64,13 +69,13 @@ A module is one `.ts` file with a default export: a function. Pi Pocket calls it
  * A clock tool: the date and time now, in any time zone. The first sentence of this comment is the module's
  * description in the Extensions sheet.
  */
-import { Type } from "@earendil-works/pi-ai";
 import { defineExtension, defineTool } from "@earendil-works/pi-durable";
+import { obj, opt, str } from "@earendil-works/pi-schema";
 
 const clock = defineTool({
     name: "clock",
     description: "The date and time now, in a time zone such as Europe/Berlin.",
-    parameters: Type.Object({ zone: Type.Optional(Type.String()) }),
+    parameters: obj({ zone: opt(str()) }),
     replay: "safe",
     execute: async (args) => ({
         output: [
@@ -153,6 +158,11 @@ The loader accepts locale packs only as validated data; their strings and templa
 Only signed-in clients receive the available packs, as `hello.server.uiLocales`. There is no public dictionary endpoint. An unauthenticated page, or a signed-in client with no enabled locale packs, uses English. The browser prefers a pack marked `default: true`, then sorts by the locale string; `default` is only a preference among packs already enabled, not a switch that enables an extension. There is no per-user language choice or saved locale.
 
 The loader's canonical-tag and data validation rules may evolve; write canonical BCP 47 tags and do not rely on undocumented size or entry limits.
+- [examples/quiet-note.ts](examples/quiet-note.ts) with [examples/quiet-note.js](examples/quiet-note.js): an input the transcript can fold. The model still reads the whole message.
+
+## Execution environments for workspaces
+
+Modules can register an execution provider for a workspace URI scheme such as `ssh`. See [Execution environments for workspaces](extensions/workspaces.md) and the experimental [`host.registerWorkspaceProvider`](extensions/reference/host.md#registerworkspaceprovider) API.
 
 ## Rules that are easy to break
 

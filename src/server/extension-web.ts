@@ -1,9 +1,9 @@
 /**
  * Extensions' web parts. While a module loads, the `web` its default export gets registers its routes (under
- * `/api/x/<module>/`), its browser module (served from `/x/<module>/<rev>/`), and its commands for the message box. They
- * count only once the module installed, and they replace the previous version's in one step, as its extensions do;
- * turning the module off removes them. The browser module loads in the tabs of the people its access lets in, and gets
- * the events the module sends.
+ * `/api/x/<module>/`), its browser module (served from `/x/<module>/<rev>/`), its commands for the message box, and how
+ * its own inputs show. They count only once the module installed, and they replace the previous version's in one step,
+ * as its extensions do; turning the module off removes them. The browser module loads in the tabs of the people its
+ * access lets in, and gets the events the module sends.
  */
 import { createHash, randomUUID } from "node:crypto";
 import {
@@ -16,6 +16,7 @@ import {
     watch,
 } from "node:fs";
 import { extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { User } from "./config.ts";
 import { describe } from "./errors.ts";
 import type {
@@ -23,10 +24,28 @@ import type {
     ConversationWebRequest,
     ExtensionCommand,
     ExtensionWeb,
+    PublicLinks as ModuleLinks,
+    PublicPageHandler,
     WebAccess,
     WebHandler,
     WebMethod,
 } from "./host.ts";
+import {
+    checkPresentation,
+    compilePresentations,
+    EMPTY_PRESENTATIONS,
+    type EntryPresentations,
+    prefixesOverlap,
+    type RegisteredPresentation,
+    samePresentations,
+} from "./entry-presentation.ts";
+import {
+    checkSettings,
+    type SettingField,
+    type SettingValue,
+    settingValue,
+} from "./extension-settings.ts";
+import type { PublicLinks } from "./public-links.ts";
 
 /**
  * The version of the extension API: the server's `web` and the app's `pocket`. It goes up only when something modules
@@ -41,6 +60,7 @@ const METHODS: ReadonlySet<string> = new Set(["GET", "POST", "PUT", "PATCH", "DE
 const ACCESS: ReadonlySet<string> = new Set(["owner", "steer", "view"]);
 /** A module with a web part needs a name that is one part of an address as it is. */
 const MODULE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+const TRUSTED_DIAGRAMS_FILE = fileURLToPath(new URL("./extensions/diagrams.ts", import.meta.url));
 const SEGMENT = /^(?::[A-Za-z_][A-Za-z0-9_]*|[A-Za-z0-9._~-]+)$/;
 /** A browser module's file or folder: a name that is one part of an address as it is. */
 const ENTRY = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
@@ -152,6 +172,31 @@ export function mayUse(user: Pick<User, "role" | "sessions">, access: WebAccess)
     return access === "view" || (access === "steer" && user.role === "guest");
 }
 
+/** The only browser module a session-invited user may load. */
+function isTrustedDiagramsClient(part: WebPart): boolean {
+    const client = part.client;
+
+    return (
+        client !== undefined &&
+        part.module === "diagrams" &&
+        join(part.directory, part.file) === TRUSTED_DIAGRAMS_FILE &&
+        client.name === "diagrams" &&
+        client.folder &&
+        client.access === "view"
+    );
+}
+
+/** Session invitations allow the trusted built-in diagrams client, but not extension routes. */
+function mayUseClient(part: WebPart, user: Pick<User, "role" | "sessions">): boolean {
+    const client = part.client;
+
+    return (
+        client !== undefined &&
+        (mayUse(user, client.access) ||
+            (user.sessions !== undefined && isTrustedDiagramsClient(part)))
+    );
+}
+
 /** A module's name, from its file: `server-status.ts` is `server-status`. */
 function moduleName(file: string): string {
     return file.replace(/\.ts$/, "");
@@ -188,7 +233,17 @@ export class WebPart {
     readonly directory: string;
     readonly routes: Route[] = [];
     client: Client | undefined;
+    /** What draws the module's public pages (`web.publicPage`), for anyone with one of its links. */
+    page: PublicPageHandler | undefined;
+    /** What the module offers other modules (`web.provide`), and the settings it declares (`web.settings`). */
+    service: object | undefined;
+    settings: SettingField[] | undefined;
+    /** What the module listens to: other modules' services, and its own settings. They go with this version. */
+    readonly serviceListeners: { module: string; listener: () => void }[] = [];
+    readonly settingsListeners: (() => void)[] = [];
     readonly commands: RegisteredCommand[] = [];
+    /** How this module's own inputs show (`web.presentEntry`). Gone when this version goes. */
+    readonly presentations: RegisteredPresentation[] = [];
     /** The tools the module installed with this version: its browser module may describe only their calls. */
     tools: readonly string[] = [];
     readonly disposers: (() => void)[] = [];
@@ -209,9 +264,17 @@ export class WebPart {
         this.title = title;
     }
 
-    /** Whether it added nothing to the app: no routes, browser module, or commands (cleanups do not count). */
+    /** Whether it added nothing to the app: no routes, browser module, public pages, commands, or presentations (cleanups do not count). */
     get empty(): boolean {
-        return this.routes.length === 0 && this.client === undefined && this.commands.length === 0;
+        return (
+            this.routes.length === 0 &&
+            this.client === undefined &&
+            this.page === undefined &&
+            this.service === undefined &&
+            this.settings === undefined &&
+            this.commands.length === 0 &&
+            this.presentations.length === 0
+        );
     }
 }
 
@@ -220,8 +283,8 @@ export type RouteMatch =
     { route: Route; part: WebPart; params: Record<string, string> } | { allow: WebMethod[] };
 
 interface Options {
-    /** Browser modules for the people `access` lets in changed: their tabs must hear which to load. */
-    changed?: (access: WebAccess[]) => void;
+    /** Browser modules changed: each affected tab must hear which to load. */
+    changed?: (access: WebAccess[] | "all") => void;
     /** Send a browser module's event to the tabs it loads in (`to`: one person's). */
     deliver?: (part: WebPart, access: WebAccess, event: string, data: unknown, to?: string) => void;
     log?: (message: string) => void;
@@ -229,11 +292,19 @@ interface Options {
     warn?: (message: string) => void;
     /** The modules' commands changed: tabs must hear the new list. */
     commandsChanged?: () => void;
+    /** How modules show their own inputs changed: open transcripts must project again. */
+    presentationsChanged?: () => void;
+    /** Where public links are kept (`public-links.ts`). Without it, `web.links` refuses. */
+    links?: PublicLinks;
+    /** The owner's values for modules' settings (config.json). Without it, every setting has its default. */
+    settings?: (module: string) => Record<string, SettingValue>;
 }
 
 export class ExtensionWebs {
     /** The web part of every module that has one, by module name. */
     readonly #parts = new Map<string, WebPart>();
+    /** The installed parts' presentations, compiled once for each change of them (`#notePresentations`). */
+    #presentations: EntryPresentations | undefined;
     readonly #options: Options;
     #watching = false;
     #closed = false;
@@ -256,7 +327,7 @@ export class ExtensionWebs {
         const sealed = (what: string) => {
             if (part.sealed) {
                 throw new Error(
-                    `web.${what}: register routes, the browser module, and commands while the module loads`,
+                    `web.${what}: register routes, the browser module, commands, and presentations while the module loads`,
                 );
             }
         };
@@ -331,6 +402,128 @@ export class ExtensionWebs {
                 sealed("command");
                 part.commands.push(this.#checkCommand(part, name, command));
             },
+            presentEntry: (spec) => {
+                open("presentEntry");
+
+                const registered = checkPresentation(part.module, spec, part.presentations.length);
+
+                if (part.presentations.some((each) => each.kind === registered.kind)) {
+                    throw new Error(`web.presentEntry: ${registered.kind} is registered twice`);
+                }
+
+                const prefix = registered.userPrefix;
+
+                if (
+                    prefix !== undefined &&
+                    part.presentations.some(
+                        (each) =>
+                            each.userPrefix !== undefined &&
+                            prefixesOverlap(each.userPrefix, prefix),
+                    )
+                ) {
+                    throw new Error(
+                        "web.presentEntry: that userPrefix starts, or starts with, one already registered",
+                    );
+                }
+
+                this.#presentationClash(part, registered);
+                part.presentations.push(registered);
+            },
+            publicPage: (handle) => {
+                open("publicPage");
+
+                if (typeof handle !== "function") {
+                    throw new Error("web.publicPage: give it a function that draws the page");
+                }
+
+                if (part.page !== undefined) {
+                    throw new Error("web.publicPage: a module has one public page handler");
+                }
+
+                part.page = handle;
+            },
+            links: this.#links(part),
+            provide: (service) => {
+                open("provide");
+
+                if (typeof service !== "object" || service === null) {
+                    throw new Error("web.provide: give it an object of what the module offers");
+                }
+
+                if (part.service !== undefined) {
+                    throw new Error("web.provide: a module provides one service");
+                }
+
+                part.service = service;
+            },
+            use: (module) => {
+                if (typeof module !== "string") {
+                    throw new Error("web.use: name a module");
+                }
+
+                // Only a version that is on: one still loading, or replaced, offers nothing.
+                return this.#parts.get(module)?.service;
+            },
+            onService: (module, listener) => {
+                if (typeof module !== "string" || typeof listener !== "function") {
+                    throw new Error("web.onService: name a module, and give a function");
+                }
+
+                const entry = { module, listener };
+
+                if (part.disposed) {
+                    return () => {};
+                }
+
+                part.serviceListeners.push(entry);
+
+                return () => {
+                    const at = part.serviceListeners.indexOf(entry);
+
+                    if (at >= 0) {
+                        part.serviceListeners.splice(at, 1);
+                    }
+                };
+            },
+            settings: (fields) => {
+                open("settings");
+
+                if (part.settings !== undefined) {
+                    throw new Error("web.settings: declare a module's settings once");
+                }
+
+                part.settings = checkSettings(fields);
+            },
+            setting: (name) => {
+                const field = part.settings?.find((each) => each.name === name);
+
+                if (field === undefined) {
+                    throw new Error(
+                        `web.setting: ${String(name)} is not one of the module's settings`,
+                    );
+                }
+
+                return settingValue(field, this.#options.settings?.(part.module) ?? {});
+            },
+            onSettings: (listener) => {
+                if (typeof listener !== "function") {
+                    throw new Error("web.onSettings: give it a function");
+                }
+
+                if (part.disposed) {
+                    return () => {};
+                }
+
+                part.settingsListeners.push(listener);
+
+                return () => {
+                    const at = part.settingsListeners.indexOf(listener);
+
+                    if (at >= 0) {
+                        part.settingsListeners.splice(at, 1);
+                    }
+                };
+            },
             onDispose: (dispose) => {
                 if (typeof dispose !== "function") {
                     throw new Error("web.onDispose: give it a function");
@@ -348,6 +541,46 @@ export class ExtensionWebs {
         };
 
         return { part, web: Object.freeze(web) };
+    }
+
+    /**
+     * A module's public links: only its own, and only while this version runs. A version that went makes, lists, and ends
+     * none, as a turned-off module's links answer nothing.
+     */
+    #links(part: WebPart): ModuleLinks {
+        const store = (what: string): PublicLinks => {
+            if (part.disposed) {
+                throw new Error(`web.links.${what}: this version of the module has gone`);
+            }
+
+            if (!MODULE_NAME.test(part.module)) {
+                throw new Error(
+                    `web.links.${what}: rename ${part.file}: a module with a web part needs a name of letters, digits, - and _`,
+                );
+            }
+
+            const links = this.#options.links;
+
+            if (links === undefined) {
+                throw new Error(`web.links.${what}: this server keeps no public links`);
+            }
+
+            return links;
+        };
+
+        return Object.freeze({
+            create: async (request) => store("create").create(part.module, request),
+            get: async (token) => store("get").get(part.module, token),
+            list: async () => store("list").list(part.module),
+            end: async (token) => store("end").end(part.module, token),
+        } satisfies ModuleLinks);
+    }
+
+    /** The page handler of a module that is on, for a public link it made; none while it is off or has none. */
+    publicPage(module: string): { part: WebPart; handle: PublicPageHandler } | undefined {
+        const part = this.#parts.get(module);
+
+        return part?.page === undefined ? undefined : { part, handle: part.page };
     }
 
     #send(part: WebPart, event: unknown, data: unknown, options: unknown): void {
@@ -497,6 +730,50 @@ export class ExtensionWebs {
         for (const command of part.commands) {
             this.#clash(part, command.name);
         }
+
+        for (const spec of part.presentations) {
+            this.#presentationClash(part, spec);
+        }
+    }
+
+    /** Throw when another module already presents this kind, or matches this prefix. */
+    #presentationClash(part: WebPart, spec: RegisteredPresentation): void {
+        for (const other of this.#parts.values()) {
+            if (other.module === part.module) {
+                continue;
+            }
+
+            for (const each of other.presentations) {
+                if (each.kind === spec.kind) {
+                    throw new Error(
+                        `web.presentEntry: ${other.file} already presents ${spec.kind}`,
+                    );
+                }
+
+                if (
+                    spec.userPrefix !== undefined &&
+                    each.userPrefix !== undefined &&
+                    prefixesOverlap(each.userPrefix, spec.userPrefix)
+                ) {
+                    throw new Error(
+                        `web.presentEntry: ${other.file} already matches messages that userPrefix would`,
+                    );
+                }
+            }
+        }
+    }
+
+    /** Tell listeners when the presentations open transcripts must use have changed. */
+    #notePresentations(
+        before: readonly RegisteredPresentation[],
+        after: readonly RegisteredPresentation[],
+    ): void {
+        const left = compilePresentations([{ presentations: before }]);
+        const right = compilePresentations([{ presentations: after }]);
+
+        if (!samePresentations(left, right)) {
+            this.#options.presentationsChanged?.();
+        }
     }
 
     /** Every installed module's commands, without their handlers. */
@@ -504,6 +781,17 @@ export class ExtensionWebs {
         return [...this.#parts.values()].flatMap((part) =>
             part.commands.map(({ handler: _handler, file: _file, ...info }) => info),
         );
+    }
+
+    /** How every module that is on shows its own inputs. Empty when none do. */
+    presentations(): EntryPresentations {
+        if (this.#presentations === undefined) {
+            const compiled = compilePresentations(this.#parts.values());
+
+            this.#presentations = compiled.byKind.size === 0 ? EMPTY_PRESENTATIONS : compiled;
+        }
+
+        return this.#presentations;
     }
 
     /** One command by its id: the very version a browser chose, never another module's or a newer version's. */
@@ -546,6 +834,7 @@ export class ExtensionWebs {
 
         // Kept even when it added nothing to the app: cleanups it adds later run when it goes.
         this.#parts.set(part.module, part);
+        this.#presentations = undefined;
         this.#rewatch(part);
 
         if (previous !== undefined) {
@@ -559,6 +848,58 @@ export class ExtensionWebs {
         if ((previous?.commands.length ?? 0) > 0 || part.commands.length > 0) {
             this.#options.commandsChanged?.();
         }
+
+        this.#notePresentations(previous?.presentations ?? [], part.presentations);
+
+        if (previous?.service !== undefined || part.service !== undefined) {
+            this.#serviceChanged(part.module);
+        }
+    }
+
+    /** Tell the modules that listen that a module's service came, changed, or went. */
+    #serviceChanged(module: string): void {
+        for (const part of this.#parts.values()) {
+            for (const entry of [...part.serviceListeners]) {
+                if (entry.module !== module || part.disposed) {
+                    continue;
+                }
+
+                try {
+                    entry.listener();
+                } catch (error) {
+                    this.#options.log?.(
+                        `${part.file}: web.onService(${module}) failed: ${safeDescribe(error)}`,
+                    );
+                }
+            }
+        }
+    }
+
+    /** The owner changed a module's settings: its version that is on hears it, and its tabs (`pocket.onSettings`). */
+    settingsChanged(module: string): void {
+        const part = this.#parts.get(module);
+
+        if (part?.client !== undefined) {
+            this.#options.deliver?.(part, part.client.access, "pocket:settings", null);
+        }
+
+        for (const listener of [...(part?.settingsListeners ?? [])]) {
+            try {
+                listener();
+            } catch (error) {
+                this.#options.log?.(`${part!.file}: web.onSettings failed: ${safeDescribe(error)}`);
+            }
+        }
+    }
+
+    /** The settings a module that is on declares, for the owner's sheet and its browser module. */
+    settingsOf(module: string): SettingField[] | undefined {
+        return this.#parts.get(module)?.settings;
+    }
+
+    /** Whose tabs load a module's browser module, when it has one: they may read its settings, secrets left out. */
+    clientAccess(module: string): WebAccess | undefined {
+        return this.#parts.get(module)?.client?.access;
     }
 
     /** The module failed to load: what it registered goes, and the version before stays. */
@@ -577,6 +918,7 @@ export class ExtensionWebs {
         }
 
         this.#parts.delete(part.module);
+        this.#presentations = undefined;
         void this.#dispose(part);
 
         if (part.client !== undefined) {
@@ -585,6 +927,12 @@ export class ExtensionWebs {
 
         if (part.commands.length > 0) {
             this.#options.commandsChanged?.();
+        }
+
+        this.#notePresentations(part.presentations, []);
+
+        if (part.service !== undefined) {
+            this.#serviceChanged(part.module);
         }
     }
 
@@ -629,7 +977,7 @@ export class ExtensionWebs {
         user: Pick<User, "role" | "sessions">,
     ): { module: string; title: string; url: string }[] {
         return [...this.#parts.values()]
-            .filter((part) => part.client !== undefined && mayUse(user, part.client.access))
+            .filter((part) => part.client !== undefined && mayUseClient(part, user))
             .map((part) => ({
                 module: part.module,
                 title: part.title,
@@ -654,7 +1002,7 @@ export class ExtensionWebs {
         if (
             part === undefined ||
             client === undefined ||
-            !mayUse(user, client.access) ||
+            !mayUseClient(part, user) ||
             path.length === 0
         ) {
             return undefined;
@@ -701,9 +1049,17 @@ export class ExtensionWebs {
     }
 
     /** What a module's web part has, for the Extensions sheet. */
-    describe(
-        file: string,
-    ): { routes: string[]; client?: WebAccess; access: WebAccess; commands: string[] } | undefined {
+    describe(file: string):
+        | {
+              routes: string[];
+              client?: WebAccess;
+              access: WebAccess;
+              commands: string[];
+              publicPage: boolean;
+              service: boolean;
+              settings: boolean;
+          }
+        | undefined {
         const part = this.#parts.get(moduleName(file));
 
         if (part === undefined || part.file !== file || part.empty) {
@@ -722,7 +1078,25 @@ export class ExtensionWebs {
             ...(part.client === undefined ? {} : { client: part.client.access }),
             access,
             commands: part.commands.map((command) => `${command.scope} /${command.name}`),
+            publicPage: part.page !== undefined,
+            service: part.service !== undefined,
+            settings: part.settings !== undefined,
         };
+    }
+
+    /** While an update moves Pi Pocket's checkout, browser modules' edits reach no tab: the restart after it does. */
+    #paused = false;
+
+    pause(paused: boolean): void {
+        this.#paused = paused;
+
+        if (paused) {
+            for (const timer of this.#timers.values()) {
+                clearTimeout(timer);
+            }
+
+            this.#timers.clear();
+        }
     }
 
     /** Look again at browser modules' files when they change: a new version reaches the tabs. */
@@ -757,6 +1131,7 @@ export class ExtensionWebs {
         );
 
         this.#parts.clear();
+        this.#presentations = undefined;
         this.#staged.clear();
 
         return this.#settled(running);
@@ -773,6 +1148,13 @@ export class ExtensionWebs {
 
     /** Tell the tabs of the people who load either part's browser module. */
     #changed(...parts: (WebPart | undefined)[]): void {
+        if (parts.some((part) => part !== undefined && isTrustedDiagramsClient(part))) {
+            // The access filter cannot select session-invited users, so refresh every tab list.
+            this.#options.changed?.("all");
+
+            return;
+        }
+
         const access = parts.flatMap((part) => (part?.client ? [part.client.access] : []));
 
         if (access.length > 0) {
@@ -781,6 +1163,10 @@ export class ExtensionWebs {
     }
 
     #recheck(part: WebPart): void {
+        if (this.#paused) {
+            return;
+        }
+
         clearTimeout(this.#timers.get(part));
         this.#timers.set(
             part,
@@ -866,6 +1252,8 @@ export class ExtensionWebs {
         }
 
         part.disposed = true;
+        part.serviceListeners.length = 0;
+        part.settingsListeners.length = 0;
 
         for (const watcher of part.watchers.values()) {
             watcher.close();

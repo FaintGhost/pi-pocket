@@ -5,6 +5,7 @@ import { t } from "./i18n.js";
 import { Component } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { Avatar, initials, personColor } from "./avatar.js";
+import { notesDrafts } from "./notes-drafts.js";
 import {
     actions,
     attempt,
@@ -26,17 +27,7 @@ import {
     store,
     typing,
 } from "./store.js";
-import {
-    copyText,
-    formatLocaleDate,
-    formatLocaleTime,
-    html,
-    Icon,
-    Loader,
-    Sheet,
-    Spinner,
-    timeAgo,
-} from "./ui.js";
+import { clockTime, copyText, html, Icon, Loader, Sheet, Spinner, timeAgo } from "./ui.js";
 
 const coarse = matchMedia("(pointer: coarse)").matches;
 
@@ -133,14 +124,7 @@ export function TypingLine({ where }) {
     </div>`;
 }
 
-function clock(at) {
-    const date = new Date(at);
-    const time = formatLocaleTime(at, { hour: "numeric", minute: "2-digit" });
-
-    return date.toDateString() === new Date().toDateString()
-        ? time
-        : `${formatLocaleDate(at, { month: "short", day: "numeric" })} ${time}`;
-}
+const clock = (at) => clockTime(new Date(at));
 
 /** The newest jump: an earlier one still loading gives way to it. */
 let jumps = 0;
@@ -675,62 +659,71 @@ function PinsTab({ onShowChat }) {
     </div>`;
 }
 
-function NotesTab() {
-    const { notes, users } = store.state;
-    const [draft, setDraft] = useState(null);
-    const [base, setBase] = useState(notes?.rev ?? 0);
-    const [saving, setSaving] = useState(false);
+const NOTES_WARNINGS = {
+    clear: "This browser could not clear its kept notes draft. It may return after a reload.",
+    write: "This browser cannot keep this draft after a reload. Save it before you reload.",
+};
 
-    if (notes === null) {
+function NotesTab() {
+    const { notes, users, me, conversationId } = store.state;
+    const [, redraw] = useState(0);
+
+    useLayoutEffect(() => notesDrafts.subscribe(() => redraw((value) => value + 1)), []);
+
+    if (notes === null || !me?.id || conversationId === null) {
         return html`<${Loader} label=${t("Loading notes")} />`;
     }
 
+    const { draft, saving, error } = notesDrafts.get(me.id, conversationId);
     const editing = draft !== null;
-    const changedMeanwhile = editing && notes.rev !== base;
+    const changedMeanwhile = editing && notes.rev !== draft.base;
     const by = notes.by ? (users.find((user) => user.id === notes.by)?.name ?? t("someone")) : null;
+    const discard = () => notesDrafts.discard(me.id, conversationId);
 
-    const save = async (rev = base) => {
-        setSaving(true);
-        const saved = await attempt(() => actions.saveNotes(draft, rev));
+    const save = async (rev) => {
+        const submitted = notesDrafts.beginSave(me.id, conversationId);
 
-        setSaving(false);
-
-        if (saved) {
-            setDraft(null);
-            setBase(saved.rev);
+        if (!submitted) {
+            return;
         }
+
+        // Keep this account, session, and draft until the answer: the panel can close meanwhile.
+        const saved = await attempt(() => actions.saveNotes(submitted.text, rev ?? submitted.base));
+
+        notesDrafts.finishSave(me.id, conversationId, submitted, Boolean(saved));
     };
 
     return html`<p class="muted small">
         ${t("One page of notes for everyone here: the plan, decisions, who does what. Pi does not see it unless you send it.")}
     </p>
+    ${error && html`<div class="error-box small" role="status">${t(NOTES_WARNINGS[error])}</div>`}
     ${
         changedMeanwhile &&
         html`<div class="error-box small">
             ${t("{{name}} saved the notes while you were editing.", { name: by ?? t("Someone") })}
             <button
                 class="link small"
-                onClick=${() => {
-                    setDraft(null);
-                    setBase(notes.rev);
-                }}
+                disabled=${Boolean(saving)}
+                onClick=${discard}
             >
                 ${t("Use theirs")}
-            </button> · <button class="link small" onClick=${() => save(notes.rev)}>${t("Keep mine")}</button>
+            </button> · <button
+                class="link small"
+                disabled=${Boolean(saving)}
+                onClick=${() => save(notes.rev)}
+            >
+                ${t("Keep mine")}
+            </button>
         </div>`
     }
     <textarea
         class="notes"
         rows="10"
-        value=${editing ? draft : notes.text}
+        readOnly=${Boolean(saving)}
+        value=${editing ? draft.text : notes.text}
         placeholder=${t("Write the plan here…")}
-        onInput=${(event) => {
-            if (!editing) {
-                setBase(notes.rev);
-            }
-
-            setDraft(event.currentTarget.value);
-        }}
+        onInput=${(event) =>
+            notesDrafts.edit(me.id, conversationId, event.currentTarget.value, notes.rev)}
     ></textarea>
     <div class="row">
         <span class="muted small grow">
@@ -750,7 +743,9 @@ function NotesTab() {
         }
         ${
             editing &&
-            html`<button class="button small ghost" onClick=${() => setDraft(null)}>${t("Cancel")}</button>`
+            html`<button class="button small ghost" disabled=${Boolean(saving)} onClick=${discard}>
+                ${t("Cancel")}
+            </button>`
         }
         <button
             class="button small primary"

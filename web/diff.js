@@ -8,6 +8,7 @@ import { useBack } from "./back.js";
 import { jumpToEntry } from "./chat.js";
 import { fingerprint, firstLine, hunkRows, markRanges, parseDiff } from "./diff-parse.js";
 import { highlight, highlightLines, langOf } from "./highlight.js";
+import { personStorage } from "./person-storage.js";
 import { branchAvailable } from "./sheets/branch.js";
 import { actions, attempt, canSteer, notify, openSheet, store } from "./store.js";
 import { html, Icon, Loader, openFile, shortPath } from "./ui.js";
@@ -771,18 +772,18 @@ function WrapToggle() {
 
 // ─── Review: every change in the folder ───────────────────────────────────────────────
 
-const VIEWED_KEY = "pocket.viewed";
+const VIEWED_KEY = "viewed";
 
 function readViewed(id) {
     try {
-        return JSON.parse(localStorage.getItem(`${VIEWED_KEY}.${id}`)) ?? {};
+        return JSON.parse(personStorage.get(`${VIEWED_KEY}.${id}`)) ?? {};
     } catch {
         return {};
     }
 }
 
 function writeViewed(id, viewed) {
-    localStorage.setItem(`${VIEWED_KEY}.${id}`, JSON.stringify(viewed));
+    personStorage.set(`${VIEWED_KEY}.${id}`, JSON.stringify(viewed));
 }
 
 /** How long after the conversation moves on the changes are read again: soon when quiet, less often while Pi works. */
@@ -804,13 +805,30 @@ export function reloadChanges(id = store.state.conversationId) {
 
     // The conversation's newest entry when it asked: nothing newer, and Pi quiet, what it said still holds.
     const entry = id === store.state.conversationId ? store.state.view.order?.at(-1) : undefined;
+    // What shows now: an answer the same as it draws nothing again (each draw is the whole app's).
+    const shown = JSON.stringify([known.data, known.error]);
 
     known.pending = actions.changes(id).then(
-        (data) => Object.assign(known, { data, error: null, pending: null, at: Date.now(), entry }),
+        (data) => {
+            // The same answer keeps its object, so what is built from it is not built again.
+            const same = JSON.stringify(data) === JSON.stringify(known.data);
+
+            Object.assign(known, {
+                data: same ? known.data : data,
+                error: null,
+                pending: null,
+                at: Date.now(),
+                entry,
+            });
+        },
         (failure) => Object.assign(known, { error: failure.message, pending: null }),
     );
     changesCache.set(id, known);
-    known.pending.finally(() => store.set({}));
+    known.pending.finally(() => {
+        if (JSON.stringify([known.data, known.error]) !== shown) {
+            store.set({});
+        }
+    });
 
     return known.pending;
 }
@@ -1251,7 +1269,8 @@ export function DiffReview({ active = true, autoFocus = false, covering = false 
 
     const refresh = () => {
         forgetDiffs(id);
-        load();
+        // An answer equal to the one shown draws nothing, yet the diffs on screen have a new key to read again.
+        load().finally(() => store.set({}));
     };
 
     const [viewed, setViewedState] = useState(() => readViewed(id));

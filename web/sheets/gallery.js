@@ -8,6 +8,7 @@ import { t } from "../i18n.js";
 import { useContext, useEffect, useRef, useState } from "preact/hooks";
 import { personColor } from "../avatar.js";
 import { planAvailable } from "../commands.js";
+import { browserModuleState } from "../extension-ui.js";
 import { DiffBlock } from "../diff.js";
 import { Highlighted } from "../rich.js";
 import {
@@ -21,7 +22,7 @@ import {
     store,
     uid,
 } from "../store.js";
-import { BASE_LOOK, prefs, setPrefs } from "../theme.js";
+import { BASE_LOOK, chooseLook, prefs, setPrefs } from "../theme.js";
 import { copyText, formatBytes, html, Icon, Loader, Sheet, SheetBack, timeAgo } from "../ui.js";
 
 /** The owner's, while its module is on. */
@@ -50,6 +51,8 @@ function useRoute(path, setData, setProblem) {
 }
 
 const short = (commit) => (commit ?? "").slice(0, 7);
+/** `3 files`: a count and its noun, singular or plural as the language needs. */
+const plural = (count, one, many) => t(count === 1 ? one : many, { count });
 const revocation = (entry, commit) => entry.revoked.find((each) => each.commit === commit)?.reason;
 
 /** Who a browser module or a route is for, in words. */
@@ -83,7 +86,10 @@ const declared = (declares, key) =>
 
         const [scope, name] = each.split(" ");
 
-        return `/${name} (${scope === "global" ? "owner" : "who can steer"})`;
+        return t("/{{name}} ({{scope}})", {
+            name,
+            scope: t(scope === "global" ? "owner" : "who can steer"),
+        });
     });
 
 const RISK =
@@ -151,10 +157,6 @@ function useListing(shared) {
     return shared ?? { data, problem, loading, load };
 }
 
-/**
- * A steady mark for an extension or theme: its icon, or the first letter of its name, in a color of the theme picked
- * from its name, so the same one looks the same everywhere.
- */
 export function Tile({ name, title, icon = null, large = false }) {
     const letter = (title ?? name ?? "?").trim().charAt(0).toUpperCase() || "?";
 
@@ -163,32 +165,288 @@ export function Tile({ name, title, icon = null, large = false }) {
         style=${`--tint:${personColor(name ?? title ?? "")}`}
         aria-hidden="true"
     >
-        ${icon ? html`<${Icon} name=${icon} size=${large ? 22 : 17} />` : letter}
+        ${icon ? html`<${Icon} name=${icon} size=${large ? 17 : 11} />` : letter}
     </span>`;
 }
 
-/** How an installed extension or theme stands, in a word: revoked, on, or installed. */
-function RowState({ installed }) {
-    if (installed.revoked !== null) {
-        return html`<span class="ext-state bad">${t("Revoked")}</span>`;
-    }
+const sentence = (items) =>
+    items.length > 1
+        ? t("{{list}} and {{last}}", { list: items.slice(0, -1).join(", "), last: items.at(-1) })
+        : (items[0] ?? "");
 
-    if (installed.enabled) {
-        return html`<span class="ext-state on"><span class="ext-dot"></span>${t("On")}</span>`;
-    }
+const HOOK_WORDS = {
+    beforeTool: "tool calls, before they run",
+    afterTool: "tool results",
+    beforeRequest: "what goes to the model",
+    afterResponse: "the model's replies",
+    onYield: "the end of each turn",
+};
 
-    return html`<span class="ext-state"><${Icon} name="check" size=${14} />${t("Installed")}</span>`;
+let lastReach = null;
+
+/** A server from before the reach route answers 404: the facts then wait for a restart. */
+function useReach(data) {
+    const [reach, setReach] = useState(lastReach);
+    const [problem, setProblem] = useState(null);
+
+    useEffect(() => {
+        if (!data) {
+            return;
+        }
+
+        const stop = new AbortController();
+
+        galleryApi("reach", undefined, { signal: stop.signal }).then(
+            (result) => {
+                if (!stop.signal.aborted) {
+                    lastReach = result.entries ?? {};
+                    setReach(lastReach);
+                    setProblem(null);
+                }
+            },
+            (error) =>
+                !stop.signal.aborted &&
+                setProblem(
+                    error.status === 404 || error.status === 503
+                        ? t(
+                              "What its code reaches shows after a server restart (menu → Restart server).",
+                          )
+                        : t("Its code could not be read: {{error}}", { error: error.message }),
+                ),
+        );
+
+        return () => stop.abort();
+    }, [data?.fetchedAt, data?.address, data?.installed.length]);
+
+    return { reach, problem };
 }
 
-/** A gallery entry in a list: its mark, name, a line or two about it, and one quiet action or how it stands. */
-function EntryRow({ entry, selected, onOpen, onChanged }) {
+/** A scan counts only for the same commit and pinned files, and the version installed here. */
+function foundFor(reach, entry, installed) {
+    const found = entry?.source ? reach?.[entry.name] : undefined;
+
+    if (
+        !found ||
+        found.error ||
+        found.commit !== entry.source.commit ||
+        found.pin !== entry.pin ||
+        (installed && installed.commit !== entry.source.commit)
+    ) {
+        return undefined;
+    }
+
+    return found;
+}
+
+function useModules(on, round) {
+    const [modules, setModules] = useState(null);
+
+    useEffect(() => {
+        if (!on) {
+            return;
+        }
+
+        let live = true;
+
+        api("extensions").then(
+            (result) => live && setModules(result.modules),
+            () => {},
+        );
+
+        return () => {
+            live = false;
+        };
+    }, [on, round]);
+
+    return modules;
+}
+
+function reachRows(declares, found) {
+    const scanned = found?.scanned;
+    const rows = [];
+
+    if (scanned) {
+        for (const [key, glyph, words] of [
+            ["network", "globe", (items) => t("Talks to {{names}}", { names: sentence(items) })],
+            [
+                "keys",
+                "key",
+                (items) =>
+                    t("Uses {{names}}", {
+                        names: sentence(
+                            items.map((item) =>
+                                item.replace(/^(.+) key from Pi$/, "your $1 key, from Pi"),
+                            ),
+                        ),
+                    }),
+            ],
+            ["programs", "terminal", (items) => t("Runs {{names}}", { names: sentence(items) })],
+            ["files", "folder", (items) => t("Uses {{names}}", { names: sentence(items) })],
+        ]) {
+            if (scanned[key]?.length > 0) {
+                rows.push({ key, glyph, text: words(scanned[key]), from: t("In its code") });
+            }
+        }
+    }
+
+    if ((declares.hooks ?? []).length > 0) {
+        rows.push({
+            key: "sees",
+            glyph: "eye",
+            text: t("Sees {{names}}", {
+                names: sentence(declares.hooks.map((hook) => t(HOOK_WORDS[hook] ?? hook))),
+            }),
+            from: t("Declared"),
+        });
+    }
+
+    const changes = [
+        (declares.sections ?? []).length > 0 && t("Adds to Pi's instructions"),
+        ...(declares.wraps ?? []).map((wrap) =>
+            t("Wraps the {{tool}} tool", { tool: wrap.replace(/^tool /, "") }),
+        ),
+    ].filter(Boolean);
+
+    if (changes.length > 0) {
+        rows.push({
+            key: "changes",
+            glyph: "chat",
+            text: changes.join("; "),
+            from: t("Declared"),
+        });
+    }
+
+    return rows;
+}
+
+const RUN_TIME = /at run time/;
+
+function rowFacts(entry, found) {
+    if (isTheme(entry) || !entry.declares) {
+        return [];
+    }
+
+    const d = entry.declares;
+    const s = found?.scanned;
+    const tools = new Set([...(d.tools ?? []), ...(d.readOnlyTools ?? [])]).size;
+
+    return [
+        s?.network.length > 0 && [
+            "globe",
+            s.network.length > 1
+                ? t("{{count}} hosts", { count: s.network.length })
+                : RUN_TIME.test(s.network[0])
+                  ? t("network")
+                  : s.network[0],
+        ],
+        s?.keys.length > 0 && [
+            "key",
+            s.keys.length > 1 ? t("{{count}} keys", { count: s.keys.length }) : t("a key"),
+        ],
+        s?.programs.length > 0 && [
+            "terminal",
+            RUN_TIME.test(s.programs.join()) ? t("programs") : s.programs.join(", "),
+        ],
+        (d.hooks ?? []).length > 0 && ["eye", t("sees turns")],
+        ((d.sections ?? []).length > 0 || (d.wraps ?? []).length > 0) && ["chat", t("changes Pi")],
+        tools > 0 && ["sparkle", plural(tools, "{{count}} tool", "{{count}} tools")],
+        d.client !== null && ["tiles", t("in the app")],
+    ]
+        .filter(Boolean)
+        .slice(0, 3);
+}
+
+function newReach(before, after) {
+    const added = (key) =>
+        declared(after, key).filter((each) => !declared(before, key).includes(each));
+    const tools = [...new Set([...added("tools"), ...added("readOnlyTools")])];
+
+    return [
+        added("hooks").length > 0 &&
+            t("sees {{names}}", {
+                names: sentence(added("hooks").map((hook) => t(HOOK_WORDS[hook] ?? hook))),
+            }),
+        added("sections").length > 0 && t("adds to Pi's instructions"),
+        ...added("wraps").map((wrap) =>
+            t("wraps the {{tool}} tool", { tool: wrap.replace(/^tool /, "") }),
+        ),
+        tools.length > 0 && plural(tools.length, "{{count}} new tool", "{{count}} new tools"),
+        added("commands").length > 0 &&
+            plural(added("commands").length, "{{count}} new command", "{{count}} new commands"),
+        (added("routes").length > 0 || (before.client === null && after.client !== null)) &&
+            t("adds to the app"),
+        before.access !== after.access &&
+            t("now for {{who}}", { who: t(ACCESS_WORDS[after.access] ?? after.access) }),
+    ].filter(Boolean);
+}
+
+function liveStatus(item, module, tab) {
+    if (item.revoked !== null && item.revoked !== undefined) {
+        return { kind: "bad", text: t("Revoked") };
+    }
+
+    if (module?.error) {
+        return { kind: "bad", text: t("Did not load") };
+    }
+
+    if (module && browserModuleState(module.file.replace(/\.ts$/, ""))?.status === "failed") {
+        return { kind: "warn", text: t("Off in this tab") };
+    }
+
+    if (item.changed?.length > 0) {
+        return { kind: "warn", text: t("Edited since install") };
+    }
+
+    if (item.enabled) {
+        return { kind: "on", text: t("On") };
+    }
+
+    return { kind: "off", text: t(tab === "discover" ? "Installed" : "Off") };
+}
+
+const Status = ({ status }) =>
+    html`<span class=${`ext-state ${status.kind}`}>
+        <span class="ext-mark" aria-hidden="true"></span>${status.text}
+    </span>`;
+
+function statusWhy(item, module) {
+    if (module?.error) {
+        return { kind: "bad", text: t("Did not load: {{error}}", { error: module.error }) };
+    }
+
+    const here = module && browserModuleState(module.file.replace(/\.ts$/, ""));
+
+    if (here?.status === "failed") {
+        return {
+            kind: "warn",
+            text: t("In this browser: {{error}}. Reloading the page tries again.", {
+                error: here.error,
+            }),
+        };
+    }
+
+    if (item?.revoked) {
+        return {
+            kind: "bad",
+            text: t("The gallery revoked this version: {{reason}}", { reason: item.revoked }),
+        };
+    }
+
+    return null;
+}
+
+function EntryRow({ entry, found, module, tab, selected, onOpen, onChanged }) {
     const [busy, setBusy] = useState(false);
     const going = useRef(false);
     const installed = entry.installed ?? (entry.listed === false ? entry : null);
     const theme = isTheme(entry);
-    const meta = [theme && t("Theme"), entry.author?.name, entry.unlisted]
-        .filter(Boolean)
-        .join(" · ");
+    const update = tab === "updates" && installed?.update;
+    const added =
+        update && !theme && entry.declares && installed.declares
+            ? newReach(installed.declares, entry.declares)
+            : null;
+    const facts = rowFacts(entry, found);
+    const why = tab !== "discover" && installed && !theme ? statusWhy(installed, module) : null;
 
     const install = () => {
         if (going.current) {
@@ -206,49 +464,152 @@ function EntryRow({ entry, selected, onOpen, onChanged }) {
         });
     };
 
-    return html`<div class=${`ext-row ${selected ? "selected" : ""}`}>
+    const end = !installed
+        ? html`<button class="button small ext-get" disabled=${busy} onClick=${install}>
+              ${busy ? t("Installing…") : t("Install")}
+          </button>`
+        : installed.update && tab !== "installed"
+          ? html`<button
+                class=${`button small ${added?.length > 0 ? "" : "primary"}`}
+                onClick=${() => openGallerySheet("gallery-update", entry.name)}
+            >
+                ${added?.length > 0 ? t("Review") : t("Update")}
+            </button>`
+          : theme
+            ? html`<span class="ext-state on"
+                  ><${Icon} name="check" size=${13} stroke=${2.5} />${t("Installed")}</span
+              >`
+            : html`<${Status} status=${liveStatus(installed, module, tab)} />`;
+
+    return html`<div
+        class=${`ext-row ${selected ? "selected" : ""} ${installed && !theme && !installed.enabled ? "off" : ""}`}
+    >
         <button class="ext-row-open" aria-current=${selected ? "true" : undefined} onClick=${onOpen}>
-            <${Tile} name=${entry.name} title=${entry.title} icon=${theme ? "palette" : null} />
-            <span class="ext-row-text">
+            <span class="ext-row-line">
+                <${Tile} name=${entry.name} title=${entry.title} icon=${theme ? "palette" : null} />
                 <span class="ext-row-title">${entry.title}</span>
-                ${entry.description && html`<span class="ext-row-desc">${entry.description}</span>`}
-                ${meta && html`<span class="ext-row-meta">${meta}</span>`}
+                <span class="ext-row-by">
+                    ${update ? `${installed.version} → ${installed.update.version}` : (entry.author?.name ?? entry.unlisted ?? "")}
+                </span>
             </span>
-        </button>
-        <div class="ext-row-end">
+            ${entry.description && html`<span class="ext-row-desc">${entry.description}</span>`}
             ${
-                !installed
-                    ? html`<button class="button small ext-get" disabled=${busy} onClick=${install}>
-                          ${busy ? t("Installing…") : t("Install")}
-                      </button>`
-                    : installed.update
-                      ? html`<button
-                            class="button small primary"
-                            onClick=${() => openGallerySheet("gallery-update", entry.name)}
-                        >
-                            ${t("Update")}
-                        </button>`
-                      : html`<${RowState} installed=${installed} />`
+                why
+                    ? html`<span class=${`ext-why ${why.kind}`}>${why.text}</span>`
+                    : added !== null
+                      ? html`<span class="ext-facts">
+                            ${
+                                added.length > 0
+                                    ? html`<span class="ext-fact new">
+                                          <${Icon} name="eye" size=${12} /><span
+                                              >${t("Declares more: {{list}}", {
+                                                  list: added.join("; "),
+                                              })}</span
+                                          >
+                                      </span>`
+                                    : html`<span class="ext-fact"
+                                          ><${Icon} name="check" size=${12} /><span
+                                              >${t("Declares nothing new")}</span
+                                          ></span
+                                      >`
+                            }
+                        </span>`
+                      : facts.length > 0 &&
+                        html`<span class="ext-facts">
+                            ${facts.map(
+                                ([glyph, text]) => html`<span class="ext-fact" key=${glyph}>
+                                    <${Icon} name=${glyph} size=${12} /><span>${text}</span>
+                                </span>`,
+                            )}
+                        </span>`
             }
-        </div>
+        </button>
+        <div class="ext-row-end">${end}</div>
     </div>`;
 }
 
-/** The most common tags first, at most `limit`. */
-function topTags(entries, limit) {
-    const counts = new Map();
+/** Only a color written as #rgb to #rrggbbaa reaches a style: a theme's palette is the index's text. */
+const HEX = /^#[0-9a-f]{3,8}$/i;
+const THEME_DOTS = ["red", "yellow", "green", "cyan", "blue", "magenta"];
 
-    for (const entry of entries) {
-        for (const tag of entry.tags) {
-            counts.set(tag, (counts.get(tag) ?? 0) + 1);
-        }
+function paletteStyle(colors) {
+    if (!colors) {
+        return "";
     }
 
-    return [...counts]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .slice(0, limit)
-        .map(([tag]) => tag);
+    const pick = (...keys) => keys.map((key) => colors[key]).find((value) => HEX.test(value ?? ""));
+
+    return [
+        ["--t-bg", pick("background")],
+        ["--t-bg-dark", pick("dark_background", "background")],
+        ["--t-bg-darker", pick("darker_background", "background")],
+        ["--t-bg-light", pick("lighter_background", "background")],
+        ["--t-fg", pick("foreground")],
+        ["--t-accent", pick("accent")],
+        ...THEME_DOTS.map((color) => [`--t-${color}`, pick(color)]),
+    ]
+        .filter(([, value]) => value !== undefined)
+        .map(([key, value]) => `${key}:${value}`)
+        .join(";");
 }
+
+function paletteOf(entry, found) {
+    const listed = store.state.themeList?.find((each) => each.id === entry.name);
+
+    if (entry.installed && listed?.colors) {
+        return { colors: listed.colors, colorsLight: listed.colorsLight ?? null };
+    }
+
+    return found?.palette?.colors ? found.palette : null;
+}
+
+const modeWords = (palette) =>
+    t(
+        !palette
+            ? "theme"
+            : palette.colorsLight
+              ? "dark and light"
+              : palette.colors.mode === "light"
+                ? "light"
+                : "dark",
+    );
+
+const ThemeDesk = ({ colors, big = false }) =>
+    html`<span
+        class=${`ext-desk ${big ? "big" : ""} ${colors ? "" : "unknown"}`}
+        style=${paletteStyle(colors)}
+        aria-hidden="true"
+    >
+        <span class="ext-win side"><i></i><i></i><i></i></span>
+        <span class="ext-win main">
+            ${big ? html`<i></i><i></i><i class="bubble"></i><i></i>` : html`<i></i><i></i>`}
+            <i class="lit"></i>
+        </span>
+    </span>`;
+
+function ThemeCard({ entry, palette, selected, state = null, onOpen }) {
+    return html`<button
+        class=${`ext-theme ${selected ? "selected" : ""}`}
+        aria-current=${selected ? "true" : undefined}
+        onClick=${onOpen}
+    >
+        <${ThemeDesk} colors=${palette?.colors ?? null} />
+        <span class="ext-theme-name">
+            <span>${entry.title ?? entry.name}</span>
+            ${state && html`<small><${Icon} name="check" size=${11} stroke=${2.5} />${state}</small>`}
+        </span>
+        <span class="ext-theme-meta">${modeWords(palette)} · ${entry.author?.name ?? entry.author ?? "yours"}</span>
+        <span class="ext-theme-dots" style=${paletteStyle(palette?.colors)} aria-hidden="true">
+            ${THEME_DOTS.map((color) => html`<i key=${color} style=${`background:var(--t-${color}, var(--hair-2))`}></i>`)}
+        </span>
+    </button>`;
+}
+
+const Section = ({ title, count, children }) =>
+    html`<section class="ext-section">
+        <h3 class="ext-section-title">${title} <span>${count}</span></h3>
+        ${children}
+    </section>`;
 
 /** Where the index is read from, and changing it (empty is the default). */
 function IndexAddress({ address, onChanged }) {
@@ -342,6 +703,39 @@ const TABS = [
     ["updates", "Updates"],
 ];
 
+const KINDS = [
+    ["all", "All", null],
+    ["extensions", "Extensions", null],
+    ["themes", "Themes", "palette"],
+];
+const WANTS = [
+    ["tools", "Tools for Pi", "sparkle"],
+    ["app", "In the app", "tiles"],
+    ["changes", "Changes Pi", "chat"],
+];
+
+function wanted(entry, want) {
+    const d = entry.declares;
+
+    if (want === null) {
+        return true;
+    }
+
+    if (isTheme(entry) || !d) {
+        return false;
+    }
+
+    if (want === "tools") {
+        return (d.tools ?? []).length + (d.readOnlyTools ?? []).length > 0;
+    }
+
+    if (want === "app") {
+        return d.client !== null || (d.routes ?? []).length > 0;
+    }
+
+    return (d.hooks ?? []).length + (d.sections ?? []).length + (d.wraps ?? []).length > 0;
+}
+
 /** One hub, whether opened from Extensions or Appearance's gallery link. */
 export function GallerySheet({
     selected = null,
@@ -351,9 +745,13 @@ export function GallerySheet({
 }) {
     const listing = useListing();
     const { data, problem, loading, load } = listing;
+    const { reach, problem: reachProblem } = useReach(data);
+    // The sheet's own Back returns to the list on a phone; this one is for an entry opened on its own.
+    const sheetBack = useContext(SheetBack);
+    const modules = useModules(tab !== "discover" || selected !== null, data);
     const [query, setQuery] = useState("");
-    const [tag, setTag] = useState(null);
-    const [kind, setKind] = useState(null);
+    const [kind, setKind] = useState("all");
+    const [want, setWant] = useState(null);
     const needle = query.trim().toLowerCase();
     const installed = data?.installed ?? [];
     const updates = installed.filter((item) => item.update).length;
@@ -370,148 +768,206 @@ export function GallerySheet({
                   ),
                   ...installed.filter((item) => !item.listed && (tab !== "updates" || item.update)),
               ];
-    const tags = tab === "discover" ? topTags(offered, 10) : [];
-    const kinds =
-        tab === "discover" && offered.some(isTheme) && !offered.every(isTheme)
-            ? ["extension", "theme"]
-            : [];
+    const foundOf = (entry) =>
+        foundFor(reach, entry.listed === false ? null : entry, entry.installed ?? null);
     const matches = entries.filter(
         (entry) =>
-            (kind === null || (kind === "theme") === isTheme(entry)) &&
-            (tag === null || entry.tags?.includes(tag)) &&
+            (tab !== "discover" || kind === "all" || (kind === "themes") === isTheme(entry)) &&
+            (tab !== "discover" || wanted(entry, want)) &&
             (needle === "" ||
                 [entry.name, entry.title, entry.description ?? "", ...(entry.tags ?? [])].some(
                     (text) => text.toLowerCase().includes(needle),
                 )),
     );
-    const detailName = selected ?? (tab === "discover" ? matches[0]?.name : null);
+    const extensionMatches = matches.filter((entry) => !isTheme(entry));
+    const themeMatches = matches.filter(isTheme);
+    const ownThemes =
+        tab === "installed"
+            ? (store.state.themeList ?? []).filter(
+                  (look) =>
+                      !look.builtIn &&
+                      !installed.some((item) => item.name === look.id) &&
+                      (needle === "" ||
+                          `${look.name} ${look.description ?? ""}`.toLowerCase().includes(needle)),
+              )
+            : [];
+    const detailName =
+        selected ??
+        extensionMatches[0]?.name ??
+        (tab === "discover" ? themeMatches[0]?.name : null);
     const hidden = data?.hidden ?? { incompatible: 0, invalid: [] };
     const select = (name) => openSheet({ type: "gallery-entry", id: name, tab, origin });
-    // The sheet's own Back returns to the list on a phone; this one is for an entry opened on its own.
-    const sheetBack = useContext(SheetBack);
+    const moduleOf = (entry) =>
+        modules?.find((each) => each.file === (entry.installed ?? entry).file) ?? null;
 
     const changeTab = (next) => {
         setQuery("");
-        setTag(null);
-        setKind(null);
+        setKind("all");
+        setWant(null);
         openSheet({ type: origin, tab: next });
     };
 
-    const chip = (key, label, on, onClick) => html`<button
+    const chip = (key, label, glyph, on, onClick) => html`<button
         key=${key}
         class=${`gallery-tag ${on ? "on" : ""}`}
         aria-pressed=${on}
         onClick=${onClick}
     >
-        ${label}
+        ${glyph && html`<${Icon} name=${glyph} size=${12} />`}${label}
     </button>`;
+
+    const row = (entry) => html`<${EntryRow}
+        key=${entry.name}
+        entry=${entry}
+        found=${foundOf(entry)}
+        module=${moduleOf(entry)}
+        tab=${tab}
+        selected=${detailName === entry.name}
+        onOpen=${() => select(entry.name)}
+        onChanged=${load}
+    />`;
+
+    const card = (entry) => html`<${ThemeCard}
+        key=${entry.name}
+        entry=${entry}
+        palette=${paletteOf(entry, foundOf(entry))}
+        selected=${detailName === entry.name}
+        state=${tab === "discover" && entry.installed ? "Installed" : null}
+        onOpen=${() => select(entry.name)}
+    />`;
+
+    const tabs = html`<div class="ext-tabs" role="tablist" aria-label=${t("Extensions")}>
+        ${TABS.map(
+            ([value, label]) => html`<button
+                key=${value}
+                class=${tab === value ? "on" : ""}
+                role="tab"
+                aria-selected=${tab === value}
+                onClick=${() => changeTab(value)}
+            >
+                ${t(label)}
+                ${
+                    value === "updates" &&
+                    updates > 0 &&
+                    html`<span class="ext-count" aria-label=${t("{{count}} available", { count: updates })}
+                        >${updates}</span
+                    >`
+                }
+            </button>`,
+        )}
+    </div>`;
+
+    const themesHere = [
+        ...themeMatches,
+        ...ownThemes.map((look) => ({ ...look, name: look.id, title: look.name, own: true })),
+    ];
+    const installedThemes =
+        themesHere.length > 0 &&
+        html`<${Section} title=${t("Themes")} count=${themesHere.length}>
+            <div class="ext-themes">
+                ${themesHere.map((entry) =>
+                    entry.own
+                        ? html`<${ThemeCard}
+                              key=${entry.name}
+                              entry=${entry}
+                              palette=${entry.colors ? { colors: entry.colors, colorsLight: entry.colorsLight ?? null } : null}
+                              state="Yours"
+                              onOpen=${() => openSheet({ type: "appearance" })}
+                          />`
+                        : card(entry),
+                )}
+            </div>
+        <//>`;
 
     return html`<${Sheet}
         title=${t("Extensions")}
         onClose=${closeSheet}
         wide=${true}
         className="extension-hub gallery"
+        actions=${tabs}
     >
-        <div class="ext-hub-bar">
-            <div class="ext-tabs" role="tablist" aria-label=${t("Extensions")}>
-                ${TABS.map(
-                    ([value, label]) => html`<button
-                        key=${value}
-                        class=${tab === value ? "on" : ""}
-                        role="tab"
-                        aria-selected=${tab === value}
-                        onClick=${() => changeTab(value)}
-                    >
-                        ${t(label)}
-                        ${
-                            value === "updates" &&
-                            updates > 0 &&
-                            html`<span
-                                class="ext-count"
-                                aria-label=${t("{{count}} available", { count: updates })}
-                                >${updates}</span
-                            >`
-                        }
-                    </button>`,
-                )}
-            </div>
-            <div class="extension-hub-toolbar">
-                <label class="ext-search">
-                    <${Icon} name="search" size=${16} />
-                    <input
-                        type="search"
-                        placeholder=${
-                            tab === "installed"
-                                ? t("Search installed")
-                                : t("Search extensions and themes")
-                        }
-                        aria-label=${t("Search extensions and themes")}
-                        value=${query}
-                        onInput=${(event) => setQuery(event.currentTarget.value)}
-                    />
-                </label>
-                ${
-                    tab !== "installed" &&
-                    html`<button
-                        class="button small ext-icon-button"
-                        aria-label=${t("Refresh")}
-                        title=${t("Read the index again")}
-                        disabled=${loading}
-                        onClick=${() => load(true)}
-                    >
-                        <${Icon} name="reload" size=${15} />
-                    </button>`
-                }
-            </div>
-        </div>
-        ${
-            (tags.length > 1 || kinds.length > 0) &&
-            html`<div class="gallery-tags ext-filters" role="group" aria-label=${t("Kinds and tags")}>
-                ${chip("all", t("All"), kind === null && tag === null, () => {
-                    setKind(null);
-                    setTag(null);
-                })}
-                ${kinds.map((each) =>
-                    chip(
-                        `kind-${each}`,
-                        each === "theme" ? t("Themes") : t("Extensions"),
-                        kind === each,
-                        () => setKind(kind === each ? null : each),
-                    ),
-                )}
-                ${kinds.length > 0 && tags.length > 1 && html`<span class="ext-filters-gap"></span>`}
-                ${(tags.length > 1 ? tags : []).map((each) =>
-                    chip(each, `#${each}`, tag === each, () => setTag(tag === each ? null : each)),
-                )}
-            </div>`
-        }
         <div class=${`extension-hub-layout ${tab} ${selected ? "has-selection" : ""}`}>
             <div class="extension-hub-list">
+                <div class="ext-toolbar">
+                    <div class="extension-hub-toolbar">
+                        <label class="ext-search">
+                            <${Icon} name="search" size=${15} />
+                            <input
+                                type="search"
+                                placeholder=${
+                                    tab === "installed"
+                                        ? t("Search installed")
+                                        : tab === "updates"
+                                          ? t("Search updates")
+                                          : offered.length > 0
+                                            ? t("Search {{count}} extensions and themes", {
+                                                  count: offered.length,
+                                              })
+                                            : t("Search extensions and themes")
+                                }
+                                aria-label=${t("Search extensions and themes")}
+                                value=${query}
+                                onInput=${(event) => setQuery(event.currentTarget.value)}
+                            />
+                        </label>
+                        ${
+                            tab !== "installed" &&
+                            html`<button
+                                class="button small ext-icon-button"
+                                aria-label=${t("Refresh")}
+                                title=${t("Read the index again")}
+                                disabled=${loading}
+                                onClick=${() => load(true)}
+                            >
+                                <${Icon} name="reload" size=${15} />
+                            </button>`
+                        }
+                    </div>
+                    ${
+                        tab === "discover" &&
+                        data &&
+                        html`<div
+                            class="gallery-tags ext-filters"
+                            role="group"
+                            aria-label=${t("Filters")}
+                        >
+                            ${KINDS.map(([value, label, glyph]) =>
+                                chip(`kind-${value}`, t(label), glyph, kind === value, () =>
+                                    setKind(value),
+                                ),
+                            )}
+                            <span class="ext-filters-gap"></span>
+                            ${WANTS.map(([value, label, glyph]) =>
+                                chip(value, t(label), glyph, want === value, () =>
+                                    setWant(want === value ? null : value),
+                                ),
+                            )}
+                        </div>`
+                    }
+                </div>
                 ${problem && html`<div class="error-box small">${problem}</div>`}
                 ${data?.error && html`<div class="error-box small">${data.error}</div>`}
                 ${!data && !problem && html`<${Loader} label=${t("Reading the index")} />`}
                 ${
                     tab === "discover" &&
-                    data &&
-                    html`<p class="ext-assure">
-                        <${Icon} name="shield" size=${15} />
-                        <span>${t("Extensions install turned off. Nothing runs until you turn it on.")}</span>
-                    </p>`
+                    extensionMatches.length > 0 &&
+                    html`<${Section} title=${t("Extensions")} count=${extensionMatches.length}>
+                        <div class="ext-list">${extensionMatches.map(row)}</div>
+                    <//>`
                 }
                 ${
+                    tab === "discover" &&
+                    themeMatches.length > 0 &&
+                    html`<${Section} title=${t("Themes")} count=${themeMatches.length}>
+                        <div class="ext-themes">${themeMatches.map(card)}</div>
+                    <//>`
+                }
+                ${
+                    tab === "updates" &&
                     matches.length > 0 &&
-                    html`${tab === "installed" && html`<div class="group-title">${t("From the gallery")}</div>`}
-                        <div class="ext-list">
-                            ${matches.map(
-                                (entry) => html`<${EntryRow}
-                                    key=${entry.name}
-                                    entry=${entry}
-                                    selected=${detailName === entry.name}
-                                    onOpen=${() => select(entry.name)}
-                                    onChanged=${load}
-                                />`,
-                            )}
-                        </div>`
+                    html`<${Section} title=${t("Updates")} count=${matches.length}>
+                        <div class="ext-list">${matches.map(row)}</div>
+                    <//>`
                 }
                 ${
                     data &&
@@ -522,7 +978,7 @@ export function GallerySheet({
                             tab === "updates" && !needle
                                 ? html`<span class="ext-empty-mark"><${Icon} name="check" size=${20} /></span>
                                       <span>${t("Everything is up to date.")}</span>`
-                                : needle || tag || kind
+                                : needle || kind !== "all" || want
                                   ? t("Nothing matches. Try other words, or All.")
                                   : t("The index has nothing for this Pi Pocket yet.")
                         }
@@ -535,12 +991,16 @@ export function GallerySheet({
                         galleryInstalled=${installed}
                         query=${query}
                         onChanged=${load}
+                        hub=${true}
+                        before=${extensionMatches.length > 0 && html`<div class="ext-list">${extensionMatches.map(row)}</div>`}
+                        beforeCount=${extensionMatches.length}
+                        between=${installedThemes}
                     />`
                 }
                 ${
                     tab === "discover" &&
                     data &&
-                    html`<details class="gallery-technical">
+                    html`<details class="gallery-technical ext-where">
                         <summary>${t("Where these come from")}</summary>
                         <${IndexAddress} address=${data.address} onChanged=${() => load(true)} />
                         <p class="muted small">
@@ -580,26 +1040,26 @@ export function GallerySheet({
             <div class="extension-hub-detail">
                 ${
                     detailName
-                        ? html`
-                            ${
-                                !sheetBack &&
-                                html`<button
-                                    class="ext-back"
-                                    onClick=${() => openSheet({ type: origin, tab })}
-                                >
-                                    <${Icon} name="back" size=${16} /> ${t("Back to {{tab}}", {
-                                        tab: t(TABS.find(([value]) => value === tab)[1]),
-                                    })}
-                                </button>`
-                            }
-                            <${GalleryEntrySheet}
-                                key=${detailName}
-                                name=${detailName}
-                                listing=${listing}
-                                embedded=${true}
-                            />
-                        `
-                        : html`<div class="extension-hub-empty">${t("Choose one to see what it does.")}</div>`
+                        ? html`${
+                              !sheetBack &&
+                              html`<button class="ext-back" onClick=${() => openSheet({ type: origin, tab })}>
+                                  <${Icon} name="back" size=${16} /> ${t("Back to {{tab}}", {
+                                      tab: t(TABS.find(([value]) => value === tab)[1]),
+                                  })}
+                              </button>`
+                          }
+                          <${GalleryEntrySheet}
+                              key=${detailName}
+                              name=${detailName}
+                              listing=${listing}
+                              reach=${reach}
+                              reachProblem=${reachProblem}
+                              module=${modules?.find((each) => each.file === `${detailName}.ts`) ?? null}
+                              embedded=${true}
+                          />`
+                        : html`<div class="extension-hub-empty">
+                              ${t("Choose one to see what it does.")}
+                          </div>`
                 }
             </div>
         </div>
@@ -694,107 +1154,6 @@ function EntryFrame({ embedded, title, children }) {
           <//>`;
 }
 
-/**
- * The way to trust something new, one step at a time: each step says what happens, and holds the buttons for it. The
- * step to take now stands out; the ones done get a check.
- */
-function Steps({ steps }) {
-    return html`<ol class="ext-steps">
-        ${steps.map(
-            (step, index) => html`<li
-                key=${step.title}
-                class=${`ext-step ${step.done ? "done" : ""} ${step.now ? "now" : ""}`}
-            >
-                <span class="ext-step-mark" aria-hidden="true">
-                    ${step.done ? html`<${Icon} name="check" size=${13} stroke=${2.5} />` : index + 1}
-                </span>
-                <div class="ext-step-body">
-                    <div class="ext-step-title">
-                        ${step.title}${step.done ? html`<span class="ext-hidden"> (done)</span>` : ""}
-                    </div>
-                    <div class="ext-step-text">${step.text}</div>
-                    ${step.actions && html`<div class="ext-step-actions">${step.actions}</div>`}
-                </div>
-            </li>`,
-        )}
-    </ol>`;
-}
-
-/** What a module adds, in plain words, leaving out what it does not: the full list is under Technical details. */
-function Adds({ declares }) {
-    const readOnly = declares.readOnlyTools ?? [];
-    const tools = [...new Set([...(declares.tools ?? []), ...readOnly])].map((tool) =>
-        readOnly.includes(tool) ? t("{{tool}} (reads only)", { tool }) : tool,
-    );
-    const parts = [
-        declares.client !== null && t("pages and buttons"),
-        (declares.routes ?? []).length > 0 && t("server routes"),
-    ].filter(Boolean);
-    const app =
-        parts.length > 0
-            ? [
-                  t("{{parts}}, for {{access}}", {
-                      parts: parts.join(", "),
-                      access: t(ACCESS_WORDS[declares.access] ?? declares.access),
-                  }),
-              ]
-            : [];
-    const turns = [
-        (declares.sections ?? []).length > 0 && t("adds to its instructions"),
-        ...(declares.hooks ?? []).map((hook) => t("hooks {{names}}", { names: hook })),
-        ...(declares.wraps ?? []).map((wrap) => t("wraps {{names}}", { names: wrap })),
-    ].filter(Boolean);
-    const rows = [
-        [t("Tools for Pi"), tools, true],
-        [t("Commands"), declared(declares, "commands"), true],
-        [t("In the app"), app, false],
-        [t("Changes to Pi"), turns, false],
-    ].filter(([, items]) => items.length > 0);
-
-    return html`<section class="ext-adds">
-        <div class="group-title">${t("What it adds")}</div>
-        ${
-            rows.length === 0
-                ? html`<p class="muted small">${t("No tools, commands, pages, or hooks.")}</p>`
-                : html`<dl>
-                      ${rows.map(
-                          ([label, items, mono]) => html`<div key=${label}>
-                              <dt>${label}</dt>
-                              <dd class=${mono ? "mono" : "ext-sentence"}>${items.join(", ")}</dd>
-                          </div>`,
-                      )}
-                  </dl>`
-        }
-    </section>`;
-}
-
-/** The head of an entry: its mark, name, who made it, its version, and how it stands here. */
-function EntryHead({ name, title, entry, installed, theme }) {
-    const by = [
-        entry?.author && t("by {{name}}", { name: entry.author.name }),
-        `v${installed?.version ?? entry.version}`,
-        theme && t("Theme"),
-    ].filter(Boolean);
-
-    return html`<header class="ext-detail-head">
-        <${Tile} name=${name} title=${title} icon=${theme ? "palette" : null} large=${true} />
-        <div class="ext-detail-name">
-            <h3 class="pi-title">${title}</h3>
-            <div class="ext-detail-by">
-                <span>${by.join(" · ")}</span>
-                ${installed && html`<${RowState} installed=${installed} />`}
-            </div>
-        </div>
-    </header>
-    ${entry?.description && html`<p class="gallery-description">${entry.description}</p>`}
-    ${
-        entry?.tags.length > 0 &&
-        html`<div class="ext-detail-tags">
-            ${entry.tags.map((tag) => html`<span key=${tag}>#${tag}</span>`)}
-        </div>`
-    }`;
-}
-
 /** A newer version waits: one calm line, and the review that shows what it changes. */
 const UpdateCallout = ({ installed, name, busy }) =>
     installed?.update &&
@@ -827,264 +1186,6 @@ const Remove = ({ label, text, busy, onClick }) =>
         <button class="button small ghost" disabled=${busy} onClick=${onClick}>${label}</button>
         <span class="muted small">${text}</span>
     </div>`;
-
-/** One entry: what it is, where it comes from, what it declares, and what the owner can do with it here. */
-export function GalleryEntrySheet({ name, listing, embedded = false }) {
-    const { data, problem, load } = useListing(listing);
-    const [busy, setBusy] = useState(false);
-    // Set at once, not at the next render: a second tap in the same moment must not run it twice.
-    const going = useRef(false);
-    // "Turn on" asks once more, in place: the owner says they trust its code.
-    const [trusting, setTrusting] = useState(false);
-    const entry = data?.entries.find((each) => each.name === name) ?? null;
-    const installed =
-        entry?.installed ?? data?.installed.find((each) => each.name === name) ?? null;
-
-    const run = (work, reload = true) => {
-        if (going.current) {
-            return;
-        }
-
-        going.current = true;
-        setBusy(true);
-        attempt(work).finally(() => {
-            going.current = false;
-            setBusy(false);
-
-            if (reload) {
-                load();
-            }
-        });
-    };
-
-    if (!entry && !installed) {
-        return html`<${EntryFrame} title=${t("Extension")} embedded=${embedded}>
-            ${problem && html`<div class="error-box small">${problem}</div>`}
-            ${
-                data === null
-                    ? !problem && html`<${Loader} label=${t("Reading the index")} />`
-                    : html`<p class="muted">${t("The index does not list {{name}}, and it is not installed.", { name })}</p>`
-            }
-        <//>`;
-    }
-
-    if (isTheme(entry ?? installed)) {
-        return html`<${ThemeEntry}
-            name=${name}
-            entry=${entry}
-            installed=${installed}
-            problem=${problem}
-            busy=${busy}
-            run=${run}
-            embedded=${embedded}
-        />`;
-    }
-
-    const title = installed?.title ?? entry.title;
-    const declares = installed?.declares ?? entry.declares;
-    // The index's files are these when it offers the version here, or nothing is installed.
-    const files =
-        entry && (!installed || entry.source.commit === installed.commit) ? entry.files : null;
-    const offeredRevoked = !installed && entry ? revocation(entry, entry.source.commit) : undefined;
-    const on = installed?.enabled && installed.revoked === null;
-
-    // Bound to the manifest the owner saw (`pin`): when the index changed since, the server refuses with 409, and the
-    // entry is read again (run's reload) for the owner to look at once more.
-    const install = () =>
-        run(() => galleryApi(`install/${encodeURIComponent(name)}`, { pin: entry.pin }));
-
-    const toggle = (enabled) => {
-        setTrusting(false);
-        run(() => setEnabled(installed, enabled));
-    };
-
-    const uninstall = () => {
-        if (
-            confirm(
-                `${t("Remove {{title}}?", { title })}\n\n${
-                    installed.enabled
-                        ? t(
-                              "It is turned off first, then its files are deleted from the extensions folder.",
-                          )
-                        : t("Its files are deleted from the extensions folder.")
-                }`,
-            )
-        ) {
-            run(() => galleryApi(`uninstall/${encodeURIComponent(name)}`, {}));
-        }
-    };
-
-    const review = () => run(() => askForReview(name), false);
-    const source = html`<button
-        class="button small"
-        disabled=${busy}
-        onClick=${() => openGallerySheet("gallery-source", name)}
-    >
-        ${t("View source")}
-    </button>`;
-    const askPi = html`<button class="button small" disabled=${busy} onClick=${review}>
-        <${Icon} name="sparkle" size=${14} /> ${t("Ask Pi to review")}
-    </button>`;
-
-    return html`<${EntryFrame} title=${title} embedded=${embedded}>
-        ${problem && html`<div class="error-box small">${problem}</div>`}
-        ${
-            installed &&
-            installed.revoked !== null &&
-            html`<div class="error-box gallery-revoked" role="alert">
-                <strong>${t("The gallery revoked this version.")}</strong> ${t(
-                    "Its reason: {{reason}}",
-                    {
-                        reason: installed.revoked,
-                    },
-                )}
-                ${
-                    installed.enabled &&
-                    html`<div class="sheet-actions">
-                        <button class="button small primary" disabled=${busy} onClick=${() => toggle(false)}>
-                            ${t("Turn it off")}
-                        </button>
-                    </div>`
-                }
-            </div>`
-        }
-        ${
-            offeredRevoked !== undefined &&
-            html`<div class="error-box gallery-revoked" role="alert">
-                <strong>${t("The gallery revoked this version.")}</strong> ${t(
-                    "Its reason: {{reason}}",
-                    {
-                        reason: offeredRevoked,
-                    },
-                )}
-            </div>`
-        }
-        <${EntryHead} name=${name} title=${title} entry=${entry} installed=${installed} />
-        <${UpdateCallout} installed=${installed} name=${name} busy=${busy} />
-        ${
-            on
-                ? html`<div class="ext-on">
-                      <div class="ext-on-text">
-                          <span class="ext-dot"></span>
-                          <span><strong>${t("On")}</strong> · ${t("it runs in every session")}</span>
-                      </div>
-                      <div class="ext-step-actions">
-                          <button class="button small" disabled=${busy} onClick=${() => toggle(false)}>
-                              ${t("Turn off")}
-                          </button>
-                          <button
-                              class="button small"
-                              disabled=${busy}
-                              onClick=${() =>
-                                  run(() =>
-                                      api(
-                                          `extensions/${encodeURIComponent(installed.file)}/reload`,
-                                          {},
-                                      ),
-                                  )}
-                          >
-                              ${t("Reload")}
-                          </button>
-                          ${source} ${askPi}
-                      </div>
-                  </div>`
-                : html`<${Steps}
-                      steps=${[
-                          {
-                              title: t("Install"),
-                              text: t("It arrives turned off, so nothing runs yet."),
-                              done: installed !== null,
-                              now: installed === null,
-                              actions:
-                                  installed === null &&
-                                  html`<button
-                                      class="button small primary"
-                                      disabled=${busy || offeredRevoked !== undefined}
-                                      onClick=${install}
-                                  >
-                                      ${t("Install")}
-                                  </button>`,
-                          },
-                          {
-                              title: t("Look it over"),
-                              text:
-                                  installed === null
-                                      ? t(
-                                            "Read its code now, or once it is installed, have Pi review it in plan mode, where Pi cannot change anything.",
-                                        )
-                                      : t(
-                                            "Read its code, or have Pi review it in plan mode, where Pi cannot change anything.",
-                                        ),
-                              now: installed !== null,
-                              actions: html`${source} ${installed && askPi}`,
-                          },
-                          {
-                              title: t("Turn it on"),
-                              text: t(RISK),
-                              actions:
-                                  installed &&
-                                  installed.revoked === null &&
-                                  (trusting
-                                      ? html`<button
-                                                class="button small primary"
-                                                disabled=${busy}
-                                                onClick=${() => toggle(true)}
-                                            >
-                                                ${t("I trust it, turn it on")}
-                                            </button>
-                                            <button
-                                                class="button small"
-                                                onClick=${() => setTrusting(false)}
-                                            >
-                                                ${t("Not now")}
-                                            </button>`
-                                      : html`<button
-                                            class="button small"
-                                            disabled=${busy}
-                                            onClick=${() => setTrusting(true)}
-                                        >
-                                            ${t("Turn on")}
-                                        </button>`),
-                          },
-                      ]}
-                  />`
-        }
-        <${Changed} installed=${installed} />
-        <${Adds} declares=${declares} />
-        <details class="gallery-technical">
-            <summary>${t("Technical details")}</summary>
-            <${EntryFacts}
-                entry=${entry}
-                installed=${installed}
-                needs=${
-                    entry &&
-                    t("Pi Pocket {{version}} or newer · extension API {{api}}", {
-                        version: entry.minPocket,
-                        api: entry.pocketApi,
-                    })
-                }
-            />
-            <${Files} files=${files} />
-            <div class="group">
-                <div class="group-title">${t("Everything it declares")}</div>
-                <${Declares} declares=${declares} />
-            </div>
-        </details>
-        ${
-            installed &&
-            html`<${Remove}
-                label=${t("Uninstall")}
-                text=${
-                    installed.enabled
-                        ? t("Turns it off and deletes its files.")
-                        : t("Deletes its files.")
-                }
-                busy=${busy}
-                onClick=${uninstall}
-            />`
-        }
-    <//>`;
-}
 
 /** The files the index pins, with their sizes. */
 const Files = ({ files }) =>
@@ -1156,15 +1257,572 @@ function EntryFacts({ entry, installed, needs }) {
     </dl>`;
 }
 
-/**
- * A theme's entry: what it is, its files, and installing, updating, and removing it. Installing puts it in the list in
- * Appearance; it changes nothing until someone chooses it there.
- */
-function ThemeEntry({ name, entry, installed, problem, busy, run, embedded }) {
+function ReachSection({ declares, found, problem, edited = false }) {
+    const rows = reachRows(declares, found);
+    const missing = found?.scanned
+        ? ["network", "keys", "programs", "files"].filter((key) => found.scanned[key].length === 0)
+        : [];
+
+    return html`<section class="ext-block">
+        <h4 class="ext-label">${t("What it can reach")}</h4>
+        ${
+            edited &&
+            html`<p class="ext-why warn">
+                ${t(
+                    "Its files were edited since it was installed: this is what the pinned version reaches, not what runs here. Read its source.",
+                )}
+            </p>`
+        }
+        <ul class="ext-reach">
+            ${rows.map(
+                (row) => html`<li key=${row.key}>
+                    <${Icon} name=${row.glyph} size=${14} />
+                    <span class="ext-reach-text">${row.text}</span>
+                    <span class="ext-reach-from">${row.from}</span>
+                </li>`,
+            )}
+            <li class="always">
+                <${Icon} name="shield" size=${14} />
+                <span class="ext-reach-text">${t(RISK)}</span>
+                <span class="ext-reach-from">${t("Always")}</span>
+            </li>
+        </ul>
+        ${
+            missing.length > 0 &&
+            html`<p class="ext-quiet">
+                ${t(
+                    "The scan found nothing for {{parts}}. It reads the code's text for addresses, keys, programs, and files, so the code can still reach more than it finds.",
+                    { parts: sentence(missing) },
+                )}
+            </p>`
+        }
+        ${
+            !found &&
+            html`<p class="ext-quiet">
+                ${
+                    problem ??
+                    t(
+                        "Its code is not read yet for this version: what it reaches in its code shows here once it is.",
+                    )
+                }
+            </p>`
+        }
+    </section>`;
+}
+
+function AddsSection({ declares: d }) {
+    const readOnly = d.readOnlyTools ?? [];
+    const tools = [...new Set([...(d.tools ?? []), ...readOnly])];
+    const commands = (d.commands ?? []).map((each) => {
+        const [scope, name] = each.split(" ");
+
+        return [`/${name}`, t(scope === "global" ? "owner" : "who can steer")];
+    });
+    const app = [
+        d.client !== null && t("pages and buttons"),
+        (d.routes ?? []).length > 0 &&
+            plural(d.routes.length, "{{count}} server route", "{{count}} server routes"),
+    ].filter(Boolean);
+
+    if (tools.length + commands.length + app.length === 0) {
+        return html`<section class="ext-block">
+            <h4 class="ext-label">${t("What it adds")}</h4>
+            <p class="ext-quiet">${t("No tools, commands, or pages.")}</p>
+        </section>`;
+    }
+
+    return html`<section class="ext-block">
+        <h4 class="ext-label">${t("What it adds")}</h4>
+        ${
+            tools.length > 0 &&
+            html`<div class="ext-codes">
+                ${tools.map(
+                    (tool) => html`<code key=${tool}>
+                        ${tool}${readOnly.includes(tool) && html`<span>${t("reads only")}</span>`}
+                    </code>`,
+                )}
+            </div>`
+        }
+        ${
+            commands.length > 0 &&
+            html`<div class="ext-codes">
+                ${commands.map(([name, who]) => html`<code key=${name}>${name}<span>${who}</span></code>`)}
+            </div>`
+        }
+        ${
+            app.length > 0 &&
+            html`<p class="ext-quiet">
+                <${Icon} name="tiles" size=${13} />
+                ${t("{{parts}} in the app, for {{who}}", {
+                    parts: `${sentence(app).charAt(0).toUpperCase()}${sentence(app).slice(1)}`,
+                    who: t(ACCESS_WORDS[d.access] ?? d.access),
+                })}
+            </p>`
+        }
+    </section>`;
+}
+
+function TurnOnDialog({ title, declares, found, installed, busy, onCancel, onOff, onOn }) {
+    const box = useRef(null);
+    const rows = reachRows(declares, found);
+    // While it installs or turns on, the question stays: closing it would hide code about to run.
+    const cancel = () => !busy && onCancel();
+
+    useEffect(() => {
+        const opener = document.activeElement;
+
+        box.current?.querySelector("[data-cancel]")?.focus();
+
+        return () => opener?.isConnected && opener.focus({ preventScroll: true });
+    }, []);
+
+    const onKeyDown = (event) => {
+        if (event.key === "Escape" && !event.isComposing && event.keyCode !== 229) {
+            event.preventDefault();
+            event.stopPropagation();
+            cancel();
+
+            return;
+        }
+
+        if (event.key === "Tab") {
+            const stops = [...box.current.querySelectorAll("button:not(:disabled)")];
+            const at = stops.indexOf(document.activeElement);
+            const next = event.shiftKey
+                ? at <= 0
+                    ? stops.at(-1)
+                    : stops[at - 1]
+                : at === stops.length - 1
+                  ? stops[0]
+                  : stops[at + 1];
+
+            event.preventDefault();
+            event.stopPropagation();
+            next?.focus();
+        }
+    };
+
+    return html`<div
+        class="ext-dialog-scrim"
+        onMouseDown=${(event) => event.target === event.currentTarget && cancel()}
+    >
+        <div
+            class="ext-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ext-dialog-title"
+            ref=${box}
+            onKeyDown=${onKeyDown}
+        >
+            <h3 id="ext-dialog-title">
+                ${
+                    installed
+                        ? t("Turn on {{title}}?", { title })
+                        : t("Install and turn on {{title}}?", { title })
+                }
+            </h3>
+            <p>${t(RISK)}</p>
+            ${
+                installed?.changed.length > 0 &&
+                html`<p class="ext-why warn">
+                    ${t(
+                        "Its files were edited since it was installed: this is what the pinned version reaches, not what runs here.",
+                    )}
+                </p>`
+            }
+            ${
+                rows.length > 0
+                    ? html`<ul class="ext-reach compact">
+                          ${rows.map(
+                              (row) => html`<li key=${row.key}>
+                                  <${Icon} name=${row.glyph} size=${14} />
+                                  <span class="ext-reach-text">${row.text}</span>
+                              </li>`,
+                          )}
+                      </ul>
+                      <p class="ext-quiet">
+                          ${t("The scan reads text, so the code can still reach more.")}
+                      </p>`
+                    : found
+                      ? html`<p class="ext-quiet">
+                            ${t(
+                                "The scan of its code found no address, key, program, or file, and it declares no hooks. The scan reads text, so the code can still reach more.",
+                            )}
+                        </p>`
+                      : html`<p class="ext-quiet">
+                            ${t("Its code is not read yet: read it with View source first.")}
+                        </p>`
+            }
+            <div class="ext-dialog-actions">
+                <button class="button small" data-cancel disabled=${busy} onClick=${cancel}>
+                    ${t("Cancel")}
+                </button>
+                ${
+                    !installed &&
+                    html`<button class="button small" disabled=${busy} onClick=${onOff}>
+                        ${t("Install turned off")}
+                    </button>`
+                }
+                <button class="button small primary" disabled=${busy} onClick=${onOn}>
+                    ${installed ? t("Turn on") : t("Install and turn on")}
+                </button>
+            </div>
+        </div>
+    </div>`;
+}
+
+function EntryHead({ name, title, entry, installed, theme, size }) {
+    const meta = [
+        entry?.author?.name ?? (installed?.unlisted ? t("not in the index") : null),
+        `v${installed?.version ?? entry?.version}`,
+        entry && plural(entry.files.length, "{{count}} file", "{{count}} files"),
+        size > 0 && formatBytes(size),
+        theme && t("theme"),
+    ].filter(Boolean);
+
+    return html`<header class="ext-detail-head">
+        <${Tile} name=${name} title=${title} icon=${theme ? "palette" : null} large=${true} />
+        <div class="ext-detail-name">
+            <h3 class="pi-title">${title}</h3>
+            <div class="ext-detail-by">${meta.join(" · ")}</div>
+        </div>
+    </header>`;
+}
+
+export function GalleryEntrySheet({
+    name,
+    listing,
+    reach = null,
+    reachProblem = null,
+    module = null,
+    embedded = false,
+}) {
+    const { data, problem, load } = useListing(listing);
+    const [busy, setBusy] = useState(false);
+    // Set at once, not at the next render: a second tap in the same moment must not run it twice.
+    const going = useRef(false);
+    const [asking, setAsking] = useState(false);
+    const entry = data?.entries.find((each) => each.name === name) ?? null;
+    const installed =
+        entry?.installed ?? data?.installed.find((each) => each.name === name) ?? null;
+
+    const run = (work, reload = true) => {
+        if (going.current) {
+            return;
+        }
+
+        going.current = true;
+        setBusy(true);
+        attempt(work).finally(() => {
+            going.current = false;
+            setBusy(false);
+
+            if (reload) {
+                load();
+            }
+        });
+    };
+
+    if (!entry && !installed) {
+        return html`<${EntryFrame} title=${t("Extension")} embedded=${embedded}>
+            ${problem && html`<div class="error-box small">${problem}</div>`}
+            ${
+                data === null
+                    ? !problem && html`<${Loader} label=${t("Reading the index")} />`
+                    : html`<p class="muted">
+                          ${t("The index does not list {{name}}, and it is not installed.", { name })}
+                      </p>`
+            }
+        <//>`;
+    }
+
+    const found = foundFor(reach, entry, installed);
+
+    if (isTheme(entry ?? installed)) {
+        return html`<${ThemeEntry}
+            name=${name}
+            entry=${entry}
+            installed=${installed}
+            palette=${paletteOf(entry ?? installed, found)}
+            problem=${problem}
+            busy=${busy}
+            run=${run}
+            embedded=${embedded}
+        />`;
+    }
+
+    const title = installed?.title ?? entry.title;
+    const declares = installed?.declares ?? entry.declares;
+    const files =
+        entry && (!installed || entry.source.commit === installed.commit) ? entry.files : null;
+    const offeredRevoked = !installed && entry ? revocation(entry, entry.source.commit) : undefined;
+    const on = installed?.enabled && installed.revoked === null;
+    const status = installed ? liveStatus(installed, module, "installed") : null;
+    const why = installed ? statusWhy(installed, module) : null;
+
+    // Bound to the manifest the owner saw (`pin`): when the index changed since, the server refuses with 409, and the
+    // entry is read again (run's reload) for the owner to look at once more.
+    const install = (andOn) =>
+        run(async () => {
+            const result = await galleryApi(`install/${encodeURIComponent(name)}`, {
+                pin: entry.pin,
+            });
+
+            if (andOn) {
+                await setEnabled(result, true);
+            }
+
+            setAsking(false);
+        });
+
+    const toggle = (enabled) =>
+        run(async () => {
+            await setEnabled(installed, enabled);
+            setAsking(false);
+        });
+
+    const uninstall = () => {
+        if (
+            confirm(
+                `${t("Remove {{title}}?", { title })}\n\n${
+                    installed.enabled
+                        ? t(
+                              "It is turned off first, then its files are deleted from the extensions folder.",
+                          )
+                        : t("Its files are deleted from the extensions folder.")
+                }`,
+            )
+        ) {
+            run(() => galleryApi(`uninstall/${encodeURIComponent(name)}`, {}));
+        }
+    };
+
+    const source = html`<button
+        class="button small"
+        disabled=${busy}
+        onClick=${() => openGallerySheet("gallery-source", name)}
+    >
+        ${t("View source")}
+    </button>`;
+    const askPi = html`<button class="button small" disabled=${busy} onClick=${() => run(() => askForReview(name), false)}>
+        <${Icon} name="sparkle" size=${14} /> ${t("Ask Pi to review")}
+    </button>`;
+    const revoked = installed?.revoked ?? offeredRevoked;
+
+    return html`<${EntryFrame} title=${title} embedded=${embedded}>
+        ${problem && html`<div class="error-box small">${problem}</div>`}
+        ${
+            revoked !== null &&
+            revoked !== undefined &&
+            html`<div class="error-box gallery-revoked" role="alert">
+                <strong>${t("The gallery revoked this version.")}</strong> ${t(
+                    "Its reason: {{reason}}",
+                    {
+                        reason: revoked,
+                    },
+                )}
+                ${
+                    installed?.enabled &&
+                    html`<div class="sheet-actions">
+                        <button class="button small primary" disabled=${busy} onClick=${() => toggle(false)}>
+                            ${t("Turn it off")}
+                        </button>
+                    </div>`
+                }
+            </div>`
+        }
+        <${EntryHead} name=${name} title=${title} entry=${entry} installed=${installed} />
+        ${entry?.description && html`<p class="gallery-description">${entry.description}</p>`}
+        <${UpdateCallout} installed=${installed} name=${name} busy=${busy} />
+        ${
+            status &&
+            html`<div class="ext-standing">
+                <${Status} status=${status} />
+                <span class="muted small">
+                    ${
+                        on
+                            ? t("Runs in every session.")
+                            : installed.revoked === null
+                              ? t("Installed, turned off: nothing runs.")
+                              : ""
+                    }
+                </span>
+            </div>`
+        }
+        ${why && html`<div class=${`ext-why ${why.kind} small`}>${why.text}</div>`}
+        <div class="ext-actions">
+            ${
+                !installed
+                    ? html`<button
+                              class="button small primary"
+                              disabled=${busy || offeredRevoked !== undefined}
+                              onClick=${() => setAsking(true)}
+                          >
+                              ${t("Install and turn on")}
+                          </button>
+                          <button
+                              class="button small"
+                              disabled=${busy || offeredRevoked !== undefined}
+                              onClick=${() => install(false)}
+                          >
+                              ${t("Install turned off")}
+                          </button>
+                          ${source}`
+                    : on
+                      ? html`<button class="button small" disabled=${busy} onClick=${() => toggle(false)}>
+                                ${t("Turn off")}
+                            </button>
+                            <button
+                                class="button small"
+                                disabled=${busy}
+                                onClick=${() =>
+                                    run(() =>
+                                        api(
+                                            `extensions/${encodeURIComponent(installed.file)}/reload`,
+                                            {},
+                                        ),
+                                    )}
+                            >
+                                <${Icon} name="reload" size=${14} /> ${t("Reload")}
+                            </button>
+                            ${source} ${askPi}`
+                      : html`${
+                            installed.revoked === null &&
+                            html`<button class="button small primary" disabled=${busy} onClick=${() => setAsking(true)}>
+                                ${t("Turn on")}
+                            </button>`
+                        }
+                        ${source} ${askPi}`
+            }
+        </div>
+        <${Changed} installed=${installed} />
+        <${ReachSection}
+            declares=${declares}
+            found=${found}
+            problem=${reachProblem}
+            edited=${installed?.changed.length > 0}
+        />
+        <${AddsSection} declares=${declares} />
+        ${
+            entry?.tags.length > 0 &&
+            html`<p class="ext-tags">${entry.tags.map((tag) => html`<span key=${tag}>#${tag}</span>`)}</p>`
+        }
+        <details class="gallery-technical">
+            <summary>${t("Technical details")}</summary>
+            <${EntryFacts}
+                entry=${entry}
+                installed=${installed}
+                needs=${
+                    entry &&
+                    t("Pi Pocket {{version}} or newer · extension API {{api}}", {
+                        version: entry.minPocket,
+                        api: entry.pocketApi,
+                    })
+                }
+            />
+            <${Files} files=${files} />
+            <div class="group">
+                <div class="group-title">${t("Everything it declares")}</div>
+                <${Declares} declares=${declares} />
+            </div>
+        </details>
+        ${
+            installed &&
+            html`<${Remove}
+                label=${t("Uninstall")}
+                text=${
+                    installed.enabled
+                        ? t("Turns it off and deletes its files.")
+                        : t("Deletes its files.")
+                }
+                busy=${busy}
+                onClick=${uninstall}
+            />`
+        }
+        ${
+            asking &&
+            html`<${TurnOnDialog}
+                title=${title}
+                declares=${declares}
+                found=${found}
+                installed=${installed}
+                busy=${busy}
+                onCancel=${() => setAsking(false)}
+                onOff=${() => install(false)}
+                onOn=${() => (installed ? toggle(true) : install(true))}
+            />`
+        }
+    <//>`;
+}
+
+function themeChanges(files, palette) {
+    const names = (files ?? []).map((file) => file.name);
+    const fonts = [
+        ...new Set(
+            names
+                .filter((file) => /\.(woff2?|ttf|otf)$/i.test(file))
+                .map((file) =>
+                    file
+                        .split("/")
+                        .pop()
+                        .replace(/\.(woff2?|ttf|otf)$/i, "")
+                        .replace(/[-_](Roman|Italic|Regular|Bold|Variable|VF).*$/i, "")
+                        .replace(/([a-z])([A-Z0-9])/g, "$1 $2"),
+                ),
+        ),
+    ];
+    const images = names.filter((file) => /\.(png|jpe?g|webp|avif|gif|svg)$/i.test(file));
+
+    return [
+        [
+            "swatch",
+            palette ? t("Colors, {{modes}}", { modes: modeWords(palette) }) : t("Its own colors"),
+        ],
+        names.some((file) => file.endsWith("layout.css")) && [
+            "tiles",
+            t("A layout of its own: it moves and restyles parts of the app"),
+        ],
+        fonts.length > 0 && [
+            "file",
+            fonts.length === 1
+                ? t("Its own font: {{names}}", { names: sentence(fonts) })
+                : t("Its own fonts: {{names}}", { names: sentence(fonts) }),
+        ],
+        images.length > 0 && [
+            "artifact",
+            plural(images.length, "{{count}} image", "{{count}} images"),
+        ],
+    ].filter(Boolean);
+}
+
+const Swatches = ({ colors }) =>
+    html`<div class="ext-swatches">
+        ${["background", "foreground", "accent", ...THEME_DOTS]
+            .filter((key) => HEX.test(colors[key] ?? ""))
+            .map(
+                (key) =>
+                    html`<i key=${key} style=${`background:${colors[key]}`} title=${`${key} ${colors[key]}`}></i>`,
+            )}
+        <span class="mono">
+            ${[
+                ["background", "background"],
+                ["foreground", "text"],
+                ["accent", "accent"],
+            ]
+                .filter(([key]) => HEX.test(colors[key] ?? ""))
+                .map(([key, label]) => `${t(label)} ${colors[key]}`)
+                .join(" · ")}
+        </span>
+    </div>`;
+
+function ThemeEntry({ name, entry, installed, palette, problem, busy, run, embedded }) {
     const title = installed?.title ?? entry.title;
     const files =
         entry && (!installed || entry.source.commit === installed.commit) ? entry.files : null;
     const offeredRevoked = !installed && entry ? revocation(entry, entry.source.commit) : undefined;
+    const usable = store.state.themeList?.some((each) => each.id === name && each.usable);
+    const inUse = (prefs().look ?? BASE_LOOK) === name;
+    const size = (entry?.files ?? []).reduce((sum, file) => sum + file.size, 0);
 
     const install = () =>
         run(() => galleryApi(`install/${encodeURIComponent(name)}`, { pin: entry.pin }));
@@ -1204,54 +1862,68 @@ function ThemeEntry({ name, entry, installed, problem, busy, run, embedded }) {
             entry=${entry}
             installed=${installed}
             theme=${true}
+            size=${size}
         />
-        <${UpdateCallout} installed=${installed} name=${name} busy=${busy} />
-        <${Steps}
-            steps=${[
-                {
-                    title: t("Install"),
-                    text: t(
-                        "It joins the list in Appearance. Nothing changes until someone chooses it.",
-                    ),
-                    done: installed !== null,
-                    now: installed === null,
-                    actions: html`${
-                        installed === null &&
-                        html`<button
-                            class="button small primary"
-                            disabled=${busy || offeredRevoked !== undefined}
-                            onClick=${install}
-                        >
-                            ${t("Install")}
-                        </button>`
+        <div class=${`ext-preview ${palette?.colorsLight ? "pair" : ""}`}>
+            <figure>
+                <${ThemeDesk} colors=${palette?.colors ?? null} big=${true} />
+                <figcaption>
+                    ${
+                        palette
+                            ? palette.colorsLight || palette.colors.mode !== "light"
+                                ? t("Dark")
+                                : t("Light")
+                            : t("Its colors show once the gallery reads them")
                     }
-                    <button
-                        class="button small"
-                        disabled=${busy}
-                        onClick=${() => openGallerySheet("gallery-source", name)}
-                    >
-                        ${t("View source")}
-                    </button>`,
-                },
-                {
-                    title: t("Choose it"),
-                    text: t(
-                        "Each person picks a theme for their own browser, under Theme in Appearance.",
-                    ),
-                    now: installed !== null,
-                    actions:
-                        installed &&
-                        html`<button
-                            class="button small primary"
-                            onClick=${() => openSheet({ type: "appearance" })}
-                        >
-                            ${t("Open Appearance")}
-                        </button>`,
-                },
-            ]}
-        />
-        <p class="ext-assure">
-            <${Icon} name="shield" size=${15} /><span>${t(THEME_RISK)}</span>
+                </figcaption>
+            </figure>
+            ${
+                palette?.colorsLight &&
+                html`<figure>
+                    <${ThemeDesk} colors=${palette.colorsLight} big=${true} />
+                    <figcaption>${t("Light")}</figcaption>
+                </figure>`
+            }
+        </div>
+        ${entry?.description && html`<p class="gallery-description">${entry.description}</p>`}
+        <${UpdateCallout} installed=${installed} name=${name} busy=${busy} />
+        <div class="ext-actions">
+            ${
+                !installed
+                    ? html`<button
+                          class="button small primary"
+                          disabled=${busy || offeredRevoked !== undefined}
+                          onClick=${install}
+                      >
+                          ${t("Install")}
+                      </button>`
+                    : html`<button
+                              class="button small primary"
+                              disabled=${!usable || inUse}
+                              onClick=${(event) => chooseLook(name, event)}
+                          >
+                              ${inUse ? t("In use in this browser") : t("Use it in this browser")}
+                          </button>
+                          <button class="button small" onClick=${() => openSheet({ type: "appearance" })}>
+                              ${t("Open Appearance")}
+                          </button>`
+            }
+            <button
+                class="button small"
+                disabled=${busy}
+                onClick=${() => openGallerySheet("gallery-source", name)}
+            >
+                ${t("View source")}
+            </button>
+        </div>
+        <p class="ext-quiet">
+            ${
+                installed
+                    ? t(
+                          "Each person picks a theme for their own browser: using it here changes nothing for anyone else.",
+                      )
+                    : t("Installing adds it to Appearance. Nothing changes until someone picks it.")
+            }
         </p>
         ${
             installed?.problem &&
@@ -1262,6 +1934,35 @@ function ThemeEntry({ name, entry, installed, problem, busy, run, embedded }) {
             </div>`
         }
         <${Changed} installed=${installed} />
+        <section class="ext-block">
+            <h4 class="ext-label">${t("What it changes")}</h4>
+            <ul class="ext-reach">
+                ${themeChanges(entry?.files, palette).map(
+                    ([glyph, text]) => html`<li key=${glyph}>
+                        <${Icon} name=${glyph} size=${14} />
+                        <span class="ext-reach-text">${text}</span>
+                        <span class="ext-reach-from">${t("In its files")}</span>
+                    </li>`,
+                )}
+                <li class="always">
+                    <${Icon} name="shield" size=${14} />
+                    <span class="ext-reach-text">${t(THEME_RISK)}</span>
+                    <span class="ext-reach-from">${t("Always")}</span>
+                </li>
+            </ul>
+        </section>
+        ${
+            palette &&
+            html`<section class="ext-block">
+                <h4 class="ext-label">${t("Palette")}</h4>
+                <${Swatches} colors=${palette.colors} />
+                ${palette.colorsLight && html`<${Swatches} colors=${palette.colorsLight} />`}
+            </section>`
+        }
+        ${
+            entry?.tags.length > 0 &&
+            html`<p class="ext-tags">${entry.tags.map((tag) => html`<span key=${tag}>#${tag}</span>`)}</p>`
+        }
         <details class="gallery-technical">
             <summary>${t("Technical details")}</summary>
             <${EntryFacts}
@@ -1354,7 +2055,7 @@ function declarationChanges(before, after) {
 
     if (before.client !== after.client) {
         lines.push({
-            label: "Browser module",
+            label: t("Browser module"),
             from: words(before.client),
             to: words(after.client),
         });
@@ -1362,7 +2063,7 @@ function declarationChanges(before, after) {
 
     if (before.access !== after.access) {
         lines.push({
-            label: "Widest access",
+            label: t("Widest access"),
             from: t(ACCESS_WORDS[before.access] ?? before.access),
             to: t(ACCESS_WORDS[after.access] ?? after.access),
         });

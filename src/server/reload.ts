@@ -25,10 +25,11 @@ import {
     watch,
     writeFileSync,
 } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join, normalize } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Extension, Registry } from "@earendil-works/pi-durable";
 import { describe } from "./errors.ts";
+import { documentImports } from "./extension-document-imports.ts";
 import { ExtensionWebs, OLDEST_POCKET_API, POCKET_API } from "./extension-web.ts";
 import type {
     ExtensionModule,
@@ -51,9 +52,11 @@ const ORDER = [
     "prompt.ts",
     "artifacts.ts",
     "browser.ts",
+    "diagrams.ts",
     "subagents.ts",
     "agent-teams.ts",
     "schedules.ts",
+    "background.ts",
     "goals.ts",
     "plan.ts",
     "anthropic-subscription.ts",
@@ -64,6 +67,11 @@ const ORDER = [
     "triggers.ts",
     "gallery.ts",
     "session-tags.ts",
+    "ask.ts",
+    "ask-someone.ts",
+    "updates.ts",
+    "design.ts",
+    "tool-search.ts",
 ];
 
 /** The built-in modules' names (their files' without `.ts`): a drop-in with one of them is never loaded. */
@@ -78,14 +86,17 @@ const OFF_BY_DEFAULT = new Set([
     "agent-teams.ts",
     "anthropic-subscription.ts",
     "session-tags.ts",
+    "ask-someone.ts",
 ]);
 const TITLES: Record<string, string> = {
     "prompt.ts": "System prompt",
     "artifacts.ts": "Artifacts",
     "browser.ts": "Browser",
+    "diagrams.ts": "Diagrams",
     "subagents.ts": "Subagents",
     "agent-teams.ts": "Agent Teams",
     "schedules.ts": "Scheduled messages",
+    "background.ts": "Background tasks",
     "goals.ts": "Done when",
     "plan.ts": "Plan mode",
     "anthropic-subscription.ts": "Claude subscription billing",
@@ -96,6 +107,11 @@ const TITLES: Record<string, string> = {
     "triggers.ts": "Triggers",
     "gallery.ts": "Extension gallery",
     "session-tags.ts": "Session tags",
+    "ask.ts": "Ask",
+    "ask-someone.ts": "Ask someone",
+    "updates.ts": "Pi Pocket updates",
+    "design.ts": "Design",
+    "tool-search.ts": "Tool search",
 };
 
 /**
@@ -112,12 +128,15 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "edit",
     "bash",
     "artifact",
+    // Not a tool since 0.28.0, but kept: old sessions hold its calls, and a drop-in must not take the name (`legacyInline`).
     "artifact_inline",
     "browser",
     "subagent",
     "team",
     "schedule",
+    "background",
     "codemode",
+    "tool_search",
     "memory",
     "sessions",
     "session_read",
@@ -131,6 +150,11 @@ export const BUILT_IN_TOOLS: ReadonlySet<string> = new Set([
     "watch_pr",
     "repo_watch",
     "session_watch_pr",
+    "ask",
+    "ask_someone",
+    "design_preview",
+    "design_export",
+    "design_system",
 ]);
 
 /** Pi Pocket's own modules, or the owner's from the drop-in folder. */
@@ -160,9 +184,18 @@ export interface ExtensionInfo {
     }[];
     /**
      * What it adds to the app: its routes (`GET status`), who loads its browser module, when it has one, the widest
-     * access of the two, and its commands (`conversation /name`, `global /name`).
+     * access of the two, its commands (`conversation /name`, `global /name`), and whether it draws pages for anyone with
+     * one of its public links.
      */
-    web?: { routes: string[]; client?: WebAccess; access?: WebAccess; commands?: string[] };
+    web?: {
+        routes: string[];
+        client?: WebAccess;
+        access?: WebAccess;
+        commands?: string[];
+        publicPage?: boolean;
+        service?: boolean;
+        settings?: boolean;
+    };
     /** Why the module is not loaded, when it failed. */
     error?: string;
 }
@@ -183,16 +216,36 @@ function moduleFiles(directory: string): string[] {
 /**
  * Make the drop-in folder, with a `node_modules` link to Pi Pocket's own packages. Drop-ins then import
  * `@earendil-works/pi-durable` and the rest as built-in modules do, and get the very modules the server runs. A
- * `node_modules` folder the owner made there stays as it is; a link to another place is replaced.
+ * `node_modules` folder the owner made there stays as it is; a link to another place is replaced. Where npm split Pi
+ * Pocket's packages between folders (a local install beside other versions of them), `packageModules` says where each
+ * is, and the link leads to a hidden folder with a link to each one instead.
  */
-export function prepareDropInFolder(directory: string, appModules: string): void {
+export function prepareDropInFolder(
+    directory: string,
+    appModules: string,
+    packageModules: Readonly<Record<string, string>> = {},
+): void {
     mkdirSync(directory, { recursive: true });
     // A junction on Windows: no administrator rights needed.
-    keepLink(
-        join(directory, "node_modules"),
-        appModules,
-        process.platform === "win32" ? "junction" : "dir",
-    );
+    const type = process.platform === "win32" ? "junction" : "dir";
+    let target = appModules;
+
+    // All in one folder, as in a checkout and most installs: one link to it, as before.
+    if (Object.values(packageModules).some((modules) => modules !== appModules)) {
+        target = join(directory, ".pocket-packages");
+        mkdirSync(target, { recursive: true });
+
+        for (const [name, modules] of Object.entries(packageModules)) {
+            const link = join(target, name);
+
+            if (existsSync(join(modules, name))) {
+                mkdirSync(dirname(link), { recursive: true });
+                keepLink(link, join(modules, name), type);
+            }
+        }
+    }
+
+    keepLink(join(directory, "node_modules"), target, type);
 }
 
 /** The first line of a copy of the types that Pi Pocket made where it cannot link: it refreshes only such a copy. */
@@ -558,8 +611,11 @@ export class ExtensionLoader {
      */
     readonly #generations = new Map<string, number>();
     readonly #loadLimitMs: number;
+    readonly #stopDocumentImports: () => void;
     /** The folder of each file's latest load: its removal from that folder takes that version away. */
     readonly #sources = new Map<string, string>();
+    /** Each module file's stamp at its latest load (`stampOf`): an event that leaves the file so loads nothing. */
+    readonly #stamps = new Map<string, string | undefined>();
     /** How to end each load still waiting for its module: the server stopping ends them. */
     readonly #waiting = new Set<() => void>();
     #closed = false;
@@ -594,6 +650,10 @@ export class ExtensionLoader {
         this.#notify = options.notify ?? ((level, message) => host.notice(level, message));
         this.#onChange = options.onChange ?? (async () => {});
         this.#loadLimitMs = options.loadLimitMs ?? LOAD_LIMIT_MS;
+        this.#stopDocumentImports =
+            this.#dropIn === undefined
+                ? () => {}
+                : documentImports(this.#dropIn, (message) => this.#notify("warning", message));
     }
 
     /** Every module, built-in ones first in install order. A drop-in with a built-in's name is left out. */
@@ -735,6 +795,7 @@ export class ExtensionLoader {
         this.#webs.remove(file);
         this.#installed.delete(file);
         this.#errors.delete(file);
+        this.#stamps.delete(file);
     }
 
     /**
@@ -835,6 +896,7 @@ export class ExtensionLoader {
         const deadline = Math.min(Date.now() + this.#loadLimitMs, until ?? Infinity);
 
         this.#sources.set(file, module.directory);
+        this.#stamps.set(file, stampOf(join(module.directory, file)));
 
         try {
             return await this.#build(module, generation, cacheBust, deadline);
@@ -842,6 +904,11 @@ export class ExtensionLoader {
             // A load that no longer counts fails quietly too: the newer load, or the module turned off, says what holds.
             if (!(error instanceof Overtaken) && !this.#isLatest(file, generation)) {
                 throw new Overtaken(file);
+            }
+
+            // A failed load is tried again at the next event about its file, even one that leaves the file as it was.
+            if (!(error instanceof Overtaken)) {
+                this.#stamps.delete(file);
             }
 
             throw error;
@@ -1113,6 +1180,23 @@ export class ExtensionLoader {
         }
     }
 
+    /** While an update moves the checkout, edits load nothing: the restart after it loads the new version. */
+    #paused = false;
+
+    /** Stop or start loading modules again when they change, as `watch` does (`updates.ts`). */
+    pause(paused: boolean): void {
+        this.#paused = paused;
+        this.#webs.pause(paused);
+
+        if (paused) {
+            for (const timer of this.#timers.values()) {
+                clearTimeout(timer);
+            }
+
+            this.#timers.clear();
+        }
+    }
+
     #checkUiLocaleNames(file: string, extensions: readonly PocketExtension[]): void {
         const owners = new Map<string, string>();
         let count = 0;
@@ -1189,6 +1273,10 @@ export class ExtensionLoader {
     }
 
     #changed(file: string, directory: string): void {
+        if (this.#paused) {
+            return;
+        }
+
         // A browser module's file, or its folder: tabs load the new version.
         this.#webs.touched(directory, file);
 
@@ -1247,6 +1335,11 @@ export class ExtensionLoader {
             return;
         }
 
+        // The file as it was loaded: Windows reports a read or a new attribute too (the Extensions sheet reads each file).
+        if (this.#stamps.has(file) && this.#stamps.get(file) === stampOf(join(directory, file))) {
+            return;
+        }
+
         const loaded = this.#installed.has(file);
 
         this.#reload(file).then(
@@ -1276,6 +1369,7 @@ export class ExtensionLoader {
     close(): Promise<void> {
         // Loads still running install nothing, and those waiting for their module end now.
         this.#closed = true;
+        this.#stopDocumentImports();
 
         for (const stop of this.#waiting) {
             stop();
@@ -1393,14 +1487,64 @@ function summary(path: string): string {
     }
 }
 
-/** Calls `onChange` shortly after anything under `directory` changes. */
+/**
+ * A file's inode, size, and time of last change, "folder" for a folder, or undefined when it is gone. Reading a file, or
+ * changing its attributes, leaves it as it was: Windows reports those to a watch too. The inode tells a file saved by a
+ * rename from the one before, also when a coarse clock gives both the same time.
+ */
+function stampOf(path: string): string | undefined {
+    try {
+        const stats = statSync(path);
+
+        return stats.isDirectory() ? "folder" : `${stats.ino}:${stats.size}:${stats.mtimeMs}`;
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Calls `onChange` shortly after a file or folder under `directory` is added, removed, or written: not after an event
+ * that leaves it as it was (`stampOf`).
+ */
 export function watchTree(directory: string, onChange: (file: string) => void): () => void {
+    const stamps = new Map<string, string>();
+
+    const keep = (name: string, stamp: string | undefined) =>
+        stamp === undefined ? stamps.delete(name) : stamps.set(name, stamp);
+
+    for (const name of readdirSync(directory, { recursive: true }) as string[]) {
+        keep(normalize(name), stampOf(join(directory, name)));
+    }
+
+    const pending = new Set<string>();
     let timer: NodeJS.Timeout | undefined;
-    let last = "";
+
+    const settle = () => {
+        const changed = [...pending].filter((name) => {
+            // An event with no name: something changed, and it does not say what.
+            if (name === "") {
+                return true;
+            }
+
+            const was = stamps.get(name);
+            const now = stampOf(join(directory, name));
+
+            keep(name, now);
+
+            return now !== was;
+        });
+
+        pending.clear();
+
+        if (changed.length > 0) {
+            onChange(changed[0]!);
+        }
+    };
+
     const watcher = watch(directory, { recursive: true }, (_event, name) => {
-        last = name?.toString() ?? "";
+        pending.add(name === null ? "" : normalize(name.toString()));
         clearTimeout(timer);
-        timer = setTimeout(() => onChange(last), 200);
+        timer = setTimeout(settle, 200);
     });
 
     return () => {

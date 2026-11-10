@@ -5,18 +5,17 @@ import { t } from "../i18n.js";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { actions, api, attempt, closeSheet, openSheet, store } from "../store.js";
 import { useDragToClose } from "../gestures.js";
+import { favoriteModels } from "../model-favorites.js";
 import {
     anchorStyle,
     BOTTOM_SHEETS,
     formatTokens,
     html,
     Icon,
+    MODEL_SEARCH_AT,
     popAnchor,
     scrimPress,
 } from "../ui.js";
-
-/** Models past this many get a search box in the picker. */
-const MODEL_SEARCH_AT = 8;
 
 /** Over the message box the picker is 330px wide; on a phone, the width `popAnchor` gives. */
 const widthOf = (anchor) =>
@@ -91,6 +90,9 @@ export function ModelPicker() {
         () => query.trim() !== "" && !scopedModels.some((model) => matches(model, query)),
     );
     const choices = showAll || scopedModels.length === 0 ? models : scopedModels;
+    const favorites = new Set(favoriteModels());
+    const [favoritesOnly, setFavoritesOnly] = useState(false);
+    const isFavorite = (model) => favorites.has(`${model.provider}/${model.id}`);
     // Decided once: a search box that went away when emptied would take the caret with it.
     const [searchable] = useState(() => models.length > MODEL_SEARCH_AT || query !== "");
     const [picked, setPicked] = useState(0);
@@ -126,8 +128,12 @@ export function ModelPicker() {
         : agent?.thinkingLevel;
     const reasoning = forDefault ? defaultModel?.reasoning : agent?.reasoning;
     const shown = choices
-        .filter((model) => matches(model, query))
-        .sort((a, b) => Number(isCurrent(b)) - Number(isCurrent(a)));
+        .filter((model) => (!favoritesOnly || isFavorite(model)) && matches(model, query))
+        .sort(
+            (a, b) =>
+                Number(isCurrent(b)) - Number(isCurrent(a)) ||
+                Number(isFavorite(b)) - Number(isFavorite(a)),
+        );
     // The list can change while the picker is open.
     const active = Math.max(0, Math.min(picked, shown.length - 1));
     // The session's model and level are the default already.
@@ -319,17 +325,47 @@ export function ModelPicker() {
                     />
                 </label>`
             }
-            <div class="pop-menu-list" ref=${list} role="listbox" aria-label=${t("Models")}>
-                ${
-                    models.length === 0 &&
-                    html`<p class="muted pop-menu-note">
+            ${
+                favorites.size > 0 &&
+                html`<div class="segmented model-filters" role="group" aria-label=${t("Filter models")}>
+                    <button
+                        class=${favoritesOnly ? "" : "on"}
+                        aria-pressed=${!favoritesOnly}
+                        onClick=${() => {
+                            setFavoritesOnly(false);
+                            setPicked(0);
+                        }}
+                    >
+                        All models
+                    </button>
+                    <button
+                        class=${favoritesOnly ? "on" : ""}
+                        aria-pressed=${favoritesOnly}
+                        onClick=${() => {
+                            setFavoritesOnly(true);
+                            setPicked(0);
+                        }}
+                    >
+                        <${Icon} name="star" size=${14} /> Favorites
+                    </button>
+                </div>`
+            }
+            <div class="pop-menu-list" ref=${list} role="listbox" aria-label=${t("Models")}>                ${
+                models.length === 0 &&
+                html`<p class="muted pop-menu-note">
                         ${t("No models are available. Add a provider first.")}
                     </p>`
-                }
+            }
                 ${
                     models.length > 0 &&
                     shown.length === 0 &&
-                    html`<p class="muted pop-menu-note">${t("No model matches “{{query}}”.", { query: query.trim() })}</p>`
+                    html`<p class="muted pop-menu-note">
+                        ${
+                            favoritesOnly && query.trim() === ""
+                                ? t("No favorites in this model scope.")
+                                : t("No model matches “{{query}}”.", { query: query.trim() })
+                        }
+                    </p>`
                 }
                 ${shown.map(
                     (model, index) => html`<button
@@ -348,6 +384,7 @@ export function ModelPicker() {
                                 ${model.provider}${!forDefault && isDefault(model) ? ` · ${t("default")}` : ""}${model.signIn ? ` · ${t("needs sign-in")}` : ""}
                             </span>
                         </span>
+                        ${isFavorite(model) && html`<${Icon} name="star" size=${14} />`}
                         ${isCurrent(model) && html`<${Icon} name="check" size=${14} />`}
                     </button>`,
                 )}

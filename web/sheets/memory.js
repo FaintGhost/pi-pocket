@@ -1,7 +1,7 @@
 // Memory: the lessons Pi keeps across sessions, for this session's project and for everywhere.
 import { useEffect, useState } from "preact/hooks";
 import { t } from "../i18n.js";
-import { api, attempt, closeSheet, navigate, notify, store } from "../store.js";
+import { api, attempt, closeSheet, navigate, notify, openSheet, store } from "../store.js";
 import { html, Sheet, timeAgo } from "../ui.js";
 
 /** Memory needs its extension, and a conversation to say which project: `id`, or the one open. */
@@ -120,6 +120,45 @@ export function memoryHint(data) {
     ];
 
     return parts.filter(Boolean).join(" · ");
+}
+
+/**
+ * The owner's review queue across every project, not just the lessons that apply here: PiP's strip, in its
+ * floating panel and above its box as a board. It shows only while something waits for approval (or the server must
+ * restart to list them): with none, nothing. `before` runs ahead of the sheet opening (the panel closes first).
+ */
+export function PendingMemories({ id, before }) {
+    const data = useMemory(id, true);
+    const count = data?.pendingAll === true ? data.lessons.length : 0;
+
+    if (!data?.restartRequired && count === 0) {
+        return null;
+    }
+
+    const hint = data.restartRequired ? t("Restart required") : t("{{count}} pending", { count });
+
+    return html`<div class="pip-memory">
+        <button
+            type="button"
+            class="button small ghost"
+            aria-label=${t("Pending memories")}
+            aria-describedby="pip-memory-count"
+            onClick=${() => {
+                before?.();
+                openSheet({ type: "memory", conversationId: id, pendingOnly: true });
+            }}
+        >
+            <span>${t("Pending memories")}</span>
+            <span
+                id="pip-memory-count"
+                class=${`pip-memory-count ${count > 0 ? "waiting" : ""}`}
+                aria-live="polite"
+                aria-atomic="true"
+            >
+                ${hint}
+            </span>
+        </button>
+    </div>`;
 }
 
 /** Save a lesson by hand: for this project, or everywhere. */
@@ -362,7 +401,7 @@ export function MemorySheet({ draft: initial = "", conversationId, pendingOnly =
     };
 
     if (pendingOnly) {
-        return html`<${Sheet} title=${title} onClose=${closeSheet}>
+        return html`<${Sheet} title=${title} onClose=${closeSheet} className="pending-memories">
             <p class="muted small">
                 ${t("Memories waiting for your approval, across every project and everywhere.")}
                 ${t("Approve only what you want Pi to keep; until then Pi goes on as before.")}

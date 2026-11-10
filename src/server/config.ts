@@ -1,11 +1,33 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** The repository root: `web/`, `src/`, and `node_modules/` live here. */
+/** The repository root: `web/` and `src/` live here, and `node_modules/` too, except in an npx or local install. */
 export const APP_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+
+/**
+ * The node_modules folder with the package `name`, as Node looks for it from `from`: Pi Pocket's own, or one above
+ * it, where npm puts Pi Pocket's packages in an npx or local install. Pi Pocket's own when none has it.
+ */
+export function modulesWith(name: string, from = APP_ROOT): string {
+    for (let folder = from; ;) {
+        const modules = basename(folder) === "node_modules" ? folder : join(folder, "node_modules");
+
+        if (existsSync(join(modules, name, "package.json"))) {
+            return modules;
+        }
+
+        const parent = dirname(folder);
+
+        if (parent === folder) {
+            return join(from, "node_modules");
+        }
+
+        folder = parent;
+    }
+}
 
 /** Where Pi Pocket keeps its database, users, uploads, and logs. */
 export function dataDir(): string {
@@ -32,6 +54,8 @@ export interface User {
     tunnel?: string;
     /** The most Pi may spend for this person, in dollars; never for the owner. */
     budget?: number;
+    /** When their profile picture was set (`avatars.ts`); absent means they have none. */
+    avatar?: number;
 }
 
 /** An invite not yet used, kept by its code's sha256 (the code itself is only shown to whoever made it). */
@@ -82,7 +106,17 @@ interface PocketConfig {
      * Absent or empty: none, and subagents always run on their session's model.
      */
     subagentModels?: string[];
+    /** The most hours a run waits for a model's limit to clear (`limit-gate.ts`); 0: it does not wait. Absent: 6. */
+    limitWaitHours?: number;
+    /**
+     * The owner's values for the settings extension modules declare (`web.settings`), by module and setting name. A
+     * setting with no value here has its default. Since 0.22.0; an older Pi Pocket ignores it.
+     */
+    extensionSettings?: Record<string, Record<string, string | number | boolean>>;
 }
+
+/** The hours a run waits for a model's limit to clear, until the owner says otherwise. */
+export const DEFAULT_LIMIT_WAIT_HOURS = 6;
 
 /** Who may allow a risky tool call: anyone who can steer, or (for guests) only someone other than who asked. */
 export type ApprovalRule = "anyone" | "others";
@@ -181,6 +215,30 @@ export class ConfigStore {
         this.save();
     }
 
+    /** The owner's values for a module's settings (`web.settings`): a copy, by name. */
+    extensionSettings(module: string): Record<string, string | number | boolean> {
+        return { ...(this.#config.extensionSettings?.[module] ?? {}) };
+    }
+
+    /** Keep a module's values, all of them at once; none drops its entry. */
+    setExtensionSettings(module: string, values: Record<string, string | number | boolean>): void {
+        const all = { ...(this.#config.extensionSettings ?? {}) };
+
+        if (Object.keys(values).length === 0) {
+            delete all[module];
+        } else {
+            all[module] = { ...values };
+        }
+
+        if (Object.keys(all).length === 0) {
+            delete this.#config.extensionSettings;
+        } else {
+            this.#config.extensionSettings = all;
+        }
+
+        this.save();
+    }
+
     /** The owner's choice of when PiP compacts itself (`pip-compact.ts`); undefined: its default. */
     get pipCompactAt(): number | undefined {
         return this.#config.pipCompactAt;
@@ -214,6 +272,25 @@ export class ConfigStore {
             delete this.#config.subagentModels;
         } else {
             this.#config.subagentModels = [...models];
+        }
+
+        this.save();
+    }
+
+    /** How many hours a run waits for a limit to clear, at most; 0: not at all. */
+    get limitWaitHours(): number {
+        const hours = this.#config.limitWaitHours;
+
+        return typeof hours === "number" && Number.isFinite(hours) && hours >= 0
+            ? Math.min(hours, 24)
+            : DEFAULT_LIMIT_WAIT_HOURS;
+    }
+
+    set limitWaitHours(hours: number) {
+        if (hours === DEFAULT_LIMIT_WAIT_HOURS) {
+            delete this.#config.limitWaitHours;
+        } else {
+            this.#config.limitWaitHours = Math.min(Math.max(hours, 0), 24);
         }
 
         this.save();
@@ -310,7 +387,9 @@ export class ConfigStore {
 
     updateUser(
         id: string,
-        patch: Partial<Pick<User, "name" | "lastSeen" | "role" | "sessions" | "tunnel" | "budget">>,
+        patch: Partial<
+            Pick<User, "name" | "lastSeen" | "role" | "sessions" | "tunnel" | "budget" | "avatar">
+        >,
     ): void {
         const user = this.userById(id);
 
@@ -339,6 +418,10 @@ export class ConfigStore {
 
         if (user.budget === undefined) {
             delete user.budget;
+        }
+
+        if (user.avatar === undefined) {
+            delete user.avatar;
         }
 
         this.save();

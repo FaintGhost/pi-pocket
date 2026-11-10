@@ -18,10 +18,18 @@ import { PlanDoc } from "../docs.ts";
 import type { PocketHost } from "../host.ts";
 import { BUILT_IN_TOOLS } from "../reload.ts";
 
-const PLANNING = `Plan mode is on. Read and explore, then propose a plan; change nothing yet. You can use read, artifact, artifact_inline, the browser to look at pages (not to click, type, or run scripts in them), and bash for simple read-only commands such as ls, cat, grep, find, and git status/log/diff/show, without redirects, globs, variables, or command substitution, and tools marked read-only. Writing, editing, other commands, and subagents are blocked until a person approves the plan. End your answer with the plan as a short numbered list.`;
+const PLANNING = `Plan mode is on. Read and explore, then propose a plan; change nothing yet. You can use read, artifact, the browser to look at pages (not to click, type, or run scripts in them), and bash for simple read-only commands such as ls, cat, grep, find, and git status/log/diff/show, without redirects, globs, variables, or command substitution, and tools marked read-only. Subagents inherit plan mode and can explore under the same restrictions. Writing, editing, and other commands are blocked until a person approves the plan. End your answer with the plan as a short numbered list.`;
 
-/** Tools that change nothing, or whose own calls are checked one by one (codemode). */
-const ALWAYS_ALLOWED = new Set(["read", "artifact", "artifact_inline", "codemode"]);
+/** Tools that change nothing, or whose own calls are checked in plan mode (codemode's, and a subagent's in its own plan mode). */
+const ALWAYS_ALLOWED = new Set([
+    "read",
+    "artifact",
+    "design_preview",
+    "tool_search",
+    "codemode",
+    "subagent",
+    "ask",
+]);
 /** What the browser may do in plan mode: look at pages, not act on them. */
 const BROWSER_LOOKS = new Set([
     "navigate",
@@ -271,8 +279,8 @@ export function blockedInPlanMode(
         return undefined;
     }
 
-    // Asking how a subagent does, or stopping it, changes nothing.
-    if (tool === "subagent" && (args.action === "status" || args.action === "stop")) {
+    // Nor does reading what a background task printed, or stopping it; starting one runs a command.
+    if (tool === "background" && args.action !== "start") {
         return undefined;
     }
 
@@ -320,7 +328,9 @@ export default function createPlan(_host: PocketHost) {
                     // HookApi omits agent, but ToolTask supplies its phase runtime and codemode preserves it.
                     // Use that same resolved snapshot, not the live registry: wrappers and reloads can differ.
                     const runtime = api as typeof api & Partial<Pick<ToolExecutionApi, "agent">>;
-                    const tool = (await runtime.agent?.(context))?.tools.find(
+                    const agent = await runtime.agent?.(context);
+                    // Codemode's Only mode leaves a tool callable but not offered: its hint counts too.
+                    const tool = [...(agent?.tools ?? []), ...(agent?.callable ?? [])].find(
                         (tool) => tool.name === call.name,
                     ) as { annotations?: ToolAnnotations } | undefined;
                     // A built-in tool's hint can only come from a wrap, which the owner never sees as read-only.
